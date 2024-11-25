@@ -133,7 +133,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         heartbeat_result.backend_info.__set_http_port(config::be_http_port);
         heartbeat_result.backend_info.__set_be_rpc_port(-1);
         heartbeat_result.backend_info.__set_brpc_port(config::brpc_port);
-        heartbeat_result.backend_info.__set_be_arrow_port(config::be_arrow_port);
+        heartbeat_result.backend_info.__set_arrow_flight_port(config::arrow_flight_port);
 #ifdef USE_STAROS
         heartbeat_result.backend_info.__set_starlet_port(config::starlet_port);
         if (StorageEngine::instance()->get_store_num() != 0) {

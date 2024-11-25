@@ -679,29 +679,25 @@ public class StmtExecutor {
                             // to this failed execution.
                             String queryId = DebugUtil.printId(context.getExecutionId());
                             ProfileManager.getInstance().removeProfile(queryId);
-                        } else {
-                            if (!isStatisticsJob) {
-                                WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouseId(), -1L);
-                            }
-                        }
-
-                        if (context instanceof ArrowFlightSqlConnectContext) {
+                        } else if (context instanceof ArrowFlightSqlConnectContext) {
                             isAsync = true;
                             tryProcessProfileAsync(execPlan, i);
                         } else if (context.isProfileEnabled()) {
                             isAsync = tryProcessProfileAsync(execPlan, i);
+                            if (parsedStmt.isExplain() &&
+                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                if (coord != null && coord.isShortCircuit()) {
+                                    throw new UserException(
+                                            "short circuit point query doesn't suppot explain analyze stmt, " +
+                                                    "you can set it off by using  set enable_short_circuit=false");
+                                }
+                                handleExplainStmt(ExplainAnalyzer.analyze(
+                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
+                            }
                         }
 
-                        if (parsedStmt.isExplain() &&
-                                StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                            if (coord != null && coord.isShortCircuit()) {
-                                throw new UserException(
-                                        "short circuit point query doesn't suppot explain analyze stmt, " +
-                                                "you can set it off by using  set enable_short_circuit=false");
-                            }
-
-                            handleExplainStmt(ExplainAnalyzer.analyze(
-                                    ProfilingExecPlan.buildFrom(execPlan), profile, null));
+                        if (!needRetry && !isStatisticsJob) {
+                            WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouseId(), -1L);
                         }
 
                         if (context.getState().isError()) {
@@ -712,11 +708,8 @@ public class StmtExecutor {
                         }
 
                         if (isAsync) {
-                            int timeout = context.getSessionVariable().getQueryTimeoutS();
-                            QeProcessorImpl.INSTANCE
-                                    .monitorQuery(context.getExecutionId(),
-                                            System.currentTimeMillis() + timeout * 1000L +
-                                                    context.getSessionVariable().getProfileTimeout() * 1000L);
+                            QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
+                                    System.currentTimeMillis() + context.getSessionVariable().getProfileTimeout() * 1000L);
                         } else {
                             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                         }
@@ -1335,7 +1328,7 @@ public class StmtExecutor {
                 sendFields(colNames, outputExprs);
             }
         }
-        
+
         if (batch != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
             if (!isOutfileQuery) {

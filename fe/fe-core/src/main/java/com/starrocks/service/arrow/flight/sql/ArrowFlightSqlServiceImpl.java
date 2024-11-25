@@ -423,7 +423,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             FlightSql.TicketStatementQuery ticketStatementQuery =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
 
-            int beArrowPort = be.getBeArrowPort();
+            int beArrowPort = be.getArrowFlightPort();
+            if (beArrowPort <= 0) {
+                throw CallStatus.INTERNAL.withDescription(String.format("BE [%d] has already disabled Arrow Flight Server. " +
+                                "You could set `arrow_flight_port` in `be.conf` to a positive value to enable it.", beId))
+                        .toRuntimeException();
+            }
             Location grpcLocation = Location.forGrpcInsecure(address.hostname, beArrowPort);
             Ticket ticket = new Ticket(Any.pack(ticketStatementQuery).toByteArray());
             List<FlightEndpoint> endpoints = Collections.singletonList(new FlightEndpoint(ticket, grpcLocation));

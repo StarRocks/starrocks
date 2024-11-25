@@ -287,7 +287,7 @@ public class HeartbeatMgr extends FrontendDaemon {
                     TBackendInfo tBackendInfo = result.getBackend_info();
                     int bePort = tBackendInfo.getBe_port();
                     int httpPort = tBackendInfo.getHttp_port();
-                    int beArrowPort = tBackendInfo.getBe_arrow_port();
+                    int arrowPort = tBackendInfo.getArrow_flight_port();
                     int brpcPort = -1;
                     int starletPort = 0;
                     boolean isSetStoragePath = false;
@@ -314,7 +314,7 @@ public class HeartbeatMgr extends FrontendDaemon {
                     BackendHbResponse backendHbResponse = new BackendHbResponse(
                             computeNodeId, bePort, httpPort, brpcPort, starletPort,
                             System.currentTimeMillis(), version, cpuCores, memLimitBytes, isSetStoragePath,
-                            beArrowPort);
+                            arrowPort);
                     if (tBackendInfo.isSetReboot_time()) {
                         backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
                     }
