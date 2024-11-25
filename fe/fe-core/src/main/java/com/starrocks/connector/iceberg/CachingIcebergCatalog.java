@@ -88,13 +88,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
         this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(
-                CacheLoader.asyncReloading(new CacheLoader<>() {
+                new CacheLoader<>() {
                     @Override
                     public Map<String, Partition> load(IcebergTableName key) throws Exception {
                         // use default executor service.
                         return delegate.getPartitions(key.dbName, key.tableName, key.snapshotId, null);
                     }
-                }, executorService));
+                });
         this.dataFileCache = enableCache ?
                 newCacheBuilder(
                         icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
@@ -216,7 +216,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             IcebergTableName key = new IcebergTableName(dbName, tableName, snapshotId);
             Map<String, Partition> cacheValue = partitionCache.getIfPresent(key);
             if (cacheValue == null) {
-                partitionCache.refresh(key);
+                executorService.submit(() -> partitionCache.refresh(key));
                 return null;
             }
         }
