@@ -216,7 +216,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
             for (Cluster cluster : wh.getClusters().values()) {
                 try {
                     StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-                    cluster.setWorkerGroupId(starOSAgent.createWorkerGroup("x0"));
+                    cluster.setWorkerGroupId(starOSAgent.createWorkerGroup("x0", 1 /* replicaNumber */));
                 } catch (DdlException e) {
                     LOG.warn(e);
                     throw new DdlException("create warehouse " + wh.getName() + " failed, reason: " + e);

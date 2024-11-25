@@ -65,6 +65,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -1022,6 +1023,10 @@ public interface AstVisitor<R, C> {
 
     default R visitShowNodesStatement(ShowNodesStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    default R visitAlterWarehouseStatement(AlterWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------

@@ -359,6 +359,7 @@ statement
     | showWarehousesStatement
     | showClustersStatement
     | showNodesStatement
+    | alterWarehouseStatement
 
     // Unsupported Statement
     | unsupportedStatement
@@ -2348,6 +2349,10 @@ showClustersStatement
 showNodesStatement
     : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
     | SHOW NODES FROM WAREHOUSE identifier
+    ;
+
+alterWarehouseStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString modifyPropertiesClause
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
