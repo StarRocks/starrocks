@@ -58,7 +58,6 @@ import com.starrocks.thrift.TUserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -388,5 +387,10 @@ public class SchemaScanNode extends ScanNode {
 
     public void setCatalogName(String catalogName) {
         this.catalogName = catalogName;
+    }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
     }
 }
