@@ -59,7 +59,10 @@ import com.starrocks.thrift.TUserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.util.HashSet;
+=======
+>>>>>>> 14ccfcc047 ([Enhancement] fix connector mem scan limit adjustment when no chunk source (#53112))
 import java.util.List;
 import java.util.Set;
 
@@ -362,11 +365,14 @@ public class SchemaScanNode extends ScanNode {
         return beScanRanges;
     }
 
+<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return beScanRanges == null ? 1 : beScanRanges.size();
     }
 
+=======
+>>>>>>> 14ccfcc047 ([Enhancement] fix connector mem scan limit adjustment when no chunk source (#53112))
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
@@ -378,5 +384,10 @@ public class SchemaScanNode extends ScanNode {
 
     public void setCatalogName(String catalogName) {
         this.catalogName = catalogName;
+    }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
     }
 }
