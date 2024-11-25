@@ -238,12 +238,12 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         }
     }
 
-    int scan_node_number = 1;
-    if (query_globals.__isset.scan_node_number) {
-        scan_node_number = query_globals.scan_node_number;
+    int connector_scan_node_number = 1;
+    if (query_globals.__isset.connector_scan_node_number) {
+        connector_scan_node_number = query_globals.connector_scan_node_number;
     }
     _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_ratio,
-                                 wg.get(), runtime_state, scan_node_number);
+                                 wg.get(), runtime_state, connector_scan_node_number);
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());

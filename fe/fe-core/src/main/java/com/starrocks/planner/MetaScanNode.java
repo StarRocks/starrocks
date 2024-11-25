@@ -128,7 +128,8 @@ public class MetaScanNode extends ScanNode {
                 boolean tabletIsNull = true;
                 for (Replica replica : allQueryableReplicas) {
                     ComputeNode node =
-                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                    .getBackendOrComputeNode(replica.getBackendId());
                     if (node == null) {
                         LOG.debug("replica {} not exists", replica.getBackendId());
                         continue;
@@ -196,5 +197,10 @@ public class MetaScanNode extends ScanNode {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
+    }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
     }
 }
