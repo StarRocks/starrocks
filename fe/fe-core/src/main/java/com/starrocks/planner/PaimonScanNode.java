@@ -24,6 +24,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
@@ -323,7 +324,8 @@ public class PaimonScanNode extends ScanNode {
         }
 
         List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                paimonTable.getCatalogName(), paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+                paimonTable.getCatalogName(), paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(),
+                ConnectorMetadatRequestContext.DEFAULT);
 
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
