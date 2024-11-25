@@ -175,7 +175,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {
         routineLoadTaskInfo.setLastScheduledTime(System.currentTimeMillis());
         // check if task has been abandoned
-        if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getId())) {
+        if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getId())) {
             // task has been abandoned while renew task has been added in queue
             // or database has been deleted
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
