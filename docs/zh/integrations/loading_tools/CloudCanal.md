@@ -24,6 +24,9 @@ CloudCanal 提供可视化的界面，可轻松实现数据的结构迁移、全
 | Hana              | 支持 | 支持 | 支持 | 支持 |
 | PolarDB for MySQL | 支持 | 支持 | 支持 | 支持 |
 | Db2               | 支持 | 支持 | 支持 | 支持 |
+:::info
+更多功能及参数设置，请参考 [CloudCanal 数据链路说明](https://www.clougence.com/cc-doc/dataMigrationAndSync/connection/mysql2?target=StarRocks)。
+:::
 
 ## 下载安装
 

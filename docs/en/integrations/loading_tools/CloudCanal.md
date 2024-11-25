@@ -27,7 +27,9 @@ BladePipe presents a visual management interface, allowing you to easily create 
   | Hana              | Yes | Yes | Yes | Yes |
   | PolarDB for MySQL | Yes | Yes | Yes | Yes |
   | Db2               | Yes | Yes | Yes | Yes |
-
+:::info
+For more functions and parameter settings, please refer to [BladePipe Connections](https://doc.bladepipe.com/dataMigrationAndSync/connection/mysql2?target=StarRocks).
+:::
 
 ## Installation
 
@@ -40,7 +42,7 @@ Taking a MySQL instance as an example, the following part describes how to move 
 
 1. Log in to the [BladePipe Cloud](https://cloud.bladepipe.com/). Click **DataSource** > **Add DataSource**.
 2. Select StarRocks as the Type, and fill in the setup form.
-   - **Client Address**：The port StarRocks provided to MySQL Client. CloudCanal queries the metadata in databases via it. 
+   - **Client Address**：The port StarRocks provided to MySQL Client. BladePipe queries the metadata in databases via it. 
    - **Account**: The user name of the StarRocks database. The INSERT permission is required to write data to StarRocks. If the user doesn't have the INSERT permission, please grant the permission with [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) as a reference.
    - **Http Address**：It is used to receive the request from BladePipe to write data to StarRocks.
 ![image.png](../../_assets/3.11-2.png)
@@ -52,25 +54,25 @@ Taking a MySQL instance as an example, the following part describes how to move 
 
 1. Click **DataJob** > [**Create DataJob**](https://doc.bladepipe.com/operation/job_manage/create_job/create_full_incre_task).
 
+2. Select the source and target DataSources, and click **Test Connection** to ensure the connection to the source and target DataSources are both successful.
 ![image.png](../../_assets/3.11-3.png)
 
-2. Select the source and target DataSources, and click **Test Connection** to ensure the connection to the source and target DataSources are both successful.
-
+3. Select **Incremental** for DataJob Type, together with the **Full Data** option.
 ![image.png](../../_assets/3.11-4.png)
 
-3. Select **Incremental** for DataJob Type, together with the **Full Data** option.
-
 4. Select the tables to be replicated. **Note that the target StarRocks tables automatically created after Schema Migration have primary keys, so source tables without primary keys are not supported currently**.
-
-5. Select the columns to be replicated.
-
 ![image.png](../../_assets/3.11-5.png)
 
+5. Select the columns to be replicated.
+![image.png](../../_assets/3.11-6.png)
+
 6. Confirm the DataJob creation.
+![image.png](../../_assets/3.11-7.png)
 
 7. The DataJob runs automatically. BladePipe will automatically run the following DataTasks:
    - **Schema Migration**: The schemas of the source tables will be migrated to the target instance.
    - **Full Data**: All existing data of the source tables will be fully migrated to the target instance.
    - **Incremental**: Ongoing data changes will be continuously synchronized to the target instance.
 
-![image.png](../../_assets/3.11-6.png)
+![image.png](../../_assets/3.11-8.png)
+
