@@ -88,13 +88,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
         this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(
-                new CacheLoader<>() {
-                    @Override
-                    public Map<String, Partition> load(IcebergTableName key) throws Exception {
-                        // use default executor service.
-                        return delegate.getPartitions(key.dbName, key.tableName, key.snapshotId, null);
-                    }
-                });
+            new CacheLoader<>() {
+                @Override
+                public Map<String, Partition> load(IcebergTableName key) throws Exception {
+                    // use default executor service.
+                    return delegate.getPartitions(key.dbName, key.tableName, key.snapshotId, null);
+                }
+            });
         this.dataFileCache = enableCache ?
                 newCacheBuilder(
                         icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
