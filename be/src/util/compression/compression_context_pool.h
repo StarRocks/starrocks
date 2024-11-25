@@ -114,7 +114,7 @@ public:
 
 private:
     void add(InternalRef ptr) {
-        // Use explicit producer token to avoid the overhead of too many sub-ququeues
+        // Use explicit producer token to avoid the overhead of too many sub-queues
         static thread_local std::unique_ptr<::moodycamel::ProducerToken> producer_token;
         if (producer_token == nullptr) {
             producer_token = std::make_unique<::moodycamel::ProducerToken>(_ctx_resources);
