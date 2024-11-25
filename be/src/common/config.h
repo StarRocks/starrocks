@@ -1518,4 +1518,6 @@ CONF_mBool(batch_write_trace_log_enable, "false");
 // ignore union type tag in avro kafka routine load
 CONF_mBool(avro_ignore_union_type_tag, "false");
 
+CONF_mInt32(json_parse_many_batch_size, "0");
+CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 } // namespace starrocks::config
