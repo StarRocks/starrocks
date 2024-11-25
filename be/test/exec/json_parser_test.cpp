@@ -881,6 +881,7 @@ PARALLEL_TEST(JsonParserTest, test_big_value) {
 }
 
 PARALLEL_TEST(JsonParserTest, test_big_json) {
+    config::json_parse_many_batch_size = 1;
     simdjson::ondemand::parser simdjson_parser;
     // The padded_string would allocate memory with simdjson::SIMDJSON_PADDING bytes padding.
     simdjson::padded_string input = simdjson::padded_string::load("./be/test/exec/test_data/json_scanner/big.json");
