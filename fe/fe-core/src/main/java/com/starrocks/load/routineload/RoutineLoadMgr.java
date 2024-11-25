@@ -584,15 +584,13 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public boolean checkTaskInJob(UUID taskId) {
+    public boolean checkTaskInJob(long jobId, UUID taskId) {
         readLock();
         try {
-            for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
-                if (routineLoadJob.containsTask(taskId)) {
-                    return true;
-                }
+            if (!idToRoutineLoadJob.containsKey(jobId)) {
+                return false;
             }
-            return false;
+            return idToRoutineLoadJob.get(jobId).containsTask(taskId);
         } finally {
             readUnlock();
         }

@@ -1049,4 +1049,23 @@ public class RoutineLoadManagerTest {
         Assert.assertNotNull(restartedRoutineLoadManager.getJob(1L));
         Assert.assertNotNull(restartedRoutineLoadManager.getJob(2L));
     }
+
+
+    @Test
+    public void testCheckTaskInJob() throws Exception {
+
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(1L, "job1", 1L, 1L, null, "topic1");
+        Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
+        partitionIdToOffset.put(1, 100L);
+        partitionIdToOffset.put(2, 200L);
+        KafkaTaskInfo routineLoadTaskInfo = new KafkaTaskInfo(new UUID(1, 1), kafkaRoutineLoadJob, 20000,
+                System.currentTimeMillis(), partitionIdToOffset, Config.routine_load_task_timeout_second * 1000);
+        kafkaRoutineLoadJob.routineLoadTaskInfoList.add(routineLoadTaskInfo);
+        RoutineLoadMgr routineLoadMgr = new RoutineLoadMgr();
+        routineLoadMgr.addRoutineLoadJob(kafkaRoutineLoadJob, "db");
+        boolean taskExist = routineLoadMgr.checkTaskInJob(kafkaRoutineLoadJob.getId(), routineLoadTaskInfo.getId());
+        Assert.assertTrue(taskExist);
+        boolean taskNotExist = routineLoadMgr.checkTaskInJob(-1L, routineLoadTaskInfo.getId());
+        Assert.assertFalse(taskNotExist);
+    }
 }
