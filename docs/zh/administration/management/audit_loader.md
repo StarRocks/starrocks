@@ -46,8 +46,8 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `planCpuCosts`      DOUBLE                     COMMENT "查询规划阶段CPU占用（纳秒）",
   `planMemCosts`      DOUBLE                     COMMENT "查询规划阶段内存占用（字节）",
   `pendingTimeMs`     BIGINT                     COMMENT "查询在队列中等待的时间（毫秒）",
-  `candidateMVs`      varchar(65533)             COMMENT "候选MV列表",
-  `hitMvs`            varchar(65533)             COMMENT "命中MV列表"
+  `candidateMVs`      VARCHAR(65533)             COMMENT "候选MV列表",
+  `hitMvs`            VARCHAR(65533)             COMMENT "命中MV列表"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "审计日志表"
@@ -90,18 +90,14 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 
 3. 修改 **plugin.conf** 文件以配置 AuditLoader。您必须配置以下项目以确保 AuditLoader 可以正常工作：
 
-    - `frontend_host_port`：FE 节点 IP 地址和 HTTP 端口，格式为 `<fe_ip>:<fe_http_port>`。 默认值为 `127.0.0.1:8030`。
+    - `frontend_host_port`：FE 节点 IP 地址和 HTTP 端口，格式为 `<fe_ip>:<fe_http_port>`。推荐使用默认值，即 `127.0.0.1:8030` 。StarRocks 中各个 FE 是独立管理各自的审计信息。在安装插件后，各个 FE 分别会启动各自的后台线程进行审计信息的获取和攒批，并通过 Stream Load 写入。 `frontend_host_port` 配置项用于为插件后台 Stream Load 任务提供 HTTP 协议的 IP 和端口，该参数不支持配置为多个值。其中，参数的 IP 部分可以使用集群内任意某个 FE 的 IP，但并不推荐这样配置，因为若对应的 FE 出现异常，其他 FE 后台的审计信息写入任务也会因无法通信导致写入失败。推荐配置为默认的 `127.0.0.1:8030`，让各个 FE 均使用自身的 HTTP 端口进行通信，以此规避其他 FE 异常时对通信的影响（所有的写入任务最终都会被 FE 自动转发到 FE Leader 节点执行）。
     - `database`：审计日志库名。
     - `table`：审计日志表名。
     - `user`：集群用户名。该用户必须具有对应表的 INSERT 权限。
     - `password`：集群用户密码。
-  
-> **注意**
->
-> - 推荐使用参数 `frontend_host_port` 的默认配置，即 `127.0.0.1:8030` 。StarRocks 中各个 FE 是独立管理各自的审计信息的，在安装审计插件后，各个 FE 分别会启动各自的后台线程进行审计信息的获取攒批和 Stream Load 写入。 `frontend_host_port` 配置项用于为插件后台 Stream Load 任务提供 http 协议的 IP 和端口，该参数不支持配置为多个值。其中，参数 IP 部分可以使用集群内任意某个 FE 的 IP，但并不推荐这样配置，因为若对应的 FE 出现异常，其他 FE 后台的审计信息写入任务也会因无法通信导致写入失败。推荐配置为默认的 `127.0.0.1:8030`，让各个 FE 均使用自身的 http 端口进行通信，以此规避其他 FE 异常时对通信的影响（当然，所有的写入任务最终都会被 FE 自动转发到 FE Leader 节点执行）。
-> - `secret_key` 参数用于配置"加密密码的 key 字符串"，在审计插件中其长度不得超过 16 个字节。如果该参数留空，表示不对 `plugin.conf` 中的密码进行加解密，在 password 处直接配置明文密码即可。如果该参数不为空，表示需要对密码进行加解密，password 处需配置为加密后的字符串，加密后的密码可在 StarRocks 中通过 `AES_ENCRYPT` 函数生成：`SELECT TO_BASE64(AES_ENCRYPT('password','secret_key'));`。
-> - `enable_compute_all_query_digest` 参数表示是否对所有查询都生成 Hash SQL 指纹（StarRocks 默认只为慢查询开启 SQL 指纹，注意插件中的指纹计算方法与 FE 内部的方法不一致，FE 会对 SQL 语句[规范化处理](https://docs.mirrorship.cn/zh/docs/administration/Query_planning/#%E6%9F%A5%E7%9C%8B-sql-%E6%8C%87%E7%BA%B9)，而插件不会，且如果开启该参数，指纹计算会额外占用集群内的计算资源）。
-> - `filter` 参数可以配置审计信息入库的过滤条件，该处使用 Stream Load 中 [where 参数](https://docs.mirrorship.cn/zh/docs/sql-reference/sql-statements/data-manipulation/STREAM_LOAD/#opt_properties)实现，即`-H "where: <condition>"`，默认为空，配置示例：`filter=isQuery=1 and clientIp like '127.0.0.1%' and user='root'`。
+    - `secret_key`：用于加密密码的 Key（字符串，长度不得超过 16 个字节）。如果该参数为空，则表示不对 **plugin.conf** 中的密码进行加解密，您只需在 `password` 处直接配置明文密码。如果该参数不为空，表示需要通过该 Key 对密码进行加解密，您需要在 `password` 处配置加密后的字符串。加密后的密码可在 StarRocks 中通过 `AES_ENCRYPT` 函数生成：`SELECT TO_BASE64(AES_ENCRYPT('password','secret_key'));`。
+    - `enable_compute_all_query_digest`：是否对所有查询都生成 Hash SQL 指纹（StarRocks 默认只为慢查询开启 SQL 指纹）。需注意插件中的指纹计算方法与 FE 内部的方法不一致，FE 会对 SQL 语句[规范化处理](../Query_planning.md#%E6%9F%A5%E7%9C%8B-sql-%E6%8C%87%E7%BA%B9)，而插件不会，且如果开启该参数，指纹计算会额外占用集群内的计算资源。
+    - `filter`：审计信息入库的过滤条件。该参数基于 Stream Load 中的 [WHERE 参数](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#opt_properties) 实现，即 `-H "where: <condition>"`，默认值为空字符串。示例：`filter=isQuery=1 and clientIp like '127.0.0.1%' and user='root'`。
 
 4. 重新打包以上文件。
 
@@ -110,9 +106,10 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
     ```
 
 5. 将压缩包分发至所有 FE 节点运行的机器。请确保所有压缩包都存储在相同的路径下，否则插件将安装失败。分发完成后，请复制压缩包的绝对路径。
-> **注意**
->
-> - 也可将 auditloader.zip 分发至所有 FE 都可访问到的 http 服务中（例如 httpd 或 nginx），然后使用网络路径安装。注意这两种方式下 auditloader.zip 在执行安装后都需要在该路径下持续保留，不可在安装后删除源文件。
+
+  > **注意**
+  >
+  > 您也可将 **auditloader.zip** 分发至所有 FE 都可访问到的 HTTP 服务中（例如 `httpd` 或 `nginx`），然后使用网络路径安装。注意这两种方式下 **auditloader.zip** 在执行安装后都需要在该路径下持续保留，不可在安装后删除源文件。
 
 ## 安装 AuditLoader
 
@@ -131,7 +128,7 @@ mysql> INSTALL PLUGIN FROM "/opt/module/starrocks/auditloader.zip";
 若通过网络路径安装，还需在安装命令的属性中提供插件压缩包的 md5 信息，命令示例：
 
 ```sql
-INSTALL PLUGIN FROM "http://47.94.183.188/extra/auditloader.zip" PROPERTIES("md5sum" = "3975F7B880C9490FE95F42E2B2A28E2D");
+INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5sum" = "3975F7B880C9490FE95F42E2B2A28E2D");
 ```
 
 详细操作说明参阅 [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugin/INSTALL_PLUGIN.md)。
@@ -217,4 +214,4 @@ INSTALL PLUGIN FROM "http://47.94.183.188/extra/auditloader.zip" PROPERTIES("md5
 UNINSTALL PLUGIN AuditLoader;
 ```
 
-AuditLoader 的日志会打印在各个 FE 的 fe.log 中，您也可以在 fe.log 中检索关键字 `audit`，用排查 Stream Load 任务的思路来定位问题。所有配置设置正确后，您可以按照上述步骤重新安装。
+AuditLoader 的日志会打印在各个 FE 的 **fe.log** 中。您可以在 **fe.log** 中检索关键字 `audit`，用排查 Stream Load 任务的思路来定位问题。所有配置设置正确后，您可以按照上述步骤重新安装。
