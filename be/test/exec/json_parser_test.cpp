@@ -336,7 +336,7 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_
     st = parser->get_current(&row);
     ASSERT_TRUE(st.ok());
     int64_t val = row.find_field("key1").get_int64();
-    ASSERT_EQ(val, 1);   
+    ASSERT_EQ(val, 1);
 
     // double get.
     st = parser->get_current(&row);
