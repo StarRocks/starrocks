@@ -104,7 +104,8 @@ public class PredicateColumnsStorage extends FrontendDaemon {
     private static final String INSERT_VALUE = "('$feId', $dbId, $tableId, $columnId, '$usage', '$lastUsed')";
 
     private static final String QUERY =
-            "SELECT fe_id, db_id,  table_id,  column_id, usage, last_used, created FROM " + TABLE_FULL_NAME;
+            "SELECT fe_id, db_id,  table_id,  column_id, usage, last_used, created FROM " + TABLE_FULL_NAME
+                    + " WHERE true ";
     private static final String WHERE_THIS_FE = "fe_id = '$feId'";
 
     private static final String VACUUM = "DELETE FROM " + TABLE_FULL_NAME +
@@ -139,19 +140,23 @@ public class PredicateColumnsStorage extends FrontendDaemon {
     /**
      * Query state from all FEs
      */
-    public List<ColumnUsage> queryGlobalState(TableName tableName) {
+    public List<ColumnUsage> queryGlobalState(TableName tableName, EnumSet<ColumnUsage.UseCase> useCases) {
         LocalMetastore meta = GlobalStateMgr.getCurrentState().getLocalMetastore();
         Optional<Database> db = StringUtils.isEmpty(tableName.getDb()) ? Optional.empty()
                 : meta.mayGetDb(tableName.getDb());
         Optional<Table> table = StringUtils.isEmpty(tableName.getTbl()) ? Optional.empty()
                 : meta.mayGetTable(tableName.getDb(), tableName.getTbl());
 
-        StringBuilder sb = new StringBuilder(QUERY + " WHERE true");
+        StringBuilder sb = new StringBuilder(QUERY);
         if (db.isPresent()) {
-            sb.append(" AND db_id = ").append(db.get().getId());
+            sb.append(" AND `db_id` = ").append(db.get().getId());
         }
         if (table.isPresent()) {
-            sb.append(" AND table_id = ").append(table.get().getId());
+            sb.append(" AND `table_id` = ").append(table.get().getId());
+        }
+        if (!useCases.isEmpty()) {
+            String useCaseRegex = useCases.stream().map(ColumnUsage.UseCase::toString).collect(Collectors.joining("|"));
+            sb.append(String.format(" AND regexp(`usage`, '%s')", useCaseRegex));
         }
 
         String sql = sb.toString();
@@ -217,7 +222,7 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         VelocityContext context = new VelocityContext();
         context.put("feId", selfName);
 
-        String template = QUERY + WHERE_THIS_FE;
+        String template = QUERY + " AND " + WHERE_THIS_FE;
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         String sql = sw.toString();

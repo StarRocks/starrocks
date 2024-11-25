@@ -189,6 +189,10 @@ public class ColumnUsage implements GsonPostProcessable {
             return EnumSet.allOf(UseCase.class);
         }
 
+        public static EnumSet<UseCase> empty() {
+            return EnumSet.noneOf(UseCase.class);
+        }
+
         public static EnumSet<UseCase> getPredicateColumnUseCase() {
             return EnumSet.of(PREDICATE, JOIN, GROUP_BY, DISTINCT);
         }

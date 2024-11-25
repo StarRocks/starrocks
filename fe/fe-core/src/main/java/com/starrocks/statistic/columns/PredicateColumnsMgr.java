@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -123,6 +124,9 @@ public class PredicateColumnsMgr {
         if (mayUsage.isEmpty()) {
             return;
         }
+        if (Database.isSystemOrInternalDatabase(mayUsage.get().getTableName().getDb())) {
+            return;
+        }
         ColumnUsage usage = mayUsage.get();
         ColumnUsage oldValue = id2columnUsage.computeIfAbsent(usage, k -> usage);
         oldValue.useNow(useCase);
@@ -144,7 +148,8 @@ public class PredicateColumnsMgr {
         if (FeConstants.runningUnitTest) {
             return id2columnUsage.values().stream().filter(pred).collect(Collectors.toList());
         } else {
-            return getStorage().queryGlobalState(tableName).stream().filter(pred).collect(Collectors.toList());
+            return getStorage().queryGlobalState(tableName, useCases).stream().filter(pred)
+                    .collect(Collectors.toList());
         }
     }
 
@@ -203,21 +208,19 @@ public class PredicateColumnsMgr {
 
         @Override
         public boolean test(ColumnUsage columnUsage) {
-            if (columnUsage.getTableName() == null) {
+            if (tableName == null || columnUsage.getTableName() == null) {
                 return true;
             }
-            if (StringUtils.isNotEmpty(tableName.getCatalog())) {
-                if (!columnUsage.getTableName().getCatalog().equalsIgnoreCase(tableName.getCatalog())) {
-                    return false;
-                }
-            }
+            // if (!StringUtils.equalsIgnoreCase(columnUsage.getTableName().getCatalog(), tableName.getCatalog())) {
+            //     return false;
+            // }
             if (StringUtils.isNotEmpty(tableName.getDb())) {
-                if (!columnUsage.getTableName().getDb().equalsIgnoreCase(tableName.getDb())) {
+                if (!StringUtils.equalsIgnoreCase(columnUsage.getTableName().getDb(), tableName.getDb())) {
                     return false;
                 }
             }
             if (StringUtils.isNotEmpty(tableName.getTbl())) {
-                if (!columnUsage.getTableName().getTbl().equalsIgnoreCase(tableName.getTbl())) {
+                if (!StringUtils.equalsIgnoreCase(columnUsage.getTableName().getTbl(), tableName.getTbl())) {
                     return false;
                 }
             }

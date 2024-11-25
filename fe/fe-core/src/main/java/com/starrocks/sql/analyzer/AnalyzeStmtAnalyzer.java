@@ -160,6 +160,7 @@ public class AnalyzeStmtAnalyzer {
             // ANALYZE TABLE xxx PREDICATE COLUMNS
             if (statement.isUsePredicateColumns()) {
                 List<String> targetColumns = Lists.newArrayList();
+
                 List<ColumnUsage> predicateColumns =
                         PredicateColumnsMgr.getInstance().queryPredicateColumns(statement.getTableName());
                 for (ColumnUsage col : ListUtils.emptyIfNull(predicateColumns)) {

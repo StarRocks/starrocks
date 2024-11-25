@@ -18,6 +18,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.history.TableKeeper;
@@ -67,9 +68,9 @@ class PredicateColumnsStorageTest extends PlanTestBase {
         instance.finishRestore();
         instance.finishRestore(lastPersist);
         Assertions.assertTrue(instance.isRestored());
-        Mockito.verify(repo).executeDQL("SELECT fe_id, db_id, table_id, column_id, " +
-                "usage, last_used , created FROM _statistics_.predicate_columns WHERE fe_id " +
-                "= '" + feName + "'");
+        Mockito.verify(repo).executeDQL("SELECT fe_id, db_id,  table_id,  column_id, usage, last_used, created " +
+                "FROM _statistics_.predicate_columns WHERE true  AND fe_id = '" + feName + "'"
+        );
 
         // persist
         Database db = starRocksAssert.getDb("test");
@@ -90,11 +91,10 @@ class PredicateColumnsStorageTest extends PlanTestBase {
                         t0.getId()));
 
         // query
-        instance.queryGlobalState(TableName.fromString("default_catalog.test.t0"));
-        Mockito.verify(repo).executeDQL(
-                "SELECT fe_id, db_id, table_id, column_id, usage, last_used , created FROM _statistics_" +
-                        ".predicate_columns " +
-                        "WHERE fe_id = '" + feName + "'");
+        instance.queryGlobalState(TableName.fromString("default_catalog.test.t0"),
+                EnumSet.noneOf(ColumnUsage.UseCase.class));
+        Mockito.verify(repo).executeDQL("SELECT fe_id, db_id,  table_id,  column_id, usage, last_used, created " +
+                "FROM _statistics_.predicate_columns WHERE true  AND fe_id = '" + feName + "'");
 
         // TODO: vacuum
         instance.vacuum(lastPersist);
@@ -118,13 +118,27 @@ class PredicateColumnsStorageTest extends PlanTestBase {
                 TableName.fromString("default_catalog.test.t1"),
                 EnumSet.of(ColumnUsage.UseCase.PREDICATE, ColumnUsage.UseCase.JOIN));
 
-        String row1 = String.format("{\"data\":[%s, %s]}",
-                (usage1.toJson()),
-                (usage2.toJson())
+        String row1 = String.format("{\"data\": ['%s',%d,%d,%d,'%s','%s','%s']}",
+                feName,
+                usage1.getColumnFullId().getDbId(),
+                usage1.getColumnFullId().getTableId(),
+                usage1.getColumnFullId().getColumnUniqueId(),
+                usage1.getUseCaseString(),
+                DateUtils.formatDateTimeUnix(usage1.getLastUsed()),
+                DateUtils.formatDateTimeUnix(usage1.getCreated())
+        );
+        String row2 = String.format("{\"data\": ['%s',%d,%d,%d,'%s','%s','%s']}",
+                feName,
+                usage2.getColumnFullId().getDbId(),
+                usage2.getColumnFullId().getTableId(),
+                usage2.getColumnFullId().getColumnUniqueId(),
+                usage2.getUseCaseString(),
+                DateUtils.formatDateTimeUnix(usage2.getLastUsed()),
+                DateUtils.formatDateTimeUnix(usage2.getCreated())
         );
 
         TResultBatch batch = new TResultBatch();
-        batch.setRows(List.of(ByteBuffer.wrap(row1.getBytes())));
+        batch.setRows(List.of(ByteBuffer.wrap(row1.getBytes()), ByteBuffer.wrap(row2.getBytes())));
         List<ColumnUsage> result = PredicateColumnsStorage.resultToColumnUsage(List.of(batch));
 
         Assertions.assertEquals(2, result.size());
