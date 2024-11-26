@@ -721,7 +721,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.getItems().removeIf(item -> {
             try {
                 Authorizer.checkTableAction(currentUser, null, item.getTable_database(), item.getTable_name(),
-                        PrivilegeType.USAGE);
+                        PrivilegeType.SELECT);
                 return false;
             } catch (AccessDeniedException e) {
                 return true;
