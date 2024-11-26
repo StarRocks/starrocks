@@ -33,7 +33,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -142,9 +141,9 @@ public class PredicateColumnsMgr {
     }
 
     private List<ColumnUsage> queryByUseCase(TableName tableName, EnumSet<ColumnUsage.UseCase> useCases) {
-        TablePredicate predicate = new TablePredicate(tableName);
+        TableNamePredicate predicate = new TableNamePredicate(tableName);
         Predicate<ColumnUsage> useCasePredicate = (c) -> !SetUtils.intersection(c.getUseCases(), useCases).isEmpty();
-        Predicate<ColumnUsage> pred = predicate.and(useCasePredicate);
+        Predicate<ColumnUsage> pred = useCasePredicate.and(x -> predicate.test(x.getTableName()));
         if (FeConstants.runningUnitTest) {
             return id2columnUsage.values().stream().filter(pred).collect(Collectors.toList());
         } else {
@@ -193,40 +192,6 @@ public class PredicateColumnsMgr {
 
     public void startDaemon() {
         DaemonThread.getInstance().start();
-    }
-
-    /**
-     * The predicate to identify a table
-     */
-    static class TablePredicate implements Predicate<ColumnUsage> {
-
-        private final TableName tableName;
-
-        public TablePredicate(TableName tableName) {
-            this.tableName = tableName;
-        }
-
-        @Override
-        public boolean test(ColumnUsage columnUsage) {
-            if (tableName == null || columnUsage.getTableName() == null) {
-                return true;
-            }
-            // if (!StringUtils.equalsIgnoreCase(columnUsage.getTableName().getCatalog(), tableName.getCatalog())) {
-            //     return false;
-            // }
-            if (StringUtils.isNotEmpty(tableName.getDb())) {
-                if (!StringUtils.equalsIgnoreCase(columnUsage.getTableName().getDb(), tableName.getDb())) {
-                    return false;
-                }
-            }
-            if (StringUtils.isNotEmpty(tableName.getTbl())) {
-                if (!StringUtils.equalsIgnoreCase(columnUsage.getTableName().getTbl(), tableName.getTbl())) {
-                    return false;
-                }
-            }
-
-            return true;
-        }
     }
 
     static class DaemonThread extends FrontendDaemon {

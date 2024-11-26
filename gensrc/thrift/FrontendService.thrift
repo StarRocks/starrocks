@@ -1772,6 +1772,32 @@ struct TColumnStatsUsageRes {
     1: optional list<TColumnStatsUsage> items;
 }
 
+struct TAnalyzeStatusReq {
+    1: optional TAuthInfo auth_info
+    2: optional string table_catalog
+    3: optional string table_database
+    4: optional string table_name
+}
+
+struct TAnalyzeStatusItem {
+    1: optional string id
+    2: optional string catalog_name
+    3: optional string database_name
+    4: optional string table_name
+    5: optional string columns
+    6: optional string type
+    7: optional string schedule
+    8: optional string status
+    9: optional string start_time
+    10: optional string end_time
+    11: optional string properties
+    12: optional string reason
+}
+
+struct TAnalyzeStatusRes {
+    1: optional list<TAnalyzeStatusItem> items
+}
+
 enum TGrantsToType {
     ROLE,
     USER,
@@ -2008,6 +2034,8 @@ service FrontendService {
 
     // information_schema.column_stats_uage
     TColumnStatsUsageRes getColumnStatsUsage(1: TColumnStatsUsageReq request)
+    // information_schema.analyze_status
+    TAnalyzeStatusRes getAnalyzeStatus(1: TAnalyzeStatusReq request)
 
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)
