@@ -19,3 +19,5 @@ CREATE MATERIALIZED VIEW sync_mv AS SELECT k1, SUM(v1) FROM tbl1 GROUP BY k1;
 function: wait_materialized_view_finish()
 
 INSERT INTO tbl1 VALUES("2020-01-11",6,100);
+
+SELECT mv_sum_v1 FROM sync_mv [_SYNC_MV_] ORDER BY k1;

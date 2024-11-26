@@ -30,3 +30,9 @@ None
 INSERT INTO tbl1 VALUES("2020-01-11",6,100);
 -- result:
 -- !result
+
+SELECT mv_sum_v1 FROM sync_mv [_SYNC_MV_] ORDER BY k1;
+-- result:
+300
+100
+-- !result
