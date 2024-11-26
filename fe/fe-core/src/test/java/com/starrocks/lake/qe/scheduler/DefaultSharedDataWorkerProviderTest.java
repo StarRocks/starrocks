@@ -663,7 +663,8 @@ public class DefaultSharedDataWorkerProviderTest {
 
     @Test
     public void testNextWorkerOverflow() throws NonRecoverableException {
-        WorkerProvider provider = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes));
+        WorkerProvider provider =
+                new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes));
         for (int i = 0; i < 100; i++) {
             Long workerId = provider.selectNextWorker();
             assertThat(workerId).isNotNegative();
