@@ -470,7 +470,7 @@ public class TransactionState implements Writable {
     }
 
     // for test
-    public long getPublishTaskFinishTime() {
+   long getPublishTaskFinishTime() {
         return this.publishVersionFinishTime;
     }
 
