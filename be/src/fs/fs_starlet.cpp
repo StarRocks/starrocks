@@ -98,6 +98,9 @@ bool is_starlet_uri(std::string_view uri) {
     case OperationKind::SCHEMA:                                                       \
         starlet_opt.op_type = staros::starlet::fslib::OperationType::SCHEMA;          \
         break;                                                                        \
+    case OperationKind::LAKE_INDEX:                                                   \
+        starlet_opt.op_type = staros::starlet::fslib::OperationType::LAKE_INDEX;      \
+        break;                                                                        \
     case OperationKind::UNDEFINED:                                                    \
         starlet_opt.op_type = staros::starlet::fslib::OperationType::UNDEFINED;       \
     } // namespace starrocks

@@ -44,7 +44,17 @@ struct SpaceInfo {
     int64_t available = 0;
 };
 
-enum class OperationKind { QUERY, LOAD, COMPACTION, TABLET_METADATA, TXN_LOG, DEL_VECTOR, SCHEMA, UNDEFINED };
+enum class OperationKind {
+    QUERY,
+    LOAD,
+    COMPACTION,
+    TABLET_METADATA,
+    TXN_LOG,
+    DEL_VECTOR,
+    SCHEMA,
+    LAKE_INDEX,
+    UNDEFINED
+};
 
 struct FSOptions {
 private:

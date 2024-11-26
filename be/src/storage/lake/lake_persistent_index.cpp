@@ -142,6 +142,7 @@ Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_met
     uint64_t max_rss_rowid = 0;
     for (auto& sstable_pb : sstable_meta.sstables()) {
         RandomAccessFileOptions opts;
+        opts.op_type = OperationKind::LAKE_INDEX;
         if (!sstable_pb.encryption_meta().empty()) {
             ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
             opts.encryption_info = std::move(info);
@@ -191,6 +192,7 @@ Status LakePersistentIndex::minor_compact() {
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
     WritableFileOptions wopts;
+    wopts.op_type = OperationKind::LAKE_INDEX;
     std::string encryption_meta;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
@@ -204,6 +206,7 @@ Status LakePersistentIndex::minor_compact() {
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
+    opts.op_type = OperationKind::LAKE_INDEX;
     if (!encryption_meta.empty()) {
         opts.encryption_info = wopts.encryption_info;
     }
@@ -421,6 +424,7 @@ Status LakePersistentIndex::prepare_merging_iterator(
     for (const auto& sstable_pb : sstables_to_merge) {
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
         RandomAccessFileOptions opts;
+        opts.op_type = OperationKind::LAKE_INDEX;
         if (!sstable_pb.encryption_meta().empty()) {
             ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
             opts.encryption_info = std::move(info);
@@ -483,6 +487,7 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     auto filename = gen_sst_filename();
     auto location = tablet_mgr->sst_location(metadata.id(), filename);
     WritableFileOptions wopts;
+    wopts.op_type = OperationKind::LAKE_INDEX;
     std::string encryption_meta;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
@@ -520,6 +525,9 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
         opts.encryption_info = std::move(info);
     }
+
+    opts.op_type = OperationKind::LAKE_INDEX;
+
     ASSIGN_OR_RETURN(auto rf,
                      fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
@@ -584,6 +592,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
         const auto& del = rowset->metadata().del_files(del_idx);
         RandomAccessFileOptions ropts;
+        ropts.op_type = OperationKind::LAKE_INDEX;
         if (!del.encryption_meta().empty()) {
             ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
         }
