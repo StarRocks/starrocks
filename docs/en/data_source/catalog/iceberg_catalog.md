@@ -589,12 +589,31 @@ Description: The service account that you want to impersonate.
 
 #### MetadataUpdateParams
 
-A set of parameters about how StarRocks caches the metadata of Hive. This parameter set is optional.
+A set of parameters about how StarRocks caches Iceberg metadata. This parameter set is optional.
 
-Currently, this parameter set contains only one parameter, `enable_iceberg_metadata_cache`, which specifies whether to cache pointers and partition names for Iceberg tables. This parameter is supported from v3.2.1 onwards:
+###### enable_iceberg_metadata_cache
+
+The main parameter is `enable_iceberg_metadata_cache`, which specifies whether to cache Iceberg tables metadata.
+This parameter is supported from v3.2.1 onwards:
 
 - From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used.
 - In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
+
+When you enable enable_iceberg_metadata_cache, backig catalog will be polled every https://docs.starrocks.io/docs/administration/management/FE_configuration/#background_refresh_metadata_interval_millis
+
+###### iceberg_meta_cache_ttl_sec
+
+This parameter controls when to update table's metadata. If you commit to iceberg table, starrocks will refresh table's metadata if cached commit timestamp is older than iceberg_meta_cache_ttl_sec on it's next refresh run.
+
+If tables metadata have not changed on refresh run, cache will be extended by this value.
+
+Default is 48 hours.
+
+##### iceberg_table_cache_ttl_sec
+
+This parameter controls when to expire cache of table names and hence when to stop refreshing tables' metadata.
+
+Default is 30 minutes.
 
 ### Examples
 
