@@ -339,7 +339,7 @@ transforms=addfield,unwrap
 transforms.addfield.type=com.starrocks.connector.kafka.transforms.AddOpFieldForDebeziumRecord
 transforms.unwrap.type=io.debezium.transforms.ExtractNewRecordState
 transforms.unwrap.drop.tombstones=true
-transforms.unwrap.delete.handling.mode
+transforms.unwrap.delete.handling.mode=rewrite
 ```
 
 In the above configurations, we specify `transforms=addfield,unwrap`.
