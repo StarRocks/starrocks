@@ -725,6 +725,7 @@ Currently, StarRocks supports modifying the following table properties:
 - `bloom_filter_columns`
 - `colocate_with`
 - `bucket_size` (supported since 3.2)
+- `base_compaction_forbidden_time_ranges` (supported since v3.2.13)
 
 Note:
 You can also modify the properties by merging into the above operation on column. See the [following examples](#examples).
@@ -752,6 +753,10 @@ Before v3.1, compaction is performed in two ways:
 Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
 
 Shared-data clusters support this feature from v3.3.0 onwards.
+
+> **NOTE**
+>
+> From v3.2.13 onwards, you can forbid Base Compaction within certain time range using the property [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction).
 
 Syntax:
 
