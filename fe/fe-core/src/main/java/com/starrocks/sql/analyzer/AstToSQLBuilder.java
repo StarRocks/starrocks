@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.ViewRelation;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -308,6 +309,11 @@ public class AstToSQLBuilder {
                 sqlBuilder.append(" [");
                 sqlBuilder.append(hint.name());
                 sqlBuilder.append("] ");
+            }
+
+            if (node.getSampleClause() != null) {
+                TableSampleClause sample = node.getSampleClause();
+                sqlBuilder.append(" ").append(sample.toSql());
             }
 
             if (node.getAlias() != null) {

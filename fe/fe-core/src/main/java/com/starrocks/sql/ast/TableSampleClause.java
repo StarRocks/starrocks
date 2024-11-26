@@ -21,6 +21,7 @@ import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTableSampleOptions;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.logging.log4j.util.Strings;
 
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
@@ -28,16 +29,14 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * SQL Clause of: TABLE SAMPLE (...)
  */
-public class TableSampleClause implements ParseNode {
+public final class TableSampleClause implements ParseNode {
 
     // Properties supported by sampling
     // sample method: by_row/by_block/by_page
     private static final String SAMPLE_PROPERTY_METHOD = "METHOD";
     // random seed: default value is a random number
     private static final String SAMPLE_PROPERTY_SEED = "SEED";
-    // probability of sampling: (0,100)
-    private static final String SAMPLE_PROPERTY_PROBABILITY = "PROBABILITY";
-    // same as probability
+    // percent of sampling: (0,100)
     private static final String SAMPLE_PROPERTY_PERCENT = "PERCENT";
 
     // Default values for sampling
@@ -70,7 +69,6 @@ public class TableSampleClause implements ParseNode {
                 case SAMPLE_PROPERTY_METHOD:
                     this.sampleMethod = SampleMethod.mustParse(value);
                     break;
-                case SAMPLE_PROPERTY_PROBABILITY:
                 case SAMPLE_PROPERTY_PERCENT:
                     long percent = ParseUtil.analyzeLongValue(value);
                     if (!(0 < percent && percent < 100)) {
@@ -96,11 +94,21 @@ public class TableSampleClause implements ParseNode {
 
     @Override
     public String toString() {
-        final StringBuffer sb = new StringBuffer("TableSample{");
+        final StringBuilder sb = new StringBuilder("TableSample{");
         sb.append("method=").append(sampleMethod);
         sb.append(", randomSeed=").append(randomSeed);
         sb.append(", randomProbability=").append(randomProbabilityPercent);
         sb.append('}');
+        return sb.toString();
+    }
+
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("SAMPLE(");
+        sb.append("'method'=").append(Strings.quote(sampleMethod.toString())).append(",");
+        sb.append("'seed'=").append(Strings.quote(String.valueOf(randomSeed))).append(",");
+        sb.append("'percent'=").append(Strings.quote(String.valueOf(randomProbabilityPercent)));
+        sb.append(")");
         return sb.toString();
     }
 
@@ -113,13 +121,11 @@ public class TableSampleClause implements ParseNode {
     }
 
     public enum SampleMethod {
-        BY_ROW,     // Bernoulli sampling of each row, which is the least efficient
         BY_BLOCK,   // BLOCK: about 1024 rows in a logical block
         BY_PAGE;    // PAGE: physical page, about 64KB, which is the most efficient but may not uniform
 
         private static final Map<SampleMethod, com.starrocks.thrift.SampleMethod> THRIFT_MAPPING =
-                ImmutableMap.of(BY_ROW, com.starrocks.thrift.SampleMethod.BY_ROW,
-                        BY_BLOCK, com.starrocks.thrift.SampleMethod.BY_BLOCK,
+                ImmutableMap.of(BY_BLOCK, com.starrocks.thrift.SampleMethod.BY_BLOCK,
                         BY_PAGE, com.starrocks.thrift.SampleMethod.BY_PAGE);
 
         public static SampleMethod mustParse(String value) throws AnalysisException {
