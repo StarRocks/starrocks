@@ -362,10 +362,15 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public static class IcebergTableName {
         private final String dbName;
         private final String tableName;
+        // if as cache key for `getTable`, ignoreSnapshotId = true
+        // otherwise it's false
+        private boolean ignoreSnapshotId = false;
+        // -1 mean it's an empty table without any snapshot.
         private long snapshotId = -1;
 
         public IcebergTableName(String dbName, String tableName) {
             this(dbName, tableName, -1);
+            this.ignoreSnapshotId = true;
         }
 
         public IcebergTableName(String dbName, String tableName, long snapshotId) {
@@ -384,7 +389,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             }
             IcebergTableName that = (IcebergTableName) o;
             return dbName.equalsIgnoreCase(that.dbName) && tableName.equalsIgnoreCase(that.tableName) &&
-                    (snapshotId == -1 || snapshotId == that.snapshotId);
+                    (ignoreSnapshotId || snapshotId == that.snapshotId);
         }
 
         @Override
