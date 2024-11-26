@@ -32,6 +32,7 @@ import com.starrocks.connector.metadata.MetadataTableName;
 import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -421,6 +422,36 @@ public class MetadataMgrTest {
             }
         };
         metadataMgr.dropDb("hive_catalog", "hive_db", false);
+    }
+
+    @Test
+    public void testDropDbInResourceGroup() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        // create database
+        String createDbStmtStr = "create database test_abc;";
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+
+        // create resource group
+        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        String createRGSql = "create resource group test_rg\n" +
+                "to\n" +
+                "     (user='rt_rg_user', db='test_abc')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '25',\n" +
+                "    'mem_limit' = '80%',\n" +
+                "    'concurrency_limit' = '10',\n" +
+                "    'type' = 'short_query'\n" +
+                ");";
+        starRocksAssert.executeResourceGroupDdlSql(createRGSql);
+
+        // drop database
+        try {
+            starRocksAssert.dropDatabase("test_abc");
+        } catch (Exception e) {
+            String error = "Deleting the database [test_abc] failed because the database was bound to a resource group [test_rg]";
+            Assert.assertTrue(e.getMessage().contains(error));
+        }
     }
 
     @Test
