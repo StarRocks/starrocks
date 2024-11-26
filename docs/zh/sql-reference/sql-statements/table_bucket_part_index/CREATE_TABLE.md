@@ -780,6 +780,46 @@ PROPERTIES (
 > - 仅 StarRocks 存算一体集群支持该参数，支持自 v3.2.0 版本起。
 > - 如果您需要为存算分离表开启 fast schema evolution，则必须在集群范围内设置启用。需要通过 FE 动态参数 [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution) 设置。
 
+#### 禁止 Base Compaction
+
+`base_compaction_forbidden_time_ranges`：禁止对表进行 Base Compaction 的时间范围。设置该属性后，系统将仅在指定时间范围之外对符合条件的 Tablet 执行 Base Compaction。该属性 v3.2.13 起支持。
+
+> **说明**
+>
+> 请确保在禁止 Base Compaction 期间，对于该表的导入次数不超过 500 次。
+
+`base_compaction_forbidden_time_ranges` 的值遵循 [Quartz cron 语法](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm)，且只支持以下字段： `<minute> <hour> <day-of-the-month> <month> <day-of-the-week>` ，其中 `<minute>` 必须为 `*`。
+
+```Plain
+crontab_param_value ::= [ "" | crontab ]
+
+crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
+```
+
+- 如果未设置此属性或设置为 `""`（空字符串），则在任何时候都不禁止 Base Compaction。
+- 当此属性设置为 `* * * * *` 时，Base Compaction 始终被禁止。
+- 其他值遵循 Quartz cron 语法。
+  - 独立数值表示字段的单位时间。例如，`<hour>` 字段中的 `8` 表示 8:00-8:59。
+  - 数值范围表示字段的时间范围。例如，`<hour>` 字段中的 `8-9` 表示 8:00-9:59。
+  - 用逗号分隔的多个数值范围表示字段的多个时间范围。
+  - `<day-of-the-week>` 的起始值为 `1` 表示周日，`7` 表示周六。
+
+示例：
+
+```SQL
+-- 每天 8AM～9PM 禁止执行 Base Compaction。
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * *'
+
+-- 每天 0-5，21-23 点禁止执行 Base Compaction。
+'base_compaction_forbidden_time_ranges' = '* 0-4,21-22 * * *'
+
+-- 每周一到周五禁止执行 Base Compaction（也即是在每周六/周日的全天允许执行）。
+'base_compaction_forbidden_time_ranges' = '* * * * 2-6'
+
+-- 每个工作日（周一到周五）的 8AM～9PM 禁止执行 Base Compaction。
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
+```
+
 ## 示例
 
 ### 创建 Hash 分桶表并根据 key 列对数据进行聚合
