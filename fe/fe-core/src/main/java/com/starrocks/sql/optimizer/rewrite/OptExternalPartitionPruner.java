@@ -311,7 +311,10 @@ public class OptExternalPartitionPruner {
                     LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
                     throw new AnalysisException("Partition pruning is invalid, please check: "
                             + "1. The partition predicate must be included. "
-                            + "2. The left and right children of the partition predicate cannot be function parameters.");
+                            + "2. The left and right children of the partition predicate cannot be function parameters. "
+                            + "Table: " + table.getCatalogName() + "." + table.getCatalogDBName()
+                            + "." + table.getCatalogTableName() + " " + "Partition columns: "
+                            + partitionColumns.stream().map(Column::getName).collect(Collectors.joining(", ")));
                 }
 
                 // get partition names
