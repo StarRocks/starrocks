@@ -39,7 +39,34 @@ PROPERTIES
 
 - If you use AWS S3:
 
+<<<<<<< HEAD
   - If you use the default authentication credential of AWS SDK to access S3, set the following properties:
+=======
+| **Property**                        | **Description**                                              |
+| ----------------------------------- | ------------------------------------------------------------ |
+| enabled                             | Whether to enable this storage volume. Default: `false`. Disabled storage volume cannot be referenced. |
+| aws.s3.region                       | The region in which your S3 bucket resides, for example, `us-west-2`. |
+| aws.s3.endpoint                     | The endpoint URL used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. [Preview] From v3.3.0 onwards, the Amazon S3 Express One Zone storage class is supported, for example, `https://s3express.us-west-2.amazonaws.com`.   |
+| aws.s3.use_aws_sdk_default_behavior | Whether to use the default authentication credential of AWS SDK. Valid values: `true` and `false` (Default). |
+| aws.s3.use_instance_profile         | Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values: `true` and `false` (Default).<ul><li>If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws.s3.access_key` and `aws.s3.secret_key`.</li><li>If you use Instance Profile to access S3, you must specify this item as `true`.</li><li>If you use Assumed Role to access S3, you must specify this item as `true`, and specify `aws.s3.iam_role_arn`.</li><li>And if you use an external AWS account, you must specify this item as `true`, and specify `aws.s3.iam_role_arn` and `aws.s3.external_id`.</li></ul> |
+| aws.s3.access_key                   | The Access Key ID used to access your S3 bucket.             |
+| aws.s3.secret_key                   | The Secret Access Key used to access your S3 bucket.         |
+| aws.s3.iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
+| aws.s3.external_id                  | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
+| azure.blob.endpoint                 | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
+| azure.blob.shared_key               | The Shared Key used to authorize requests for your Azure Blob Storage. |
+| azure.blob.sas_token                | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage. |
+| hadoop.security.authentication      | The authentication method. Valid values: `simple`(Default) and `kerberos`. `simple` indicates simple authentication, that is, username. `kerberos` indicates Kerberos authentication. |
+| username                            | Username used to access the NameNode in the HDFS cluster.                      |
+| hadoop.security.kerberos.ticket.cache.path | The path that stores the kinit-generated Ticket Cache.                   |
+| dfs.nameservices                    | Name of the HDFS cluster                                        |
+| dfs.ha.namenodes.`<ha_cluster_name>`                   | Name of the NameNode. Multiple names must be separated by commas (,). No space is allowed in the double quotes. `<ha_cluster_name>` is the name of the HDFS service specified in `dfs.nameservices`. |
+| dfs.namenode.rpc-address.`<ha_cluster_name>`.`<NameNode>` | The RPC address information of the NameNode. `<NameNode>` is the name of the NameNode specified in `dfs.ha.namenodes.<ha_cluster_name>`. |
+| dfs.client.failover.proxy.provider                    | The provider of the NameNode for client connection. The default value is `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
+| fs.viewfs.mounttable.`<ViewFS_cluster>`.link./`<viewfs_path>` | The path to the ViewFS cluster to be mounted. Multiple paths must be separated by commas (,). `<ViewFS_cluster>` is the ViewFS cluster name specified in `LOCATIONS`. |
+| aws.s3.enable_partitioned_prefix    | Whether to enable the Partitioned Prefix feature for the storage volume. Default: `false`. For more information about this feature, see [Partitioned Prefix](#partitioned-prefix). |
+| aws.s3.num_partitioned_prefix       | The number of prefixes to be created for the storage volume. Default: `256`. Valid range: [4, 1024].|
+>>>>>>> d58e8d1671 ([Doc] Fix Back Slash in create storage volume (#53175))
 
     ```SQL
     "enabled" = "{ true | false }",

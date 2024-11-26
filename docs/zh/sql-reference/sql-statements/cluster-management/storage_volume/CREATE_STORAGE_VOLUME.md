@@ -39,7 +39,34 @@ PROPERTIES
 
 - 如果您使用 AWS S3：
 
+<<<<<<< HEAD
   - 如果您使用 AWS SDK 默认的认证凭证，请设置以下属性：
+=======
+| **属性**                            | **描述**                                                     |
+| ----------------------------------- | ------------------------------------------------------------ |
+| enabled                             | 是否启用当前存储卷。默认值：`false`。已禁用的存储卷无法被引用。 |
+| aws.s3.region                       | 需访问的 S3 存储空间的地区，如 `us-west-2`。                 |
+| aws.s3.endpoint                     | 访问 S3 存储空间的连接地址，如 `https://s3.us-west-2.amazonaws.com`。[Preview] 自 v3.3.0 起，支持 Amazon S3 Express One Zone Storage，如 `https://s3express.us-west-2.amazonaws.com`。 |
+| aws.s3.use_aws_sdk_default_behavior | 是否使用 AWS SDK 默认的认证凭证。有效值：`true` 和 `false` (默认)。 |
+| aws.s3.use_instance_profile         | 是否使用 Instance Profile 或 Assumed Role 作为安全凭证访问 S3。有效值：`true` 和 `false` (默认)。<ul><li>如果您使用 IAM 用户凭证（Access Key 和 Secret Key）访问 S3，则需要将此项设为 `false`，并指定 `aws.s3.access_key` 和 `aws.s3.secret_key`。</li><li>如果您使用 Instance Profile 访问 S3，则需要将此项设为 `true`。</li><li>如果您使用 Assumed Role 访问 S3，则需要将此项设为 `true`，并指定 `aws.s3.iam_role_arn`。</li><li>如果您使用外部 AWS 账户通过 Assumed Role 认证访问 S3，则需要将此项设为 `true`，并额外指定 `aws.s3.iam_role_arn` 和 `aws.s3.external_id`。</li></ul> |
+| aws.s3.access_key                   | 访问 S3 存储空间的 Access Key。                              |
+| aws.s3.secret_key                   | 访问 S3 存储空间的 Secret Key。                              |
+| aws.s3.iam_role_arn                 | 有访问 S3 存储空间权限 IAM Role 的 ARN。                     |
+| aws.s3.external_id                  | 用于跨 AWS 账户访问 S3 存储空间的外部 ID。                   |
+| azure.blob.endpoint   | Azure Blob Storage 的链接地址，如 `https://test.blob.core.windows.net`。 |
+| azure.blob.shared_key | 访问 Azure Blob Storage 的共享密钥（Shared Key）。           |
+| azure.blob.sas_token  | 访问 Azure Blob Storage 的共享访问签名（SAS）。              |
+| hadoop.security.authentication                        | 指定认证方式。有效值：`simple`（默认） 和 `kerberos`。`simple` 表示简单认证，即 Username。`kerberos` 表示 Kerberos 认证。 |
+| username                                              | 用于访问 HDFS 集群中 NameNode 节点的用户名。                      |
+| hadoop.security.kerberos.ticket.cache.path            | 用于指定 kinit 生成的 Ticket Cache 文件的路径。                   |
+| dfs.nameservices                                      | 自定义 HDFS 集群的名称。                                        |
+| dfs.ha.namenodes.`<ha_cluster_name>`                   | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。其中 `<ha_cluster_name>` 为 `dfs.nameservices` 中自定义的 HDFS 服务的名称。 |
+| dfs.namenode.rpc-address.`<ha_cluster_name>`.`<NameNode>` | 指定 NameNode 的 RPC 地址信息。 其中 `<NameNode>` 表示 `dfs.ha.namenodes.<ha_cluster_name>` 中自定义 NameNode 的名称。 |
+| dfs.client.failover.proxy.provider                    | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
+| fs.viewfs.mounttable.`<ViewFS_cluster>`.link./`<viewfs_path>` | 需要挂载的 ViewFS 集群路径，多个路径以逗号 (,) 分隔。其中 `<ViewFS_cluster>` 为 `LOCATIONS` 中自定义的 ViewFS 集群名。 |
+| aws.s3.enable_partitioned_prefix    | 是否启用存储卷的分区前缀功能。默认值：`false`。有关此功能的更多信息，请参阅 [分区前缀](#分区前缀)。 |
+| aws.s3.num_partitioned_prefix       | 要为该存储卷创建的前缀数量。默认值：`256`。有效范围：[4, 1024]。|
+>>>>>>> d58e8d1671 ([Doc] Fix Back Slash in create storage volume (#53175))
 
     ```SQL
     "enabled" = "{ true | false }",
