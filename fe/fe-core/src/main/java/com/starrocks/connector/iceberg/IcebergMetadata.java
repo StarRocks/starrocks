@@ -225,7 +225,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw new AlreadyExistsException("Database Already Exists");
         }
 
-        icebergCatalog.createDb(dbName, properties);
+        icebergCatalog.createDB(dbName, properties);
     }
 
     @Override
@@ -234,7 +234,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException("Database %s not empty", dbName);
         }
 
-        icebergCatalog.dropDb(dbName);
+        icebergCatalog.dropDB(dbName);
         databases.remove(dbName);
     }
 
@@ -488,7 +488,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Do not support get partitions from catalog type: " + nativeType);
         }
 
-        return icebergCatalog.listPartitionNames(dbName, tblName, requestContext, jobPlanningExecutor);
+        Table table = getTable(dbName, tblName);
+        return icebergCatalog.listPartitionNames((IcebergTable) table, requestContext, jobPlanningExecutor);
     }
 
     @Override
@@ -517,15 +518,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        IcebergTable icebergTable = (IcebergTable) table;
-        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
-        long snapshotId = -1;
-        if (nativeTable.currentSnapshot() != null) {
-            snapshotId = nativeTable.currentSnapshot().snapshotId();
-        }
         List<Partition> ans =
-                icebergCatalog.getPartitionsByNames(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
-                        snapshotId, null, partitionNames);
+                icebergCatalog.getPartitionsByNames((IcebergTable) table, null, partitionNames);
         return new ArrayList<>(ans);
     }
 
