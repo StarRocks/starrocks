@@ -116,10 +116,10 @@ public interface IcebergCatalog extends MemoryTrackable {
     default void refreshTable(String dbName, String tableName, ExecutorService refreshExecutor) {
     }
 
-    default void invalidateCacheWithoutTable(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    default void invalidatePartitionCache(String dbName, String tableName) {
     }
 
-    default void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    default void invalidateCache(String dbName, String tableName) {
     }
 
     default StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext srScanContext) {

@@ -329,13 +329,24 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
     }
 
-    public void invalidateCacheWithoutTable(IcebergTableName icebergTableName) {
-        partitionCache.invalidate(icebergTableName);
+    @Override
+    public void invalidatePartitionCache(String dbName, String tableName) {
+        // will invalidate all snapshots of this table
+        IcebergTableName key = new IcebergTableName(dbName, tableName);
+        partitionCache.invalidate(key);
     }
 
-    public void invalidateCache(IcebergTableName icebergTableName) {
-        tables.invalidate(icebergTableName);
-        partitionCache.invalidate(icebergTableName);
+    @Override
+    public void invalidateCache(String dbName, String tableName) {
+        IcebergTableName key = new IcebergTableName(dbName, tableName);
+        invalidateCache(key);
+
+    }
+
+    private void invalidateCache(IcebergTableName key) {
+        tables.invalidate(key);
+        // will invalidate all snapshots of this table
+        partitionCache.invalidate(key);
     }
 
     @Override
