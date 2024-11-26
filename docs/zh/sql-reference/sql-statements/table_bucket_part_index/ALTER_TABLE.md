@@ -727,15 +727,10 @@ StarRocks 通过 Compaction 机制将导入的不同数据版本进行合并，�
 
 3.1 版本之后，增加了一个 SQL 接口，用户可以通过执行 SQL 命令来手动进行 Compaction，可以指定表、单个或多个分区进行 Compaction。
 
-<<<<<<< HEAD
-=======
-存算分离集群自 v3.3.0 起支持该功能。
-
 > **说明**
 >
 > 自 v3.2.13 版本起支持通过 [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#禁止-base-compaction) 属性在特定时段禁止 Base Compaction。
 
->>>>>>> 217ce01619 ([Doc] Doc for Forbidding Base Compaction (#53170))
 语法：
 
 ```sql
