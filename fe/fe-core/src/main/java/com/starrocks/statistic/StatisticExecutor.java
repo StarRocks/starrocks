@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
@@ -517,6 +518,9 @@ public class StatisticExecutor {
         context.setQueryId(UUIDUtil.genUUID());
         if (Config.enable_print_sql) {
             LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
+        }
+        if (FeConstants.enableUnitStatistics) {
+            return Collections.emptyList();
         }
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);

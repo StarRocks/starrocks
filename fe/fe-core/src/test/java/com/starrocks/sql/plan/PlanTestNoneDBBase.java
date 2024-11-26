@@ -96,6 +96,7 @@ public class PlanTestNoneDBBase {
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;
+        FeConstants.enableUnitStatistics = true;
     }
 
     @Before
