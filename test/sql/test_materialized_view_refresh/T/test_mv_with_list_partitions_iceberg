@@ -47,6 +47,9 @@ select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_$
 select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='beijing' order by 1, 2, 3;
 
 INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 VALUES (3, 'guangdong', 30, 'c', 'c1');
+-- partitions in this snapshot is not ready yet.
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1", "test_mv1")
+refresh materialized view  test_mv1 with sync mode;
 function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1", "test_mv1")
 function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='guangdong'", "test_mv1")
 function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='beijing'", "test_mv1")

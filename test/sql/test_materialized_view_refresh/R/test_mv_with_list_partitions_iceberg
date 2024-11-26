@@ -87,6 +87,11 @@ INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 VALUES (3, 'guangdong'
 -- !result
 function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1", "test_mv1")
 -- result:
+False
+-- !result
+refresh materialized view  test_mv1 with sync mode;
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1", "test_mv1")
+-- result:
 True
 -- !result
 function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='guangdong'", "test_mv1")
