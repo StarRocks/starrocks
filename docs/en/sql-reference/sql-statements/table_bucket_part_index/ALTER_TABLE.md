@@ -718,15 +718,10 @@ Before v3.1, compaction is performed in two ways:
 
 Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
 
-<<<<<<< HEAD
-=======
-Shared-data clusters support this feature from v3.3.0 onwards.
-
 > **NOTE**
 >
 > From v3.2.13 onwards, you can forbid Base Compaction within certain time range using the property [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction).
 
->>>>>>> 217ce01619 ([Doc] Doc for Forbidding Base Compaction (#53170))
 Syntax:
 
 ```SQL
