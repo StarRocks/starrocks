@@ -57,10 +57,10 @@ The table below lists all available properties of storage volumes. Following the
 | username                            | Username used to access the NameNode in the HDFS cluster.                      |
 | hadoop.security.kerberos.ticket.cache.path | The path that stores the kinit-generated Ticket Cache.                   |
 | dfs.nameservices                    | Name of the HDFS cluster                                        |
-| dfs.ha.namenodes.`<ha_cluster_name\>`                   | Name of the NameNode. Multiple names must be separated by commas (,). No space is allowed in the double quotes. `<ha_cluster_name>` is the name of the HDFS service specified in `dfs.nameservices`. |
-| dfs.namenode.rpc-address.`<ha_cluster_name\>`.`<NameNode\>` | The RPC address information of the NameNode. `<NameNode>` is the name of the NameNode specified in `dfs.ha.namenodes.<ha_cluster_name>`. |
+| dfs.ha.namenodes.`<ha_cluster_name>`                   | Name of the NameNode. Multiple names must be separated by commas (,). No space is allowed in the double quotes. `<ha_cluster_name>` is the name of the HDFS service specified in `dfs.nameservices`. |
+| dfs.namenode.rpc-address.`<ha_cluster_name>`.`<NameNode>` | The RPC address information of the NameNode. `<NameNode>` is the name of the NameNode specified in `dfs.ha.namenodes.<ha_cluster_name>`. |
 | dfs.client.failover.proxy.provider                    | The provider of the NameNode for client connection. The default value is `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
-| fs.viewfs.mounttable.`<ViewFS_cluster\>`.link./`<viewfs_path\>` | The path to the ViewFS cluster to be mounted. Multiple paths must be separated by commas (,). `<ViewFS_cluster>` is the ViewFS cluster name specified in `LOCATIONS`. |
+| fs.viewfs.mounttable.`<ViewFS_cluster>`.link./`<viewfs_path>` | The path to the ViewFS cluster to be mounted. Multiple paths must be separated by commas (,). `<ViewFS_cluster>` is the ViewFS cluster name specified in `LOCATIONS`. |
 | aws.s3.enable_partitioned_prefix    | Whether to enable the Partitioned Prefix feature for the storage volume. Default: `false`. For more information about this feature, see [Partitioned Prefix](#partitioned-prefix). |
 | aws.s3.num_partitioned_prefix       | The number of prefixes to be created for the storage volume. Default: `256`. Valid range: [4, 1024].|
 
