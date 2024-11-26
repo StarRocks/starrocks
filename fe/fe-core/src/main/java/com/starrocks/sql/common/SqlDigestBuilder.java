@@ -15,24 +15,19 @@
 package com.starrocks.sql.common;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.common.Pair;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ValuesRelation;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
-import java.util.Queue;
-import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -47,37 +42,6 @@ public class SqlDigestBuilder {
     }
 
     private static class SqlDigestBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
-
-        private Pair<Integer, Integer> countCompound(CompoundPredicate node) {
-            int andCount = 0;
-            int orCount = 0;
-            Queue<Expr> q = Lists.newLinkedList();
-            q.add(node);
-            while (!q.isEmpty()) {
-                Expr head = q.poll();
-                if (head instanceof CompoundPredicate) {
-                    CompoundPredicate.Operator op = ((CompoundPredicate) head).getOp();
-                    if (op == CompoundPredicate.Operator.AND) {
-                        andCount++;
-                    } else if (op == CompoundPredicate.Operator.OR) {
-                        orCount++;
-                    }
-                }
-                q.addAll(head.getChildren());
-            }
-
-            return Pair.create(andCount, orCount);
-        }
-
-        private void traverse(CompoundPredicate node, Consumer<Expr> consumer) {
-            Queue<Expr> q = Lists.newLinkedList();
-            q.add(node);
-            while (!q.isEmpty()) {
-                Expr head = q.poll();
-                consumer.accept(head);
-                q.addAll(head.getChildren());
-            }
-        }
 
         @Override
         public String visitInPredicate(InPredicate node, Void context) {
@@ -94,20 +58,19 @@ public class SqlDigestBuilder {
 
         @Override
         public String visitCompoundPredicate(CompoundPredicate node, Void context) {
-            Pair<Integer, Integer> pair = countCompound(node);
-            if (pair.first + pair.second >= MASSIVE_COMPOUND_LIMIT) {
+            List<Expr> flatten = AnalyzerUtils.flattenPredicate(node);
+            if (flatten.size() >= MASSIVE_COMPOUND_LIMIT) {
                 // Only record de-duplicated slots if there are too many compounds
-                Set<SlotRef> exprs = Sets.newHashSet();
-                traverse(node, x -> {
-                    if (x instanceof SlotRef) {
-                        exprs.add((SlotRef) x);
-                    }
-                });
-                return "$massive_compounds[" + exprs.stream().map(SlotRef::toSqlImpl)
-                        .collect(Collectors.joining(",")) + "]$";
+                List<SlotRef> exprs = node.collectAllSlotRefs(true);
+                String sortedSlots = exprs.stream()
+                        .filter(SlotRef::isColumnRef)
+                        .map(SlotRef::toSqlImpl)
+                        .sorted()
+                        .collect(Collectors.joining(","));
+                return "$massive_compounds[" + sortedSlots + "]$";
             } else {
-                // TODO: it will introduce a little bit overhead in top-down visiting, in which the countCompound is
-                //  duplicated. it's better to eliminate this overhead
+                // TODO: it will introduce a little bit overhead in top-down visiting, in which the
+                //  flattenPredicate is duplicated revoked. it's better to eliminate this overhead
                 return super.visitCompoundPredicate(node, context);
             }
         }
