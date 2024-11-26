@@ -118,9 +118,6 @@ Execute the following statement along with the path you copied to install AuditL
 INSTALL PLUGIN FROM "<absolute_path_to_package>";
 ```
 
-<<<<<<< HEAD:docs/en/administration/audit_loader.md
-See [INSTALL PLUGIN](../sql-reference/sql-statements/Administration/INSTALL_PLUGIN.md) for detailed instructions.
-=======
 Example of installation from a local package:
 
 ```SQL
@@ -135,8 +132,7 @@ Example:
 INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5sum" = "3975F7B880C9490FE95F42E2B2A28E2D");
 ```
 
-See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugin/INSTALL_PLUGIN.md) for detailed instructions.
->>>>>>> 1b05fcb054 ([Doc] Added function introduction of auditloader 4.2.1 (#52612)):docs/en/administration/management/audit_loader.md
+See [INSTALL PLUGIN](../sql-reference/sql-statements/Administration/INSTALL_PLUGIN.md) for detailed instructions.
 
 ## Verify the installation and query audit logs
 
