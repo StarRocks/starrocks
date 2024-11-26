@@ -177,6 +177,7 @@ enum TSchemaTableType {
     SCH_TEMP_TABLES,
     
     SCH_COLUMN_STATS_USAGE,
+    SCH_ANALYZE_STATUS,
 }
 
 enum THdfsCompression {
