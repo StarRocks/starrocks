@@ -153,20 +153,19 @@ public:
 
     virtual void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) = 0;
 
-    virtual Status row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                             SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
-                                             const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
-        // not implemented, means select the whole row group
-        row_ranges->add({rg_first_row, rg_first_row + rg_num_rows});
-        return Status::OK();
+    virtual StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                     CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                                     const uint64_t rg_num_rows) const {
+        return true;
     }
 
-    virtual Status page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
-                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) {
-        // not implemented, means select the whole row group
-        row_ranges->add({rg_first_row, rg_first_row + rg_num_rows});
-        return Status::OK();
+    // return true means page index filter happened
+    // return false means no page index filter happened
+    virtual StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                      SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                                      const uint64_t rg_first_row, const uint64_t rg_num_rows) {
+        DCHECK(row_ranges->empty());
+        return false;
     }
 
 private:

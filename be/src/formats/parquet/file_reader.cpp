@@ -44,8 +44,8 @@
 #include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
 #include "formats/parquet/column_converter.h"
-#include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/statistics_helper.h"
 #include "formats/parquet/utils.h"
@@ -326,7 +326,7 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
 // when doing row group filter, there maybe some error, but we'd better just ignore it instead of returning the error
 // status and lead to the query failed.
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
-    if (_scanner_ctx->conjuncts_manager != nullptr) {
+    if (config::parquet_advance_zonemap_filter) {
         auto res = _scanner_ctx->predicate_tree.visit(
                 ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader.get()});
         if (!res.ok()) {
@@ -334,6 +334,7 @@ bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
             return false;
         }
         if (res.value().has_value() && res.value()->empty()) {
+            // no rows selected, the whole row group can be filtered
             return true;
         }
         return false;
@@ -447,6 +448,9 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.file_metadata = _file_metadata.get();
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
+    _group_reader_param.partition_columns = &fd_scanner_ctx.partition_columns;
+    _group_reader_param.partition_values = &fd_scanner_ctx.partition_values;
+    _group_reader_param.not_existed_slots = &fd_scanner_ctx.not_existed_slots;
     // for pageIndex
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
     _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;

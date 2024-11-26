@@ -14,9 +14,12 @@
 
 #include "formats/parquet/complex_column_reader.h"
 
+#include <storage/column_expr_predicate.h>
+
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
+#include "exprs/subfield_expr.h"
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
@@ -349,6 +352,144 @@ void StructColumnReader::_handle_null_rows(uint8_t* is_nulls, bool* has_null, si
             }
         }
     }
+}
+StatusOr<bool> StructColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                             CompoundNodeType pred_relation,
+                                                             const uint64_t rg_first_row,
+                                                             const uint64_t rg_num_rows) const {
+    ObjectPool pool;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    RETURN_IF_ERROR(_rewrite_column_expr_predicate(&pool, predicates, rewritten_predicates));
+
+    auto is_satisfied = [&](const ColumnPredicate* predicate) -> bool {
+        if (!predicate->is_expr_predicate()) {
+            // for not supported expr, select it by default
+            return true;
+        }
+
+        const ColumnExprPredicate* expr_predicate = down_cast<const ColumnExprPredicate*>(predicate);
+        const std::vector<ExprContext*>& expr_contexts = expr_predicate->get_expr_ctxs();
+        if (expr_contexts.size() != 1) {
+            // defense code
+            return true;
+        }
+
+        ExprContext* expr_context = expr_contexts[0];
+        Expr* root_expr = expr_context->root();
+        const std::vector<Expr*>& expr_children = root_expr->children();
+        Expr* subfield_expr = expr_children[0];
+        // check there must have two children, and the left one is SubfieldExpr
+        if (expr_children.size() != 2 || subfield_expr->node_type() != TExprNodeType::type::SUBFIELD_EXPR) {
+            return true;
+        }
+        Expr* right_expr = expr_children[1];
+
+        // check exprs are monotonic
+        if (!root_expr->is_monotonic() || !subfield_expr->is_monotonic() || !right_expr->is_monotonic()) {
+            return true;
+        }
+
+        std::vector<std::vector<std::string>> subfields{};
+        int num_subfield = subfield_expr->get_subfields(&subfields);
+        if (num_subfield != 1) {
+            // must only exist one subfield
+            return true;
+        }
+
+        if (subfield_expr->children().size() != 1 && !subfield_expr->get_child(0)->is_slotref()) {
+            return true;
+        }
+
+        Expr* new_slot_expr = Expr::copy(&pool, subfield_expr->get_child(0));
+        Expr* new_right_expr = Expr::copy(&pool, right_expr);
+        Expr* new_root_expr = root_expr->clone(&pool);
+        new_root_expr->set_monotonic(true);
+        new_root_expr->add_child(new_slot_expr);
+        new_root_expr->add_child(new_right_expr);
+
+        auto expr_rewrite = std::make_unique<ExprContext>(new_root_expr);
+        auto st = expr_rewrite->prepare(expr_predicate->runtime_state());
+        if (!st.ok()) {
+            return true;
+        }
+        st = expr_rewrite->open(expr_predicate->runtime_state());
+        if (!st.ok()) {
+            return true;
+        }
+        auto stv = ColumnExprPredicate::make_column_expr_predicate(
+                get_type_info(subfield_expr->type().type, subfield_expr->type().precision, subfield_expr->type().scale),
+                expr_predicate->column_id(), expr_predicate->runtime_state(), expr_rewrite.get(),
+                expr_predicate->slot_desc());
+        if (!stv.ok()) {
+            return true;
+        }
+
+        ColumnPredicate* new_predicate = stv.value();
+        ColumnReader* column_reader = nullptr;
+        for (const std::string& subfield : subfields[0]) {
+            if (column_reader == nullptr) {
+                column_reader = get_child_column_reader(subfield);
+            } else {
+                StructColumnReader* struct_column_reader = down_cast<StructColumnReader*>(column_reader);
+                column_reader = struct_column_reader->get_child_column_reader(subfield);
+            }
+
+            if (column_reader == nullptr) {
+                return true;
+            }
+        }
+
+        if (column_reader == nullptr) {
+            return true;
+        }
+
+        if (column_reader->get_column_parquet_field()->type != ColumnType::SCALAR) {
+            return true;
+        }
+
+        std::vector<const ColumnPredicate*> new_predicates;
+        new_predicates.emplace_back(new_predicate);
+        auto res = column_reader->row_group_zone_map_filter(new_predicates, pred_relation, rg_first_row, rg_num_rows);
+        if (!res.ok()) {
+            return true;
+        }
+        return res.value();
+    };
+
+    if (pred_relation == CompoundNodeType::AND) {
+        return std::ranges::all_of(rewritten_predicates, [&](const auto* pred) { return is_satisfied(pred); });
+    } else {
+        return rewritten_predicates.empty() ||
+               std::ranges::any_of(rewritten_predicates, [&](const auto* pred) { return is_satisfied(pred); });
+    }
+
+    return Status::OK();
+}
+
+Status StructColumnReader::_rewrite_column_expr_predicate(ObjectPool* pool,
+                                                          const std::vector<const ColumnPredicate*>& src_preds,
+                                                          std::vector<const ColumnPredicate*>& dst_preds) const {
+    DCHECK_NOTNULL(pool);
+
+    // try to rewrite EQ expr first
+    for (const ColumnPredicate* predicate : src_preds) {
+        if (!predicate->is_expr_predicate()) {
+            dst_preds.emplace_back(predicate);
+            continue;
+        }
+
+        const ColumnExprPredicate* expr_predicate = down_cast<const ColumnExprPredicate*>(predicate);
+        std::vector<const ColumnExprPredicate*> output;
+        RETURN_IF_ERROR(expr_predicate->try_to_rewrite_for_zone_map_filter(pool, &output));
+        if (output.size() == 0) {
+            // no rewrite happened, insert the original predicate
+            dst_preds.emplace_back(predicate);
+        } else {
+            // insert rewritten predicates
+            dst_preds.insert(dst_preds.end(), output.begin(), output.end());
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::parquet

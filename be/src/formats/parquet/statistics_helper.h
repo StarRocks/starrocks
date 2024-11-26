@@ -29,7 +29,7 @@ public:
 
     static Status decode_value_into_column(const ColumnPtr& column, const std::vector<std::string>& values,
                                            const TypeDescriptor& type, const ParquetField* field,
-                                           const std::string& timezone, const std::vector<bool>* null_pages = nullptr);
+                                           const std::string& timezone);
 
     static bool can_be_used_for_statistics_filter(ExprContext* ctx, StatSupportedFilter& filter_type);
 

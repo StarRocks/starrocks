@@ -218,19 +218,7 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     _update_has_any_predicate();
 
     RETURN_IF_ERROR(_decompose_conjunct_ctxs(state));
-    {
-        std::vector<ExprContext*> cloned_conjunct_ctxs;
-        RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
-        for (auto* ctx : cloned_conjunct_ctxs) {
-            _all_conjunct_ctxs.emplace_back(ctx);
-        }
-
-        cloned_conjunct_ctxs.clear();
-        RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
-        for (auto* ctx : cloned_conjunct_ctxs) {
-            _all_conjunct_ctxs.emplace_back(ctx);
-        }
-    }
+    RETURN_IF_ERROR(_setup_all_conjunct_ctxs(state));
     return Status::OK();
 }
 
@@ -455,6 +443,23 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
             }
             _conjunct_ctxs_by_slot[slot_id].emplace_back(ctx);
         }
+    }
+    return Status::OK();
+}
+
+Status HiveDataSource::_setup_all_conjunct_ctxs(RuntimeState* state) {
+    // clone conjunct from _min_max_conjunct_ctxs & _conjunct_ctxs
+    // then we will generate PredicateTree based on _all_conjunct_ctxs
+    std::vector<ExprContext*> cloned_conjunct_ctxs;
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
+    for (auto* ctx : cloned_conjunct_ctxs) {
+        _all_conjunct_ctxs.emplace_back(ctx);
+    }
+
+    cloned_conjunct_ctxs.clear();
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
+    for (auto* ctx : cloned_conjunct_ctxs) {
+        _all_conjunct_ctxs.emplace_back(ctx);
     }
     return Status::OK();
 }

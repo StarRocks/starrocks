@@ -54,6 +54,7 @@ public:
     std::string debug_string() const override;
     RuntimeState* runtime_state() const { return _state; }
     const SlotDescriptor* slot_desc() const { return _slot_desc; }
+    TypeInfoPtr get_type_info_ptr() const { return _type_info; }
 
     // try to rewrite the predicate to equivalent one or more predicates that can be used on zone map index
     // output is only valid when returning Status::OK()

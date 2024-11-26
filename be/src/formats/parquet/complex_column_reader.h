@@ -210,7 +210,23 @@ public:
         }
     }
 
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override;
+
+    ColumnReader* get_child_column_reader(const std::string& subfield) const {
+        auto it = _child_readers.find(subfield);
+        if (it == _child_readers.end()) {
+            return nullptr;
+        } else {
+            return it->second.get();
+        }
+    }
+
 private:
+    Status _rewrite_column_expr_predicate(ObjectPool* pool, const std::vector<const ColumnPredicate*>& src_pred,
+                                          std::vector<const ColumnPredicate*>& dst_preds) const;
+
     void _handle_null_rows(uint8_t* is_nulls, bool* has_null, size_t num_rows);
 
     // _children_readers order is the same as TypeDescriptor children order.
