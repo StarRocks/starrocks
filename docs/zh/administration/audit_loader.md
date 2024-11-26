@@ -119,9 +119,6 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 INSTALL PLUGIN FROM "<absolute_path_to_package>";
 ```
 
-<<<<<<< HEAD:docs/zh/administration/audit_loader.md
-详细操作说明参阅 [INSTALL PLUGIN](../sql-reference/sql-statements/Administration/INSTALL_PLUGIN.md)。
-=======
 以安装本地插件包为例，安装命令示例：
 
 ```SQL
@@ -134,8 +131,7 @@ mysql> INSTALL PLUGIN FROM "/opt/module/starrocks/auditloader.zip";
 INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5sum" = "3975F7B880C9490FE95F42E2B2A28E2D");
 ```
 
-详细操作说明参阅 [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugin/INSTALL_PLUGIN.md)。
->>>>>>> 1b05fcb054 ([Doc] Added function introduction of auditloader 4.2.1 (#52612)):docs/zh/administration/management/audit_loader.md
+详细操作说明参阅 [INSTALL PLUGIN](../sql-reference/sql-statements/Administration/INSTALL_PLUGIN.md)。
 
 ## 验证安装并查询审计日志
 
