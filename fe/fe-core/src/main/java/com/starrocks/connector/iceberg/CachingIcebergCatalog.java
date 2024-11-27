@@ -30,6 +30,7 @@ import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
@@ -210,10 +211,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public List<String> listPartitionNames(IcebergTable icebergTable, ConnectorMetadatRequestContext requestContext,
                                            ExecutorService executorService) {
+        SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
         // optimization for query mv rewrite, we can optionally return null to bypass it.
         // if we don't have cache right now, which means it probably takes time to load it during query,
         // so we can do load in background while return null to bypass this synchronous process.
-        if (requestContext.isQueryMVRewrite()) {
+        if (requestContext.isQueryMVRewrite() && sv.isEnableConnectorMVRewriteSKipPartitionCache()) {
             long snapshotId = requestContext.getSnapshotId();
             IcebergTableName key =
                     new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
