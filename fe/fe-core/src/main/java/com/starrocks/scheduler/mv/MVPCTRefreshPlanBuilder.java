@@ -23,7 +23,11 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
+<<<<<<< HEAD
 import com.starrocks.analysis.StringLiteral;
+=======
+import com.starrocks.analysis.TableName;
+>>>>>>> c3f7698da2 ([BugFix] Fix MVPCTRefreshPlanBuilder generate plan bug if output contains complex expressions (#53212))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
@@ -153,7 +157,28 @@ public class MVPCTRefreshPlanBuilder {
             Expr finalPredicate = Expr.compoundAnd(extraPartitionPredicates);
             selectRelation.setWhereClause(finalPredicate);
             LOG.info("Optimize materialized view {} refresh task, generate insert stmt final " +
+<<<<<<< HEAD
                             "predicate(select relation):{} ", mv.getName(), finalPredicate.toSql());
+=======
+                    "predicate(select relation):{} ", mv.getName(), finalPredicate.toSql());
+        } else {
+            // support to generate partition predicate for other query relation types
+            LOG.warn("MV Refresh cannot push down partition predicate since " +
+                    "the query relation is not select relation, mv:{}", mv.getName());
+            TableName tableName = queryRelation.getResolveTableName();
+            // use `getColumnOutputNames` rather than `getOutputExpression` to avoid `getOutputExpression` referring original queryStatement's 
+            // output expressions which may cause column missing if the original queryStatement's output contains alias.
+            List<SelectListItem> items = queryRelation.getColumnOutputNames().stream()
+                    .map(x -> new SlotRef(tableName, x))
+                    .map(x -> new SelectListItem(x, null)).collect(Collectors.toList());
+            SelectList selectList = new SelectList(items, false);
+            SelectRelation selectRelation = new SelectRelation(selectList, queryRelation,
+                    Expr.compoundAnd(extraPartitionPredicates), null, null);
+            selectRelation.setWhereClause(Expr.compoundAnd(extraPartitionPredicates));
+            QueryStatement newQueryStatement = new QueryStatement(selectRelation);
+            insertStmt.setQueryStatement(newQueryStatement);
+            new QueryAnalyzer(mvContext.getCtx()).analyze(newQueryStatement);
+>>>>>>> c3f7698da2 ([BugFix] Fix MVPCTRefreshPlanBuilder generate plan bug if output contains complex expressions (#53212))
         }
         return insertStmt;
     }
