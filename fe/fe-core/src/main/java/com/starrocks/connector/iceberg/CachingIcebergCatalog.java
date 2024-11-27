@@ -93,7 +93,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 CacheLoader.from(key -> {
                     Table nativeTable = getTable(key.dbName, key.tableName);
                     IcebergTable icebergTable =
-                            IcebergTable.builder().setRemoteDbName(key.dbName).setRemoteTableName(key.tableName)
+                            IcebergTable.builder().setCatalogDBName(key.dbName).setCatalogTableName(key.tableName)
                                     .setNativeTable(nativeTable).build();
                     return delegate.getPartitions(icebergTable, key.snapshotId, null);
                 }));

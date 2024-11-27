@@ -405,7 +405,7 @@ public class IcebergTable extends Table {
         private String srTableName;
         private String catalogName;
         private String resourceName;
-        private String catalogDbName;
+        private String catalogDBName;
         private String catalogTableName;
 
         private String comment;
@@ -441,12 +441,12 @@ public class IcebergTable extends Table {
             return this;
         }
 
-        public Builder setRemoteDbName(String catalogDbName) {
-            this.catalogDbName = catalogDbName;
+        public Builder setCatalogDBName(String catalogDbName) {
+            this.catalogDBName = catalogDbName;
             return this;
         }
 
-        public Builder setRemoteTableName(String catalogTableName) {
+        public Builder setCatalogTableName(String catalogTableName) {
             this.catalogTableName = catalogTableName;
             return this;
         }
@@ -467,7 +467,7 @@ public class IcebergTable extends Table {
         }
 
         public IcebergTable build() {
-            return new IcebergTable(id, srTableName, catalogName, resourceName, catalogDbName, catalogTableName,
+            return new IcebergTable(id, srTableName, catalogName, resourceName, catalogDBName, catalogTableName,
                     comment, fullSchema, nativeTable, icebergProperties);
         }
     }
