@@ -327,8 +327,92 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
             {
                 String query = "select t1a, sum(if(murmur_hash3_32(t1b %3) = 0, t1b, 0)) as total from test.test_all_type group" +
                         " by t1a;";
+<<<<<<< HEAD
                 sql(query)
                         .contains("mv0")
+=======
+                sql(query).notContain("mv0");
+            }
+            {
+                String query = "select t1a, sum(case when(t1b=0) then t1b else 0 end) as total from test.test_all_type " +
+                        "group by t1a;";
+                sql(query).notContain("mv0");
+            }
+            {
+                String query = "select t1a, sum(case when(t1b=0) then t1b else 0 end) as total from test.test_all_type " +
+                        "group by t1a;";
+                sql(query).notContain("mv0");
+            }
+        });
+    }
+
+    @Test
+    public void testRewriteWithOnlyGroupByKeys() {
+        starRocksAssert.withMaterializedView("create materialized view mv0" +
+                " distributed by random" +
+                " as select sum(t1f) as total, t1a, t1b from test.test_all_type group by t1a, t1b;", () -> {
+            {
+                String query = "select t1a, sum(t1b) as total from test.test_all_type group by t1a;";
+                sql(query).nonMatch("mv0");
+            }
+            {
+                String query = "select t1a, sum(t1b + 1) as total from test.test_all_type group by t1a;";
+                sql(query).nonMatch("mv0");
+            }
+            {
+                String query = "select t1a, max(t1b), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, max(concat(t1b,'.')), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, min(substr(t1b,1)), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, count(distinct t1b), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+        });
+    }
+
+    @Test
+    public void testMVRewriteWithNonDeterministicFunctions() {
+        starRocksAssert.withMaterializedView("create materialized view mv0" +
+                " distributed by random" +
+                " as select current_date(), t1a, t1b from test.test_all_type ;", () -> {
+            {
+                String query = " select current_date(), t1a, t1b from test.test_all_type";
+                sql(query).nonMatch("mv0");
+            }
+        });
+    }
+
+    @Test
+    public void testRewriteWithEliminateJoinsBasic1() {
+        starRocksAssert.withMaterializedView("create materialized view mv0" +
+                " distributed by random" +
+                " as select sum(t1f) as total, t1a, t1b from test.test_all_type group by t1a, t1b;", () -> {
+            {
+                String query = "select t1.t1b, sum(t1f) as total from test.test_all_type t1 " +
+                        "join (select 'k1' as k1) t2 on t1.t1a=t2.k1 group by t1.t1b;";
+                sql(query).match("mv0")
+                        .contains("  1:Project\n" +
+                                "  |  <slot 2> : 16: t1b\n" +
+                                "  |  <slot 13> : 15: total\n" +
+                                "  |  \n" +
+                                "  0:OlapScanNode\n" +
+                                "     TABLE: mv0\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     PREDICATES: 14: t1a = 'k1'");
+            }
+            {
+                String query = "select t2.k1, t1.t1b, sum(t1f) as total from test.test_all_type t1 " +
+                        "join (select 'k1' as k1) t2 on true group by t2.k1, t1.t1b;";
+                sql(query).match("mv0")
+>>>>>>> 00fafdb82f ([BugFix] Fix mv non rollup rewrite result contains aggregate functions (#53218))
                         .contains("  1:AGGREGATE (update serialize)\n" +
                                 "  |  STREAMING\n" +
                                 "  |  output: sum(if(murmur_hash3_32(CAST(14: t1b % 3 AS VARCHAR)) = 0, 14: t1b, 0))\n" +
