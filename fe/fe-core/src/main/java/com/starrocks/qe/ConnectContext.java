@@ -153,6 +153,7 @@ public class ConnectContext {
 
     // error code
     protected String errorCode = "";
+    protected String errorMsg = "";
 
     // the protocol capability which server say it can support
     protected MysqlCapability serverCapability;
@@ -838,6 +839,30 @@ public class ConnectContext {
     public void setErrorCodeOnce(String errorCode) {
         if (Strings.isNullOrEmpty(this.errorCode)) {
             this.errorCode = errorCode;
+        }
+    }
+
+    public String getErrorMsg() {
+        if (StringUtils.isNotEmpty(errorMsg)) {
+            // error happens in BE execution.
+            return errorMsg;
+        }
+
+        if (state.getErrType() != QueryState.ErrType.UNKNOWN) {
+            // error happens in FE execution.
+            return state.getErrorMessage();
+        }
+
+        return "";
+    }
+
+    public void resetErrorMsg() {
+        this.errorMsg = "";
+    }
+
+    public void setErrorMsgOnce(String errorMsg) {
+        if (Strings.isNullOrEmpty(this.errorMsg)) {
+            this.errorMsg = errorMsg;
         }
     }
 

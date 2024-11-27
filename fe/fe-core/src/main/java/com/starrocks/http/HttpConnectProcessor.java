@@ -138,6 +138,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
         ctx.setStartTime();
         ctx.setResourceGroup(null);
         ctx.resetErrorCode();
+        ctx.resetErrorMsg();
         this.handleQuery();
         ctx.setStartTime();
 
