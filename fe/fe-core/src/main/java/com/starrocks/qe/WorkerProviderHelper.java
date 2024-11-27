@@ -25,15 +25,10 @@ public class WorkerProviderHelper {
         if (workers.isEmpty()) {
             return null;
         }
-        int index = getNextWorkerNodeIndex.getAsInt();
+        int index = getNextWorkerNodeIndex.getAsInt() % workers.size();
         if (index < 0) {
-            if (index == Integer.MIN_VALUE) {
-                index = 0;
-            } else {
-                index = -index;
-            }
+            index = -index;
         }
-        index %= workers.size();
         return workers.values().asList().get(index);
     }
 }
