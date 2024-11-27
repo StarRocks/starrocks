@@ -272,7 +272,12 @@ public class AggregatePushDownUtils {
                 logMVRewrite(mvRewriteContext, "Get rollup function is null, rollupFuncName:", rollupFuncName);
                 return null;
             }
-            newAggregate = new CallOperator(rollupFuncName, newFunc.getReturnType(), newArgs, newFunc);
+            // ensure argument types are correct
+            // clone function to avoid changing the original function
+            Function cloned = newFunc.copy();
+            cloned.setArgsType(argTypes);
+            cloned.setRetType(aggCall.getType());
+            newAggregate = new CallOperator(rollupFuncName, aggCall.getType(), newArgs, cloned);
         }
         if (newAggregate == null) {
             logMVRewrite(mvRewriteContext, "realAggregate is null");
@@ -282,8 +287,8 @@ public class AggregatePushDownUtils {
     }
 
     public static CallOperator getRollupPartialAggregate(MvRewriteContext mvRewriteContext,
-                                                          AggregatePushDownContext ctx,
-                                                          CallOperator aggCall) {
+                                                         AggregatePushDownContext ctx,
+                                                         CallOperator aggCall) {
         if (!ctx.isRewrittenByEquivalent(aggCall)) {
             return aggCall;
         }

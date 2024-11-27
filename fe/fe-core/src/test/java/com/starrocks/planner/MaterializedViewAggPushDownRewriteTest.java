@@ -24,6 +24,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewPushDownRewriter;
+import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
@@ -1089,5 +1090,53 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                     "join dates d on l.LO_ORDERDATE = d.d_datekey group by LO_ORDERDATE");
             sql(query).contains("mv0");
         });
+    }
+
+    @Test
+    public void testAggPushDownWithDecimalTypes() throws Exception {
+        String tbl1 = "CREATE TABLE `test_pt8` (\n" +
+                "  `id` bigint(20) NULL,\n" +
+                "  `pt` date NOT NULL,\n" +
+                "  `gmv` bigint(20) NULL,\n" +
+                "  `gmv2` bigint(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY date_trunc('day', pt)\n" +
+                "DISTRIBUTED BY HASH(`pt`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String tbl2 = "CREATE TABLE `test_pt9` (\n" +
+                "  `id` bigint(20) NULL COMMENT \"id\",\n" +
+                "  `pt` date NOT NULL,\n" +
+                "  `name` varchar(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY date_trunc('day', pt)\n" +
+                "DISTRIBUTED BY HASH(`pt`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" ;
+        starRocksAssert.withTable(tbl1);
+        starRocksAssert.withTable(tbl2);
+        String mv = "CREATE MATERIALIZED VIEW `test_pt8_mv` \n" +
+                "PARTITION BY (`pt`)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "REFRESH ASYNC START(\"2024-11-22 17:34:45\") EVERY(INTERVAL 1 MINUTE)\n" +
+                "PROPERTIES (\n" +
+                "\"query_rewrite_consistency\" = \"LOOSE\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT  `id`,`pt`,SUM((`gmv` + `gmv2`) * 0.01) AS `sum_channel_direct_indirect_gmv`\n" +
+                "FROM `test_pt8` GROUP BY  `id`,`pt`;\n";
+        starRocksAssert.withRefreshedMaterializedView(mv);
+        String query = "SELECT SUM((gmv+gmv2)*0.01)\n" +
+                "FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1' )";
+        String plan = getQueryPlan(query, TExplainLevel.VERBOSE);
+        System.out.println(plan);
+        starRocksAssert.dropTable("test_pt8");
+        starRocksAssert.dropTable("test_pt9");
+        starRocksAssert.dropMaterializedView("test_pt8_mv");
     }
 }
