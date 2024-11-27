@@ -263,8 +263,12 @@ public class MaterializedViewAnalyzer {
              * 1. Use default catalog if not specified, actually it only support default catalog until now
              */
             if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getCatalog())) {
-                tableNameObject.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                String catalogName = Optional.ofNullable(context.getSessionVariable())
+                        .map(sessionVariable -> sessionVariable.getCatalog())
+                        .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                tableNameObject.setCatalog(catalogName);
             }
+
             if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getDb())) {
                 if (com.google.common.base.Strings.isNullOrEmpty(context.getDatabase())) {
                     throw new SemanticException("No database selected. " +
