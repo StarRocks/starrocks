@@ -49,7 +49,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.EtlJobType;
@@ -80,10 +79,6 @@ import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -109,7 +104,7 @@ import java.util.stream.Collectors;
  * LoadManager.lock
  * LoadJob.lock
  */
-public class LoadMgr implements Writable, MemoryTrackable {
+public class LoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
     private static final int MEMORY_JOB_SAMPLES = 10;
 
@@ -745,42 +740,6 @@ public class LoadMgr implements Writable, MemoryTrackable {
         if (job != null) {
             job.updateProgress(params);
         }
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
-
-        out.writeInt(loadJobs.size());
-        for (LoadJob loadJob : loadJobs) {
-            loadJob.write(out);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int size = in.readInt();
-        long now = System.currentTimeMillis();
-        for (int i = 0; i < size; i++) {
-            LoadJob loadJob = LoadJob.read(in);
-            // discard expired job right away
-            if (isJobExpired(loadJob, now)) {
-                LOG.info("discard expired job: {}", loadJob);
-                continue;
-            }
-
-            putLoadJob(loadJob);
-        }
-    }
-
-    public long loadLoadJobsV2(DataInputStream in, long checksum) throws IOException {
-        readFields(in);
-        LOG.info("finished replay loadJobsV2 from image");
-        return checksum;
-    }
-
-    public long saveLoadJobsV2(DataOutputStream out, long checksum) throws IOException {
-        write(out);
-        return checksum;
     }
 
     public void loadLoadJobsV2JsonFormat(SRMetaBlockReader reader)

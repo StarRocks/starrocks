@@ -40,13 +40,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -67,9 +65,6 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -100,7 +95,8 @@ public abstract class BulkLoadJob extends LoadJob {
     protected Map<String, String> sessionVariables = Maps.newHashMap();
 
     protected static final String PRIORITY_SESSION_VARIABLE_KEY = "priority.session.variable.key";
-    public static final String LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY = "log.rejected.record.num.session.variable.key";
+    public static final String LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY =
+            "log.rejected.record.num.session.variable.key";
     public static final String CURRENT_USER_IDENT_KEY = "current.user.ident.key";
     public static final String CURRENT_QUALIFIED_USER_KEY = "current.qualified.user.key";
 
@@ -109,15 +105,15 @@ public abstract class BulkLoadJob extends LoadJob {
         super();
     }
 
-    public BulkLoadJob(long dbId, String label, OriginStatement originStmt) throws MetaNotFoundException {
+    public BulkLoadJob(long dbId, String label, OriginStatement originStmt) {
         super(dbId, label);
         this.originStmt = originStmt;
-        this.authorizationInfo = gatherAuthInfo();
 
         if (ConnectContext.get() != null) {
             SessionVariable var = ConnectContext.get().getSessionVariable();
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
-            sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, var.getloadTransmissionCompressionType());
+            sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE,
+                    var.getloadTransmissionCompressionType());
             sessionVariables.put(CURRENT_QUALIFIED_USER_KEY, ConnectContext.get().getQualifiedUser());
             sessionVariables.put(CURRENT_USER_IDENT_KEY, ConnectContext.get().getCurrentUserIdentity().toString());
         } else {
@@ -182,14 +178,6 @@ public abstract class BulkLoadJob extends LoadJob {
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
-    }
-
-    private AuthorizationInfo gatherAuthInfo() throws MetaNotFoundException {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (database == null) {
-            throw new MetaNotFoundException("Database " + dbId + "has been deleted");
-        }
-        return new AuthorizationInfo(database.getFullName(), getTableNames(false));
     }
 
     @Override
@@ -329,41 +317,5 @@ public abstract class BulkLoadJob extends LoadJob {
             return;
         }
         unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment(), true);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        brokerDesc.write(out);
-        originStmt.write(out);
-
-        out.writeInt(sessionVariables.size());
-        for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue());
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        brokerDesc = BrokerDesc.read(in);
-
-        originStmt = OriginStatement.read(in);
-        // The origin stmt does not be analyzed in here.
-        // The reason is that it will thrown MetaNotFoundException when the tableId could not be found by tableName.
-        // The origin stmt will be analyzed after the replay is completed.
-
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            sessionVariables.put(key, value);
-        }
-        if (sessionVariables.containsKey(PRIORITY_SESSION_VARIABLE_KEY)) {
-            priority = Integer.parseInt(sessionVariables.get(PRIORITY_SESSION_VARIABLE_KEY));
-        }
-        if (sessionVariables.containsKey(LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
-            logRejectedRecordNum = Long.parseLong(sessionVariables.get(LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY));
-        }
     }
 }
