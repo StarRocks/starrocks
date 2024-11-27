@@ -17,28 +17,45 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class InlineOneCTEConsumeRule extends TransformationRule {
-
-    public InlineOneCTEConsumeRule() {
-        super(RuleType.TF_INLINE_CTE_CONSUME, Pattern.create(OperatorType.LOGICAL_CTE_CONSUME)
-                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)));
+// If all leaf nodes of cte are constant, we can directly inline this cte.
+// After inline, we can perform more optimizations, such as
+// with cte as (select 111) select * from cte join (select * from (select * from t1 join cte) s1) s2;
+// we can eliminate join node by EliminateJoinWithConstantRule.
+public class EliminateConstantCTERule extends TransformationRule {
+    public EliminateConstantCTERule() {
+        super(RuleType.TF_ELIMINATE_CONSTANT_CTE_CONSUME, Pattern.create(OperatorType.LOGICAL_CTE_CONSUME)
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) input.getOp();
-        return context.getCteContext().needInline(consume.getCteId());
+        return areAllLeafNodesConstants(input);
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        // delete cte consume direct
         return input.getInputs();
     }
+
+    private boolean areAllLeafNodesConstants(OptExpression root) {
+        for (OptExpression optExpression : root.getInputs()) {
+            if (!optExpression.getInputs().isEmpty()) {
+                if (!areAllLeafNodesConstants(optExpression)) {
+                    return false;
+                }
+            } else {
+                if (optExpression.getOp().getOpType() != OperatorType.LOGICAL_VALUES) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
 }
