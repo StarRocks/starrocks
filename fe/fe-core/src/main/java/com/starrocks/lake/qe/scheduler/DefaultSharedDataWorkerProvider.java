@@ -42,8 +42,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
+
+import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
 
 /**
  * WorkerProvider for SHARED_DATA mode. Compared to its counterpart for SHARED_NOTHING mode:
@@ -271,13 +272,9 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
     }
 
-    private static ComputeNode getNextWorker(ImmutableMap<Long, ComputeNode> workers,
-                                             IntSupplier getNextWorkerNodeIndex) {
-        if (workers.isEmpty()) {
-            return null;
-        }
-        int index = getNextWorkerNodeIndex.getAsInt() % workers.size();
-        return workers.values().asList().get(index);
+    @VisibleForTesting
+    static AtomicInteger getNextComputeNodeIndexer() {
+        return NEXT_COMPUTE_NODE_INDEX;
     }
 
     private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {

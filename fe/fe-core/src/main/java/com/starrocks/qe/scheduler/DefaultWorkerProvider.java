@@ -41,8 +41,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
+
+import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
 
 /**
  * DefaultWorkerProvider handles ComputeNode/Backend selection in SHARED_NOTHING mode.
@@ -50,6 +51,7 @@ import java.util.stream.Collectors;
  */
 public class DefaultWorkerProvider implements WorkerProvider {
     private static final Logger LOG = LogManager.getLogger(DefaultWorkerProvider.class);
+
     private static final AtomicInteger NEXT_COMPUTE_NODE_INDEX = new AtomicInteger(0);
     private static final AtomicInteger NEXT_BACKEND_INDEX = new AtomicInteger(0);
 
@@ -401,17 +403,13 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return ImmutableMap.copyOf(computeNodes);
     }
 
-    private static <C extends ComputeNode> C getNextWorker(ImmutableMap<Long, C> workers,
-                                                           IntSupplier getNextWorkerNodeIndex) {
-        if (workers.isEmpty()) {
-            return null;
-        }
-        int index = getNextWorkerNodeIndex.getAsInt() % workers.size();
-        return workers.values().asList().get(index);
-    }
-
     public static boolean isWorkerAvailable(ComputeNode worker) {
         return worker.isAlive() && !SimpleScheduler.isInBlocklist(worker.getId());
+    }
+
+    @VisibleForTesting
+    static AtomicInteger getNextComputeNodeIndexer() {
+        return NEXT_COMPUTE_NODE_INDEX;
     }
 
     private static <C extends ComputeNode> ImmutableMap<Long, C> filterAvailableWorkers(ImmutableMap<Long, C> workers) {

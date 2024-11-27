@@ -80,7 +80,6 @@ public class DefaultWorkerProviderTest {
         return ImmutableMap.copyOf(res);
     }
 
-
     @Test
     public void testCaptureAvailableWorkers() {
 
@@ -129,7 +128,7 @@ public class DefaultWorkerProviderTest {
 
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, 
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
                             WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             int numAvailableComputeNodes = 0;
@@ -176,7 +175,7 @@ public class DefaultWorkerProviderTest {
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, 
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
                             WarehouseManager.DEFAULT_WAREHOUSE_ID);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             for (Long selectedWorkerId : selectedWorkerIdsList) {
@@ -188,7 +187,7 @@ public class DefaultWorkerProviderTest {
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, 
+                            false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
                             WarehouseManager.DEFAULT_WAREHOUSE_ID);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             Assert.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
@@ -201,7 +200,7 @@ public class DefaultWorkerProviderTest {
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES, 
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES,
                             WarehouseManager.DEFAULT_WAREHOUSE_ID);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             Collections.reverse(selectedWorkerIdsList); //put ComputeNode id to the front,Backend id to the back
@@ -375,6 +374,21 @@ public class DefaultWorkerProviderTest {
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
                         true);
         Assert.assertThrows(SchedulerException.class, workerProvider::reportDataNodeNotFoundException);
+    }
+
+    @Test
+    public void testNextWorkerOverflow() throws NonRecoverableException {
+        DefaultWorkerProvider workerProvider =
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true);
+        for (int i = 0; i < 100; i++) {
+            Long workerId = workerProvider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
+        }
+        DefaultWorkerProvider.getNextComputeNodeIndexer().set(Integer.MAX_VALUE);
+        for (int i = 0; i < 100; i++) {
+            Long workerId = workerProvider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
+        }
     }
 
     public static void testUsingWorkerHelper(DefaultWorkerProvider workerProvider, Long workerId) {
