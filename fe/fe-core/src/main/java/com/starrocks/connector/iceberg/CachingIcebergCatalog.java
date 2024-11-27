@@ -177,7 +177,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public boolean dropTable(String dbName, String tableName, boolean purge) {
         boolean dropped = delegate.dropTable(dbName, tableName, purge);
-        tables.invalidate(new IcebergTableName(dbName, tableName));
+        invalidateCache(new IcebergTableName(dbName, tableName));
         return dropped;
     }
 
