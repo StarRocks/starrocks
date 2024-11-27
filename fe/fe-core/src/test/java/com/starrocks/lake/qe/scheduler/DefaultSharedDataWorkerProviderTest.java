@@ -67,6 +67,8 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 public class DefaultSharedDataWorkerProviderTest {
     private Map<Long, ComputeNode> id2Backend;
     private Map<Long, ComputeNode> id2ComputeNode;
@@ -656,6 +658,21 @@ public class DefaultSharedDataWorkerProviderTest {
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, providerNoAvailNode, 1);
             Assert.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);
+        }
+    }
+
+    @Test
+    public void testNextWorkerOverflow() throws NonRecoverableException {
+        WorkerProvider provider =
+                new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes));
+        for (int i = 0; i < 100; i++) {
+            Long workerId = provider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
+        }
+        DefaultSharedDataWorkerProvider.getNextComputeNodeIndexer().set(Integer.MAX_VALUE);
+        for (int i = 0; i < 100; i++) {
+            Long workerId = provider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
         }
     }
 }
