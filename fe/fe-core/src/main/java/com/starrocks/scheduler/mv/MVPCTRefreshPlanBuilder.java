@@ -22,6 +22,7 @@ import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
@@ -226,7 +227,11 @@ public class MVPCTRefreshPlanBuilder {
             // support to generate partition predicate for other query relation types
             LOG.warn("MV Refresh cannot push down partition predicate since " +
                     "the query relation is not select relation, mv:{}", mv.getName());
-            List<SelectListItem> items = queryRelation.getOutputExpression().stream()
+            TableName tableName = queryRelation.getResolveTableName();
+            // use `getColumnOutputNames` rather than `getOutputExpression` to avoid `getOutputExpression` referring original queryStatement's 
+            // output expressions which may cause column missing if the original queryStatement's output contains alias.
+            List<SelectListItem> items = queryRelation.getColumnOutputNames().stream()
+                    .map(x -> new SlotRef(tableName, x))
                     .map(x -> new SelectListItem(x, null)).collect(Collectors.toList());
             SelectList selectList = new SelectList(items, false);
             SelectRelation selectRelation = new SelectRelation(selectList, queryRelation,
