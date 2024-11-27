@@ -1453,4 +1453,6 @@ CONF_mInt32(max_committed_without_schema_rowset, "1000");
 // ignore union type tag in avro kafka routine load
 CONF_mBool(avro_ignore_union_type_tag, "false");
 
+CONF_mInt32(apply_version_slow_log_sec, "30");
+
 } // namespace starrocks::config
