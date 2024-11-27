@@ -226,8 +226,13 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         if (hasMinMax.first) {
             List<Long> sorted = partitionInfo.getSortedPartitions(true);
             sorted.retainAll(nonEmptyPartitionIds);
-            sorted.removeAll(nullPartitions);
             if (CollectionUtils.isEmpty(sorted)) {
+                return null;
+            }
+            // TODO: in theory if we can confirm one partition contains only NULL values, we can rule out these
+            //  partitions from sorted. But currently a range-partition can contains both NULL value and regular
+            //  values
+            if (nullPartitions.contains(sorted.get(0))) {
                 return null;
             }
             pruned.add(sorted.get(0));
@@ -238,6 +243,9 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             sorted.retainAll(nonEmptyPartitionIds);
             sorted.removeAll(nullPartitions);
             if (CollectionUtils.isEmpty(sorted)) {
+                return null;
+            }
+            if (nullPartitions.contains(sorted.get(0))) {
                 return null;
             }
             pruned.add(sorted.get(0));
