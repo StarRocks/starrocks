@@ -55,6 +55,8 @@ public:
 
     bool pick_candidate(CompactionCandidate* candidate);
 
+    void submit_compaction_task(const CompactionCandidate& compaction_candidate);
+
     void update_tablet_async(const TabletSharedPtr& tablet);
 
     void update_tablet(const TabletSharedPtr& tablet);
@@ -131,6 +133,8 @@ public:
 
     void stop_compaction(const TabletSharedPtr& tablet);
 
+    bool check_compaction_disabled(const CompactionCandidate& candidate);
+
     std::unordered_set<CompactionTask*> get_running_task(const TabletSharedPtr& tablet);
 
     int get_waiting_task_num();
@@ -146,8 +150,8 @@ private:
     CompactionManager& operator=(CompactionManager&& compaction_manager) = delete;
 
     void _dispatch_worker();
-    bool _check_compaction_disabled(const CompactionCandidate& candidate);
     bool _check_precondition(const CompactionCandidate& candidate);
+    bool _check_compaction_disabled(const CompactionCandidate& candidate);
     void _set_force_cumulative(CompactionCandidate* candidate);
     void _schedule();
     void _notify();
