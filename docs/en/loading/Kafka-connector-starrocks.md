@@ -317,9 +317,6 @@ The data is successfully loaded when the above result is returned.
 **Default value**: json<br/>
 **Description**: The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#csv-parameters) and [JSON parameters](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#json-parameters).
 
-<<<<<<< HEAD
-## Limits
-=======
 ### sink.properties.partial_update
 
 **Required**:  NO<br/>
@@ -345,7 +342,6 @@ The Kafka connector will buffer the data in memory, and flush them in batch to S
 For lower data latency, adjust these configurations in the Kafka connector settings. However, more frequent flushes will increase CPU and I/O usage.
 
 ### Limits
->>>>>>> 6ca914d416 ([Doc] Add Kafka Connector Example (#53210))
 
 - It is not supported to flatten a single message from a Kafka topic into multiple data rows and load into StarRocks.
 - The sink of the Kafka connector provided by StarRocks guarantees at-least-once semantics.
