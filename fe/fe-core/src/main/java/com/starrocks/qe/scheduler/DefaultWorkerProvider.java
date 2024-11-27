@@ -37,8 +37,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
+
+import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
 
 /**
  * DefaultWorkerProvider handles ComputeNode/Backend selection in SHARED_NOTHING mode.
@@ -46,6 +47,7 @@ import java.util.stream.Collectors;
  */
 public class DefaultWorkerProvider implements WorkerProvider {
     private static final Logger LOG = LogManager.getLogger(DefaultWorkerProvider.class);
+
     private static final AtomicInteger NEXT_COMPUTE_NODE_INDEX = new AtomicInteger(0);
     private static final AtomicInteger NEXT_BACKEND_INDEX = new AtomicInteger(0);
 
@@ -353,6 +355,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return ImmutableMap.copyOf(computeNodes);
     }
 
+<<<<<<< HEAD
     private static <C extends ComputeNode> C getNextWorker(ImmutableMap<Long, C> workers,
                                                            IntSupplier getNextWorkerNodeIndex) {
         if (workers.isEmpty()) {
@@ -364,6 +367,15 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     private static boolean isWorkerAvailable(ComputeNode worker) {
         return worker.isAlive() && !SimpleScheduler.isInBlacklist(worker.getId());
+=======
+    public static boolean isWorkerAvailable(ComputeNode worker) {
+        return worker.isAlive() && !SimpleScheduler.isInBlocklist(worker.getId());
+>>>>>>> 4e70ef57dd ([BugFix] Fix getNextWorker overflow (#53213))
+    }
+
+    @VisibleForTesting
+    static AtomicInteger getNextComputeNodeIndexer() {
+        return NEXT_COMPUTE_NODE_INDEX;
     }
 
     private static <C extends ComputeNode> ImmutableMap<Long, C> filterAvailableWorkers(ImmutableMap<Long, C> workers) {
