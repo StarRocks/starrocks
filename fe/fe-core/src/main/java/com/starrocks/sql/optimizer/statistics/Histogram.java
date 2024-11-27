@@ -14,9 +14,12 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.statistic.StatisticUtils;
 
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -58,9 +61,43 @@ public class Histogram {
         sb.append("MCV: [");
         mcv.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
                 .limit(printMcvSize)
-                .forEach(entry -> sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]"));
+                .forEach(entry -> sb.append("[").append(entry.getKey()).append(":").append(entry.getValue())
+                        .append("]"));
         sb.append("]");
         return sb.toString();
+    }
+
+    public List<Bucket> getOverlappedBuckets(double lower, double upper) {
+        int startIndex = Collections.binarySearch(buckets, new Bucket(lower, lower, 0L, 0L),
+                Comparator.comparingDouble(Bucket::getUpper));
+        if (startIndex < 0) {
+            startIndex = -startIndex - 1;
+        }
+
+        // Find the first bucket that overlaps with the upper bound
+        int endIndex = Collections.binarySearch(buckets, new Bucket(upper, upper, 0L, 0L),
+                Comparator.comparingDouble(Bucket::getLower));
+        if (endIndex < 0) {
+            endIndex = -endIndex - 2;
+        }
+
+        if (startIndex <= endIndex) {
+            return buckets.subList(startIndex, endIndex + 1);
+        } else {
+            return Lists.newArrayList();
+        }
+    }
+
+    /**
+     * Get the row count of a bucket at the specified ordinal
+     */
+    public long getRowCountOfBucket(int ordinal) {
+        Bucket bucket = buckets.get(ordinal);
+        long count = bucket.getCount();
+        if (ordinal > 0) {
+            return count - buckets.get(ordinal - 1).getCount();
+        }
+        return count;
     }
 
     public Optional<Long> getRowCountInBucket(ConstantOperator constantOperator, double distinctValuesCount) {
@@ -86,9 +123,11 @@ public class Histogram {
                 }
 
                 if (constantOperator.getType().isFixedPointType()) {
-                    rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, (bucket.getUpper() - bucket.getLower()))));
+                    rowCount = (long) Math.ceil(
+                            Math.max(1, rowCount / Math.max(1, (bucket.getUpper() - bucket.getLower()))));
                 } else {
-                    rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount / buckets.size())));
+                    rowCount =
+                            (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount / buckets.size())));
                 }
 
                 return Optional.of(rowCount);
@@ -104,5 +143,29 @@ public class Histogram {
         }
 
         return Optional.empty();
+    }
+
+    static class Builder {
+        private final List<Bucket> buckets = Lists.newArrayList();
+        private final Map<String, Long> mcv = Maps.newHashMap();
+
+        public Builder addBucket(Bucket bucket) {
+            this.buckets.add(bucket);
+            return this;
+        }
+
+        public Builder addCommonValue(String key, Long count) {
+            this.mcv.put(key, count);
+            return this;
+        }
+
+        public Histogram build() {
+            return new Histogram(buckets, mcv);
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "Histogram(buckets=" + buckets + ",mcv=" + mcv + ")";
     }
 }

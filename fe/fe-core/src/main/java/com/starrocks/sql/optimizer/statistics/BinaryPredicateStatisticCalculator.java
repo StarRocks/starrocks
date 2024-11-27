@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -295,15 +296,45 @@ public class BinaryPredicateStatisticCalculator {
         }
     }
 
+    /**
+     * Estimate selectivity based on domain contains assumption:
+     * selectivity = 1/max{NDV}
+     * It's not robust if the NDV is distorted, which usually lead to underestimated selectivity
+     */
+    private static double estimateSelectivityWithNDV(ColumnStatistic leftColumnStatistic,
+                                                     ColumnStatistic rightColumnStatistic) {
+        double leftDistinctValuesCount = leftColumnStatistic.getDistinctValuesCount();
+        double rightDistinctValuesCount = rightColumnStatistic.getDistinctValuesCount();
+        return 1.0 / Math.max(1, Math.max(leftDistinctValuesCount, rightDistinctValuesCount));
+    }
+
+    /**
+     * Estimate selectivity based on histogram:
+     * selectivity = sum{ overlap_area/total_area of all-buckets }
+     */
+    private static Double estimateSelectivityWithHistogram(ColumnStatistic leftColumnStatistic,
+                                                           ColumnStatistic rightColumnStatistic) {
+        ConnectContext context = ConnectContext.get();
+        if (context == null || !context.getSessionVariable().isCboEnableHistogramJoinEstimation()) {
+            return null;
+        }
+        return HistogramEstimator.estimateEqualToSelectivity(leftColumnStatistic, rightColumnStatistic);
+    }
+
     public static Statistics estimateColumnEqualToColumn(ScalarOperator leftColumn,
                                                          ColumnStatistic leftColumnStatistic,
                                                          ScalarOperator rightColumn,
                                                          ColumnStatistic rightColumnStatistic,
                                                          Statistics statistics,
                                                          boolean isEqualForNull) {
-        double leftDistinctValuesCount = leftColumnStatistic.getDistinctValuesCount();
-        double rightDistinctValuesCount = rightColumnStatistic.getDistinctValuesCount();
-        double selectivity = 1.0 / Math.max(1, Math.max(leftDistinctValuesCount, rightDistinctValuesCount));
+        double selectivity;
+        Double histogramSelectivity = estimateSelectivityWithHistogram(leftColumnStatistic, rightColumnStatistic);
+        if (histogramSelectivity != null) {
+            selectivity = histogramSelectivity;
+        } else {
+            selectivity = estimateSelectivityWithNDV(leftColumnStatistic, rightColumnStatistic);
+        }
+
         double rowCount = statistics.getOutputRowCount() * selectivity *
                 (isEqualForNull ? 1 :
                         (1 - leftColumnStatistic.getNullsFraction()) * (1 - rightColumnStatistic.getNullsFraction()));
@@ -437,7 +468,8 @@ public class BinaryPredicateStatisticCalculator {
                     repeat = 0;
                 }
 
-                bucketList.add(new Bucket(bucket.getLower(), constantDouble, previousTotalRowCount + bucketRowCount, repeat));
+                bucketList.add(new Bucket(bucketList.size(), bucket.getLower(), constantDouble,
+                        previousTotalRowCount + bucketRowCount, repeat));
                 break;
             } else if (bucket.getLower() > constantDouble) {
                 break;
@@ -502,7 +534,7 @@ public class BinaryPredicateStatisticCalculator {
                 }
 
                 if (bucket.getCount() - previousTotalRowCount != 0) {
-                    bucketList.add(new Bucket(constantDouble, bucket.getUpper(),
+                    bucketList.add(new Bucket(bucketList.size(), constantDouble, bucket.getUpper(),
                             bucket.getCount() - previousTotalRowCount, bucket.getUpperRepeats()));
                 }
                 i++;
@@ -515,6 +547,7 @@ public class BinaryPredicateStatisticCalculator {
 
         for (; i < histogram.getBuckets().size(); i++) {
             Bucket bucket = new Bucket(
+                    bucketList.size(),
                     histogram.getBuckets().get(i).getLower(),
                     histogram.getBuckets().get(i).getUpper(),
                     histogram.getBuckets().get(i).getCount() - previousTotalRowCount,
