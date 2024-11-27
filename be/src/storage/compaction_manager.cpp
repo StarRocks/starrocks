@@ -77,38 +77,43 @@ void CompactionManager::_schedule() {
             std::unique_lock<std::mutex> lk(_mutex);
             _cv.wait_for(lk, 1000ms);
         } else {
-            if (compaction_candidate.type == CompactionType::BASE_COMPACTION) {
-                StarRocksMetrics::instance()->tablet_base_max_compaction_score.set_value(compaction_candidate.score);
-            } else {
-                StarRocksMetrics::instance()->tablet_cumulative_max_compaction_score.set_value(
-                        compaction_candidate.score);
-            }
-
-            auto task_id = next_compaction_task_id();
-            LOG(INFO) << "submit task to compaction pool"
-                      << ", task_id:" << task_id << ", tablet_id:" << compaction_candidate.tablet->tablet_id()
-                      << ", compaction_type:" << starrocks::to_string(compaction_candidate.type)
-                      << ", compaction_score:" << compaction_candidate.score << " for round:" << _round
-                      << ", candidates_size:" << candidates_size();
-            auto st = _compaction_pool->submit_func([compaction_candidate, task_id] {
-                auto compaction_task = compaction_candidate.tablet->create_compaction_task();
-                if (compaction_task != nullptr) {
-                    if (compaction_task->compaction_type() == CompactionType::BASE_COMPACTION &&
-                        compaction_candidate.force_cumulative) {
-                        LOG(INFO) << "skip base compaction task " << task_id << " for tablet "
-                                  << compaction_candidate.tablet->tablet_id() << " because force_cumulative is true";
-                        return;
-                    }
-                    compaction_task->set_task_id(task_id);
-                    compaction_task->start();
-                }
-            });
-            if (!st.ok()) {
-                LOG(WARNING) << "submit compaction task " << task_id
-                             << " to compaction pool failed. status:" << st.to_string();
-                update_tablet_async(compaction_candidate.tablet);
-            }
+            submit_compaction_task(compaction_candidate);
         }
+    }
+}
+
+void CompactionManager::submit_compaction_task(const CompactionCandidate& compaction_candidate) {
+    if (compaction_candidate.type == CompactionType::BASE_COMPACTION) {
+        StarRocksMetrics::instance()->tablet_base_max_compaction_score.set_value(compaction_candidate.score);
+    } else {
+        StarRocksMetrics::instance()->tablet_cumulative_max_compaction_score.set_value(compaction_candidate.score);
+    }
+
+    auto task_id = next_compaction_task_id();
+    LOG(INFO) << "submit task to compaction pool"
+              << ", task_id:" << task_id << ", tablet_id:" << compaction_candidate.tablet->tablet_id()
+              << ", compaction_type:" << starrocks::to_string(compaction_candidate.type)
+              << ", compaction_score:" << compaction_candidate.score << " for round:" << _round
+              << ", candidates_size:" << candidates_size();
+    auto manager = this;
+    auto tablet = std::move(compaction_candidate.tablet);
+    auto st = _compaction_pool->submit_func([tablet, task_id, manager] {
+        auto compaction_task = tablet->create_compaction_task();
+        if (compaction_task != nullptr) {
+            CompactionCandidate candidate;
+            candidate.type = compaction_task->compaction_type();
+            candidate.tablet = tablet;
+            if (manager->check_compaction_disabled(candidate)) {
+                LOG(INFO) << "skip base compaction task " << task_id << " for tablet " << tablet->tablet_id();
+                return;
+            }
+            compaction_task->set_task_id(task_id);
+            compaction_task->start();
+        }
+    });
+    if (!st.ok()) {
+        LOG(WARNING) << "submit compaction task " << task_id << " to compaction pool failed. status:" << st.to_string();
+        update_tablet_async(tablet);
     }
 }
 
@@ -209,6 +214,11 @@ void CompactionManager::remove_candidate(int64_t tablet_id) {
     }
 }
 
+bool CompactionManager::check_compaction_disabled(const CompactionCandidate& candidate) {
+    std::lock_guard lg(_candidates_mutex);
+    return _check_compaction_disabled(candidate);
+}
+
 bool CompactionManager::_check_compaction_disabled(const CompactionCandidate& candidate) {
     if (candidate.type == CompactionType::BASE_COMPACTION &&
         _table_to_disable_deadline_map.find(candidate.tablet->tablet_meta()->table_id()) !=
@@ -226,15 +236,6 @@ bool CompactionManager::_check_compaction_disabled(const CompactionCandidate& ca
         }
     }
     return false;
-}
-
-void CompactionManager::_set_force_cumulative(CompactionCandidate* candidate) {
-    // In the pick_candidate stage, the task is for cumulative compaction. However, during the execution stage,
-    // it might turn into base compaction. Therefore, if base compaction is disabled,
-    // such tasks will be forced to execute as cumulative compaction only.
-    candidate->force_cumulative = _table_to_disable_deadline_map.find(candidate->tablet->tablet_meta()->table_id()) !=
-                                          _table_to_disable_deadline_map.end() &&
-                                  candidate->type == CompactionType::CUMULATIVE_COMPACTION;
 }
 
 bool CompactionManager::_check_precondition(const CompactionCandidate& candidate) {
@@ -321,7 +322,6 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
         }
         if (_check_precondition(*iter)) {
             *candidate = *iter;
-            _set_force_cumulative(candidate);
             _compaction_candidates.erase(iter);
             _last_score = candidate->score;
             if (candidate->type == CompactionType::BASE_COMPACTION) {
