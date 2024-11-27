@@ -103,7 +103,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     private ConnectorMetadata metadataOfDb(String dBName) {
-        if (isInfoSchemaDb(dBName) && !normal.hasSelfInfoSchema()) {
+        if (isInfoSchemaDb(dBName)) {
             return informationSchema;
         }
         return normal;
