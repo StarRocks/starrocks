@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
@@ -42,6 +43,11 @@ public class PruneProjectEmptyRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.getOp();
+        if (projectOperator.getColumnRefMap().values().stream().allMatch(ScalarOperator::isConstant)) {
+            return Collections.emptyList();
+        }
+
         List<ColumnRefOperator> outputs =
                 Lists.newArrayList(((LogicalProjectOperator) input.getOp()).getColumnRefMap().keySet());
         return Lists.newArrayList(OptExpression.create(new LogicalValuesOperator(outputs, Collections.emptyList())));

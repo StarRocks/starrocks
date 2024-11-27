@@ -74,6 +74,12 @@ public class SelectConstTest extends PlanTestBase {
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 1");
+        assertPlanContains("select t.aaa from (select cast(4/3 as int)as aaa)t", "1:Project\n" +
+                "  |  <slot 3> : CAST(1.3333333333333333 AS INT)\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL");
     }
 
     @Test
@@ -214,6 +220,12 @@ public class SelectConstTest extends PlanTestBase {
                 "78883632:00:00");
         assertFeExecuteResult("select timediff('1000-01-01 01:01:01.000001', '9999-01-02 01:01:01.123456')",
                 "-78883632:00:01");
+    }
+
+    @Test
+    public void testLogicalValueWithProject() throws Exception {
+        String sql = "select t.aaa from (select cast(4/3 as int)as aaa)t;";
+        System.out.println(getVerboseExplain(sql));
     }
 
     private void assertFeExecuteResult(String sql, String expected) throws Exception {
