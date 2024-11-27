@@ -254,6 +254,14 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         throw new NotImplementedException("not reachable");
     }
 
+    /**
+     * Return the partitions that contains NULL partition values
+     * e.g. PARTITION p_null VALUES IN (NULL)
+     */
+    public List<Long> getNullValuePartitions() {
+        throw new NotImplementedException("not reachable");
+    }
+
     @Override
     public void gsonPreProcess() throws IOException {
     }

@@ -220,11 +220,13 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
         PartitionInfo partitionInfo = table.getPartitionInfo();
+        List<Long> nullPartitions = partitionInfo.getNullValuePartitions();
 
         List<Long> pruned = Lists.newArrayList();
         if (hasMinMax.first) {
             List<Long> sorted = partitionInfo.getSortedPartitions(true);
             sorted.retainAll(nonEmptyPartitionIds);
+            sorted.removeAll(nullPartitions);
             if (CollectionUtils.isEmpty(sorted)) {
                 return null;
             }
@@ -234,6 +236,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         if (hasMinMax.second) {
             List<Long> sorted = partitionInfo.getSortedPartitions(false);
             sorted.retainAll(nonEmptyPartitionIds);
+            sorted.removeAll(nullPartitions);
             if (CollectionUtils.isEmpty(sorted)) {
                 return null;
             }

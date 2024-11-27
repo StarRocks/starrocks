@@ -615,6 +615,29 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     /**
+     * ListPartition would put the NULL value into a real NULL partition, whose partition value is NullLiteral
+     *
+     * @return
+     */
+    @Override
+    public List<Long> getNullValuePartitions() {
+        if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
+            return idToLiteralExprValues.entrySet().stream()
+                    .filter(x -> x.getValue().stream().anyMatch(LiteralExpr::isConstantNull))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else if (MapUtils.isEmpty(idToMultiLiteralExprValues)) {
+            // only if all partition columns are NULL
+            return idToMultiLiteralExprValues.entrySet().stream()
+                    .filter(x -> x.getValue().stream().anyMatch(y -> y.stream().allMatch(LiteralExpr::isConstantNull)))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else {
+            return Lists.newArrayList();
+        }
+    }
+
+    /**
      * Compare based on the max/min value in the list
      */
     private static int compareRow(List<LiteralExpr> lhs, List<LiteralExpr> rhs, boolean asc) {
