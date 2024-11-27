@@ -245,14 +245,6 @@ Kafka connector 会先在内存中缓存数据，然后通过 Stream Load 将其
 
 ### 导入 Debezium CDC 格式数据
 
-<<<<<<< HEAD
-如果 Kafka 数据为 Debezium CDC 格式，并且 StarRocks 表为主键表，则在 Kafka connector 配置文件 **connect-StarRocks-sink.properties** 中除了[配置基础参数](#使用示例)外，还需要配置 `transforms` 以及相关参数。
-  :::note
-
-  Kafka connector 是 sink connector。
-
-  :::
-=======
 Debezium 是一款 CDC 工具，可监控多种数据库的数据变更，并将变更流写入 Kafka。以下示例演示了如何配置和使用 Kafka Connector 将 PostgreSQL 的更改写入 StarRocks 中的**主键表**。
 
 #### 步骤 1：安装启动 Kafka
@@ -262,7 +254,6 @@ Debezium 是一款 CDC 工具，可监控多种数据库的数据变更，并将
 > 如果您有自己的 Kafka 环境，可以跳过当前步骤。
 
 1. [下载](https://dlcdn.apache.org/kafka/)最新版本的 Kafka，并解压压缩包。
->>>>>>> 6ca914d416 ([Doc] Add Kafka Connector Example (#53210))
 
    ```Bash
    tar -xzf kafka_2.13-3.7.0.tgz
@@ -551,10 +542,6 @@ PROPERTIES (
 
 #### 步骤 4：安装 Connector
 
-<<<<<<< HEAD
-- 如果 StarRocks 表是主键表，则需要指定 addfield transform，用于向 Debezium CDC 格式数据的每个记录添加一个 `op` 字段。如果 StarRocks 表不是主键表，则无需指定 addfield transform。addfield transform 的类是 `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`，已经包含在 Kafka connector 的 JAR 文件中，您无需手动安装。
-- unwrap transform 是指由 Debezium 提供的 unwrap，可以根据操作类型 unwrap Debezium 复杂的数据结构。更多信息，参见 [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html)。
-=======
 1. 下载 connector 解压到 **plugins** 目录。
 
    ```Bash
@@ -737,4 +724,3 @@ MySQL [test]> select * from customers;
 +------+------------+-----------+---------+
 1 row in set (0.00 sec)
 ```
->>>>>>> 6ca914d416 ([Doc] Add Kafka Connector Example (#53210))
