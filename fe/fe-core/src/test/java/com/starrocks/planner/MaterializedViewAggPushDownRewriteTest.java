@@ -25,6 +25,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewPushDownRewriter;
+import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
@@ -1065,4 +1066,95 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
             });
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAggPushDown_RollupFunctions_Avg() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt \n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, avg(LO_REVENUE) as revenue_sum\n" +
+                    "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
+                    "   group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_MultiAvgs1() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt \n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, avg(LO_REVENUE) as avg1, avg(LO_REVENUE) as avg2\n" +
+                    "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
+                    "   group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_MultiAvgs2() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt,\n" +
+                " sum(lo_custkey) as sum_lo_custkey, count(lo_custkey) as count_lo_custkey\n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, sum(LO_REVENUE), avg(LO_REVENUE) as avg1, " +
+                    "avg(LO_REVENUE) as avg2, avg(lo_custkey) as avg3 from lineorder l \n" +
+                    "join dates d on l.LO_ORDERDATE = d.d_datekey group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDownWithDecimalTypes() throws Exception {
+        String tbl1 = "CREATE TABLE `test_pt8` (\n" +
+                "  `id` bigint(20) NULL,\n" +
+                "  `pt` date NOT NULL,\n" +
+                "  `gmv` bigint(20) NULL,\n" +
+                "  `gmv2` bigint(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY date_trunc('day', pt)\n" +
+                "DISTRIBUTED BY HASH(`pt`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String tbl2 = "CREATE TABLE `test_pt9` (\n" +
+                "  `id` bigint(20) NULL COMMENT \"id\",\n" +
+                "  `pt` date NOT NULL,\n" +
+                "  `name` varchar(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY date_trunc('day', pt)\n" +
+                "DISTRIBUTED BY HASH(`pt`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" ;
+        starRocksAssert.withTable(tbl1);
+        starRocksAssert.withTable(tbl2);
+        String mv = "CREATE MATERIALIZED VIEW `test_pt8_mv` \n" +
+                "PARTITION BY (`pt`)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "REFRESH ASYNC START(\"2024-11-22 17:34:45\") EVERY(INTERVAL 1 MINUTE)\n" +
+                "PROPERTIES (\n" +
+                "\"query_rewrite_consistency\" = \"LOOSE\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT  `id`,`pt`,SUM((`gmv` + `gmv2`) * 0.01) AS `sum_channel_direct_indirect_gmv`\n" +
+                "FROM `test_pt8` GROUP BY  `id`,`pt`;\n";
+        starRocksAssert.withRefreshedMaterializedView(mv);
+        String query = "SELECT SUM((gmv+gmv2)*0.01)\n" +
+                "FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1' )";
+        String plan = getQueryPlan(query, TExplainLevel.VERBOSE);
+        System.out.println(plan);
+        starRocksAssert.dropTable("test_pt8");
+        starRocksAssert.dropTable("test_pt9");
+        starRocksAssert.dropMaterializedView("test_pt8_mv");
+    }
+>>>>>>> 4ebd6b8f1a ([BugFix] Fix mv agg push down rewrite decimal type bug (#53226))
 }
