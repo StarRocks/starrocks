@@ -28,7 +28,6 @@ struct CompactionCandidate {
     TabletSharedPtr tablet;
     CompactionType type;
     double score = 0;
-    bool force_cumulative = false;
 
     CompactionCandidate() : tablet(nullptr), type(INVALID_COMPACTION) {}
 
@@ -41,14 +40,12 @@ struct CompactionCandidate {
         tablet = other.tablet;
         type = other.type;
         score = other.score;
-        force_cumulative = other.force_cumulative;
     }
 
     CompactionCandidate& operator=(const CompactionCandidate& rhs) {
         tablet = rhs.tablet;
         type = rhs.type;
         score = rhs.score;
-        force_cumulative = rhs.force_cumulative;
         return *this;
     }
 
@@ -56,14 +53,12 @@ struct CompactionCandidate {
         tablet = std::move(other.tablet);
         type = other.type;
         score = other.score;
-        force_cumulative = other.force_cumulative;
     }
 
     CompactionCandidate& operator=(CompactionCandidate&& rhs) {
         tablet = std::move(rhs.tablet);
         type = rhs.type;
         score = rhs.score;
-        force_cumulative = rhs.force_cumulative;
         return *this;
     }
 
@@ -75,7 +70,6 @@ struct CompactionCandidate {
             ss << "nullptr tablet";
         }
         ss << ", type:" << starrocks::to_string(type);
-        ss << ", force_cumulative:" << force_cumulative;
         ss << ", score:" << score;
         return ss.str();
     }

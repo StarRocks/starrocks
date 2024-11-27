@@ -137,7 +137,11 @@ public:
     }
     ~CompactionTask() override;
 
+#ifdef BE_TEST
+    virtual void run();
+#else
     void run() override;
+#endif
 
     bool should_stop() const override;
 

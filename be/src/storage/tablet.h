@@ -274,7 +274,11 @@ public:
 
     void set_compaction_context(std::unique_ptr<CompactionContext>& context);
 
+#ifdef BE_TEST
+    virtual std::shared_ptr<CompactionTask> create_compaction_task();
+#else
     std::shared_ptr<CompactionTask> create_compaction_task();
+#endif
 
     bool has_compaction_task();
 
