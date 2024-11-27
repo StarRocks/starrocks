@@ -134,7 +134,6 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendResourceStat;
@@ -307,8 +306,7 @@ public class UtFrameUtils {
                         retry++ < 600) {
                 Thread.sleep(100);
             }
-            StatisticsMetaManager manager = new StatisticsMetaManager();
-            manager.createStatisticsTablesForTest();
+            FeConstants.enableUnitStatistics = true;
             CREATED_MIN_CLUSTER.set(true);
         } catch (Exception e) {
             e.printStackTrace();
