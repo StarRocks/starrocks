@@ -36,7 +36,7 @@ We recommend that you use 10 Gigabit Ethernet networking to ensure stable data t
 
 ## Operating system
 
-StarRocks supports deployments on CentOS Linux 7.9 or Ubuntu Linux 22.04.
+StarRocks supports deployments on Red Hat Enterprise Linux 7.9, CentOS Linux 7.9 or Ubuntu Linux 22.04.
 
 ## Software
 
