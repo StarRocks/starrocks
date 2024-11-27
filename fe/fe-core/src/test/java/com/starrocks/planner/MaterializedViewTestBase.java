@@ -338,10 +338,14 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     public String getQueryPlan(String query) {
+        return getQueryPlan(query, TExplainLevel.NORMAL);
+    }
+
+    public String getQueryPlan(String query, TExplainLevel level) {
         try {
             Pair<ExecPlan, String> planAndTrace =
                     UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
-            return planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+            return planAndTrace.first.getExplainString(level);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
