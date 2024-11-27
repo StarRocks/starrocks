@@ -274,7 +274,7 @@ public class AggregatePushDownUtils {
             }
             // ensure argument types are correct
             // clone function to avoid changing the original function
-            Function cloned = newFunc.clone();
+            Function cloned = newFunc.copy();
             cloned.setArgsType(argTypes);
             cloned.setRetType(aggCall.getType());
             newAggregate = new CallOperator(rollupFuncName, aggCall.getType(), newArgs, cloned);
