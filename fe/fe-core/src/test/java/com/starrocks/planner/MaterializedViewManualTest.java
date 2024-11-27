@@ -553,12 +553,12 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 " distributed by random" +
                 " as select sum(t1f) as total, t1a, t1b from test.test_all_type group by t1a, t1b;", () -> {
             {
-                String query = "select t1.t1b, sum(t1b) as total from test.test_all_type t1 " +
+                String query = "select t1.t1b, sum(t1f) as total from test.test_all_type t1 " +
                         "join (select 'k1' as k1) t2 on t1.t1a=t2.k1 group by t1.t1b;";
                 sql(query).match("mv0")
                         .contains("  1:Project\n" +
                                 "  |  <slot 2> : 16: t1b\n" +
-                                "  |  <slot 13> : sum(16: t1b)\n" +
+                                "  |  <slot 13> : 15: total\n" +
                                 "  |  \n" +
                                 "  0:OlapScanNode\n" +
                                 "     TABLE: mv0\n" +
