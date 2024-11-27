@@ -24,13 +24,16 @@ public class TableSampleClauseTest extends PlanTestBase {
 
     @Test
     public void testBasic() throws Exception {
-        StatementBase statementBase =
-                UtFrameUtils.parseStmtWithNewParser("select * from t1 sample('method'='by_block', 'seed'='1')",
-                        connectContext);
-        String sql = AstToSQLBuilder.toSQL(statementBase);
+        final String sql = "select * from t1 sample('method'='by_block', 'seed'='1')";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+
+        // to sql
         Assert.assertEquals("SELECT `test`.`t1`.`v4`, `test`.`t1`.`v5`, `test`.`t1`.`v6`\n" +
                         "FROM `test`.`t1` SAMPLE('method'='BY_BLOCK','seed'='1','percent'='1')",
-                sql);
+                AstToSQLBuilder.toSQL(statementBase));
+
+        // explain
+        starRocksAssert.query(sql).explainContains("SAMPLE");
     }
 
 }
