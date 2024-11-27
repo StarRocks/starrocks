@@ -220,9 +220,6 @@ MySQL [example_db]> select * from test_tbl;
 | sink.properties.*                   |          |                                                              | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `sink.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
 | sink.properties.format              | 否       | json                                                         | Stream Load 导入时的数据格式。取值为 CSV 或者 JSON。默认为JSON。更多参数说明，参见 [CSV 适用参数](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#csv-适用参数)和 [JSON 适用参数](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#json-适用参数)。 |
 
-<<<<<<< HEAD
-## 使用限制
-=======
 ## 使用说明
 
 ### Flush 策略
@@ -236,7 +233,6 @@ Kafka connector 会先在内存中缓存数据，然后通过 Stream Load 将其
 如需降低数据延迟，可在 Kafka Connector 设置文件中调整以上配置。但请注意，频繁的 Flush 会增加 CPU 和 I/O 的使用。
 
 ### 使用限制
->>>>>>> 6ca914d416 ([Doc] Add Kafka Connector Example (#53210))
 
 - 不支持将 Kafka topic 里的一条消息展开成多条导入到 StarRocks。
 - StarRocks 提供的 Kafka connector 的 Sink 保证 at-least-once 语义。
