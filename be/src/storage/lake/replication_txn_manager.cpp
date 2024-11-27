@@ -256,8 +256,9 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
         auto status = tablet_meta.create_from_memory(header_file_content);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to parse remote snapshot header file: " << remote_header_file_name
-                         << ", content: " << header_file_content << ", " << status;
-            return status;
+                         << ", content: " << header_file_content << ", status: " << status;
+            return status.clone_and_prepend("Failed to parse remote snapshot header file: " + remote_header_file_name +
+                                            ", content: " + header_file_content + ", status");
         }
 
         const auto& rowset_metas =
@@ -282,8 +283,9 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
         auto status = snapshot_meta.parse_from_file(memory_file.get());
         if (!status.ok()) {
             LOG(WARNING) << "Failed to parse remote snapshot meta file: " << snapshot_meta_file_name
-                         << ", content: " << snapshot_meta_content << ", " << status;
-            return status;
+                         << ", content: " << snapshot_meta_content << ", status: " << status;
+            return status.clone_and_prepend("Failed to parse remote snapshot meta file: " + snapshot_meta_file_name +
+                                            ", content: " + snapshot_meta_content + ", status");
         }
 
         DCHECK(((src_snapshot_info.incremental_snapshot &&
