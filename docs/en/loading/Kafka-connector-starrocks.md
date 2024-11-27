@@ -358,15 +358,6 @@ For lower data latency, adjust these configurations in the Kafka connector setti
 
 ### Load Debezium-formatted CDC data
 
-<<<<<<< HEAD
-If the Kafka data is in Debezium CDC format and the StarRocks table is a Primary Key table, you also need to configure the `transforms` parameter and other related parameters.
-
-  :::note
-
-  The Kafka connector is a sink connector.
-
-  :::
-=======
 Debezium is a popular Change Data Capture (CDC) tool that supports monitoring data changes in various database systems and streaming these changes to Kafka. The following example demonstrates how to configure and use the Kafka connector to write PostgreSQL changes to a **Primary Key table** in StarRocks.
 
 #### Step 1: Install and start Kafka
@@ -376,7 +367,6 @@ Debezium is a popular Change Data Capture (CDC) tool that supports monitoring da
 > You can skip this step if you have your own Kafka environment.
 
 1. [Download](https://dlcdn.apache.org/kafka/) the latest Kafka release from the official site and extract the package.
->>>>>>> 6ca914d416 ([Doc] Add Kafka Connector Example (#53210))
 
    ```Bash
    tar -xzf kafka_2.13-3.7.0.tgz
@@ -665,10 +655,6 @@ PROPERTIES (
 
 #### Step 4: Install connector
 
-<<<<<<< HEAD
-- If the StarRocks table is a Primary Key table, you need to specify the addfield transform to add an `op` field to each record of the Debezium CDC formatted data. If the StarRocks table is not a Primary Key table, you do not need to specify the addfield transform. The addfield transform class is `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`. It is included in the Kafka connector JAR file, so you do not need to manually install it.
-- The unwrap transform is provided by Debezium and is used to unwrap Debezium's complex data structure based on the operation type. For more information, see [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html).
-=======
 1. Download the connectors and extract the packages in the **plugins** directory.
 
    ```Bash
@@ -851,4 +837,3 @@ MySQL [test]> select * from customers;
 +------+------------+-----------+---------+
 1 row in set (0.00 sec)
 ```
->>>>>>> 6ca914d416 ([Doc] Add Kafka Connector Example (#53210))
