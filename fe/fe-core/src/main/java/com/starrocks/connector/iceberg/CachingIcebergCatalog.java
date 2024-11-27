@@ -215,7 +215,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         // optimization for query mv rewrite, we can optionally return null to bypass it.
         // if we don't have cache right now, which means it probably takes time to load it during query,
         // so we can do load in background while return null to bypass this synchronous process.
-        if (requestContext.isQueryMVRewrite() && sv.isEnableConnectorMVRewriteSKipPartitionCache()) {
+        if (requestContext.isQueryMVRewrite() && sv.isEnableConnectorAsyncListPartitions()) {
             long snapshotId = requestContext.getSnapshotId();
             IcebergTableName key =
                     new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);

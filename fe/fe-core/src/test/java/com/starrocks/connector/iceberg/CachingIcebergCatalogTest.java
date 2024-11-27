@@ -89,7 +89,7 @@ public class CachingIcebergCatalogTest {
         {
             ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
             SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
-            sv.setEnableConnectorMVRewriteSKipPartitionCache(true);
+            sv.setEnableConnectorAsyncListPartitions(true);
             requestContext.setQueryMVRewrite(true);
             List<String> res = cachingIcebergCatalog.listPartitionNames(table, requestContext, null);
             Assert.assertNull(res);
@@ -97,7 +97,7 @@ public class CachingIcebergCatalogTest {
         {
             ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
             SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
-            sv.setEnableConnectorMVRewriteSKipPartitionCache(false);
+            sv.setEnableConnectorAsyncListPartitions(false);
             requestContext.setQueryMVRewrite(true);
             List<String> res = cachingIcebergCatalog.listPartitionNames(table, requestContext, null);
             Assert.assertEquals(res.size(), 0);

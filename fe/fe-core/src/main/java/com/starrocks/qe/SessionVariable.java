@@ -818,7 +818,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
     public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
     public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
-    public static final String CONNECTOR_MV_REWRITE_SKIP_PARTITION_CACHE = "connector_mv_rewrite_skip_partition_cache";
+    public static final String ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS = "enable_connector_async_list_partitions";
     public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
 
     public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
@@ -2249,8 +2249,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
     private int connectorIncrementalScanRangeSize = 500;
 
-    @VarAttr(name = CONNECTOR_MV_REWRITE_SKIP_PARTITION_CACHE)
-    private boolean enableConnectorMVRewriteSKipPartitionCache = false;
+    @VarAttr(name = ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS)
+    private boolean enableConnectorAsyncListPartitions = false;
 
     @VarAttr(name = ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK)
     private boolean enablePushDownPreAggWithRank = true;
@@ -4397,12 +4397,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableConnectorIncrementalScanRanges;
     }
 
-    public boolean isEnableConnectorMVRewriteSKipPartitionCache() {
-        return enableConnectorMVRewriteSKipPartitionCache;
+    public boolean isEnableConnectorAsyncListPartitions() {
+        return enableConnectorAsyncListPartitions;
     }
 
-    public void setEnableConnectorMVRewriteSKipPartitionCache(boolean v) {
-        enableConnectorMVRewriteSKipPartitionCache = v;
+    public void setEnableConnectorAsyncListPartitions(boolean v) {
+        enableConnectorAsyncListPartitions = v;
     }
 
     public void setEnableConnectorIncrementalScanRanges(boolean v) {
