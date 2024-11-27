@@ -1,0 +1,24 @@
+files:
+    - file: 1.pdf
+      title: First file
+    - file: 2.pdf
+      title: Second file
+
+openleft: True
+title: Binder
+author: Tom de Geus
+output: binder.pdf
+0000.pdf
+0001.pdf
+0002.pdf
+0003.pdf
+0004.pdf
+0005.pdf
+0006.pdf
+0007.pdf
+0008.pdf
+0009.pdf
+binder.pdf
+joined-puppeteer-72DPI-images175DPI.pdf
+
+pdf:

@@ -1,0 +1,21 @@
+services:
+
+  gotenberg:
+    image: gotenberg/gotenberg
+    healthcheck:
+      test: ["CMD", "curl", "--silent", "--fail", "http://localhost:3000/health"]
+
+  docusaurus:
+    build: /Users/droscign/GitHub/starrocks/docs/docusaurus
+    environment:
+      - NODE_OPTIONS="--max-old-space-size=8192"
+      - DISABLE_VERSIONING='true'
+    volumes:
+      - /Users/droscign/GitHub/starrocks/docs/en:/app/docusaurus/docs
+      - /Users/droscign/GitHub/starrocks/docs/zh:/app/docusaurus/i18n/zh/docusaurus-plugin-content-docs/current
+    working_dir: /app/docusaurus
+    entrypoint: >
+      /bin/sh -c "
+      tail -f /dev/null
+      "
+
