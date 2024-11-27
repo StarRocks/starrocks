@@ -266,16 +266,18 @@ public class AggregatePushDownUtils {
                 return null;
             }
             Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-            // ensure argument types are correct
             Function newFunc = Expr.getBuiltinFunction(rollupFuncName, argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (newFunc == null) {
                 logMVRewrite(mvRewriteContext, "Get rollup function is null, rollupFuncName:", rollupFuncName);
                 return null;
             }
-            newFunc.setArgsType(argTypes);
-            newFunc.setRetType(aggCall.getType());
-            newAggregate = new CallOperator(rollupFuncName, aggCall.getType(), newArgs, newFunc);
+            // ensure argument types are correct
+            // clone function to avoid changing the original function
+            Function cloned = newFunc.clone();
+            cloned.setArgsType(argTypes);
+            cloned.setRetType(aggCall.getType());
+            newAggregate = new CallOperator(rollupFuncName, aggCall.getType(), newArgs, cloned);
         }
         if (newAggregate == null) {
             logMVRewrite(mvRewriteContext, "realAggregate is null");
