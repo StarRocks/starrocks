@@ -27,6 +27,31 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
 
     public DateTruncEquivalent() {}
 
+<<<<<<< HEAD
+=======
+    /**
+     * TODO: we can support this later.
+     * Change date_trunc('month', dt) to col = '2023-12-01' will get a wrong result.
+     * MV       : select date_trunc('day', dt) as dt from t
+     * Query1   : select date_trunc('month, dt) from t dt = '2023-11-01'
+     * -- cannot be rewritten, rewrite  result will be wrong
+     * Rewritten: select date_trunc('month, dt) from t where date_trunc('month', dt) = '2023-11-01'
+     *
+     * Query2   : select date_trunc('month, dt) from t where dt between '2023-11-01' and '2023-12-01'
+     * -- cannot be rewritten, dt='2023-12-01' doesn't match with date_trunc('month', dt)= '2023-11-01'
+     * Rewritten : select date_trunc('month, dt) from t where date_trunc('month', dt) between '2023-11-01' and '2023-12-01'
+     */
+    private static Set<BinaryType> SUPPORTED_BINARY_TYPES = ImmutableSet.of(
+            BinaryType.GE,
+            BinaryType.GT,
+            BinaryType.LT
+    );
+
+    public static boolean isSupportedBinaryType(BinaryType binaryType) {
+        return SUPPORTED_BINARY_TYPES.contains(binaryType);
+    }
+
+>>>>>>> 3e89c4e7cb ([BugFix] Disable date_trunc equivalent replace if binary type is LE (#53229))
     @Override
     public boolean isEquivalent(ScalarOperator op1, ConstantOperator op2) {
         if (!(op1 instanceof CallOperator)) {
@@ -68,8 +93,56 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
                                   EquivalentShuttleContext shuttleContext,
                                   ColumnRefOperator replace,
                                   ScalarOperator newInput) {
+<<<<<<< HEAD
         if (!(newInput instanceof BinaryPredicateOperator)) {
             return null;
+=======
+        if (newInput instanceof BinaryPredicateOperator) {
+            ScalarOperator left = newInput.getChild(0);
+            ScalarOperator right = newInput.getChild(1);
+
+            if (!right.isConstantRef() || !left.equals(eqContext.getEquivalent())) {
+                return null;
+            }
+            if (!isEquivalent(eqContext.getInput(), (ConstantOperator) right)) {
+                return null;
+            }
+            BinaryPredicateOperator predicate = (BinaryPredicateOperator) newInput.clone();
+            if (!isSupportedBinaryType(predicate.getBinaryType())) {
+                return null;
+            }
+            predicate.setChild(0, replace);
+            return predicate;
+        } else if (newInput instanceof CallOperator) {
+            // only in rollup aggregate, `date_trunc('day', dt) as dt` can be rewritten to `date_trunc('month', dt)`
+            if (!shuttleContext.isRollup()) {
+                return null;
+            }
+            CallOperator newCall = (CallOperator) newInput;
+            if (!checkDateTrucFunc(newCall)) {
+                return null;
+            }
+            CallOperator oldCall = (CallOperator) eqContext.getInput();
+            ConstantOperator oldChild0 = (ConstantOperator) oldCall.getChild(0);
+            // ensure col ref is the same in date_trunc
+            if (!newCall.getChild(1).equals(oldCall.getChild(1))) {
+                return null;
+            }
+            ConstantOperator newChild0 = (ConstantOperator) newCall.getChild(0);
+            if (!DATE_TRUNC_SUPPORTED_TIME_MAP.containsKey(oldChild0.getVarchar()) ||
+                    !DATE_TRUNC_SUPPORTED_TIME_MAP.containsKey(newChild0.getVarchar())) {
+                // only can rewrite date_trunc('day', col) to date_trunc('month', col)
+                return null;
+            }
+            int oldTimeUnit = DATE_TRUNC_SUPPORTED_TIME_MAP.get(oldChild0.getVarchar());
+            int newTimeUnit = DATE_TRUNC_SUPPORTED_TIME_MAP.get(newChild0.getVarchar());
+            if (oldTimeUnit > newTimeUnit) {
+                return null;
+            }
+            CallOperator rewritten = (CallOperator) newCall.clone();
+            rewritten.setChild(1, replace);
+            return rewritten;
+>>>>>>> 3e89c4e7cb ([BugFix] Disable date_trunc equivalent replace if binary type is LE (#53229))
         }
         ScalarOperator left = newInput.getChild(0);
         ScalarOperator right = newInput.getChild(1);
