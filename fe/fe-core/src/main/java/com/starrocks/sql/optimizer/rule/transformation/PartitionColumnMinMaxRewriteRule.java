@@ -229,26 +229,28 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             if (CollectionUtils.isEmpty(sorted)) {
                 return null;
             }
-            // TODO: in theory if we can confirm one partition contains only NULL values, we can rule out these
-            //  partitions from sorted. But currently a range-partition can contains both NULL value and regular
-            //  values
-            if (nullPartitions.contains(sorted.get(0))) {
-                return null;
+            for (long partitionId : sorted) {
+                pruned.add(partitionId);
+                // at least reserve one non-null partition, null-partition might be useless
+                if (!nullPartitions.contains(partitionId)) {
+                    break;
+                }
             }
-            pruned.add(sorted.get(0));
         }
 
         if (hasMinMax.second) {
             List<Long> sorted = partitionInfo.getSortedPartitions(false);
             sorted.retainAll(nonEmptyPartitionIds);
-            sorted.removeAll(nullPartitions);
             if (CollectionUtils.isEmpty(sorted)) {
                 return null;
             }
-            if (nullPartitions.contains(sorted.get(0))) {
-                return null;
+            for (long partitionId : sorted) {
+                pruned.add(partitionId);
+                // at least reserve one non-null partition, null-partition might be useless
+                if (!nullPartitions.contains(partitionId)) {
+                    break;
+                }
             }
-            pruned.add(sorted.get(0));
         }
 
         LogicalOlapScanOperator scan = new LogicalOlapScanOperator.Builder()
