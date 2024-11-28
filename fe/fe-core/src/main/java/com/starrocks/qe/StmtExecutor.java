@@ -1527,7 +1527,7 @@ public class StmtExecutor {
                 StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
                         StatsConstants.AnalyzeType.FULL;
                 statisticExecutor.collectStatistics(statsConnectCtx,
-                        StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                        StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, analyzeStmt.getPartitionIds(),
                                 analyzeStmt.getColumnNames(),
                                 analyzeStmt.getColumnTypes(),
                                 analyzeType,
