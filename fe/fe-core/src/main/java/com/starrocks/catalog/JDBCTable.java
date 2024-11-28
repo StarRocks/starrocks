@@ -97,7 +97,8 @@ public class JDBCTable extends Table {
         return dbName;
     }
 
-    public String getJdbcTable() {
+    @Override
+    public String getCatalogTableName() {
         return jdbcTable;
     }
 

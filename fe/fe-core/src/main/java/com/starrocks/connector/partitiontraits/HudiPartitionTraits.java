@@ -22,12 +22,6 @@ import java.util.List;
 import java.util.Set;
 
 public class HudiPartitionTraits extends DefaultTraits {
-
-    @Override
-    public String getDbName() {
-        return (table).getCatalogDBName();
-    }
-
     @Override
     public PartitionKey createEmptyKey() {
         return new HudiPartitionKey();
@@ -40,7 +34,7 @@ public class HudiPartitionTraits extends DefaultTraits {
 
     @Override
     public String getTableName() {
-        return (table).getCatalogTableName();
+        return table.getCatalogTableName();
     }
 
     @Override

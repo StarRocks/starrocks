@@ -24,12 +24,6 @@ import java.util.Map;
 import java.util.Optional;
 
 public class PaimonPartitionTraits extends DefaultTraits {
-
-    @Override
-    public String getDbName() {
-        return ((PaimonTable) table).getCatalogDBName();
-    }
-
     @Override
     public boolean isSupportPCTRefresh() {
         return true;

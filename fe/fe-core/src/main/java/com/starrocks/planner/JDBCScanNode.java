@@ -53,7 +53,7 @@ public class JDBCScanNode extends ScanNode {
         super(id, desc, "SCAN JDBC");
         table = tbl;
         String objectIdentifier = getIdentifierSymbol();
-        tableName = objectIdentifier + tbl.getJdbcTable() + objectIdentifier;
+        tableName = objectIdentifier + tbl.getCatalogTableName() + objectIdentifier;
     }
 
     @Override
