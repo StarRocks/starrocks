@@ -14,7 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -251,19 +250,9 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY ds \n" +
-<<<<<<< HEAD
-                "DISTRIBUTED BY HASH(`order_num`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"" +
-                ")\n" +
-                "AS\n" +
-                "SELECT \n" +
-                "count(DISTINCT `order_id`) AS `order_num`, \n" +
-=======
                 "DISTRIBUTED BY RANDOM \n" +
                 "AS SELECT \n" +
                 "bitmap_union(to_bitmap(`order_id`)) AS `order_num`, \n" +
->>>>>>> 3e89c4e7cb ([BugFix] Disable date_trunc equivalent replace if binary type is LE (#53229))
                 "date_trunc('minute', `dt`) AS ds\n" +
                 "FROM `test_partition_expr_tbl1`\n" +
                 "group by ds;";
@@ -278,7 +267,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "group by ds")
                     .match("test_partition_expr_mv1");
         }
-        connectContext.getSessionVariable().setEnableMaterializedViewTimeSeriesPushDownRewrite(false);
         {
             sql("SELECT \n" +
                     "count(DISTINCT `order_id`) AS `order_num`, \n" +
@@ -288,25 +276,21 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "group by ds")
                     .nonMatch("test_partition_expr_mv1");
         }
-        connectContext.getSessionVariable().setEnableMaterializedViewTimeSeriesPushDownRewrite(true);
 
         {
-            UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
             sql("SELECT \n" +
                     "count(DISTINCT `order_id`) AS `order_num`, \n" +
                     "date_trunc('minute', `dt`) AS ds \n" +
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
                     "group by ds")
-                    .match("test_partition_expr_mv1");
+                    .nonMatch("test_partition_expr_mv1");
         }
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
         starRocksAssert.dropTable("test_partition_expr_tbl1");
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testDateTruncPartitionColumnExpr2() throws Exception {
         String tableSQL = "CREATE TABLE `test_partition_expr_tbl1` (\n" +
                 "  `order_id` bigint(20) NOT NULL DEFAULT \"-1\" COMMENT \"\",\n" +
@@ -398,7 +382,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "group by ds")
                     .nonMatch("test_partition_expr_mv1");
         }
-        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
         {
             sql("SELECT \n" +
                     "count(DISTINCT `order_id`) AS `order_num`, \n" +
@@ -406,7 +389,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE date_trunc('day', `dt`) BETWEEN '2023-04-01' AND '2023-05-01'\n" +
                     "group by ds")
-                    .match("test_partition_expr_mv1");
+                    .nonMatch("test_partition_expr_mv1");
         }
 
         {
@@ -416,7 +399,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
                     "group by ds")
-                    .match("test_partition_expr_mv1");
+                    .nonMatch("test_partition_expr_mv1");
         }
 
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
@@ -454,7 +437,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     .nonMatch("test_partition_expr_mv1");
         }
 
-        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
         {
             sql("SELECT \n" +
                     "count(DISTINCT `order_id`) AS `order_num`, \n" +
@@ -462,7 +444,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE date_trunc('day', `dt`) BETWEEN '2023-04-01' AND '2023-05-01'\n" +
                     "group by ds")
-                    .match("test_partition_expr_mv1");
+                    .nonMatch("test_partition_expr_mv1");
         }
 
         {
@@ -472,7 +454,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
                     "group by ds")
-                    .match("test_partition_expr_mv1");
+                    .nonMatch("test_partition_expr_mv1");
         }
 
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
@@ -480,7 +462,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
     }
 
     @Test
->>>>>>> 3e89c4e7cb ([BugFix] Disable date_trunc equivalent replace if binary type is LE (#53229))
     public void testMvRewriteForColumnReorder() throws Exception {
         {
             starRocksAssert.withMaterializedView("create materialized view mv0" +
