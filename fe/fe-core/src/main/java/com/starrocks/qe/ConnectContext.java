@@ -257,6 +257,11 @@ public class ConnectContext {
         return threadLocalInfo.get();
     }
 
+    public static SessionVariable getSessionVariableOrDefault() {
+        ConnectContext ctx = get();
+        return (ctx != null) ? ctx.sessionVariable : SessionVariable.DEFAULT_SESSION_VARIABLE;
+    }
+
     public static void remove() {
         threadLocalInfo.remove();
     }

@@ -866,7 +866,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return result;
         }
 
-        return ConnectorPartitionTraits.build(this, baseTable).getUpdatedPartitionNames(
+        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(this, baseTable);
+        traits.setQueryMVRewrite(isQueryRewrite);
+        return traits.getUpdatedPartitionNames(
                 this.getBaseTableInfos(),
                 this.refreshScheme.getAsyncRefreshContext());
     }
