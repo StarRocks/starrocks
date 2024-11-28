@@ -15,6 +15,7 @@
 #include "storage/sstable/filter_block.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/format.h"
+#include "testutil/sync_point.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 
@@ -241,6 +242,8 @@ Status TableBuilder::Finish() {
         WriteBlock(&r->index_block, &index_block_handle);
     }
 
+    TEST_SYNC_POINT_CALLBACK("table_builder_footer_error", &r->status);
+
     // Write footer
     if (ok()) {
         Footer footer;
@@ -254,7 +257,9 @@ Status TableBuilder::Finish() {
         }
     }
     // sync file at last
-    r->status = r->file->sync();
+    if (ok()) {
+        r->status = r->file->sync();
+    }
     return r->status;
 }
 
