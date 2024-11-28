@@ -17,6 +17,7 @@ package com.starrocks.connector;
 public class ConnectorMetadatRequestContext {
     public static ConnectorMetadatRequestContext DEFAULT = new ConnectorMetadatRequestContext();
     TableVersionRange tableVersionRange = TableVersionRange.empty();
+    boolean queryMVRewrite = false;
 
     public void setTableVersionRange(TableVersionRange value) {
         tableVersionRange = value;
@@ -24,6 +25,18 @@ public class ConnectorMetadatRequestContext {
 
     public TableVersionRange getTableVersionRange() {
         return tableVersionRange;
+    }
+
+    public void setQueryMVRewrite(boolean v) {
+        queryMVRewrite = v;
+    }
+
+    public boolean isQueryMVRewrite() {
+        return queryMVRewrite;
+    }
+
+    public long getSnapshotId() {
+        return tableVersionRange.end().isPresent() ? tableVersionRange.end().get() : -1;
     }
 }
 

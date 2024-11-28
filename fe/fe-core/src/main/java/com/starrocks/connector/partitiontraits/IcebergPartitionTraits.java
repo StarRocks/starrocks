@@ -82,6 +82,7 @@ public class IcebergPartitionTraits extends DefaultTraits {
         Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
                 .map(Snapshot::snapshotId);
         ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        requestContext.setQueryMVRewrite(isQueryMVRewrite());
         requestContext.setTableVersionRange(TableVersionRange.withEnd(snapshotId));
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getDbName(), getTableName(), requestContext);
