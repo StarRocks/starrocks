@@ -139,15 +139,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
         // Cannot ROLLUP distinct
         if (isRollup) {
-<<<<<<< HEAD
-            boolean mvHasDistinctAggFunc = 
+            boolean mvHasDistinctAggFunc =
                     mvAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct());
             boolean queryHasDistinctAggFunc = 
-=======
-            boolean mvHasDistinctAggFunc = mvAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct()
-                            && !callOp.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG));
-            boolean queryHasDistinctAggFunc =
->>>>>>> 00fafdb82f ([BugFix] Fix mv non rollup rewrite result contains aggregate functions (#53218))
                     queryAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct());
             if (mvHasDistinctAggFunc && queryHasDistinctAggFunc) {
                 logMVRewrite(mvRewriteContext, "Rollup aggregate cannot contain distinct aggregate functions," +
@@ -163,11 +157,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         EquationRewriter queryExprToMvExprRewriter =
                 buildEquationRewriter(mvProjection, rewriteContext, false);
 
-<<<<<<< HEAD
-=======
         // TODO:duplicate if mv has already outputted.
         // mvOptExpr = duplicateMvOptExpression(rewriteContext, mvOptExpr, queryExprToMvExprRewriter);
->>>>>>> 00fafdb82f ([BugFix] Fix mv non rollup rewrite result contains aggregate functions (#53218))
         if (isRollup) {
             return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
                     rewriteContext, mvOptExpr);
@@ -234,19 +225,13 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             ScalarOperator rewritten = rewriteScalarOperator(entry.getValue(),
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
-<<<<<<< HEAD
-            if (rewritten == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite aggregate group-by/agg expr failed: {}", scalarOp.toString());
-                return null;
-=======
             // for non-rollup rewrite, the rewritten result should not contain aggregate functions.
             boolean isAggregate = isAggregate(rewritten);
             if (rewritten == null || isAggregate) {
-                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                logMVRewrite(mvRewriteContext,
                         "Rewrite projection with aggregate group-by/agg expr " +
                         "failed: {}", scalarOp.toString());
                 return Pair.create(null, isAggregate);
->>>>>>> 00fafdb82f ([BugFix] Fix mv non rollup rewrite result contains aggregate functions (#53218))
             }
             newQueryProjection.put(entry.getKey(), rewritten);
         }
@@ -264,18 +249,12 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 ScalarOperator rewritten = rewriteScalarOperator(swapped,
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
-<<<<<<< HEAD
-                if (rewritten == null) {
-                    logMVRewrite(mvRewriteContext, "Rewrite aggregate with having expr failed: {}", scalarOp.toString());
-                    return null;
-=======
                 // for non-rollup rewrite, the rewritten result should not contain aggregate functions.
                 boolean isAggregate = isAggregate(rewritten);
                 if (rewritten == null || isAggregate) {
-                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                    logMVRewrite(mvRewriteContext,
                             "Rewrite aggregate with having expr failed: {}", scalarOp.toString());
                     return Pair.create(null, isAggregate);
->>>>>>> 00fafdb82f ([BugFix] Fix mv non rollup rewrite result contains aggregate functions (#53218))
                 }
                 queryColumnRefToScalarMap.put(entry.getKey(), rewritten);
             }
@@ -285,17 +264,11 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 ScalarOperator rewritten = rewriteScalarOperator(swapped,
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
-<<<<<<< HEAD
-                if (rewritten == null) {
-                    logMVRewrite(mvRewriteContext, "mapping grouping key failed: {}", groupKey.toString());
-                    return null;
-=======
                 boolean isAggregate = isAggregate(rewritten);
                 if (rewritten == null || isAggregate) {
-                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                    logMVRewrite(mvRewriteContext,
                             "Mapping grouping key failed: {}", groupKey.toString());
                     return Pair.create(null, isAggregate);
->>>>>>> 00fafdb82f ([BugFix] Fix mv non rollup rewrite result contains aggregate functions (#53218))
                 }
                 queryColumnRefToScalarMap.put(groupKey, rewritten);
             }
@@ -303,16 +276,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             ScalarOperator aggPredicate = queryAggregationOperator.getPredicate();
             ScalarOperator rewrittenPred = rewriter.rewrite(aggPredicate);
             if (rewrittenPred == null) {
-<<<<<<< HEAD
                 logMVRewrite(mvRewriteContext, "Rewrite aggregate wth having failed, " +
                         "cannot compensate aggregate having predicates: {}", queryAggregationOperator.getPredicate().toString());
-                return null;
-=======
-                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
-                        "Rewrite aggregate with having failed, cannot compensate aggregate having predicates: {}",
-                        queryAggregationOperator.getPredicate().toString());
                 return Pair.create(null, false);
->>>>>>> 00fafdb82f ([BugFix] Fix mv non rollup rewrite result contains aggregate functions (#53218))
             }
             LogicalScanOperator scanOperator = mvOptExpr.getOp().cast();
             Operator.Builder builder = OperatorBuilderFactory.build(scanOperator);
