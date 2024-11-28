@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.Memo;
@@ -27,6 +29,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 import static org.junit.Assert.assertTrue;
 
@@ -345,6 +349,66 @@ public class PartitionPruneTest extends PlanTestBase {
                 .explainContains("partitions=5/5");
         starRocksAssert.query("select min(c1), min(c2) from t5_dup")
                 .explainContains("partitions=5/5");
+    }
+
+    @Test
+    public void testMinMaxPrune_NullValuePartition() throws Exception {
+        // list partition
+        starRocksAssert.withTable("create table t1_list " +
+                "(c1 int, c2 int) " +
+                "partition by (c1)" +
+                "properties('replication_num'='1')");
+        starRocksAssert.ddl("alter table t1_list add partition p4 values in ('4')");
+        starRocksAssert.ddl("alter table t1_list add partition p3 values in ('3')");
+        starRocksAssert.ddl("alter table t1_list add partition p2 values in ('2')");
+        starRocksAssert.ddl("alter table t1_list add partition p1 values in ('1')");
+        starRocksAssert.ddl("alter table t1_list add partition p0 values in (NULL)");
+        {
+            OlapTable t1 = (OlapTable) starRocksAssert.getTable("test", "t1_list");
+            PartitionInfo partitionInfo = t1.getPartitionInfo();
+            List<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
+            Assert.assertEquals(1, nullValuePartitions.size());
+        }
+
+        // composite partition
+        starRocksAssert.withTable("create table t3_composite " +
+                "(c1 int, c2 int) " +
+                "partition by (c1, c2)" +
+                "properties('replication_num'='1')");
+        starRocksAssert.ddl("alter table t3_composite add partition p1_1 values in (('1', '1'))");
+        starRocksAssert.ddl("alter table t3_composite add partition p1_2 values in (('1', '2'))");
+        starRocksAssert.ddl("alter table t3_composite add partition p2_1 values in (('5', '1'))");
+        starRocksAssert.ddl("alter table t3_composite add partition p2_2 values in (('5', '2'))");
+        {
+            OlapTable t3 = (OlapTable) starRocksAssert.getTable("test", "t3_composite");
+            PartitionInfo partitionInfo = t3.getPartitionInfo();
+
+            List<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
+            Assert.assertEquals(0, nullValuePartitions.size());
+
+            starRocksAssert.ddl("alter table t3_composite add partition pnull values in ((NULL, NULL))");
+            Assert.assertEquals(1, partitionInfo.getNullValuePartitions().size());
+        }
+
+        // range
+        starRocksAssert.withTable("create table t2_range " +
+                "(c1 datetime, c2 int) " +
+                "partition by range(c1) ()" +
+                "properties('replication_num'='1')");
+        starRocksAssert.ddl("alter table t2_range add partition p4 values less than ('2024-01-01')");
+        starRocksAssert.ddl("alter table t2_range add partition p3 values less than ('2024-01-02')");
+        starRocksAssert.ddl("alter table t2_range add partition p2 values less than ('2024-01-03')");
+        starRocksAssert.ddl("alter table t2_range add partition p1 values less than ('2024-01-04')");
+        {
+            OlapTable t2 = (OlapTable) starRocksAssert.getTable("test", "t2_range");
+            PartitionInfo partitionInfo = t2.getPartitionInfo();
+            List<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
+            Assert.assertEquals(1, nullValuePartitions.size());
+        }
+
+        starRocksAssert.dropTable("t1_list");
+        starRocksAssert.dropTable("t2_range");
+        starRocksAssert.dropTable("t3_composite");
     }
 
     @Test

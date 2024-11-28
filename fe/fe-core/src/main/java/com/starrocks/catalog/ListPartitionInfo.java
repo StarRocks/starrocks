@@ -626,7 +626,7 @@ public class ListPartitionInfo extends PartitionInfo {
                     .filter(x -> x.getValue().stream().anyMatch(LiteralExpr::isConstantNull))
                     .map(Map.Entry::getKey)
                     .collect(Collectors.toList());
-        } else if (MapUtils.isEmpty(idToMultiLiteralExprValues)) {
+        } else if (MapUtils.isNotEmpty(idToMultiLiteralExprValues)) {
             // only if all partition columns are NULL
             return idToMultiLiteralExprValues.entrySet().stream()
                     .filter(x -> x.getValue().stream().anyMatch(y -> y.stream().allMatch(LiteralExpr::isConstantNull)))
