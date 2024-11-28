@@ -32,6 +32,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
@@ -327,7 +328,7 @@ public class OptExternalPartitionPruner {
                 } else {
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNames(table.getCatalogName(), table.getCatalogDBName(),
-                                    table.getCatalogTableName());
+                                    table.getCatalogTableName(), ConnectorMetadatRequestContext.DEFAULT);
                 }
 
                 List<PartitionKey> keys = new ArrayList<>();
