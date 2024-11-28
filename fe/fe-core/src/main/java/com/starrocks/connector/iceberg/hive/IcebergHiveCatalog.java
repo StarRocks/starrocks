@@ -116,7 +116,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void createDb(String dbName, Map<String, String> properties) {
+    public void createDB(String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -140,7 +140,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void dropDb(String dbName) throws MetaNotFoundException {
+    public void dropDB(String dbName) throws MetaNotFoundException {
         Database database;
         try {
             database = getDB(dbName);

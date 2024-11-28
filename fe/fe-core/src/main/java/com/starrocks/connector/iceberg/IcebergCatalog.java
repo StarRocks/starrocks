@@ -17,8 +17,10 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -60,10 +62,10 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     List<String> listAllDatabases();
 
-    default void createDb(String dbName, Map<String, String> properties) {
+    default void createDB(String dbName, Map<String, String> properties) {
     }
 
-    default void dropDb(String dbName) throws MetaNotFoundException {
+    default void dropDB(String dbName) throws MetaNotFoundException {
     }
 
     Database getDB(String dbName);
@@ -114,10 +116,10 @@ public interface IcebergCatalog extends MemoryTrackable {
     default void refreshTable(String dbName, String tableName, ExecutorService refreshExecutor) {
     }
 
-    default void invalidateCacheWithoutTable(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    default void invalidatePartitionCache(String dbName, String tableName) {
     }
 
-    default void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    default void invalidateCache(String dbName, String tableName) {
     }
 
     default StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext srScanContext) {
@@ -145,10 +147,11 @@ public interface IcebergCatalog extends MemoryTrackable {
     }
 
     // --------------- partition APIs ---------------
-    private Map<String, Partition> getPartitions(Table icebergTable, long snapshotId, ExecutorService executorService) {
+    default Map<String, Partition> getPartitions(IcebergTable icebergTable, long snapshotId, ExecutorService executorService) {
+        Table nativeTable = icebergTable.getNativeTable();
         Map<String, Partition> partitionMap = Maps.newHashMap();
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
-                createMetadataTableInstance(icebergTable, org.apache.iceberg.MetadataTableType.PARTITIONS);
+                createMetadataTableInstance(nativeTable, org.apache.iceberg.MetadataTableType.PARTITIONS);
         TableScan tableScan = partitionsTable.newScan();
         if (snapshotId != -1) {
             tableScan = tableScan.useSnapshot(snapshotId);
@@ -160,7 +163,7 @@ public interface IcebergCatalog extends MemoryTrackable {
 
         // TODO: ideally we should know if table is partitioned under a snapshotId.
         // but currently we just did it in a very wild way.
-        if (icebergTable.spec().isUnpartitioned()) {
+        if (nativeTable.spec().isUnpartitioned()) {
             Partition partition = null;
             try (CloseableIterable<FileScanTask> tasks = tableScan.planFiles()) {
                 for (FileScanTask task : tasks) {
@@ -181,7 +184,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                         try {
                             lastUpdated = row.get(7, Long.class);
                         } catch (NullPointerException e) {
-                            logger.error("The table [{}] snapshot [{}] has been expired", icebergTable.name(), snapshotId, e);
+                            logger.error("The table [{}] snapshot [{}] has been expired", nativeTable.name(), snapshotId, e);
                         }
                         partition = new Partition(lastUpdated);
                         break;
@@ -192,7 +195,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                 }
                 partitionMap.put(EMPTY_PARTITION_NAME, partition);
             } catch (IOException e) {
-                throw new StarRocksConnectorException("Failed to get partitions for table: " + icebergTable.name(), e);
+                throw new StarRocksConnectorException("Failed to get partitions for table: " + nativeTable.name(), e);
             }
         } else {
             // For partition table, we need to get all partitions from PartitionsTable.
@@ -215,7 +218,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                         // Get the partition data/spec id/last updated time according to the table schema
                         StructProjection partitionData = row.get(0, StructProjection.class);
                         int specId = row.get(1, Integer.class);
-                        PartitionSpec spec = icebergTable.specs().get(specId);
+                        PartitionSpec spec = nativeTable.specs().get(specId);
 
                         String partitionName =
                                 PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
@@ -224,7 +227,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                         try {
                             lastUpdated = row.get(9, Long.class);
                         } catch (NullPointerException e) {
-                            logger.error("The table [{}.{}] snapshot [{}] has been expired", icebergTable.name(), partitionName,
+                            logger.error("The table [{}.{}] snapshot [{}] has been expired", nativeTable.name(), partitionName,
                                     snapshotId, e);
                         }
                         Partition partition = new Partition(lastUpdated);
@@ -232,34 +235,38 @@ public interface IcebergCatalog extends MemoryTrackable {
                     }
                 }
             } catch (IOException e) {
-                throw new StarRocksConnectorException("Failed to get partitions for table: " + icebergTable.name(), e);
+                throw new StarRocksConnectorException("Failed to get partitions for table: " + nativeTable.name(), e);
             }
         }
         return partitionMap;
     }
 
-    default Map<String, Partition> getPartitions(String dbName, String tableName, long snapshotId,
-                                                 ExecutorService executorService) {
-        Table icebergTable = getTable(dbName, tableName);
-        return getPartitions(icebergTable, snapshotId, executorService);
-    }
+    default List<String> listPartitionNames(IcebergTable icebergTable,
+                                            ConnectorMetadatRequestContext requestContext,
+                                            ExecutorService executorService) {
+        Table nativeTable = icebergTable.getNativeTable();
 
-    default List<String> listPartitionNames(String dbName, String tableName, long snapshotId, ExecutorService executorService) {
-        Table icebergTable = getTable(dbName, tableName);
-        Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
-        if (icebergTable.spec().isUnpartitioned()) {
+        // Call public method so subclasses can override and optimize this method.
+        Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
+        if (nativeTable.spec().isUnpartitioned()) {
             return List.of();
         } else {
             return new ArrayList<>(partitionMap.keySet());
         }
     }
 
-    default List<Partition> getPartitionsByNames(String dbName, String tableName, long snapshotId,
+    default List<Partition> getPartitionsByNames(IcebergTable icebergTable,
                                                  ExecutorService executorService,
                                                  List<String> partitionNames) {
-        Table icebergTable = getTable(dbName, tableName);
+        Table nativeTable = icebergTable.getNativeTable();
+        long snapshotId = -1;
+        if (nativeTable.currentSnapshot() != null) {
+            snapshotId = nativeTable.currentSnapshot().snapshotId();
+        }
+
+        // Call public method so subclasses can override and optimize this method.
         Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
-        if (icebergTable.spec().isUnpartitioned()) {
+        if (nativeTable.spec().isUnpartitioned()) {
             return List.of(partitionMap.get(EMPTY_PARTITION_NAME));
         } else {
             ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
