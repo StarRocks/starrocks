@@ -215,11 +215,12 @@ public class ConsolidateLikesRule extends TopDownScalarOperatorRewriteRule {
                 .collect(Collectors.groupingBy(likeOp ->
                         Utils.mustCast(likeOp.getChild(0), ColumnRefOperator.class)));
 
-        List<Pair<List<LikePredicateOperator>, Optional<List<ScalarOperator>>>> consolidatedConjuncts =
+        List<Pair<List<ScalarOperator>, Optional<List<ScalarOperator>>>> consolidatedConjuncts =
                 likeOpGroups.values()
                         .stream()
                         .map(likePredicateOperators -> Pair.create(
-                                likePredicateOperators,
+                                likePredicateOperators.stream().map(CompoundPredicateOperator::not)
+                                        .collect(Collectors.toList()),
                                 consolidate(likePredicateOperators, consolidateMin)
                                         .map(ops -> ops.stream().map(CompoundPredicateOperator::not)
                                                 .collect(Collectors.toList()))))
