@@ -33,7 +33,6 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/defer_op.h"
-#include "exec/avro_test.h"
 
 #ifdef __cplusplus
 extern "C" {
