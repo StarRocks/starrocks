@@ -171,6 +171,9 @@ public:
 
     void set_report_when_finish(bool report) { _report_when_finish = report; }
 
+    // acquire runtime filter from cache
+    void acquire_runtime_filters();
+
 private:
     bool _enable_group_execution = false;
     // Id of this query

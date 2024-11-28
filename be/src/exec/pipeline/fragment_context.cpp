@@ -409,4 +409,22 @@ Status FragmentContext::submit_active_drivers(DriverExecutor* executor) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+void FragmentContext::acquire_runtime_filters() {
+    iterate_pipeline([this](Pipeline* pipeline) { pipeline->acquire_runtime_filter(this->runtime_state()); });
+}
+
+void FragmentContext::_close_stream_load_contexts() {
+    for (const auto& context : _stream_load_contexts) {
+        context->body_sink->cancel(Status::Cancelled("Close the stream load pipe"));
+        if (context->enable_batch_write) {
+            _runtime_state->exec_env()->batch_write_mgr()->unregister_stream_load_pipe(context);
+        } else {
+            _runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(context);
+        }
+    }
+}
+
+>>>>>>> 5d854ad5c9 ([BugFix] Fix some fragment not recv runtime filter (#53265))
 } // namespace starrocks::pipeline
