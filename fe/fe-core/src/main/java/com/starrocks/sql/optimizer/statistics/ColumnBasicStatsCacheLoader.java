@@ -24,6 +24,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -55,6 +56,9 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
     public @NonNull CompletableFuture<Optional<ColumnStatistic>> asyncLoad(@NonNull ColumnStatsCacheKey cacheKey,
                                                                            @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
+            if (FeConstants.enableUnitStatistics) {
+                return Optional.empty();
+            }
             try {
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
@@ -79,7 +83,13 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
     public CompletableFuture<Map<@NonNull ColumnStatsCacheKey, @NonNull Optional<ColumnStatistic>>> asyncLoadAll(
             @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
-
+            if (FeConstants.enableUnitStatistics) {
+                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
+                for (ColumnStatsCacheKey key : keys) {
+                    result.put(key, Optional.empty());
+                }
+                return result;
+            }
             try {
                 long tableId = -1;
                 List<String> columns = new ArrayList<>();
