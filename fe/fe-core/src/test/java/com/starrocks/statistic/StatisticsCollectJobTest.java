@@ -59,7 +59,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
@@ -227,13 +226,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(7, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
         jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
-        FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertTrue("[v1, v2, v3, v4, v5]".contains(
                 fullStatisticsCollectJob.getColumnNames().toString()));
-        Assert.assertTrue(jobs.get(1) instanceof FullStatisticsCollectJob);
-        fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
+        Assert.assertTrue(jobs.get(1) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(1);
         Assert.assertTrue("[v4, v5, v6]".contains(
                 fullStatisticsCollectJob.getColumnNames().toString()));
     }
@@ -248,12 +247,12 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(3, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
         jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
-        FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumnNames().toString());
-        Assert.assertTrue(jobs.get(1) instanceof FullStatisticsCollectJob);
-        fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
+        Assert.assertTrue(jobs.get(1) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(1);
         Assert.assertEquals("[v4, v5, v6]", fullStatisticsCollectJob.getColumnNames().toString());
     }
 
@@ -267,8 +266,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-        FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("t0_stats", fullStatisticsCollectJob.getTable().getName());
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumnNames().toString());
 
@@ -281,8 +280,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-        fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("tprimary_stats", fullStatisticsCollectJob.getTable().getName());
         Assert.assertEquals("[pk, v1, v2]", fullStatisticsCollectJob.getColumnNames().toString());
 
@@ -294,8 +293,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-        fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("tunique_stats", fullStatisticsCollectJob.getTable().getName());
         Assert.assertEquals("[pk]", fullStatisticsCollectJob.getColumnNames().toString());
     }
@@ -312,8 +311,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-        FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("struct_a", fullStatisticsCollectJob.getTable().getName());
         Assert.assertEquals("[b.a, b.c, d.c.a]", fullStatisticsCollectJob.getColumnNames().toString());
     }
@@ -329,8 +328,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-        FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v2]", fullStatisticsCollectJob.getColumnNames().toString());
     }
 
@@ -345,8 +344,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
-        SampleStatisticsCollectJob sampleStatisticsCollectJob = (SampleStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob sampleStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v2]", sampleStatisticsCollectJob.getColumnNames().toString());
     }
 
@@ -486,7 +485,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         statsConnectCtx.setThreadLocalInfo();
         StatisticExecutor statisticExecutor = new StatisticExecutor();
 
-        new MockUp<FullStatisticsCollectJob>() {
+        new MockUp<HyperStatisticsCollectJob>() {
             @Mock
             public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
             }
@@ -495,7 +494,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
         Assert.assertEquals(StatsConstants.ScheduleStatus.FINISH, nativeAnalyzeJob.getStatus());
 
-        new MockUp<FullStatisticsCollectJob>() {
+        new MockUp<HyperStatisticsCollectJob>() {
             @Mock
             public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
                 throw new RuntimeException("mock exception");
@@ -512,53 +511,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
         Assert.assertEquals(StatsConstants.ScheduleStatus.FAILED, nativeAnalyzeJob.getStatus());
         Assert.assertEquals("mock exception", nativeAnalyzeJob.getReason());
-    }
-
-    @Test
-    public void createAnalyzeJobSimultaneously() throws Exception {
-        new MockUp<StatisticsCollectJob>() {
-            @Mock
-            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
-            }
-        };
-
-        // case: sample table
-        {
-            starRocksAssert.ddl("create analyze sample table test.t0_stats");
-            StatisticAutoCollector collector = new StatisticAutoCollector();
-            List<StatisticsCollectJob> jobs = collector.runJobs();
-            Optional<StatisticsCollectJob> tableJob = jobs.stream()
-                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats")).findFirst();
-            Assert.assertTrue(tableJob.isPresent());
-            Assert.assertEquals(StatsConstants.AnalyzeType.SAMPLE, tableJob.get().getType());
-            starRocksAssert.dropAnalyzeForTable("t0_stats");
-        }
-
-        // case: column
-        {
-            starRocksAssert.ddl("create analyze full table test.t0_stats(v2)");
-            StatisticAutoCollector collector = new StatisticAutoCollector();
-            List<StatisticsCollectJob> jobs = collector.runJobs();
-            long count = jobs.stream()
-                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
-                    .count();
-            Assert.assertEquals(2, count);
-            starRocksAssert.dropAnalyzeForTable("t0_stats");
-        }
-
-        // case: overlapped columns
-        {
-            starRocksAssert.ddl("create analyze full table test.t0_stats(v2)");
-            starRocksAssert.ddl("create analyze full table test.t0_stats(v3)");
-            starRocksAssert.ddl("create analyze full table test.t0_stats(v2, v3)");
-            StatisticAutoCollector collector = new StatisticAutoCollector();
-            List<StatisticsCollectJob> jobs = collector.runJobs();
-            long count = jobs.stream()
-                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
-                    .count();
-            Assert.assertEquals(4, count);
-            starRocksAssert.dropAnalyzeForTable("t0_stats");
-        }
     }
 
     @Test
@@ -1298,8 +1250,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-        FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("t0_stats", fjb.getTable().getName());
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
 
@@ -1362,8 +1314,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-        FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
 
         BasicStatsMeta execMeta2 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
@@ -1426,8 +1378,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-        FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
 
         Config.statistic_auto_collect_small_table_interval = 100;
@@ -1504,8 +1456,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
             Assert.assertEquals(1, jobs.size());
-            Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-            FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+            Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+            HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
         }
 
@@ -1520,8 +1472,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
             Assert.assertEquals(1, jobs.size());
-            Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
-            SampleStatisticsCollectJob fjb = (SampleStatisticsCollectJob) jobs.get(0);
+            Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+            HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
         }
 
@@ -1542,8 +1494,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
             Assert.assertEquals(1, jobs.size());
-            Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-            FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+            Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+            HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
         }
     }

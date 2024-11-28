@@ -2111,6 +2111,9 @@ public class Config extends ConfigBase {
             "we would use sample statistics instead of full statistics")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
 
+    @ConfField(mutable = true)
+    public static boolean statistic_use_meta_statistics = true;
+
     /**
      * default bucket size of histogram statistics
      */

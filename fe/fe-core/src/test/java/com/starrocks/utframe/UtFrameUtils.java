@@ -306,6 +306,7 @@ public class UtFrameUtils {
                         retry++ < 600) {
                 Thread.sleep(100);
             }
+            FeConstants.enableUnitStatistics = true;
             CREATED_MIN_CLUSTER.set(true);
         } catch (Exception e) {
             e.printStackTrace();
