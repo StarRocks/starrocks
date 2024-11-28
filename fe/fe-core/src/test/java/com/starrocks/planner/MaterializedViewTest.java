@@ -5615,6 +5615,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         // If agg push down is open, cannot rewrite.
         String mv = "select lo_orderkey from lineorder group by lo_orderkey";
         String sql = "select count(distinct lo_orderkey) from lineorder where lo_orderkey = 1";
-        testRewriteOK(mv, sql);
+        testRewriteFail(mv, sql);
     }
 }
