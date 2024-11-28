@@ -5065,7 +5065,7 @@ public class CreateMaterializedViewTest {
                     "group by s_suppkey, s_nationkey order by s_suppkey;";
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view can only be created in default_catalog."));
+            Assert.assertTrue(e.getMessage().contains("Can not find database"));
         }
     }
 

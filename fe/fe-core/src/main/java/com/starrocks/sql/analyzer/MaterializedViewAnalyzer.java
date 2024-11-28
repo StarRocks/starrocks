@@ -263,10 +263,7 @@ public class MaterializedViewAnalyzer {
              * 1. Use default catalog if not specified, actually it only support default catalog until now
              */
             if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getCatalog())) {
-                String catalogName = Optional.ofNullable(context.getSessionVariable())
-                        .map(sessionVariable -> sessionVariable.getCatalog())
-                        .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-                tableNameObject.setCatalog(catalogName);
+                tableNameObject.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             }
 
             if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getDb())) {
@@ -320,8 +317,8 @@ public class MaterializedViewAnalyzer {
             }
             Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getTableName().getDb());
             if (db == null) {
-                throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
-                        statement.getTableName().getPos());
+                String errMsg = String.format("Can not find database %s in default_catalog", statement.getTableName().getDb());
+                throw new SemanticException(errMsg, statement.getTableName().getPos());
             }
             Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
             // now do not support empty base tables
