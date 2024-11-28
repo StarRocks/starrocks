@@ -37,7 +37,7 @@ public class StarOSAgentEpack extends StarOSAgent {
         }
     }
 
-    public long createWorkerGroup(String size) throws DdlException {
+    public long createWorkerGroup(String size, int replicaNumber) throws DdlException {
         prepare();
 
         // size should be x0, x1, x2, x4...
@@ -47,7 +47,7 @@ public class StarOSAgentEpack extends StarOSAgent {
         WorkerGroupDetailInfo result = null;
         try {
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap());
+                    Collections.emptyMap(), replicaNumber);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
@@ -67,4 +67,13 @@ public class StarOSAgentEpack extends StarOSAgent {
         tryRemovePreviousWorkerGroup(groupId);
     }
 
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
+        prepare();
+        try {
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to update worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
+    }
 }

@@ -73,7 +73,7 @@ public class SetWarehouseStmtTest {
         new MockUp<WarehouseManager>() {
             @Mock
             public Warehouse getWarehouse(String warehouseName) {
-                return new LocalWarehouse(12343L, "aaa", 11L, "no comments");
+                return new LocalWarehouse(12343L, "aaa", 11L, null, "no comments");
             }
 
             @Mock

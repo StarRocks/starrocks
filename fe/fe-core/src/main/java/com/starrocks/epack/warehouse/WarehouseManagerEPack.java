@@ -26,6 +26,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -38,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -56,7 +58,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
             // If the state of default warehouse is updated, e.g. SUSPENDED, we should not overwrite the state.
             if (!nameToWh.containsKey(DEFAULT_WAREHOUSE_NAME)) {
                 Warehouse wh = new LocalWarehouse(DEFAULT_WAREHOUSE_ID,
-                        DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID,
+                        DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID, new WarehouseProperty(),
                         "An internal warehouse init after FE is ready");
                 nameToWh.put(wh.getName(), wh);
                 idToWh.put(wh.getId(), wh);
@@ -207,16 +209,30 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 }
                 ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_EXISTS, String.format("name: %s", warehouseName));
             }
+            WarehouseProperty warehouseProperty = new WarehouseProperty();
+            Map<String, String> properties = stmt.getProperties();
+            if (properties != null) {
+                int computeReplica = Integer.parseInt(properties.getOrDefault(WarehouseProperty.PROPERTY_COMPUTE_REPLICA,
+                        String.valueOf(WarehouseProperty.DEFAULT_REPLICA_NUMBER)));
+                if (computeReplica <= 0) {
+                    throw new DdlException("warehouse compute replica can not be <= 0");
+                }
+                if (computeReplica > Config.lake_warehouse_max_compute_replica) {
+                    throw new DdlException("warehouse compute replica can not be larger than " +
+                            Config.lake_warehouse_max_compute_replica);
+                }
+                warehouseProperty.setComputeReplica(computeReplica);
+            }
 
             long id = GlobalStateMgr.getCurrentState().getNextId();
             long clusterId = GlobalStateMgr.getCurrentState().getNextId();
             String comment = stmt.getComment();
-            LocalWarehouse wh = new LocalWarehouse(id, warehouseName, clusterId, comment);
+            LocalWarehouse wh = new LocalWarehouse(id, warehouseName, clusterId, warehouseProperty, comment);
 
             for (Cluster cluster : wh.getClusters().values()) {
                 try {
                     StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-                    cluster.setWorkerGroupId(starOSAgent.createWorkerGroup("x0", 1 /* replicaNumber */));
+                    cluster.setWorkerGroupId(starOSAgent.createWorkerGroup("x0", warehouseProperty.getComputeReplica()));
                 } catch (DdlException e) {
                     LOG.warn(e);
                     throw new DdlException("create warehouse " + wh.getName() + " failed, reason: " + e);
@@ -323,6 +339,53 @@ public class WarehouseManagerEPack extends WarehouseManager {
             warehouse.resumeSelf();
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
+        }
+    }
+
+    @Override
+    public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
+        }
+
+        String warehouseName = stmt.getWarehouseName();
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(nameToWh.containsKey(warehouseName),
+                    "Warehouse '%s' doesn't exist", warehouseName);
+
+            Map<String, String> properties = stmt.getProperties();
+            if (properties == null || properties.isEmpty()) {
+                return;
+            }
+            WarehouseProperty warehouseProperty = new WarehouseProperty();
+            if (properties.get(WarehouseProperty.PROPERTY_COMPUTE_REPLICA) != null) {
+                int computeReplica = Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_COMPUTE_REPLICA));
+                if (computeReplica <= 0) {
+                    throw new DdlException("warehouse compute replica can not be <= 0");
+                }
+                if (computeReplica > Config.lake_warehouse_max_compute_replica) {
+                    throw new DdlException("warehouse compute replica can not be larger than " +
+                            Config.lake_warehouse_max_compute_replica);
+                }
+                warehouseProperty.setComputeReplica(computeReplica);
+
+                LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
+                // TODO: operation below is not atomic
+                StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+                for (Cluster cluster : warehouse.getClusters().values()) {
+                    try {
+                        starOSAgent.updateWorkerGroup(cluster.getWorkerGroupId(), warehouseProperty.getComputeReplica());
+                    } catch (DdlException e) {
+                        LOG.warn(e);
+                        throw new DdlException("alter warehouse " + warehouse.getName() + " failed, reason: " + e);
+                    }
+                }
+                warehouse.setProperty(warehouseProperty);
+                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+                editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
+            } else {
+                throw new DdlException("unsupported warehouse property");
+            }
         }
     }
 

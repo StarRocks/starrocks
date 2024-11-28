@@ -66,6 +66,9 @@ public class LocalWarehouse extends Warehouse {
     @SerializedName(value = "mtime")
     private volatile long updatedTime;
 
+    @SerializedName(value = "property")
+    private WarehouseProperty property = new WarehouseProperty();
+
     protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public static final ImmutableList<String> CLUSTER_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
@@ -78,10 +81,12 @@ public class LocalWarehouse extends Warehouse {
 
     public LocalWarehouse() {
         super(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME, "");
+        this.property = new WarehouseProperty();
     }
 
-    public LocalWarehouse(long id, String name, long clusterId, String comment) {
+    public LocalWarehouse(long id, String name, long clusterId, WarehouseProperty property, String comment) {
         super(id, name, comment);
+        this.property = property;
         cluster = new Cluster(clusterId);
     }
 
@@ -104,6 +109,14 @@ public class LocalWarehouse extends Warehouse {
 
     public WarehouseState getState() {
         return state;
+    }
+
+    public void setProperty(WarehouseProperty property) {
+        this.property = property;
+    }
+
+    public WarehouseProperty getProperty() {
+        return property;
     }
 
     public Map<Long, Cluster> getClusters() {

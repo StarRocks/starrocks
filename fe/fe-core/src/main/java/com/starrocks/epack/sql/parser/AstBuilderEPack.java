@@ -63,9 +63,11 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.Identifier;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -660,6 +662,18 @@ public class AstBuilderEPack extends AstBuilder {
             }
         }
         return new ShowNodesStmt(warehouseName, pattern, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterWarehouseStatement(StarRocksParser.AlterWarehouseStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String whName = identifier.getValue();
+        Map<String, String> properties = new HashMap<>();
+        if (context.modifyPropertiesClause() != null) {
+            ModifyTablePropertiesClause clause = (ModifyTablePropertiesClause) visit(context.modifyPropertiesClause());
+            properties = clause.getProperties();
+        }
+        return new AlterWarehouseStmt(whName, properties, createPos(context));
     }
 
     // ---------------------------------------- Failover Group Statement ---------------------------------------------------

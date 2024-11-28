@@ -67,6 +67,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -536,6 +537,19 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.ANY.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+        try {
+            AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
         }
         return null;
     }

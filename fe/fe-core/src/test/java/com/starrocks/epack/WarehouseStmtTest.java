@@ -95,7 +95,7 @@ public class WarehouseStmtTest {
                 result = null;
                 minTimes = 0;
 
-                starOSAgent.createWorkerGroup(anyString);
+                starOSAgent.createWorkerGroup(anyString, 1 /* replicaNumber */);
                 result = -1L;
                 minTimes = 0;
             }

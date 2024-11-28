@@ -981,6 +981,7 @@ public class RoutineLoadManagerTest {
                 warehouseMgr.getWarehouse(anyLong);
                 result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManagerEPack.DEFAULT_CLUSTER_ID,
+                        null,
                         "An internal warehouse contains all compute nodes in this system");
                 minTimes = 0;
             }
