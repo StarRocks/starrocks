@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.TableProperty.QueryRewriteConsistencyMode.CHECKED;
@@ -413,7 +414,9 @@ public class MaterializationContext {
          * Prefer small table to large table
          */
         private static long orderingRowCount(MaterializationContext mvContext) {
-            return mvContext.getMv().getRowCount();
+            // prefer max partition row count to mv's total row count,
+            // eg: a mv is with less partitions and smaller total row count but maxPartitionRowCount is larger.
+            return mvContext.getMv().getMaxPartitionRowCount();
         }
 
         @Override
@@ -422,8 +425,27 @@ public class MaterializationContext {
             OperatorType o2Type = o2.getMvExpression().getOp().getOpType();
 
             if (o1Type == o2Type && (o1Type == OperatorType.LOGICAL_AGGR)) {
+                // -- rows: 100 mv1:
+                // select sum(v1) from t1 group by a, b, c, f;
+                // -- rows: 10000 mv2:
+                // select sum(v1) from t1 group by a, b, d;
+                // query: select sum(v1) from t1 where b = 'a' group by a;
+
+                // When many mvs satisfy query, prefer mv with fewer rows, like mv1.
+                // But `RewriteOrdering` is only used for sorting when there are too many candidate mvs
+                // and candidate mv list need to be trimmed to a limited size.
+                // So `mv1` in above example is just a candidate, it doesn't mean mv1 is the final chosen mv.
+                // Actually `BestMvSelector` is the final place to judge which mv is used after rewrite rule.
+                boolean mvHasDifferentRows = orderingRowCount(o1) != 0 && orderingRowCount(o2) != 0
+                        && orderingRowCount(o1) != orderingRowCount(o2);
                 return Comparator
-                        .comparing(this::orderingAggregation)
+                        .comparing((Function<MaterializationContext, Long>) mv -> {
+                            int r = orderingAggregation(mv);
+                            if (r > 0 && mvHasDifferentRows) {
+                                return orderingRowCount(mv);
+                            }
+                            return (long) r;
+                        })
                         .thenComparing(RewriteOrdering::orderingRowCount)
                         .thenComparing(MaterializationContext::getMVUsedCount)
                         .thenComparing(this::orderingTimeGranularity)
