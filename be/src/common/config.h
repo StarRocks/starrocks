@@ -1296,6 +1296,8 @@ CONF_String(rocksdb_db_options_string, "create_if_missing=true;create_missing_co
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
+// limit exchange buffer's memory size per driver, 0 means unlimited
+CONF_Int64(exchange_sink_buffer_mem_limit_per_driver, "0");
 // only used for test. default: 128M
 CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
 // mem limit for partition hash join probe side buffer

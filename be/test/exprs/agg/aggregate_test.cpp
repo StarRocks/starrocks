@@ -67,11 +67,11 @@ public:
         utils = new FunctionUtils();
         ctx = utils->get_fn_ctx();
         _allocator = std::make_unique<CountingAllocatorWithHook>();
-        tls_agg_state_allocator = _allocator.get();
+        tls_scope_counting_allocator = _allocator.get();
     }
     void TearDown() override {
         delete utils;
-        tls_agg_state_allocator = nullptr;
+        tls_scope_counting_allocator = nullptr;
         _allocator.reset();
     }
 

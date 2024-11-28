@@ -28,6 +28,7 @@
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/memory/counting_allocator.h"
 #include "serde/protobuf_serde.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
@@ -83,6 +84,8 @@ public:
 
     // Return the physical bytes of attachment.
     int64_t construct_brpc_attachment(const PTransmitChunkParamsPtr& _chunk_request, butil::IOBuf& attachment);
+
+    CountingAllocatorWithHook* shuffle_counting_allocator() const { return _shuffle_counting_allocator.get(); }
 
 private:
     bool _is_large_chunk(size_t sz) const {
@@ -210,6 +213,8 @@ private:
     std::unique_ptr<Shuffler> _shuffler;
 
     std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
+
+    std::unique_ptr<CountingAllocatorWithHook> _shuffle_counting_allocator;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {

@@ -25,6 +25,7 @@
 #include "common/config.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/expr.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
@@ -82,6 +83,8 @@ public:
     // 'from' and copy 'size' rows
     Status add_rows_selective(Chunk* chunk, int32_t driver_sequence, const uint32_t* row_indexes, uint32_t from,
                               uint32_t size, RuntimeState* state);
+
+    Status flush_send_chunk_request(int32_t driver_sequence, RuntimeState* state);
 
     // Flush buffered rows and close channel. This function don't wait the response
     // of close operation, client should call close_wait() to finish channel's close.
@@ -192,6 +195,7 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
 Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t driver_sequence, const uint32_t* indexes,
                                                          uint32_t from, uint32_t size, RuntimeState* state) {
     if (UNLIKELY(_chunks[driver_sequence] == nullptr)) {
+        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_parent->shuffle_counting_allocator());
         _chunks[driver_sequence] = chunk->clone_empty_with_slot(size);
     }
 
@@ -202,9 +206,19 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t d
     }
 
     {
+        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_parent->shuffle_counting_allocator());
         SCOPED_TIMER(_parent->_shuffle_chunk_append_timer);
         _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
         COUNTER_UPDATE(_parent->_shuffle_chunk_append_counter, 1);
+    }
+    return Status::OK();
+}
+
+Status ExchangeSinkOperator::Channel::flush_send_chunk_request(int32_t driver_sequence, RuntimeState* state) {
+    if (UNLIKELY(_chunks[driver_sequence] != nullptr)) {
+        RETURN_IF_ERROR(send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
+        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_parent->shuffle_counting_allocator());
+        _chunks[driver_sequence].reset();
     }
     return Status::OK();
 }
@@ -456,6 +470,8 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _shuffle_channel_ids.resize(state->chunk_size());
     _row_indexes.resize(state->chunk_size());
 
+    _shuffle_counting_allocator = std::make_unique<CountingAllocatorWithHook>();
+
     return Status::OK();
 }
 
@@ -620,6 +636,17 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
 
                 RETURN_IF_ERROR(_channels[channel_id]->add_rows_selective(send_chunk, driver_sequence,
                                                                           _row_indexes.data(), from, size, state));
+            }
+        }
+        const size_t exchange_sink_max_memusage = config::exchange_sink_buffer_mem_limit_per_driver;
+        if (exchange_sink_max_memusage > 0 &&
+            _shuffle_counting_allocator->memory_usage() > exchange_sink_max_memusage) {
+            for (int32_t channel_id : _channel_indices) {
+                for (int32_t i = 0; i < _num_shuffles_per_channel; ++i) {
+                    int shuffle_id = channel_id * _num_shuffles_per_channel + i;
+                    int driver_sequence = _driver_sequence_per_shuffle[shuffle_id];
+                    RETURN_IF_ERROR(_channels[channel_id]->flush_send_chunk_request(driver_sequence, state));
+                }
             }
         }
     }
