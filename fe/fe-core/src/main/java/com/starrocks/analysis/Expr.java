@@ -40,6 +40,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
@@ -82,6 +83,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.Queue;
 import java.util.stream.Collectors;
 
 /**
@@ -439,63 +441,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             throw new IllegalStateException(e);
         }
     }
-
-    /**
-     * Gather conjuncts from this expr and return them in a list.
-     * A conjunct is an expr that returns a boolean, e.g., Predicates, function calls,
-     * SlotRefs, etc. Hence, this method is placed here and not in Predicate.
-     */
-    public static List<Expr> extractConjuncts(Expr root) {
-        List<Expr> conjuncts = Lists.newArrayList();
-        if (null == root) {
-            return conjuncts;
-        }
-
-        extractConjunctsImpl(root, conjuncts);
-        return conjuncts;
-    }
-
-    private static void extractConjunctsImpl(Expr root, List<Expr> conjuncts) {
-        if (!(root instanceof CompoundPredicate)) {
-            conjuncts.add(root);
-            return;
-        }
-
-        CompoundPredicate cpe = (CompoundPredicate) root;
-        if (!CompoundPredicate.Operator.AND.equals(cpe.getOp())) {
-            conjuncts.add(root);
-            return;
-        }
-
-        extractConjunctsImpl(cpe.getChild(0), conjuncts);
-        extractConjunctsImpl(cpe.getChild(1), conjuncts);
-    }
-
-    public static List<Expr> flattenPredicate(Expr root) {
-        List<Expr> children = Lists.newArrayList();
-        if (null == root) {
-            return children;
-        }
-
-        flattenPredicate(root, children);
-        return children;
-    }
-
-    private static void flattenPredicate(Expr root, List<Expr> children) {
-        if (!(root instanceof CompoundPredicate)) {
-            children.add(root);
-            return;
-        }
-
-        CompoundPredicate cpe = (CompoundPredicate) root;
-        if (CompoundPredicate.Operator.AND.equals(cpe.getOp()) || CompoundPredicate.Operator.OR.equals(cpe.getOp())) {
-            extractConjunctsImpl(cpe.getChild(0), children);
-            extractConjunctsImpl(cpe.getChild(1), children);
-        } else {
-            children.add(root);
-        }
-    }
-
 
     public static Expr compoundAnd(Collection<Expr> conjuncts) {
         return createCompound(CompoundPredicate.Operator.AND, conjuncts);
@@ -1218,14 +1163,22 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     public List<SlotRef> collectAllSlotRefs() {
-        List<SlotRef> result = Lists.newArrayList();
-        if (this instanceof SlotRef) {
-            result.add((SlotRef) this);
+        return collectAllSlotRefs(false);
+    }
+
+    public List<SlotRef> collectAllSlotRefs(boolean distinct) {
+        Collection<SlotRef> result = distinct ? Sets.newHashSet() : Lists.newArrayList();
+        Queue<Expr> q = Lists.newLinkedList();
+        q.add(this);
+        while (!q.isEmpty()) {
+            Expr head = q.poll();
+            if (head instanceof SlotRef) {
+                result.add((SlotRef) head);
+            }
+            q.addAll(head.getChildren());
         }
-        for (Expr child : children) {
-            result.addAll(child.collectAllSlotRefs());
-        }
-        return result;
+
+        return distinct ? Lists.newArrayList(result) : (List<SlotRef>) result;
     }
 
     /**

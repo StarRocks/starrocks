@@ -29,6 +29,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -135,6 +136,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -288,6 +290,65 @@ public class AnalyzerUtils {
             return (CallOperator) operator;
         }
         return null;
+    }
+
+    /**
+     * Gather conjuncts from this expr and return them in a list.
+     * A conjunct is an expr that returns a boolean, e.g., Predicates, function calls,
+     * SlotRefs, etc. Hence, this method is placed here and not in Predicate.
+     */
+    public static List<Expr> extractConjuncts(Expr root) {
+        List<Expr> conjuncts = Lists.newArrayList();
+        if (null == root) {
+            return conjuncts;
+        }
+
+        extractConjunctsImpl(root, conjuncts);
+        return conjuncts;
+    }
+
+    private static void extractConjunctsImpl(Expr root, List<Expr> conjuncts) {
+        if (!(root instanceof CompoundPredicate)) {
+            conjuncts.add(root);
+            return;
+        }
+
+        CompoundPredicate cpe = (CompoundPredicate) root;
+        if (!CompoundPredicate.Operator.AND.equals(cpe.getOp())) {
+            conjuncts.add(root);
+            return;
+        }
+
+        extractConjunctsImpl(cpe.getChild(0), conjuncts);
+        extractConjunctsImpl(cpe.getChild(1), conjuncts);
+    }
+
+    /**
+     * Flatten AND/OR tree
+     */
+    public static List<Expr> flattenPredicate(Expr root) {
+        List<Expr> children = Lists.newArrayList();
+        if (null == root) {
+            return children;
+        }
+
+        flattenPredicate(root, children);
+        return children;
+    }
+
+    private static void flattenPredicate(Expr root, List<Expr> children) {
+        Queue<Expr> q = Lists.newLinkedList();
+        q.add(root);
+        while (!q.isEmpty()) {
+            Expr head = q.poll();
+            if (head instanceof CompoundPredicate &&
+                    (((CompoundPredicate) head).getOp() == CompoundPredicate.Operator.AND ||
+                            ((CompoundPredicate) head).getOp() == CompoundPredicate.Operator.OR)) {
+                q.addAll(head.getChildren());
+            } else {
+                children.add(head);
+            }
+        }
     }
 
     private static class DBCollector implements AstVisitor<Void, Void> {
