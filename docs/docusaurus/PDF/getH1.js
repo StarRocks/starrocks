@@ -16,6 +16,29 @@ async function getH1(url) {
   }
 }
 
+async function callGotenberg(url, fileName) {
+    //var util = require('util');
+    var exec = require('child_process').exec;
+
+    var command = `curl --request POST http://gotenberg:3000/forms/chromium/convert/url --form url=${url} -o ${fileName}`
+
+    // curl --request POST \
+    // http://gotenberg:3000/forms/chromium/convert/url \
+    // --form url=$line -o ${padded}.pdf
+
+    child = exec(command, function(error, stdout, stderr){
+
+    console.log('stdout: ' + stdout);
+    console.log('stderr: ' + stderr);
+
+    if(error !== null)
+    {
+        console.log('exec error: ' + error);
+    }
+
+    });
+}
+
 async function processLineByLine() {
   const fileStream = fs.createReadStream('URLs.txt');
 
@@ -53,6 +76,8 @@ async function requestPage(url) {
       // file written successfully
     }
   });
+
+  await callGotenberg(url, fileName);
 
   i++;
 
