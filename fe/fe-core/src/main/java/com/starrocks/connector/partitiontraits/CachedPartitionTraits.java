@@ -113,8 +113,8 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public String getDbName() {
-        return delegate.getDbName();
+    public String getCatalogDBName() {
+        return delegate.getCatalogDBName();
     }
 
     @Override

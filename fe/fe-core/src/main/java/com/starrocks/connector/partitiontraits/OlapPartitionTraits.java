@@ -44,7 +44,7 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public String getDbName() {
+    public String getCatalogDBName() {
         throw new NotImplementedException("not support olap table");
     }
 

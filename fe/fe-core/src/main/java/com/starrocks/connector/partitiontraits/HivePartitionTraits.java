@@ -24,12 +24,6 @@ import java.util.Map;
 import java.util.Optional;
 
 public class HivePartitionTraits extends DefaultTraits {
-
-    @Override
-    public String getDbName() {
-        return (table).getCatalogDBName();
-    }
-
     @Override
     public boolean isSupportPCTRefresh() {
         return true;
@@ -37,7 +31,7 @@ public class HivePartitionTraits extends DefaultTraits {
 
     @Override
     public String getTableName() {
-        return (table).getCatalogTableName();
+        return table.getCatalogTableName();
     }
 
     @Override

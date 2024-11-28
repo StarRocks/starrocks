@@ -38,12 +38,6 @@ import java.util.List;
 import java.util.Optional;
 
 public class IcebergPartitionTraits extends DefaultTraits {
-
-    @Override
-    public String getDbName() {
-        return ((IcebergTable) table).getCatalogDBName();
-    }
-
     @Override
     public boolean isSupportPCTRefresh() {
         return true;
@@ -51,7 +45,7 @@ public class IcebergPartitionTraits extends DefaultTraits {
 
     @Override
     public String getTableName() {
-        return ((IcebergTable) table).getCatalogTableName();
+        return table.getCatalogTableName();
     }
 
     @Override
@@ -85,7 +79,7 @@ public class IcebergPartitionTraits extends DefaultTraits {
         requestContext.setQueryMVRewrite(isQueryMVRewrite());
         requestContext.setTableVersionRange(TableVersionRange.withEnd(snapshotId));
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                table.getCatalogName(), getDbName(), getTableName(), requestContext);
+                table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
     }
 
     @Override

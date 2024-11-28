@@ -69,7 +69,7 @@ public class MysqlScanNode extends ScanNode {
      */
     public MysqlScanNode(PlanNodeId id, TupleDescriptor desc, MysqlTable tbl) {
         super(id, desc, "SCAN MYSQL");
-        tblName = "`" + tbl.getMysqlTableName() + "`";
+        tblName = "`" + tbl.getCatalogTableName() + "`";
     }
 
     public void setTemporalClause(String temporalClause) {

@@ -217,7 +217,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         String query = getPartitionQuery(table);
         try (PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setString(1, jdbcTable.getCatalogDBName());
-            ps.setString(2, jdbcTable.getJdbcTable());
+            ps.setString(2, jdbcTable.getCatalogTableName());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
             if (null != rs) {

@@ -92,7 +92,7 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
         ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
         requestContext.setQueryMVRewrite(this.isQueryMVRewrite());
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                table.getCatalogName(), getDbName(), getTableName(), requestContext);
+                table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
     }
 
     @Override

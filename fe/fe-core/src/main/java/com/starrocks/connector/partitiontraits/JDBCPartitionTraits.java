@@ -29,15 +29,9 @@ import java.util.Map;
 import java.util.Optional;
 
 public class JDBCPartitionTraits extends DefaultTraits {
-
-    @Override
-    public String getDbName() {
-        return ((JDBCTable) table).getCatalogDBName();
-    }
-
     @Override
     public String getTableName() {
-        return ((JDBCTable) table).getJdbcTable();
+        return table.getCatalogTableName();
     }
 
     @Override
