@@ -410,30 +410,31 @@ StatusOr<bool> StructColumnReader::page_index_zone_map_filter(const std::vector<
         return ret.value();
     };
 
-    bool has_filtered = false;
-
     std::vector<const ColumnPredicate*> rewritten_predicates;
     RETURN_IF_ERROR(_rewrite_column_expr_predicate(&pool, predicates, rewritten_predicates));
 
     std::optional<SparseRange<uint64_t>> result_sparse_range = std::nullopt;
 
     for (const ColumnPredicate* predicate : rewritten_predicates) {
-        SparseRange<uint64_t> cur_row_ranges;
-        if (handle_page_index(predicate, &cur_row_ranges)) {
-            has_filtered = true;
-            if (pred_relation == CompoundNodeType::AND) {
-                merge_row_ranges<CompoundNodeType::AND>(result_sparse_range, cur_row_ranges);
-            } else {
-                merge_row_ranges<CompoundNodeType::OR>(result_sparse_range, cur_row_ranges);
-            }
+        SparseRange<uint64_t> tmp_row_ranges;
+
+        if (!handle_page_index(predicate, &tmp_row_ranges)) {
+            // select all
+            tmp_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
+        }
+
+        if (pred_relation == CompoundNodeType::AND) {
+            merge_row_ranges<CompoundNodeType::AND>(result_sparse_range, tmp_row_ranges);
+        } else {
+            merge_row_ranges<CompoundNodeType::OR>(result_sparse_range, tmp_row_ranges);
         }
     }
 
-    if (has_filtered) {
-        *row_ranges = std::move(result_sparse_range.value());
+    if (!result_sparse_range.has_value()) {
+        return false;
     }
-
-    return has_filtered;
+    *row_ranges = std::move(result_sparse_range.value());
+    return row_ranges->span_size() < rg_num_rows;
 }
 
 StatusOr<ColumnPredicate*> StructColumnReader::_try_to_rewrite_subfield_expr(
