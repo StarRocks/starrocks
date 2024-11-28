@@ -18,6 +18,7 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#include "common/status.h"
 #include "common/statusor.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"

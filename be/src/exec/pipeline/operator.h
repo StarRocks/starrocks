@@ -405,6 +405,9 @@ public:
     // Whether it has any runtime filter built by TopN node.
     bool has_topn_filter() const;
 
+    // try to get runtime filter from cache
+    void acquire_runtime_filter(RuntimeState* state);
+
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);
     void _prepare_runtime_holders(const std::vector<RuntimeFilterHolder*>& holders,

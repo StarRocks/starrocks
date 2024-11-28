@@ -389,6 +389,10 @@ Status FragmentContext::submit_active_drivers(DriverExecutor* executor) {
     return Status::OK();
 }
 
+void FragmentContext::acquire_runtime_filters() {
+    iterate_pipeline([this](Pipeline* pipeline) { pipeline->acquire_runtime_filter(this->runtime_state()); });
+}
+
 void FragmentContext::_close_stream_load_contexts() {
     for (const auto& context : _stream_load_contexts) {
         context->body_sink->cancel(Status::Cancelled("Close the stream load pipe"));
