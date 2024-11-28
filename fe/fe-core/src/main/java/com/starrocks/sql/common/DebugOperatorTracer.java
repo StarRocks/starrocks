@@ -122,7 +122,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalHiveScan(LogicalHiveScanOperator node, Void context) {
-        return "LogicalHiveScanOperator" + " {" + "table=" + (node.getTable()).getCatalogTableName() +
+        return "LogicalHiveScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
@@ -132,7 +132,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitLogicalIcebergScan(LogicalIcebergScanOperator node, Void context) {
         StringBuilder sb = new StringBuilder("LogicalIcebergScanOperator");
-        sb.append(" {").append("table=").append((node.getTable()).getCatalogTableName())
+        sb.append(" {").append("table=").append(node.getTable().getCatalogTableName())
                 .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                 .append(", predicates=").append(node.getScanOperatorPredicates())
                 .append("}");
@@ -141,7 +141,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalHudiScan(LogicalHudiScanOperator node, Void context) {
-        return "LogicalHudiScanOperator" + " {" + "table=" + (node.getTable()).getCatalogTableName() +
+        return "LogicalHudiScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
@@ -150,7 +150,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalMysqlScan(LogicalMysqlScanOperator node, Void context) {
-        return "LogicalMysqlScanOperator" + " {" + "table=" + (node.getTable()).getCatalogTableName() +
+        return "LogicalMysqlScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
@@ -342,7 +342,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitPhysicalHiveScan(PhysicalHiveScanOperator node, Void context) {
-        return "PhysicalHiveScanOperator" + " {" + "table=" + (node.getTable()).getCatalogTableName() +
+        return "PhysicalHiveScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
@@ -352,7 +352,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, Void context) {
         StringBuilder sb = new StringBuilder("PhysicalIcebergScanOperator");
-        sb.append(" {").append("table=").append((node.getTable()).getCatalogTableName())
+        sb.append(" {").append("table=").append(node.getTable().getCatalogTableName())
                 .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                 .append(", predicates=").append(node.getScanOperatorPredicates())
                 .append("}");
@@ -361,7 +361,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitPhysicalHudiScan(PhysicalHudiScanOperator node, Void context) {
-        return "PhysicalHudiScanOperator" + " {" + "table=" + (node.getTable()).getCatalogTableName() +
+        return "PhysicalHudiScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
@@ -375,7 +375,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, Void context) {
-        return "PhysicalMysqlScanOperator" + " {" + "table=" + (node.getTable()).getCatalogTableName() +
+        return "PhysicalMysqlScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
