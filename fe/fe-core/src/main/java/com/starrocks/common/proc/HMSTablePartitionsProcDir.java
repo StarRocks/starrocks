@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -55,7 +56,7 @@ public class HMSTablePartitionsProcDir implements ProcDirInterface {
             try {
                 List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                         .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getCatalogDBName(),
-                                hmsTable.getCatalogTableName());
+                                hmsTable.getCatalogTableName(), ConnectorMetadatRequestContext.DEFAULT);
                 for (String partitionName : partitionNames) {
                     result.addRow(Lists.newArrayList(partitionName));
                 }

@@ -27,6 +27,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -311,7 +312,7 @@ public class AnalyzeStmtAnalyzer {
                 } else {
                     List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNames(tableName.getCatalog(), tableName.getDb(),
-                                    tableName.getTbl());
+                                    tableName.getTbl(), ConnectorMetadatRequestContext.DEFAULT);
                     List<PartitionKey> keys = new ArrayList<>();
                     try {
                         for (String partName : partitionNames) {

@@ -259,7 +259,8 @@ public class PartitionUtilTest {
         };
         new MockUp<MetadataMgr>() {
             @Mock
-            public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+            public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                                   ConnectorMetadatRequestContext requestContext) {
                 return partitionNames;
             }
         };

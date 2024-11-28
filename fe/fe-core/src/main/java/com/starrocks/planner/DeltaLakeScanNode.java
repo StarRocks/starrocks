@@ -22,6 +22,7 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
@@ -165,7 +166,8 @@ public class DeltaLakeScanNode extends ScanNode {
             }
 
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    deltaLakeTable.getCatalogName(), deltaLakeTable.getCatalogDBName(), deltaLakeTable.getCatalogTableName());
+                    deltaLakeTable.getCatalogName(), deltaLakeTable.getCatalogDBName(), deltaLakeTable.getCatalogTableName(),
+                    ConnectorMetadatRequestContext.DEFAULT);
 
             if (selectedPartitionCount == -1) {
                 if (scanRangeSource != null) {

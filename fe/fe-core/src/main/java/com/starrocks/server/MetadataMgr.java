@@ -617,10 +617,6 @@ public class MetadataMgr {
         return connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
     }
 
-    public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
-        return listPartitionNames(catalogName, dbName, tableName, ConnectorMetadatRequestContext.DEFAULT);
-    }
-
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
                                            ConnectorMetadatRequestContext requestContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);

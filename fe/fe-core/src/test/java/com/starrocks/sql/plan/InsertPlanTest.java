@@ -808,8 +808,8 @@ public class InsertPlanTest extends PlanTestBase {
         Column k2 = new Column("k2", Type.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog");
-        builder.setRemoteDbName("iceberg_db");
-        builder.setRemoteTableName("iceberg_table");
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName("iceberg_table");
         builder.setSrTableName("iceberg_table");
         builder.setFullSchema(Lists.newArrayList(k1, k2));
         builder.setNativeTable(nativeTable);

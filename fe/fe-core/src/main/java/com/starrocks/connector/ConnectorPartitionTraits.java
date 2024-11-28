@@ -79,6 +79,8 @@ public abstract class ConnectorPartitionTraits {
 
     protected Table table;
 
+    protected boolean queryMVRewrite = false;
+
     public static boolean isSupported(Table.TableType tableType) {
         return TRAITS_TABLE.containsKey(tableType);
     }
@@ -222,4 +224,12 @@ public abstract class ConnectorPartitionTraits {
      * inconsistency between the two systems, so we add extraSeconds
      */
     public abstract LocalDateTime getTableLastUpdateTime(int extraSeconds);
+
+    public void setQueryMVRewrite(boolean value) {
+        queryMVRewrite = value;
+    }
+
+    public boolean isQueryMVRewrite() {
+        return queryMVRewrite;
+    }
 }

@@ -362,7 +362,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
 
-
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_PUSH_DOWN_GROUPINGSET = "cbo_push_down_groupingset";
@@ -819,16 +818,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
     public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
     public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
-
+    public static final String ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS = "enable_connector_async_list_partitions";
     public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
 
     public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
 
     public static final String DISABLE_GENERATED_COLUMN_REWRITE = "disable_generated_column_rewrite";
-    
+
     public static final String ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK = "enable_push_down_pre_agg_with_rank";
 
-    public static final  String INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG = "insert_local_shuffle_for_window_pre_agg";
+    public static final String INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG = "insert_local_shuffle_for_window_pre_agg";
 
     public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
 
@@ -2249,6 +2248,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
     private int connectorIncrementalScanRangeSize = 500;
+
+    @VarAttr(name = ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS)
+    private boolean enableConnectorAsyncListPartitions = false;
 
     @VarAttr(name = ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK)
     private boolean enablePushDownPreAggWithRank = true;
@@ -4393,6 +4395,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableConnectorIncrementalScanRanges() {
         return enableConnectorIncrementalScanRanges;
+    }
+
+    public boolean isEnableConnectorAsyncListPartitions() {
+        return enableConnectorAsyncListPartitions;
+    }
+
+    public void setEnableConnectorAsyncListPartitions(boolean v) {
+        enableConnectorAsyncListPartitions = v;
     }
 
     public void setEnableConnectorIncrementalScanRanges(boolean v) {

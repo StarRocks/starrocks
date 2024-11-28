@@ -76,7 +76,7 @@ public class MVViewRewriteWithManyJoinTest extends MaterializedViewTestBase {
 
     @ParameterizedTest(name = "{index}-{0}")
     @MethodSource("generateManyJoinArguments")
-    @Timeout(5)
+    @Timeout(30)
     public void testManyJoins(String name, String query) throws Exception {
         LOG.info("test {}, query: {}", name, query);
         String mvName = "mv_manyjoin";

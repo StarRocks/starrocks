@@ -225,7 +225,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw new AlreadyExistsException("Database Already Exists");
         }
 
-        icebergCatalog.createDb(dbName, properties);
+        icebergCatalog.createDB(dbName, properties);
     }
 
     @Override
@@ -234,7 +234,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException("Database %s not empty", dbName);
         }
 
-        icebergCatalog.dropDb(dbName);
+        icebergCatalog.dropDB(dbName);
         databases.remove(dbName);
     }
 
@@ -326,7 +326,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                 icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);
             } catch (Exception exception) {
                 LOG.error("Failed to refresh caching iceberg table.");
-                icebergCatalog.invalidateCache(new CachingIcebergCatalog.IcebergTableName(dbName, tableName));
+                icebergCatalog.invalidateCache(dbName, tableName);
             }
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
         }
@@ -488,9 +488,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Do not support get partitions from catalog type: " + nativeType);
         }
 
-        TableVersionRange version = requestContext.getTableVersionRange();
-        long snapshotId = version.end().isPresent() ? version.end().get() : -1;
-        return icebergCatalog.listPartitionNames(dbName, tblName, snapshotId, jobPlanningExecutor);
+        Table table = getTable(dbName, tblName);
+        return icebergCatalog.listPartitionNames((IcebergTable) table, requestContext, jobPlanningExecutor);
     }
 
     @Override
@@ -519,15 +518,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        IcebergTable icebergTable = (IcebergTable) table;
-        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
-        long snapshotId = -1;
-        if (nativeTable.currentSnapshot() != null) {
-            snapshotId = nativeTable.currentSnapshot().snapshotId();
-        }
         List<Partition> ans =
-                icebergCatalog.getPartitionsByNames(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
-                        snapshotId, null, partitionNames);
+                icebergCatalog.getPartitionsByNames((IcebergTable) table, null, partitionNames);
         return new ArrayList<>(ans);
     }
 
@@ -1078,7 +1070,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                 icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);
             } catch (Exception e) {
                 LOG.error("Failed to refresh table {}.{}.{}. invalidate cache", catalogName, dbName, tableName, e);
-                icebergCatalog.invalidateCache(new CachingIcebergCatalog.IcebergTableName(dbName, tableName));
+                icebergCatalog.invalidateCache(dbName, tableName);
             }
         }
     }
@@ -1166,7 +1158,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(e.getMessage());
         } finally {
-            icebergCatalog.invalidateCacheWithoutTable(new CachingIcebergCatalog.IcebergTableName(dbName, tableName));
+            // Do we really need that? because partition cache is associated with snapshotId
+            icebergCatalog.invalidatePartitionCache(dbName, tableName);
         }
     }
 
