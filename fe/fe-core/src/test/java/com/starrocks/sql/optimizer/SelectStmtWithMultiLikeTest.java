@@ -19,6 +19,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -34,6 +36,7 @@ public class SelectStmtWithMultiLikeTest {
     private static StarRocksAssert starRocksAssert;
 
     @BeforeAll
+    @BeforeClass
     public static void setUp()
             throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -67,6 +70,16 @@ public class SelectStmtWithMultiLikeTest {
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("joinOnMultiLikeTestCases")
     void testJoinOnMultiLikeClause(String sql, List<String> patterns) throws Exception {
+        test(sql, patterns);
+    }
+
+    @Test
+    public void testMultiNotLikes() throws Exception {
+        String sql = "select count(1) from t0 where " +
+                "site not like '%ABC%' and " +
+                "region not like '%ABC%' and region not like '%DEF%'";
+        List<String> patterns = Lists.newArrayList(
+                "Predicates: NOT (1: region REGEXP '^((.*ABC.*)|(.*DEF.*))$'), NOT (3: site LIKE '%ABC%')");
         test(sql, patterns);
     }
 
