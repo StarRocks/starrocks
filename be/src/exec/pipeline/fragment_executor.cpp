@@ -917,6 +917,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     {
         SCOPED_TIMER(prepare_instance_timer);
         SCOPED_TIMER(prepare_driver_timer);
+        _fragment_ctx->acquire_runtime_filters();
         RETURN_IF_ERROR(_fragment_ctx->prepare_active_drivers());
     }
     prepare_success = true;
