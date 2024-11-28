@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <string>
 
+#include "gen_cpp/types.pb.h"
+
 namespace starrocks {
 class Cache;
 
@@ -22,7 +24,9 @@ enum CompressionType {
     // NOTE: do not change the values of existing entries, as these are
     // part of the persistent format on disk.
     kNoCompression = 0x0,
-    kSnappyCompression = 0x1
+    kSnappyCompression = 0x1,
+    kLz4FrameCompression = 0x2,
+    kZstdCompression = 0x3
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
@@ -93,6 +97,9 @@ struct Options {
     // Many applications will benefit from passing the result of
     // NewBloomFilterPolicy() here.
     const FilterPolicy* filter_policy = nullptr;
+
+    // set compression by CompressionTypePB from tablet schema.
+    void set_compression(CompressionTypePB type);
 };
 
 struct ReadIOStat {

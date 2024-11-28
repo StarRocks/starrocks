@@ -15,6 +15,7 @@
 #include "storage/sstable/filter_block.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/format.h"
+#include "util/compression/block_compression.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 
@@ -142,6 +143,43 @@ static bool Snappy_Compress(const char* input, size_t length, ::std::string* out
     return true;
 }
 
+/**
+ * Compresses the input data using the specified compression type.
+ *
+ * @param compression_type The type of compression to use.
+ * @param input The input data to compress.
+ * @param length The length of the input data.
+ * @param output The output string to store the compressed data.
+ * @return Status::OK() if the data was compressed successfully, otherwise an error status.
+ */
+static Status CompressBlock(CompressionTypePB compression_type, const char* input, uint64_t length,
+                            std::string* output) {
+    // Get the appropriate compression codec for the specified compression type.
+    const BlockCompressionCodec* codec = nullptr;
+    RETURN_IF_ERROR(get_block_compression_codec(compression_type, &codec));
+
+    // Calculate the maximum length of the compressed data.
+    size_t output_length = codec->max_compressed_len(length);
+
+    // Resize the output string to accommodate the uncompressed length and the maximum compressed data length.
+    starrocks::raw::stl_string_resize_uninitialized(output, sizeof(uint64_t) + output_length);
+
+    // Store the length of the uncompressed data in the first 64 bits of the output string.
+    EncodeFixed64(output->data(), length);
+
+    // Create slices for the input and output data.
+    Slice output_slice(output->data() + sizeof(uint64_t), output_length);
+    Slice input_slice(input, length);
+
+    // Compress the input data and store it in the output slice.
+    RETURN_IF_ERROR(codec->compress(input_slice, &output_slice));
+
+    // Resize the output string to the actual size of the compressed data plus the size of the uncompressed length.
+    output->resize(sizeof(uint64_t) + output_slice.size);
+
+    return Status::OK();
+}
+
 void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
     // File format contains a sequence of blocks where each block has:
     //    block_data: uint8[n]
@@ -153,6 +191,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
 
     Slice block_contents;
     CompressionType type = r->options.compression;
+    std::string* compressed = &r->compressed_output;
     // TODO(postrelease): Support more compression options: zlib?
     switch (type) {
     case kNoCompression:
@@ -160,7 +199,6 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
         break;
 
     case kSnappyCompression: {
-        std::string* compressed = &r->compressed_output;
         if (Snappy_Compress(raw.get_data(), raw.get_size(), compressed) &&
             compressed->size() < raw.get_size() - (raw.get_size() / 8u)) {
             block_contents = *compressed;
@@ -170,6 +208,31 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
             block_contents = raw;
             type = kNoCompression;
         }
+        break;
+    }
+    case kLz4FrameCompression: {
+        auto st = CompressBlock(CompressionTypePB::LZ4_FRAME, raw.get_data(), raw.get_size(), compressed);
+        if (st.ok()) {
+            block_contents = *compressed;
+        } else {
+            LOG(ERROR) << "CompressByType fail, st : " << st.to_string();
+            block_contents = raw;
+            type = kNoCompression;
+        }
+        break;
+    }
+    case kZstdCompression: {
+        auto st = CompressBlock(CompressionTypePB::ZSTD, raw.get_data(), raw.get_size(), compressed);
+        if (st.ok()) {
+            block_contents = *compressed;
+        } else {
+            LOG(ERROR) << "CompressByType fail, st : " << st.to_string();
+            block_contents = raw;
+            type = kNoCompression;
+        }
+        break;
+    }
+    default: {
         break;
     }
     }
