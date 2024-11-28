@@ -310,6 +310,10 @@ public class SlotRef extends Expr {
         }
     }
 
+    public boolean isColumnRef() {
+        return tblName != null && !isFromLambda();
+    }
+
     @Override
     public String explainImpl() {
         if (label != null) {

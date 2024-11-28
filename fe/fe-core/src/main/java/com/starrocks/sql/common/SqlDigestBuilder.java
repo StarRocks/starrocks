@@ -15,9 +15,13 @@
 package com.starrocks.sql.common;
 
 import com.google.common.base.Joiner;
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -30,6 +34,8 @@ import java.util.stream.Collectors;
  * Used to build sql digest(string without any dynamic parameters in it)
  */
 public class SqlDigestBuilder {
+
+    private static final int MASSIVE_COMPOUND_LIMIT = 16;
 
     public static String build(StatementBase statement) {
         return new SqlDigestBuilderVisitor().visit(statement);
@@ -47,6 +53,25 @@ public class SqlDigestBuilder {
                 strBuilder.append(printWithParentheses(node.getChild(0))).append(" ").append(notStr).append("IN ");
                 strBuilder.append("(?)");
                 return strBuilder.toString();
+            }
+        }
+
+        @Override
+        public String visitCompoundPredicate(CompoundPredicate node, Void context) {
+            List<Expr> flatten = AnalyzerUtils.flattenPredicate(node);
+            if (flatten.size() >= MASSIVE_COMPOUND_LIMIT) {
+                // Only record de-duplicated slots if there are too many compounds
+                List<SlotRef> exprs = node.collectAllSlotRefs(true);
+                String sortedSlots = exprs.stream()
+                        .filter(SlotRef::isColumnRef)
+                        .map(SlotRef::toSqlImpl)
+                        .sorted()
+                        .collect(Collectors.joining(","));
+                return "$massive_compounds[" + sortedSlots + "]$";
+            } else {
+                // TODO: it will introduce a little bit overhead in top-down visiting, in which the
+                //  flattenPredicate is duplicated revoked. it's better to eliminate this overhead
+                return super.visitCompoundPredicate(node, context);
             }
         }
 
