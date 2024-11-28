@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.rule.transformation.CTEProduceAddProjectionRu
 import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
@@ -483,6 +484,9 @@ public class Optimizer {
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INLINE_CTE);
             CTEUtils.collectCteOperators(tree, context);
         }
+
+        ruleRewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
+        CTEUtils.collectCteOperators(tree, context);
 
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.AGGREGATE_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_SUBQUERY);
