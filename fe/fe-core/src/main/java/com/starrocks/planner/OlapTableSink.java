@@ -296,7 +296,16 @@ public class OlapTableSink extends DataSink {
             List<TColumn> columnsDesc = Lists.newArrayList();
             List<Integer> columnSortKeyUids = Lists.newArrayList();
             Map<String, String> columnToExprValue = new HashMap<>();
+<<<<<<< HEAD
             columns.addAll(indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toList()));
+=======
+            columns.addAll(indexMeta
+                    .getSchema()
+                    .stream()
+                    .map(column -> column.isShadowColumn() ? column.getName() : column.getColumnId().getId())
+                    .collect(Collectors.toList()));
+            boolean isShadow = indexMeta.getSchema().stream().anyMatch(column -> column.isShadowColumn());
+>>>>>>> decea07f62 ([BugFix] Fix random table broker load fails when table has schema change (#53041))
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
@@ -321,6 +330,7 @@ public class OlapTableSink extends DataSink {
             indexSchema.setColumn_param(columnParam);
             indexSchema.setSchema_id(indexMeta.getSchemaId());
             indexSchema.setColumn_to_expr_value(columnToExprValue);
+            indexSchema.setIs_shadow(isShadow);
             schemaParam.addToIndexes(indexSchema);
             if (indexMeta.getWhereClause() != null) {
                 String dbName = MetaUtils.getDatabase(dbId).getFullName();
