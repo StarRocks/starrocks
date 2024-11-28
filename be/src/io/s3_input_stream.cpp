@@ -20,11 +20,12 @@
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <fmt/format.h>
 
+#include "io/io_profiler.h"
+#include "util/stopwatch.hpp"
+
 #ifdef USE_STAROS
 #include "fslib/metric_key.h"
-#include "io/io_profiler.h"
 #include "metrics/metrics.h"
-#include "util/stopwatch.hpp"
 #endif
 
 namespace starrocks::io {
