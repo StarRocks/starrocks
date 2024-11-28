@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.rule.transformation.CTEProduceAddProjectionRu
 import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
@@ -484,6 +485,13 @@ public class Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
+<<<<<<< HEAD
+=======
+        ruleRewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
+        CTEUtils.collectCteOperators(tree, context);
+
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new IcebergPartitionsTableRewriteRule());
+>>>>>>> 0bff4c6541 ([Enhancement] eliminate constant cte (#53286))
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.AGGREGATE_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_SUBQUERY);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_COMMON);
