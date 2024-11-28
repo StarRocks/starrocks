@@ -40,7 +40,7 @@ namespace starrocks::parquet {
 
 Status StatisticsHelper::decode_value_into_column(const ColumnPtr& column, const std::vector<std::string>& values,
                                                   const TypeDescriptor& type, const ParquetField* field,
-                                                  const std::string& timezone, const std::vector<bool>* null_page) {
+                                                  const std::string& timezone) {
     std::unique_ptr<ColumnConverter> converter;
     RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, type, timezone, &converter));
     bool ret = true;

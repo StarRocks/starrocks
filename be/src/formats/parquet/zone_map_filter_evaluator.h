@@ -21,6 +21,19 @@ namespace starrocks::parquet {
 
 enum class FilterLevel { ROW_GROUP = 0, PAGE_INDEX };
 
+template <CompoundNodeType Type>
+static void merge_row_ranges(std::optional<SparseRange<uint64_t>>& dest, SparseRange<uint64_t>& source) {
+    if (!dest.has_value()) {
+        dest = std::move(source);
+    } else {
+        if constexpr (Type == CompoundNodeType::AND) {
+            dest.value() &= source;
+        } else {
+            dest.value() |= source;
+        }
+    }
+}
+
 template <FilterLevel level>
 struct ZoneMapEvaluator {
     template <CompoundNodeType Type>
@@ -35,7 +48,7 @@ struct ZoneMapEvaluator {
         for (const auto& [cid, col_preds] : cid_to_col_preds) {
             SparseRange<uint64_t> cur_row_ranges;
 
-            const auto* column_reader = group_reader->get_column_reader(cid);
+            auto* column_reader = group_reader->get_column_reader(cid);
 
             if (column_reader == nullptr) {
                 // ColumnReader not found, select all by default
@@ -66,19 +79,6 @@ struct ZoneMapEvaluator {
             }
         }
         return row_ranges;
-    }
-
-    template <CompoundNodeType Type>
-    static void merge_row_ranges(std::optional<SparseRange<uint64_t>>& dest, SparseRange<uint64_t>& source) {
-        if (!dest.has_value()) {
-            dest = std::move(source);
-        } else {
-            if constexpr (Type == CompoundNodeType::AND) {
-                dest.value() &= source;
-            } else {
-                dest.value() |= source;
-            }
-        }
     }
 
     const PredicateTree& pred_tree;

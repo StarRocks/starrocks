@@ -360,13 +360,11 @@ StatusOr<bool> ScalarColumnReader::page_index_zone_map_filter(const std::vector<
 
     const size_t page_num = column_index.min_values.size();
 
-    const std::vector<bool> null_pages = column_index.null_pages;
-
     ColumnPtr min_column = ColumnHelper::create_column(*_col_type, true);
     ColumnPtr max_column = ColumnHelper::create_column(*_col_type, true);
     // deal with min_values
     auto st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, *_col_type,
-                                                         get_column_parquet_field(), _opts.timezone, &null_pages);
+                                                         get_column_parquet_field(), _opts.timezone);
     if (!st.ok()) {
         // swallow error status
         LOG(INFO) << "Error when decode min/max statistics, type " << _col_type->debug_string();
@@ -374,7 +372,7 @@ StatusOr<bool> ScalarColumnReader::page_index_zone_map_filter(const std::vector<
     }
     // deal with max_values
     st = StatisticsHelper::decode_value_into_column(max_column, column_index.max_values, *_col_type,
-                                                    get_column_parquet_field(), _opts.timezone, &null_pages);
+                                                    get_column_parquet_field(), _opts.timezone);
     if (!st.ok()) {
         // swallow error status
         LOG(INFO) << "Error when decode min/max statistics, type " << _col_type->debug_string();
@@ -385,6 +383,7 @@ StatusOr<bool> ScalarColumnReader::page_index_zone_map_filter(const std::vector<
     DCHECK_EQ(page_num, max_column->size());
 
     // fill ZoneMapDetail
+    const std::vector<bool> null_pages = column_index.null_pages;
     std::vector<ZoneMapDetail> zone_map_details{};
     for (size_t i = 0; i < page_num; i++) {
         if (null_pages[i]) {
