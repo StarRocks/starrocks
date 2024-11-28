@@ -83,7 +83,7 @@ public class StatisticsCollectJobFactory {
                 return Collections.emptyList();
             }
             createJob(statsJobs, nativeAnalyzeJob, db, GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                    .getTable(db.getId(), nativeAnalyzeJob.getTableId()),
+                            .getTable(db.getId(), nativeAnalyzeJob.getTableId()),
                     nativeAnalyzeJob.getColumns(), nativeAnalyzeJob.getColumnTypes());
         }
 
@@ -108,8 +108,18 @@ public class StatisticsCollectJobFactory {
 
         LOG.debug("statistics job work on table: {}, type: {}", table.getName(), analyzeType.name());
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
-            return new SampleStatisticsCollectJob(db, table, columnNames, columnTypes,
-                    StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties);
+            if (partitionIdList == null) {
+                partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
+                        .map(Partition::getId).collect(Collectors.toList());
+            }
+            
+            if (Config.statistic_use_meta_statistics) {
+                return new HyperStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
+                        StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties);
+            } else {
+                return new SampleStatisticsCollectJob(db, table, columnNames, columnTypes,
+                        StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties);
+            }
         } else if (analyzeType.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             return new HistogramStatisticsCollectJob(db, table, columnNames, columnTypes, scheduleType, properties);
         } else {
@@ -117,8 +127,14 @@ public class StatisticsCollectJobFactory {
                 partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
                         .map(Partition::getId).collect(Collectors.toList());
             }
-            return new FullStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
-                    StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+
+            if (Config.statistic_use_meta_statistics) {
+                return new HyperStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
+                        StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+            } else {
+                return new FullStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
+                        StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+            }
         }
     }
 
@@ -190,7 +206,8 @@ public class StatisticsCollectJobFactory {
                                                                          StatsConstants.AnalyzeType analyzeType,
                                                                          StatsConstants.ScheduleType scheduleType,
                                                                          Map<String, String> properties) {
-        List<Type> columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
+        List<Type> columnTypes =
+                columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
         return buildExternalStatisticsCollectJob(catalogName, db, table, partitionNames, columnNames, columnTypes,
                 analyzeType, scheduleType, properties);
     }
@@ -294,7 +311,8 @@ public class StatisticsCollectJobFactory {
         if (basicStatsMeta != null) {
             // check table row count
             List<ConnectorTableColumnStats> columnStatisticList =
-                    GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatisticsSync(table, columnNames);
+                    GlobalStateMgr.getCurrentState().getStatisticStorage()
+                            .getConnectorTableStatisticsSync(table, columnNames);
             List<ConnectorTableColumnStats> validColumnStatistics = columnStatisticList.stream().
                     filter(columnStatistic -> !columnStatistic.isUnknown()).collect(Collectors.toList());
 
@@ -453,7 +471,7 @@ public class StatisticsCollectJobFactory {
                     job.getAnalyzeType() == StatsConstants.AnalyzeType.HISTOGRAM ?
                             Config.statistic_auto_collect_histogram_interval :
                             (sumDataSize > Config.statistic_auto_collect_small_table_size ?
-                    Config.statistic_auto_collect_large_table_interval :
+                                    Config.statistic_auto_collect_large_table_interval :
                                     Config.statistic_auto_collect_small_table_interval);
 
             long timeInterval = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL) != null ?

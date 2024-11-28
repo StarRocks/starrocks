@@ -77,6 +77,8 @@ public class FeConstants {
     public static int checkpoint_interval_second = 60; // 1 minutes
     // set this flag true to skip some step when running FE unit test
     public static boolean runningUnitTest = false;
+    // set this flat true to enable unit statistics mock
+    public static boolean enableUnitStatistics = false;
     // set this flag false to skip test view in plan test
     public static boolean unitTestView = true;
     // Set this flag false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
