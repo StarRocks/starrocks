@@ -1880,7 +1880,7 @@ public class PlanFragmentBuilder {
             }
 
             scanNode.setLimit(node.getLimit());
-            scanNode.computeColumnsAndFilters();
+            scanNode.computeColumnsAndFiltersAndSessionVariables();
             scanNode.computeStatistics(optExpression.getStatistics());
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             context.getScanNodes().add(scanNode);

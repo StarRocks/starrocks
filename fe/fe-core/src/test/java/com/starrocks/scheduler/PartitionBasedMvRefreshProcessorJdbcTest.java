@@ -125,8 +125,8 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
     @Test
     public void testJDBCProtocolType() {
         JDBCTable table = new JDBCTable();
-        table.getProperties().put(JDBCResource.URI, "jdbc:postgres:aaa");
-        Assert.assertEquals(JDBCTable.ProtocolType.POSTGRES, table.getProtocolType());
+        table.getProperties().put(JDBCResource.URI, "jdbc:postgresql:aaa");
+        Assert.assertEquals(JDBCTable.ProtocolType.POSTGRESQL, table.getProtocolType());
         table.getProperties().put(JDBCResource.URI, "jdbc:mysql:aaa");
         Assert.assertEquals(JDBCTable.ProtocolType.MYSQL, table.getProtocolType());
         table.getProperties().put(JDBCResource.URI, "jdbc:h2:aaa");
