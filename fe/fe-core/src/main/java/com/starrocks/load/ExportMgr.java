@@ -302,12 +302,11 @@ public class ExportMgr implements MemoryTrackable {
                 }
 
                 // warehouse
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().
-                        getWarehouse(job.getWarehouseId());
-                if (warehouse != null) {
+                try {
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(job.getWarehouseId());
                     jobInfo.add(warehouse.getName());
-                } else {
-                    jobInfo.add("");
+                } catch (Exception e) {
+                    jobInfo.add(e.getMessage());
                 }
 
                 exportJobInfos.add(jobInfo);

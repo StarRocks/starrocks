@@ -26,9 +26,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.Warehouse;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -103,14 +100,7 @@ public class ExportMgrTest {
     }
 
     @Test
-    public void testShowExpiredJob(@Mocked Warehouse warehouse) throws Exception {
-        new Expectations() {
-            {
-                warehouse.getName();
-                result = "default_warehouse";
-            }
-        };
-
+    public void testShowExpiredJob() throws Exception {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         connectContext.setThreadLocalInfo();
