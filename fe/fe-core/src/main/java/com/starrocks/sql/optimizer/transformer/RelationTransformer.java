@@ -45,6 +45,7 @@ import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -1083,7 +1084,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             List<ColumnRefOperator> leftOutputColumns, List<ColumnRefOperator> rightOutputColumns,
             ExpressionMapping expressionMapping) {
         // Step1
-        List<Expr> exprConjuncts = Expr.extractConjuncts(node.getOnPredicate());
+        List<Expr> exprConjuncts = AnalyzerUtils.extractConjuncts(node.getOnPredicate());
 
         List<ScalarOperator> scalarConjuncts = Lists.newArrayList();
         Map<ScalarOperator, SubqueryOperator> allSubqueryPlaceholders = Maps.newHashMap();
@@ -1160,7 +1161,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
     private boolean isJoinLeftRelatedSubquery(JoinRelation node, Expr joinOnConjunct) {
         List<Subquery> subqueries = Lists.newArrayList();
 
-        List<Expr> elements = Expr.flattenPredicate(joinOnConjunct);
+        List<Expr> elements = AnalyzerUtils.flattenPredicate(joinOnConjunct);
         List<Expr> predicateWithSubquery = Lists.newArrayList();
         for (Expr element : elements) {
             int oldSize = subqueries.size();
