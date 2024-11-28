@@ -178,7 +178,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalJDBCScan(LogicalJDBCScanOperator node, Void context) {
-        return "LogicalJDBCScanOperator" + " {" + "table=" + ((JDBCTable) node.getTable()).getJdbcTable() +
+        return "LogicalJDBCScanOperator" + " {" + "table=" + ((JDBCTable) node.getTable()).getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
@@ -403,7 +403,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, Void context) {
-        return "PhysicalJDBCScanOperator" + " {" + "table=" + ((JDBCTable) node.getTable()).getJdbcTable() +
+        return "PhysicalJDBCScanOperator" + " {" + "table=" + ((JDBCTable) node.getTable()).getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +

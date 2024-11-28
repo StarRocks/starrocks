@@ -153,7 +153,9 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract PartitionKey createEmptyKey();
 
-    public abstract String getDbName();
+    public String getCatalogDBName() {
+        return table.getCatalogDBName();
+    }
 
     /**
      * `createPartitionKeyWithType` is deprecated, use `createPartitionKey` instead.
