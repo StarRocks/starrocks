@@ -364,6 +364,7 @@ public class OlapTableSink extends DataSink {
                     .stream()
                     .map(column -> column.isShadowColumn() ? column.getName() : column.getColumnId().getId())
                     .collect(Collectors.toList()));
+            boolean isShadow = indexMeta.getSchema().stream().anyMatch(column -> column.isShadowColumn());
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getColumnId().getId());
@@ -388,6 +389,7 @@ public class OlapTableSink extends DataSink {
             indexSchema.setColumn_param(columnParam);
             indexSchema.setSchema_id(indexMeta.getSchemaId());
             indexSchema.setColumn_to_expr_value(columnToExprValue);
+            indexSchema.setIs_shadow(isShadow);
             schemaParam.addToIndexes(indexSchema);
             if (indexMeta.getWhereClause() != null) {
                 String dbName = MetaUtils.getDatabase(dbId).getFullName();
