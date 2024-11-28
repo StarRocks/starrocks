@@ -43,6 +43,12 @@ import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+>>>>>>> c411ac513d ([Enhancement] improve sql digest for massive compound predicates (#53207))
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -1014,7 +1020,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             List<ColumnRefOperator> leftOutputColumns, List<ColumnRefOperator> rightOutputColumns,
             ExpressionMapping expressionMapping) {
         // Step1
-        List<Expr> exprConjuncts = Expr.extractConjuncts(node.getOnPredicate());
+        List<Expr> exprConjuncts = AnalyzerUtils.extractConjuncts(node.getOnPredicate());
 
         List<ScalarOperator> scalarConjuncts = Lists.newArrayList();
         Map<ScalarOperator, SubqueryOperator> allSubqueryPlaceholders = Maps.newHashMap();
@@ -1091,7 +1097,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     private boolean isJoinLeftRelatedSubquery(JoinRelation node, Expr joinOnConjunct) {
         List<Subquery> subqueries = Lists.newArrayList();
 
-        List<Expr> elements = Expr.flattenPredicate(joinOnConjunct);
+        List<Expr> elements = AnalyzerUtils.flattenPredicate(joinOnConjunct);
         List<Expr> predicateWithSubquery = Lists.newArrayList();
         for (Expr element : elements) {
             int oldSize = subqueries.size();

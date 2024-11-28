@@ -14,18 +14,95 @@
 
 package com.starrocks.sql.common;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Joiner;
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.InPredicate;
+>>>>>>> c411ac513d ([Enhancement] improve sql digest for massive compound predicates (#53207))
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.StatementBase;
 
 //Used to build sql digests
 public class SqlDigestBuilder {
+<<<<<<< HEAD
+=======
+
+    private static final int MASSIVE_COMPOUND_LIMIT = 16;
+
+>>>>>>> c411ac513d ([Enhancement] improve sql digest for massive compound predicates (#53207))
     public static String build(StatementBase statement) {
         return new SqlDigestBuilderVisitor().visit(statement);
     }
 
     private static class SqlDigestBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
+<<<<<<< HEAD
+=======
+
+        @Override
+        public String visitInPredicate(InPredicate node, Void context) {
+            if (!node.isLiteralChildren()) {
+                return super.visitInPredicate(node, context);
+            } else {
+                StringBuilder strBuilder = new StringBuilder();
+                String notStr = (node.isNotIn()) ? "NOT " : "";
+                strBuilder.append(printWithParentheses(node.getChild(0))).append(" ").append(notStr).append("IN ");
+                strBuilder.append("(?)");
+                return strBuilder.toString();
+            }
+        }
+
+        @Override
+        public String visitCompoundPredicate(CompoundPredicate node, Void context) {
+            List<Expr> flatten = AnalyzerUtils.flattenPredicate(node);
+            if (flatten.size() >= MASSIVE_COMPOUND_LIMIT) {
+                // Only record de-duplicated slots if there are too many compounds
+                List<SlotRef> exprs = node.collectAllSlotRefs(true);
+                String sortedSlots = exprs.stream()
+                        .filter(SlotRef::isColumnRef)
+                        .map(SlotRef::toSqlImpl)
+                        .sorted()
+                        .collect(Collectors.joining(","));
+                return "$massive_compounds[" + sortedSlots + "]$";
+            } else {
+                // TODO: it will introduce a little bit overhead in top-down visiting, in which the
+                //  flattenPredicate is duplicated revoked. it's better to eliminate this overhead
+                return super.visitCompoundPredicate(node, context);
+            }
+        }
+
+        @Override
+        public String visitValues(ValuesRelation node, Void scope) {
+            if (node.isNullValues()) {
+                return "VALUES(NULL)";
+            }
+
+            StringBuilder sqlBuilder = new StringBuilder("VALUES");
+            if (!node.getRows().isEmpty()) {
+                StringBuilder rowBuilder = new StringBuilder();
+                rowBuilder.append("(");
+                List<String> rowStrings =
+                        node.getRows().get(0).stream().map(this::visit).collect(Collectors.toList());
+                rowBuilder.append(Joiner.on(", ").join(rowStrings));
+                rowBuilder.append(")");
+                sqlBuilder.append(rowBuilder.toString());
+            }
+            return sqlBuilder.toString();
+        }
+
+        @Override
+        protected void visitInsertLabel(String label, StringBuilder sb) {
+            if (StringUtils.isNotEmpty(label)) {
+                sb.append("WITH LABEL ? ");
+            }
+        }
+
+>>>>>>> c411ac513d ([Enhancement] improve sql digest for massive compound predicates (#53207))
         @Override
         public String visitLiteral(LiteralExpr expr, Void context) {
             return "?";
