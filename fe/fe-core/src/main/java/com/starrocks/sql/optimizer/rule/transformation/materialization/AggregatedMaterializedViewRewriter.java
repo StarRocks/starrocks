@@ -163,11 +163,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         EquationRewriter queryExprToMvExprRewriter =
                 buildEquationRewriter(mvProjection, rewriteContext, false);
 
-<<<<<<< HEAD
-=======
         // TODO:duplicate if mv has already outputted.
         // mvOptExpr = duplicateMvOptExpression(rewriteContext, mvOptExpr, queryExprToMvExprRewriter);
->>>>>>> 00fafdb82f ([BugFix] Fix mv non rollup rewrite result contains aggregate functions (#53218))
         if (isRollup) {
             return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
                     rewriteContext, mvOptExpr);
