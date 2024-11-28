@@ -153,6 +153,10 @@ public class FoldConstantsRuleTest {
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 6, 6))
         );
         assertEquals("0.0", rule.apply(cast7, null).toString());
+
+        // cast(96.1 as int)-> 96
+        CastOperator cast8 = new CastOperator(Type.INT, ConstantOperator.createDouble(96.1));
+        assertEquals(ConstantOperator.createInt(96), rule.apply(cast8, null));
     }
 
     @Test

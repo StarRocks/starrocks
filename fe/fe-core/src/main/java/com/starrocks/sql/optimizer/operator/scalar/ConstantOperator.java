@@ -510,6 +510,9 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
 
         ConstantOperator res = null;
+        if (desc.isFixedPointType() && type.isFloatingPointType()) {
+            childString = childString.split("\\.")[0];
+        }
         try {
             if (desc.isBoolean()) {
                 if ("FALSE".equalsIgnoreCase(childString) || "0".equalsIgnoreCase(childString)) {
