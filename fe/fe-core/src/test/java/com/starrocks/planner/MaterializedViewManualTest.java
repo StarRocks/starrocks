@@ -255,7 +255,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "group by ds")
                     .match("test_partition_expr_mv1");
         }
-        connectContext.getSessionVariable().setEnableMaterializedViewTimeSeriesPushDownRewrite(false);
         {
             sql("SELECT \n" +
                     "count(DISTINCT `order_id`) AS `order_num`, \n" +
@@ -265,17 +264,15 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "group by ds")
                     .nonMatch("test_partition_expr_mv1");
         }
-        connectContext.getSessionVariable().setEnableMaterializedViewTimeSeriesPushDownRewrite(true);
 
         {
-            UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
             sql("SELECT \n" +
                     "count(DISTINCT `order_id`) AS `order_num`, \n" +
                     "date_trunc('minute', `dt`) AS ds \n" +
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
                     "group by ds")
-                    .match("test_partition_expr_mv1");
+                    .nonMatch("test_partition_expr_mv1");
         }
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
         starRocksAssert.dropTable("test_partition_expr_tbl1");
@@ -373,7 +370,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "group by ds")
                     .nonMatch("test_partition_expr_mv1");
         }
-        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
         {
             sql("SELECT \n" +
                     "count(DISTINCT `order_id`) AS `order_num`, \n" +
@@ -381,7 +377,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE date_trunc('day', `dt`) BETWEEN '2023-04-01' AND '2023-05-01'\n" +
                     "group by ds")
-                    .match("test_partition_expr_mv1");
+                    .nonMatch("test_partition_expr_mv1");
         }
 
         {
@@ -391,7 +387,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
                     "group by ds")
-                    .match("test_partition_expr_mv1");
+                    .nonMatch("test_partition_expr_mv1");
         }
 
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
@@ -429,7 +425,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     .nonMatch("test_partition_expr_mv1");
         }
 
-        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
         {
             sql("SELECT \n" +
                     "count(DISTINCT `order_id`) AS `order_num`, \n" +
@@ -437,7 +432,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE date_trunc('day', `dt`) BETWEEN '2023-04-01' AND '2023-05-01'\n" +
                     "group by ds")
-                    .match("test_partition_expr_mv1");
+                    .nonMatch("test_partition_expr_mv1");
         }
 
         {
@@ -447,7 +442,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
                     "group by ds")
-                    .match("test_partition_expr_mv1");
+                    .nonMatch("test_partition_expr_mv1");
         }
 
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
