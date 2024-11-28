@@ -408,7 +408,12 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                         logMVRewrite(mvRewriteContext, "Get rollup function is null, rollupFuncName:", rollupFuncName);
                         return AggRewriteInfo.NOT_REWRITE;
                     }
-                    newAggregate = new CallOperator(rollupFuncName, newFunc.getReturnType(), newArgs, newFunc);
+                    // ensure argument types are correct
+                    // clone function to avoid changing the original function
+                    Function cloned = newFunc.copy();
+                    cloned.setArgsType(argTypes);
+                    cloned.setRetType(aggCall.getType());
+                    newAggregate = new CallOperator(rollupFuncName, aggCall.getType(), newArgs, cloned);
                     realAggregate = newAggregate;
                 }
 
