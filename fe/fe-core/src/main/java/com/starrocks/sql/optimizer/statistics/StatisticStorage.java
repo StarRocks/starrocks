@@ -32,10 +32,10 @@ public interface StatisticStorage {
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
-    default void refreshTableStatistic(Table table) {
+    default void refreshTableStatistic(Table table, boolean isSync) {
     }
 
-    default void refreshTableStatisticSync(Table table) {
+    default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
     /**
