@@ -490,7 +490,15 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
             if (chunk_size != 0) {
                 ColumnHelper::merge_two_filters(row_delete_filter, &_chunk_filter, nullptr);
+<<<<<<< HEAD
                 chunk_size = SIMD::count_nonzero(_chunk_filter);
+=======
+                rows_read = SIMD::count_nonzero(_chunk_filter);
+                if (rows_read == 0) {
+                    // If rows_read = 0, we need to set chunk size = 0 and bypass filter chunk directly
+                    ck->set_num_rows(0);
+                }
+>>>>>>> 4284140c63 ([BugFix] Set chunk_size = 0 when rows_read=0 after applying row_delete_filter in orc scanner. (#53057))
             }
 
             if (chunk_size != 0 && chunk_size != ck->num_rows()) {
