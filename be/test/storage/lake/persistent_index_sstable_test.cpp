@@ -438,4 +438,37 @@ TEST_F(PersistentIndexSstableTest, test_index_value_protobuf) {
     }
 }
 
+TEST_F(PersistentIndexSstableTest, test_ioerror_inject) {
+    const int N = 10000;
+    sstable::Options options;
+    const std::string filename = "test_ioerror_inject.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    sstable::TableBuilder builder(options, file.get());
+    for (int i = 0; i < N; i++) {
+        std::string str = fmt::format("test_key_{:016X}", i);
+        IndexValue val(i);
+        builder.Add(Slice(str), Slice(val.v, 8));
+    }
+    SyncPoint::GetInstance()->SetCallBack("table_builder_footer_error",
+                                          [&](void* arg) { *(Status*)arg = Status::IOError("ut_test"); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    auto st = builder.Finish();
+    SyncPoint::GetInstance()->ClearCallBack("table_builder_footer_error");
+    SyncPoint::GetInstance()->DisableProcessing();
+    uint64_t filesz = builder.FileSize();
+    if (st.ok()) {
+        // scan & check
+        sstable::Table* sstable = nullptr;
+        ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+        CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
+        sstable::ReadOptions read_options;
+        sstable::Iterator* iter = sstable->NewIterator(read_options);
+        for (iter->SeekToFirst(); iter->Valid() && iter->status().ok(); iter->Next()) {
+        }
+        ASSERT_TRUE(iter->status().ok());
+        delete iter;
+        delete sstable;
+    }
+}
+
 } // namespace starrocks::lake

@@ -503,7 +503,7 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
 }
 
 Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
-    if (op_compaction.input_sstables().empty()) {
+    if (op_compaction.input_sstables().empty() || !op_compaction.has_output_sstable()) {
         return Status::OK();
     }
 
