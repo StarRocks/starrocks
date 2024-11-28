@@ -22,7 +22,9 @@
 
 #ifdef USE_STAROS
 #include "fslib/metric_key.h"
+#include "io/io_profiler.h"
 #include "metrics/metrics.h"
+#include "util/stopwatch.hpp"
 #endif
 
 namespace starrocks::io {
@@ -41,6 +43,8 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
         return 0;
     }
 
+    MonotonicStopWatch watch;
+    watch.start();
     // https://www.rfc-editor.org/rfc/rfc9110.html#name-range
     auto range = fmt::format("bytes={}-{}", _offset, std::min<int64_t>(_offset + count, _size) - 1);
     Aws::S3::Model::GetObjectRequest request;
@@ -53,6 +57,7 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
         Aws::IOStream& body = outcome.GetResult().GetBody();
         body.read(static_cast<char*>(out), count);
         _offset += body.gcount();
+        IOProfiler::add_read(count, watch.elapsed_time());
         return body.gcount();
     } else {
         return make_error_status(outcome.GetError());
@@ -89,12 +94,15 @@ void S3InputStream::set_size(int64_t value) {
 }
 
 StatusOr<std::string> S3InputStream::read_all() {
+    MonotonicStopWatch watch;
+    watch.start();
     Aws::S3::Model::GetObjectRequest request;
     request.SetBucket(_bucket);
     request.SetKey(_object);
     Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
     if (outcome.IsSuccess()) {
         Aws::IOStream& body = outcome.GetResult().GetBody();
+        IOProfiler::add_read(body.gcount(), watch.elapsed_time());
         return std::string(std::istreambuf_iterator<char>(body), {});
     } else {
         return make_error_status(outcome.GetError());
