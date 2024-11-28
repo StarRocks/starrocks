@@ -801,8 +801,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public long getMaxPartitionRowCount() {
         long maxRowCount = 0;
-        for (Partition partition : idToPartition.values()) {
-            maxRowCount = Math.max(maxRowCount, partition.getBaseIndex().getRowCount());
+        for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
+            for (PhysicalPartition partition : entry.getValue().getSubPartitions()) {
+                maxRowCount = Math.max(maxRowCount, partition.getBaseIndex().getRowCount());
+            }
         }
         return maxRowCount;
     }
