@@ -556,7 +556,95 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return ConstantOperator.createChar(childString, desc);
         }
 
+<<<<<<< HEAD
         throw UnsupportedException.unsupportedException(this + " cast to " + desc.getPrimitiveType().toString());
+=======
+        String childString = toString();
+        if (getType().isBoolean()) {
+            childString = getBoolean() ? "1" : "0";
+        }
+
+        ConstantOperator res = null;
+        if (desc.isFixedPointType() && type.isFloatingPointType()) {
+            childString = childString.split("\\.")[0];
+        }
+        try {
+            if (desc.isBoolean()) {
+                if ("FALSE".equalsIgnoreCase(childString) || "0".equalsIgnoreCase(childString)) {
+                    res = ConstantOperator.createBoolean(false);
+                } else if ("TRUE".equalsIgnoreCase(childString) || "1".equalsIgnoreCase(childString)) {
+                    res = ConstantOperator.createBoolean(true);
+                }
+            } else if (desc.isTinyint()) {
+                res = ConstantOperator.createTinyInt(Byte.parseByte(childString.trim()));
+            } else if (desc.isSmallint()) {
+                res = ConstantOperator.createSmallInt(Short.parseShort(childString.trim()));
+            } else if (desc.isInt()) {
+                if (Type.DATE.equals(type)) {
+                    childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+                }
+                res = ConstantOperator.createInt(Integer.parseInt(childString.trim()));
+            } else if (desc.isBigint()) {
+                if (Type.DATE.equals(type)) {
+                    childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+                } else if (Type.DATETIME.equals(type)) {
+                    childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+                }
+                res = ConstantOperator.createBigint(Long.parseLong(childString.trim()));
+            } else if (desc.isLargeint()) {
+                if (Type.DATE.equals(type)) {
+                    childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+                } else if (Type.DATETIME.equals(type)) {
+                    childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+                }
+                res = ConstantOperator.createLargeInt(new BigInteger(childString.trim()));
+            } else if (desc.isFloat()) {
+                if (Type.DATE.equals(type)) {
+                    childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+                } else if (Type.DATETIME.equals(type)) {
+                    childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+                }
+                res = ConstantOperator.createFloat(Double.parseDouble(childString));
+            } else if (desc.isDouble()) {
+                if (Type.DATE.equals(type)) {
+                    childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+                } else if (Type.DATETIME.equals(type)) {
+                    childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+                }
+                res = ConstantOperator.createDouble(Double.parseDouble(childString));
+            } else if (desc.isDate() || desc.isDatetime()) {
+                String dateStr = StringUtils.strip(childString, "\r\n\t ");
+                LocalDateTime dateTime = DateUtils.parseStrictDateTime(dateStr);
+                if (Type.DATE.equals(desc)) {
+                    dateTime = dateTime.truncatedTo(ChronoUnit.DAYS);
+                }
+                res = ConstantOperator.createDatetime(dateTime, desc);
+            } else if (desc.isDecimalV2()) {
+                res = ConstantOperator.createDecimal(BigDecimal.valueOf(Double.parseDouble(childString)), Type.DECIMALV2);
+            } else if (desc.isDecimalV3()) {
+                BigDecimal decimal = new BigDecimal(childString);
+                ScalarType scalarType = (ScalarType) desc;
+                try {
+                    DecimalLiteral.checkLiteralOverflowInBinaryStyle(decimal, scalarType);
+                    int realScale = DecimalLiteral.getRealScale(decimal);
+                    int scale = scalarType.getScalarScale();
+                    if (scale <= realScale) {
+                        decimal = decimal.setScale(scale, RoundingMode.HALF_UP);
+                    }
+                    res = ConstantOperator.createDecimal(decimal, desc);
+                } catch (AnalysisException ignored) {
+                    res = ConstantOperator.createNull(desc);
+                }
+
+            } else if (desc.isChar() || desc.isVarchar()) {
+                res =  ConstantOperator.createChar(childString, desc);
+            }
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+        
+        return Optional.ofNullable(res);
+>>>>>>> d071ba0b71 ([BugFix] fix fe cast problem (#53267))
     }
 
     public Optional<ConstantOperator> successor() {
