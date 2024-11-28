@@ -254,8 +254,6 @@ select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), 
 select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by d_year, LO_ORDERDATE order by LO_ORDERDATE;
 
 drop materialized view mv0;
-<<<<<<< HEAD
-=======
 
 --- test simple case
 CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS
@@ -319,4 +317,3 @@ REFRESH MATERIALIZED VIEW `test_mv1` WITH SYNC MODE;
 
 function: check_hit_materialized_view("SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');", "test_mv1")
 SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');
->>>>>>> 4ebd6b8f1a ([BugFix] Fix mv agg push down rewrite decimal type bug (#53226))

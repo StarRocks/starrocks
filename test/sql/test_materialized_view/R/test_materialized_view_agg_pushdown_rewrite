@@ -500,8 +500,6 @@ select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), 
 -- !result
 drop materialized view mv0;
 -- result:
-<<<<<<< HEAD
-=======
 -- !result
 CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS
 select LO_ORDERDATE, sum(LO_REVENUE), count(LO_REVENUE), sum(lo_suppkey), count(lo_suppkey), max(LO_REVENUE), min(LO_REVENUE), bitmap_union(to_bitmap(LO_REVENUE)), hll_union(hll_hash(LO_REVENUE)), percentile_union(percentile_hash(LO_REVENUE)), any_value(LO_REVENUE), bitmap_agg(LO_REVENUE), array_agg_distinct(LO_REVENUE) 
@@ -602,5 +600,4 @@ None
 SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');
 -- result:
 0.03
->>>>>>> 4ebd6b8f1a ([BugFix] Fix mv agg push down rewrite decimal type bug (#53226))
 -- !result
