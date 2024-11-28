@@ -1177,7 +1177,6 @@ public class DatabaseTransactionMgr {
                     transactionState.clearErrorMsg();
                     transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
                     unprotectUpsertTransactionState(transactionState, false);
-                    transactionState.resetTabletCommitInfos();
                     txnOperated = true;
                     // TODO(cmy): We found a very strange problem. When delete-related transactions are processed here,
                     // subsequent `updateCatalogAfterVisible()` is called, but it does not seem to be executed here
@@ -1206,6 +1205,13 @@ public class DatabaseTransactionMgr {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
             finishSpan.end();
+        }
+
+        writeLock();
+        try {
+            transactionState.resetTabletCommitInfos();
+        } finally {
+            writeUnlock();
         }
 
         transactionState.notifyVisible();
@@ -1886,7 +1892,6 @@ public class DatabaseTransactionMgr {
                     transactionState.setNewFinish();
                     transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
                     unprotectUpsertTransactionState(transactionState, false);
-                    transactionState.resetTabletCommitInfos();
                     transactionState.notifyVisible();
                     txnOperated = true;
                 } finally {
@@ -1907,6 +1912,13 @@ public class DatabaseTransactionMgr {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
             finishSpan.end();
+        }
+
+        writeLock();
+        try {
+            transactionState.resetTabletCommitInfos();
+        } finally {
+            writeUnlock();
         }
 
         // do after transaction finish
