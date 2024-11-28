@@ -674,6 +674,10 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             if (rows_read != 0) {
                 ColumnHelper::merge_two_filters(row_delete_filter, &_chunk_filter, nullptr);
                 rows_read = SIMD::count_nonzero(_chunk_filter);
+                if (rows_read == 0) {
+                    // If rows_read = 0, we need to set chunk size = 0 and bypass filter chunk directly
+                    ck->set_num_rows(0);
+                }
             }
 
             if (rows_read != 0 && rows_read != ck->num_rows()) {
