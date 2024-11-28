@@ -1607,7 +1607,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePlanAnalyzer = false;
 
     @VarAttr(name = ENABLE_PLAN_ADVISOR)
-    private boolean enablePlanAdvisor = true;
+    private boolean enablePlanAdvisor = false;
 
     @VarAttr(name = COUNT_DISTINCT_IMPLEMENTATION)
     private String countDistinctImplementation = "default";
