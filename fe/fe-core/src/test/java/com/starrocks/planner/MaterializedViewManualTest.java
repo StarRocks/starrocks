@@ -248,13 +248,9 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY ds \n" +
-                "DISTRIBUTED BY HASH(`order_num`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"" +
-                ")\n" +
-                "AS\n" +
-                "SELECT \n" +
-                "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "AS SELECT \n" +
+                "bitmap_union(to_bitmap(`order_id`)) AS `order_num`, \n" +
                 "date_trunc('minute', `dt`) AS ds\n" +
                 "FROM `test_partition_expr_tbl1`\n" +
                 "group by ds;";
@@ -269,6 +265,62 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "group by ds")
                     .match("test_partition_expr_mv1");
         }
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('minute', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
+                    "group by ds")
+                    .nonMatch("test_partition_expr_mv1");
+        }
+        starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
+        starRocksAssert.dropTable("test_partition_expr_tbl1");
+    }
+
+    @Test
+    public void testDateTruncPartitionColumnExpr2() throws Exception {
+        String tableSQL = "CREATE TABLE `test_partition_expr_tbl1` (\n" +
+                "  `order_id` bigint(20) NOT NULL DEFAULT \"-1\" COMMENT \"\",\n" +
+                "  `dt` datetime NOT NULL DEFAULT \"1996-01-01 00:00:00\" COMMENT \"\",\n" +
+                "  `value` varchar(256) NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`order_id`, `dt`)\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(\n" +
+                "PARTITION p2023041017 VALUES [(\"2023-04-10 17:00:00\"), (\"2023-04-10 18:00:00\")),\n" +
+                "PARTITION p2023041021 VALUES [(\"2023-04-10 21:00:00\"), (\"2023-04-10 22:00:00\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`order_id`)";
+        starRocksAssert.withTable(tableSQL);
+        String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
+                "PARTITION BY ds \n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "AS SELECT \n" +
+                "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                "date_trunc('day', `dt`) AS ds\n" +
+                "FROM `test_partition_expr_tbl1`\n" +
+                "group by ds;";
+        starRocksAssert.withMaterializedView(mv);
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('day', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE date_trunc('month', `dt`) = '2023-04-01'\n" +
+                    "group by ds")
+                    .nonMatch("test_partition_expr_mv1");
+        }
+
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('minute', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE date_trunc('month', `dt`) BETWEEN '2023-04-01' AND '2023-05-01'\n" +
+                    "group by ds")
+                    .nonMatch("test_partition_expr_mv1");
+        }
 
         {
             sql("SELECT \n" +
@@ -277,7 +329,120 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
                     "group by ds")
-                    .match("test_partition_expr_mv1");
+                    .nonMatch("test_partition_expr_mv1");
+        }
+
+        starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
+        starRocksAssert.dropTable("test_partition_expr_tbl1");
+    }
+
+    @Test
+    public void testDateTruncPartitionColumnExpr3() throws Exception {
+        String tableSQL = "CREATE TABLE `test_partition_expr_tbl1` (\n" +
+                "  `order_id` bigint(20) NOT NULL,\n" +
+                "  `dt` datetime NOT NULL,\n" +
+                "  `value` varchar(256) NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`order_id`, `dt`)\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(\n" +
+                "PARTITION p2023041017 VALUES [(\"2023-04-10 17:00:00\"), (\"2023-04-10 18:00:00\")),\n" +
+                "PARTITION p2023041021 VALUES [(\"2023-04-10 21:00:00\"), (\"2023-04-10 22:00:00\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`order_id`)";
+        starRocksAssert.withTable(tableSQL);
+        String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
+                "PARTITION BY ds \n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "AS SELECT \n" +
+                "bitmap_union(to_bitmap(`order_id`)) AS `order_num`, \n" +
+                "date_trunc('hour', `dt`) AS ds\n" +
+                "FROM `test_partition_expr_tbl1`\n" +
+                "group by ds;";
+        starRocksAssert.withMaterializedView(mv);
+
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('day', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE date_trunc('day', `dt`) = '2023-04-01'\n" +
+                    "group by ds")
+                    .nonMatch("test_partition_expr_mv1");
+        }
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('day', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE date_trunc('day', `dt`) BETWEEN '2023-04-01' AND '2023-05-01'\n" +
+                    "group by ds")
+                    .nonMatch("test_partition_expr_mv1");
+        }
+
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('day', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
+                    "group by ds")
+                    .nonMatch("test_partition_expr_mv1");
+        }
+
+        starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
+        starRocksAssert.dropTable("test_partition_expr_tbl1");
+    }
+
+    @Test
+    public void testDateTruncPartitionColumnExpr4() throws Exception {
+        String tableSQL = "CREATE TABLE `test_partition_expr_tbl1` (\n" +
+                "  `order_id` bigint(20) NOT NULL,\n" +
+                "  `dt` datetime NOT NULL,\n" +
+                "  `value` varchar(256) NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`order_id`, `dt`)\n" +
+                "PARTITION BY date_trunc('hour', `dt`)\n" + // with date_trunc partition expression
+                "DISTRIBUTED BY HASH(`order_id`)";
+        starRocksAssert.withTable(tableSQL);
+        String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
+                "PARTITION BY ds \n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "AS SELECT \n" +
+                "bitmap_union(to_bitmap(`order_id`)) AS `order_num`, \n" +
+                "date_trunc('hour', `dt`) AS ds\n" +
+                "FROM `test_partition_expr_tbl1`\n" +
+                "group by ds;";
+        starRocksAssert.withMaterializedView(mv);
+
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('day', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE date_trunc('day', `dt`) = '2023-04-01'\n" +
+                    "group by ds")
+                    .nonMatch("test_partition_expr_mv1");
+        }
+
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('day', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE date_trunc('day', `dt`) BETWEEN '2023-04-01' AND '2023-05-01'\n" +
+                    "group by ds")
+                    .nonMatch("test_partition_expr_mv1");
+        }
+
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('day', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
+                    "group by ds")
+                    .nonMatch("test_partition_expr_mv1");
         }
 
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
