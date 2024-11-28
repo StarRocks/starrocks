@@ -33,6 +33,7 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/defer_op.h"
+#include "exec/avro_test.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,6 +44,13 @@ extern "C" {
 #endif
 
 namespace starrocks {
+
+struct AvroHelper {
+    avro_schema_t schema = NULL;
+    avro_value_iface_t* iface = NULL;
+    avro_value_t avro_val;
+    std::string schema_text;
+};
 
 class AvroScannerTest : public ::testing::Test {
 protected:
