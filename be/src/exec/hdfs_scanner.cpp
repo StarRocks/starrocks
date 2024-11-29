@@ -244,7 +244,9 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
         std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
     ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.path))
     const int64_t file_size = options.file_size;
-    raw_file->set_size(file_size);
+    if (file_size >= 0) {
+        raw_file->set_size(file_size);
+    }
     const std::string& filename = raw_file->filename();
 
     std::shared_ptr<io::SeekableInputStream> input_stream = raw_file->stream();

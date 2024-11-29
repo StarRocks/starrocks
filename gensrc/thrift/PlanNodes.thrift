@@ -315,6 +315,15 @@ struct TPaimonDeletionFile {
     3: optional i64 length
 }
 
+// refer to https://github.com/delta-io/delta/blob/master/PROTOCOL.md#deletion-vector-descriptor-schema
+struct TDeletionVectorDescriptor {
+  1: optional string storageType
+  2: optional string pathOrInlineDv
+  3: optional i64 offset
+  4: optional i64 sizeInBytes
+  5: optional i64 cardinality
+}
+
 // Hdfs scan range
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
@@ -401,6 +410,8 @@ struct THdfsScanRange {
     29: optional Descriptors.THdfsPartition partition_value;
 
     30: optional Types.TTableId table_id;
+
+    31:optional TDeletionVectorDescriptor deletion_vector_descriptor
 }
 
 struct TBinlogScanRange {
