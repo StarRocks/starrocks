@@ -883,15 +883,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         Assert.assertEquals(3, baseTableVisibleVersionMap.get(tbl1.getId()).get("p100").getVersion());
     }
 
-    private PartitionBasedMvRefreshProcessor createProcessor(MaterializedView mv) {
+    private PartitionBasedMvRefreshProcessor createProcessor(TaskRun taskRun, MaterializedView mv) {
         TaskRunContext context = new TaskRunContext();
+        context.setTaskRun(taskRun);
         context.setCtx(connectContext);
         context.getCtx().setDatabase("test");
         MvTaskRunContext mvContext = new MvTaskRunContext(context);
         Map<String, String> props = Maps.newHashMap();
         props.put(MV_ID, String.valueOf(mv.getId()));
         mvContext.setProperties(props);
-        PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
+        PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor(context.getTaskRun());
         processor.setMvContext(mvContext);
         processor.prepare(mvContext);
         return processor;
@@ -919,7 +920,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         initAndExecuteTaskRun(taskRun);
         materializedView.getTableProperty().setPartitionRefreshNumber(3);
 
-        PartitionBasedMvRefreshProcessor processor = createProcessor(materializedView);
+        PartitionBasedMvRefreshProcessor processor = createProcessor(taskRun, materializedView);
         processor.filterPartitionByRefreshNumber(materializedView.getPartitionNames(), Sets.newHashSet(), materializedView);
         MvTaskRunContext mvContext = processor.getMvContext();
         Assert.assertEquals("2022-03-01", mvContext.getNextPartitionStart());
@@ -958,7 +959,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
         materializedView.getTableProperty().setPartitionRefreshNumber(1);
 
-        PartitionBasedMvRefreshProcessor processor = createProcessor(materializedView);
+        PartitionBasedMvRefreshProcessor processor = createProcessor(taskRun, materializedView);
         Set<String> allPartitions = new HashSet<>(materializedView.getPartitionNames());
 
         // ascending refresh
