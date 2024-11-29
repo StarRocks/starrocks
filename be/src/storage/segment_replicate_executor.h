@@ -73,11 +73,11 @@ private:
 };
 
 struct SegmentReplicateStat {
-    atomic_int32_t num_pending_tasks{0};
-    atomic_int32_t num_running_tasks{0};
-    atomic_int32_t num_finished_tasks{0};
-    atomic_int64_t pending_time_ns{0};
-    atomic_int64_t execute_time_ns{0};
+    std::atomic_int32_t num_pending_tasks{0};
+    std::atomic_int32_t num_running_tasks{0};
+    std::atomic_int32_t num_finished_tasks{0};
+    std::atomic_int64_t pending_time_ns{0};
+    std::atomic_int64_t execute_time_ns{0};
 };
 
 class ReplicateToken {
