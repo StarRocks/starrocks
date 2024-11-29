@@ -1191,6 +1191,52 @@ void Tablet::get_compaction_status(std::string* json_result) {
             }
             compaction_start_time = _compaction_task->get_start_time();
             std::sort(compaction_rowsets.begin(), compaction_rowsets.end(), Rowset::comparator);
+<<<<<<< HEAD
+=======
+
+            rapidjson::Value compaction_task_id_value;
+            compaction_task_id_value.SetUint64(compaction_task_id);
+            task.AddMember("task_id", compaction_task_id_value, root.GetAllocator());
+
+            rapidjson::Value elapsed_time;
+            int64_t elapsed = (UnixMillis() - compaction_start_time) / MILLIS_PER_SEC;
+            elapsed_time.SetInt64(elapsed);
+            task.AddMember("elapsed_time", elapsed_time, root.GetAllocator());
+
+            rapidjson::Value compaction_score_value;
+            compaction_score_value.SetDouble(compaction_score);
+            task.AddMember("score", compaction_score_value, root.GetAllocator());
+
+            rapidjson::Value compaction_type_value;
+            compaction_type_value.SetString(compaction_type.c_str(), compaction_type.length(), root.GetAllocator());
+            task.AddMember("type", compaction_type_value, root.GetAllocator());
+
+            rapidjson::Value compaction_rowsets_count;
+            compaction_rowsets_count.SetUint64(compaction_rowsets.size());
+            task.AddMember("rowsets_count", compaction_rowsets_count, root.GetAllocator());
+
+            rapidjson::Document input_rowset_details;
+            input_rowset_details.SetArray();
+            for (auto& compaction_rowset : compaction_rowsets) {
+                rapidjson::Value value;
+                value.SetObject();
+
+                rapidjson::Value rowset_id;
+                std::string rowset_id_value = compaction_rowset->rowset_id().to_string();
+                rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
+                value.AddMember("rowset_id", rowset_id, root.GetAllocator());
+
+                rapidjson::Value version;
+                const Version& ver = compaction_rowset->version();
+                std::string version_value = strings::Substitute("$0-$1", ver.first, ver.second);
+                version.SetString(version_value.c_str(), version_value.length(), root.GetAllocator());
+                value.AddMember("version", version, root.GetAllocator());
+
+                input_rowset_details.PushBack(value, root.GetAllocator());
+            }
+            task.AddMember("input_rowset_details", input_rowset_details, root.GetAllocator());
+            compaction_detail.AddMember("task", task, root.GetAllocator());
+>>>>>>> 62aaf74778 ([BugFix] Fix get compaction status crash (#53355))
         }
     }
 

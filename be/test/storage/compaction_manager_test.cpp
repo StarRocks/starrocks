@@ -155,4 +155,142 @@ TEST(CompactionManagerTest, test_next_compaction_task_id) {
     ASSERT_LT(0, start_task_id);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(CompactionManagerTest, test_compaction_parallel) {
+    std::vector<TabletSharedPtr> tablets;
+    std::vector<std::shared_ptr<MockCompactionTask>> tasks;
+    DataDir data_dir("./data_dir");
+    // generate compaction task
+    config::max_compaction_concurrency = 10;
+    int tablet_num = 3;
+    int task_id = 0;
+    // each tablet has 3 compaction tasks
+    for (int i = 0; i < tablet_num; i++) {
+        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+        tablet_meta->set_tablet_id(i);
+        tablet->set_tablet_meta(tablet_meta);
+        tablet->set_data_dir(&data_dir);
+        std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
+        compaction_context->policy = std::make_unique<DefaultCumulativeBaseCompactionPolicy>(tablet.get());
+        tablet->set_compaction_context(compaction_context);
+        tablets.push_back(tablet);
+
+        // create base compaction
+        std::shared_ptr<MockCompactionTask> task = std::make_shared<MockCompactionTask>();
+        task->set_tablet(tablet);
+        task->set_task_id(task_id++);
+        task->set_compaction_type(BASE_COMPACTION);
+        tasks.emplace_back(std::move(task));
+
+        // create cumulative compaction1
+        task = std::make_shared<MockCompactionTask>();
+        task->set_tablet(tablet);
+        task->set_task_id(task_id++);
+        task->set_compaction_type(CUMULATIVE_COMPACTION);
+        tasks.emplace_back(std::move(task));
+
+        // create cumulative compaction2
+        task = std::make_shared<MockCompactionTask>();
+        task->set_tablet(tablet);
+        task->set_task_id(task_id++);
+        task->set_compaction_type(CUMULATIVE_COMPACTION);
+        tasks.emplace_back(std::move(task));
+    }
+
+    _engine->compaction_manager()->init_max_task_num(config::max_compaction_concurrency);
+
+    for (int i = 0; i < 9; i++) {
+        bool ret = _engine->compaction_manager()->register_task(tasks[i].get());
+        ASSERT_TRUE(ret);
+    }
+
+    ASSERT_EQ(9, _engine->compaction_manager()->running_tasks_num());
+
+    _engine->compaction_manager()->clear_tasks();
+    ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+}
+
+TEST_F(CompactionManagerTest, test_compaction_update_thread_pool_num) {
+    config::max_compaction_concurrency = 10;
+    config::cumulative_compaction_num_threads_per_disk = 2;
+    config::base_compaction_num_threads_per_disk = 2;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    int32_t compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(4, compaction_concurrency);
+
+    config::cumulative_compaction_num_threads_per_disk = 0;
+    config::base_compaction_num_threads_per_disk = 0;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(0, compaction_concurrency);
+
+    config::cumulative_compaction_num_threads_per_disk = -1;
+    config::base_compaction_num_threads_per_disk = -1;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(5, compaction_concurrency);
+
+    _engine->compaction_manager()->init_max_task_num(compaction_concurrency);
+    _engine->compaction_manager()->schedule();
+    EXPECT_EQ(5, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+
+    _engine->compaction_manager()->update_max_threads(3);
+    EXPECT_EQ(3, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(3, _engine->compaction_manager()->max_task_num());
+
+    _engine->compaction_manager()->update_max_threads(0);
+    EXPECT_EQ(3, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(0, _engine->compaction_manager()->max_task_num());
+
+    _engine->compaction_manager()->update_max_threads(-1);
+    EXPECT_EQ(5, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(5, _engine->compaction_manager()->max_task_num());
+}
+
+TEST_F(CompactionManagerTest, test_get_compaction_status) {
+    auto tablet_meta = std::make_shared<TabletMeta>();
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(KeysType::DUP_KEYS);
+    auto schema = std::make_shared<const TabletSchema>(schema_pb);
+    tablet_meta->set_tablet_schema(schema);
+    DataDir data_dir("./data_dir");
+    auto tablet = Tablet::create_tablet_from_meta(tablet_meta, &data_dir);
+    tablet_meta->set_tablet_id(0);
+    auto compaction_context = std::make_unique<CompactionContext>();
+    compaction_context->policy = std::make_unique<DefaultCumulativeBaseCompactionPolicy>(tablet.get());
+    tablet->set_compaction_context(compaction_context);
+
+    std::vector<RowsetSharedPtr> mock_rowsets;
+    auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+    rs_meta_pb->set_rowset_id("123");
+    rs_meta_pb->set_start_version(0);
+    rs_meta_pb->set_end_version(1);
+    auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
+    auto rowset = std::make_shared<Rowset>(schema, "", rowset_meta);
+    mock_rowsets.emplace_back(rowset);
+
+    // generate compaction task
+    auto task = std::make_shared<MockCompactionTask>();
+    task->set_tablet(tablet);
+    task->set_task_id(1);
+    task->set_compaction_type(CUMULATIVE_COMPACTION);
+    task->set_input_rowsets(std::move(mock_rowsets));
+
+    _engine->compaction_manager()->init_max_task_num(10);
+    bool ret = _engine->compaction_manager()->register_task(task.get());
+    ASSERT_TRUE(ret);
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
+
+    std::string compaction_status;
+    tablet->get_compaction_status(&compaction_status);
+    ASSERT_TRUE(compaction_status.find("\"compaction_status\": \"RUNNING\"") != std::string::npos);
+    ASSERT_TRUE(compaction_status.find("\"rowset_id\": \"123\"") != std::string::npos);
+
+    _engine->compaction_manager()->clear_tasks();
+    ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+}
+
+>>>>>>> 62aaf74778 ([BugFix] Fix get compaction status crash (#53355))
 } // namespace starrocks
