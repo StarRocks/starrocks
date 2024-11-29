@@ -40,6 +40,7 @@ import com.starrocks.common.Pair;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -50,6 +51,9 @@ import java.util.concurrent.atomic.AtomicLong;
 // It's used to collect queries for monitor.
 public class QueryDetailQueue {
     public static final ConcurrentLinkedDeque<QueryDetail> TOTAL_QUERIES = new ConcurrentLinkedDeque<>();
+    // QUERY_MAP don't need to be exactly same as TOTAL_QUERIES, so we can only use ConcurrentHashMap instead of lock
+    // it's a help structure to get query detail by query id quickly
+    public static final ConcurrentHashMap<String, QueryDetail> QUERY_MAP = new ConcurrentHashMap<>();
     private static final ScheduledExecutorService SCHEDULED = Executors.newSingleThreadScheduledExecutor();
 
     private static final AtomicLong LATEST_MS = new AtomicLong();
@@ -62,13 +66,16 @@ public class QueryDetailQueue {
     public static void addQueryDetail(QueryDetail queryDetail) {
         queryDetail.setEventTime(getCurrentTimeNS());
         TOTAL_QUERIES.addLast(queryDetail);
+        // one query will be put into query map twice, finished query will overwrite running query
+        QUERY_MAP.put(queryDetail.getQueryId(), queryDetail);
     }
 
     private static void removeExpiredQueryDetails() {
         long deleteTime = getCurrentTimeNS() - Config.query_detail_cache_time_nanosecond;
 
         while (!TOTAL_QUERIES.isEmpty() && TOTAL_QUERIES.peekFirst().getEventTime() < deleteTime) {
-            TOTAL_QUERIES.pollFirst();
+            QueryDetail head = TOTAL_QUERIES.pollFirst();
+            QUERY_MAP.remove(head.getQueryId());
         }
     }
 
@@ -80,6 +87,28 @@ public class QueryDetailQueue {
             }
         }
         return results;
+    }
+
+    /* for async profile, when calling addFinishQueryDetail, profile is not ready
+     * so if queryDetail's needWaitProfileToReport is true, then we need to call
+     * getQueryProfilesByQueryIds with queryIds to get profile in batch manner
+     * @param queryIds
+     * @return  query profile if it's ready, else null
+     */
+    public static List<String> getQueryProfilesByQueryIds(List<String> queryIds) {
+        List<String> results = Lists.newArrayList();
+        for (String queryId : queryIds) {
+            QueryDetail queryDetail = QUERY_MAP.get(queryId);
+            String result = null;
+            if (queryDetail != null) {
+                result = queryDetail.getProfile();
+            }
+            // if queryDetail is removed by SCHEDULED or profile is not ready, return null
+            // else return profile content
+            results.add(result);
+        }
+        return results;
+
     }
 
     public static long getTotalQueriesCount() {

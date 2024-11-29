@@ -82,6 +82,9 @@ public class QueryDetail implements Serializable {
     private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     private String digest;
     private String catalog;
+    // only valid if state is "finished"
+    // when query finished, profile maybe still not ready, so need wait
+    private boolean needWaitProfileToReport = false;
 
     public QueryDetail() {
     }
@@ -148,6 +151,7 @@ public class QueryDetail implements Serializable {
         queryDetail.digest = this.digest;
         queryDetail.resourceGroupName = this.resourceGroupName;
         queryDetail.catalog = this.catalog;
+        queryDetail.needWaitProfileToReport = this.needWaitProfileToReport;
         return queryDetail;
     }
 
@@ -261,6 +265,7 @@ public class QueryDetail implements Serializable {
 
     public void setProfile(String profile) {
         this.profile = profile;
+        this.needWaitProfileToReport = false;
     }
 
     public String getResourceGroupName() {
@@ -337,5 +342,13 @@ public class QueryDetail implements Serializable {
 
     public void setCatalog(String catalog) {
         this.catalog = catalog;
+    }
+
+    public void setNeedWaitProfileToReport(boolean needWaitProfileToReport) {
+        this.needWaitProfileToReport = needWaitProfileToReport;
+    }
+
+    public boolean isNeedWaitProfileToReport() {
+        return needWaitProfileToReport;
     }
 }
