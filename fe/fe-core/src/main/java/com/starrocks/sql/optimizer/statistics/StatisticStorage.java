@@ -59,10 +59,6 @@ public interface StatisticStorage {
         return null;
     }
 
-    default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
-        return getColumnStatistics(table, columns);
-    }
-
     default List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
         return columns.stream().
                 map(col -> ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
@@ -95,6 +91,9 @@ public interface StatisticStorage {
     }
 
     default void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
+    }
+
+    default void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
     default void expireConnectorHistogramStatistics(Table table, List<String> columns) {
