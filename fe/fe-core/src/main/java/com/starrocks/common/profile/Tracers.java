@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 
 public class Tracers {
@@ -250,4 +251,29 @@ public class Tracers {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.allTracer[1].toRuntimeProfile(profile);
     }
+<<<<<<< HEAD
+=======
+
+    public static Optional<Timer> getSpecifiedTimer(String name) {
+        Tracers tracers = THREAD_LOCAL.get();
+        return tracers.allTracer[1].getSpecifiedTimer(name);
+    }
+
+    public static String getTrace(Mode mode) {
+        switch (mode) {
+            case TIMER:
+                return Tracers.printScopeTimer();
+            case VARS:
+                return Tracers.printVars();
+            case TIMING:
+                return Tracers.printTiming();
+            case LOGS:
+                return Tracers.printLogs();
+            case REASON:
+                return Tracers.printReasons();
+            default:
+                return "";
+        }
+    }
+>>>>>>> 6c556d87f9 ([Enhancement] Add pendingTime/netTime/netComputeTime to queryDetail (#53322))
 }
