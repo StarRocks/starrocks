@@ -18,7 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.Reference;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -218,7 +218,7 @@ public class DefaultWorkerProviderTest {
     }
 
     @Test
-    public void testSelectWorker() throws UserException {
+    public void testSelectWorker() throws StarRocksException {
         DefaultWorkerProvider workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
                         true);
@@ -235,7 +235,7 @@ public class DefaultWorkerProviderTest {
 
     private static <C extends ComputeNode> void testSelectNextWorkerHelper(DefaultWorkerProvider workerProvider,
                                                                            Map<Long, C> id2Worker)
-            throws UserException {
+            throws StarRocksException {
 
         Set<Long> selectedWorkers = new HashSet<>(id2Worker.size());
         for (int i = 0; i < id2Worker.size(); i++) {
@@ -249,7 +249,7 @@ public class DefaultWorkerProviderTest {
     }
 
     @Test
-    public void testSelectNextWorker() throws UserException {
+    public void testSelectNextWorker() throws StarRocksException {
         DefaultWorkerProvider workerProvider;
 
         workerProvider =

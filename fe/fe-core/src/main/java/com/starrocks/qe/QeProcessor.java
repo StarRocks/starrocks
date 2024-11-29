@@ -17,7 +17,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
@@ -42,9 +42,9 @@ public interface QeProcessor {
     TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams params, TNetworkAddress beAddr);
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams params);
 
-    void registerQuery(TUniqueId queryId, Coordinator coord) throws UserException;
+    void registerQuery(TUniqueId queryId, Coordinator coord) throws StarRocksException;
 
-    void registerQuery(TUniqueId queryId, QeProcessorImpl.QueryInfo info) throws UserException;
+    void registerQuery(TUniqueId queryId, QeProcessorImpl.QueryInfo info) throws StarRocksException;
 
     void unregisterQuery(TUniqueId queryId);
 

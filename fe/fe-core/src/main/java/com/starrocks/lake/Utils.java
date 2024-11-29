@@ -21,7 +21,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -61,7 +61,7 @@ public class Utils {
         try {
             return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                     .getNodeSelector().seqChooseBackendOrComputeId();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             return null;
         }
     }

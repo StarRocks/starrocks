@@ -36,9 +36,16 @@ package com.starrocks.common;
 
 import java.util.MissingFormatArgumentException;
 
-// Error code used to indicate what error happened.
+/**
+ * 1、ErrorCode: The most granular error message, recording the error cause at the bottom of the call stack
+ * <p>
+ * 2、SqlState: Coarse-grained error information is also recorded in ErrorCode
+ * Main references: <a href="https://www.postgresql.org/docs/15/errcodes-appendix.html">...</a>
+ * <p>
+ * 3、ErrorType: The most coarse-grained error message, which determines the error category
+ * based on the first two digits of SQLSTATE. For example, Internal Error, Syntax Error
+ */
 public enum ErrorCode {
-    // Try our best to compatible with MySQL's
     ERR_CANT_CREATE_TABLE(1005, new byte[] {'H', 'Y', '0', '0', '0'}, "Can't create table '%s' (errno: %s)"),
     ERR_DB_CREATE_EXISTS(1007, new byte[] {'H', 'Y', '0', '0', '0'}, "Can't create database '%s'; database exists"),
     ERR_DB_DROP_EXISTS(1008, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -314,7 +321,8 @@ public enum ErrorCode {
             "No files were found matching the pattern(s) or path(s): '%s'"),
     ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND(5601, new byte[] {'4', '2', '0', '0', '0'},
             "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
-    ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'"),
+    ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'},
+            "Expr '%s' analyze error: %s, derived column is '%s'"),
     ERR_NO_PARTITIONS_HAVE_DATA_LOAD(5603, new byte[] {'0', '2', '0', '0', '0'},
             "No partitions have data available for loading. If you are sure there may be no data to be loaded, " +
                     "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
@@ -327,8 +335,9 @@ public enum ErrorCode {
                     "you can set '%s' property to a greater value through ALTER ROUTINE LOAD and RESUME the job"),
     ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
             "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
-            "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
-    ERR_INSERT_COLUMN_NAME_MISMATCH(5608, new byte[] {'4', '2', '6', '0', '1'}, "%s column: %s has no matching %s column"),
+                    "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+    ERR_INSERT_COLUMN_NAME_MISMATCH(5608, new byte[] {'4', '2', '6', '0', '1'},
+            "%s column: %s has no matching %s column"),
 
     /**
      * 5700 - 5799: Partition
@@ -339,7 +348,7 @@ public enum ErrorCode {
     ERR_ADD_PARTITION_WITH_ERROR_STEP_LENGTH(5701, new byte[] {'4', '2', '0', '0', '0'},
             "Step length [%d] in the operation is not equal to the partition step length [%d] stored in the table"),
 
-    ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE(5702,  new byte[] {'4', '2', '0', '0', '0'},
+    ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE(5702, new byte[] {'4', '2', '0', '0', '0'},
             "Can't add multi range partition to multi partition column table"),
 
     ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},

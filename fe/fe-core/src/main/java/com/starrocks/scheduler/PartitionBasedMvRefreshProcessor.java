@@ -41,7 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
@@ -1121,7 +1121,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     }
                 }
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Materialized view compute partition change failed", DebugUtil.getRootStackTrace(e));
             return true;
         }
@@ -1162,7 +1162,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (mvContext.getTaskRun().isKilled()) {
             LOG.warn("[QueryId:{}] refresh materialized view {} is killed", ctx.getQueryId(),
                     materializedView.getName());
-            throw new UserException("User Cancelled");
+            throw new StarRocksException("User Cancelled");
         }
 
         StmtExecutor executor = new StmtExecutor(ctx, insertStmt);

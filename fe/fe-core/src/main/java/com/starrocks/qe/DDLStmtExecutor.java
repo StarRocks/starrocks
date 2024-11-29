@@ -26,7 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
@@ -966,7 +966,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {
             try {
                 return context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new RuntimeException(e);
             }
         }

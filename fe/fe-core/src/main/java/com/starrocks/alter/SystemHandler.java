@@ -45,7 +45,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -99,7 +99,7 @@ public class SystemHandler extends AlterHandler {
     @Override
     // add synchronized to avoid process 2 or more stmts at same time
     public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database dummyDb,
-                                              OlapTable dummyTbl) throws UserException {
+                                              OlapTable dummyTbl) throws StarRocksException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
         alterClause.accept(SystemHandler.Visitor.getInstance(), null);

@@ -75,7 +75,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
@@ -234,7 +234,7 @@ public class OlapTableSink extends DataSink {
         this.enableDynamicOverwrite = enableDynamicOverwrite;
     }
 
-    public void complete(String mergeCondition) throws UserException {
+    public void complete(String mergeCondition) throws StarRocksException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
             tSink.setMerge_condition(mergeCondition);
@@ -264,7 +264,7 @@ public class OlapTableSink extends DataSink {
     }
 
     // must called after tupleDescriptor is computed
-    public void complete() throws UserException {
+    public void complete() throws StarRocksException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
 
         tSink.setTable_id(dstTable.getId());
@@ -466,7 +466,7 @@ public class OlapTableSink extends DataSink {
         return schemaParam;
     }
 
-    private static List<String> getDistColumns(DistributionInfo distInfo, OlapTable table) throws UserException {
+    private static List<String> getDistColumns(DistributionInfo distInfo, OlapTable table) throws StarRocksException {
         List<String> distColumns = Lists.newArrayList();
         switch (distInfo.getType()) {
             case HASH: {
@@ -480,7 +480,7 @@ public class OlapTableSink extends DataSink {
                 break;
             }
             default:
-                throw new UserException("unsupported distributed type, type=" + distInfo.getType());
+                throw new StarRocksException("unsupported distributed type, type=" + distInfo.getType());
         }
         return distColumns;
     }
@@ -500,7 +500,7 @@ public class OlapTableSink extends DataSink {
                                                            TupleDescriptor tupleDescriptor,
                                                            boolean enableAutomaticPartition,
                                                            long automaticBucketSize,
-                                                           List<Long> partitionIds) throws UserException {
+                                                           List<Long> partitionIds) throws StarRocksException {
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
@@ -660,7 +660,7 @@ public class OlapTableSink extends DataSink {
                 break;
             }
             default: {
-                throw new UserException("unsupported partition for OlapTable, partition=" + partType);
+                throw new StarRocksException("unsupported partition for OlapTable, partition=" + partType);
             }
         }
         LOG.debug("partitionParam: {}", partitionParam);
@@ -736,14 +736,15 @@ public class OlapTableSink extends DataSink {
 
     private static DistributionInfo setDistributedColumns(TOlapTablePartitionParam partitionParam,
                                                           DistributionInfo selectedDistInfo,
-                                                          Partition partition, OlapTable table) throws UserException {
+                                                          Partition partition, OlapTable table) throws
+            StarRocksException {
         DistributionInfo distInfo = partition.getDistributionInfo();
         if (selectedDistInfo == null) {
             partitionParam.setDistributed_columns(getDistColumns(distInfo, table));
             return distInfo;
         } else {
             if (selectedDistInfo.getType() != distInfo.getType()) {
-                throw new UserException("different distribute types in two different partitions, type1="
+                throw new StarRocksException("different distribute types in two different partitions, type1="
                         + selectedDistInfo.getType() + ", type2=" + distInfo.getType());
             }
         }
@@ -751,7 +752,7 @@ public class OlapTableSink extends DataSink {
     }
 
     public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
-                                                         boolean enableReplicatedStorage) throws UserException {
+                                                         boolean enableReplicatedStorage) throws StarRocksException {
         return createLocation(table, partitionParam, enableReplicatedStorage,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
@@ -766,7 +767,7 @@ public class OlapTableSink extends DataSink {
 
     public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
                                                          boolean enableReplicatedStorage,
-                                                         long warehouseId) throws UserException {
+                                                         long warehouseId) throws StarRocksException {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
@@ -796,7 +797,7 @@ public class OlapTableSink extends DataSink {
                         Multimap<Replica, Long> bePathsMap =
                                 localTablet.getNormalReplicaBackendPathMap(infoService);
                         if (bePathsMap.keySet().size() < quorum) {
-                            throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+                            throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
                                     String.format("Tablet lost replicas. Check if any backend is down or not. " +
                                                     "tablet_id: %s, replicas: %s. Check quorum number failed" +
                                                     "(OlapTableSink): BeReplicaSize:%s, quorum:%s",

@@ -43,7 +43,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.PartitionUtil;
@@ -778,7 +778,7 @@ public class MvPartitionCompensator {
             Map<String, Range<PartitionKey>> refBaseTableRangeMap =
                     PartitionUtil.getPartitionKeyRange(partitionByTable, partitionColumn, mvPartitionExpr);
             refBaseTableRanges = refBaseTableRangeMap.values().stream().collect(Collectors.toList());
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Materialized view Optimizer compute partition range failed.", e);
             return Lists.newArrayList();
         }

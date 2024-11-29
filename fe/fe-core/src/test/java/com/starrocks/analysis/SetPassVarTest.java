@@ -38,7 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SetExecutor;
@@ -70,7 +70,7 @@ public class SetPassVarTest {
     }
 
     @Test
-    public void testNormal() throws UserException {
+    public void testNormal() throws StarRocksException {
         SetPassVar stmt;
 
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';

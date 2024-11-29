@@ -15,7 +15,7 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.common.Reference;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
@@ -169,7 +169,7 @@ public class GetNextTest extends SchedulerTestBase {
 
         fetchDataResultStatusCode.setRef(TStatusCode.INTERNAL_ERROR);
         scheduler = startScheduling(sql);
-        Assert.assertThrows("Internal_error", UserException.class, scheduler::getNext);
+        Assert.assertThrows("Internal_error", StarRocksException.class, scheduler::getNext);
 
         fetchDataResultStatusCode.setRef(TStatusCode.THRIFT_RPC_ERROR);
         scheduler = startScheduling(sql);
@@ -248,7 +248,7 @@ public class GetNextTest extends SchedulerTestBase {
 
         scheduler.cancel("Cancelled");
 
-        Assert.assertThrows("Cancelled", UserException.class, scheduler::getNext);
+        Assert.assertThrows("Cancelled", StarRocksException.class, scheduler::getNext);
 
         Assert.assertFalse(scheduler.isDone());
         Assert.assertTrue(scheduler.getExecStatus().isCancelled());

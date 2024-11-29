@@ -20,7 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
@@ -339,10 +339,10 @@ public class PipeManagerTest {
             private int count = 0;
 
             @Mock
-            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws UserException {
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws StarRocksException {
                 count++;
                 if (count <= errorCount) {
-                    throw new UserException("network connection error");
+                    throw new StarRocksException("network connection error");
                 } else {
                     List<FileStatus> res = new ArrayList<>();
                     res.add(new FileStatus(1024, false, 1, 1, 1, new Path("file1")));

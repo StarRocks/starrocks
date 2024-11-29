@@ -15,12 +15,12 @@
 package com.starrocks.common.util;
 
 import com.starrocks.common.NoAliveBackendException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 
 public class AutoInferUtil {
-    public static int calDefaultReplicationNum() throws UserException {
+    public static int calDefaultReplicationNum() throws StarRocksException {
         if (RunMode.isSharedDataMode()) {
             return 1;
         }

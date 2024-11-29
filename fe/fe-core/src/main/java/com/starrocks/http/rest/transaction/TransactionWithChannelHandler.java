@@ -15,7 +15,7 @@
 package com.starrocks.http.rest.transaction;
 
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.TransactionResult;
@@ -41,7 +41,7 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
     }
 
     @Override
-    public ResultWrapper handle(BaseRequest request, BaseResponse response) throws UserException {
+    public ResultWrapper handle(BaseRequest request, BaseResponse response) throws StarRocksException {
         TransactionOperation txnOperation = txnOperationParams.getTxnOperation();
         String dbName = txnOperationParams.getDbName();
         String tableName = txnOperationParams.getTableName();
@@ -84,7 +84,7 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                 }
                 return new ResultWrapper(redirectAddr);
             default:
-                throw new UserException("Unsupported operation: " + txnOperation);
+                throw new StarRocksException("Unsupported operation: " + txnOperation);
         }
     }
 }

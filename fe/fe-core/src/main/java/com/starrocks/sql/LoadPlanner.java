@@ -38,7 +38,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
@@ -267,7 +267,7 @@ public class LoadPlanner {
         this.jsonOptions = options;
     }
 
-    public void plan() throws UserException {
+    public void plan() throws StarRocksException {
         // 1. Generate tuple descriptor
         OlapTable olapDestTable = (OlapTable) destTable;
         List<Column> destColumns = Lists.newArrayList();
@@ -386,7 +386,7 @@ public class LoadPlanner {
         Collections.reverse(fragments);
     }
 
-    private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws UserException {
+    private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws StarRocksException {
         this.tupleDesc = descTable.createTupleDescriptor("DestTableTupleDescriptor");
         // Add column slotDesc for dest table
         for (Column col : destColumns) {
@@ -416,7 +416,7 @@ public class LoadPlanner {
         descTable.computeMemLayout();
     }
 
-    private ScanNode prepareScanNodes() throws UserException {
+    private ScanNode prepareScanNodes() throws StarRocksException {
         ScanNode scanNode = null;
         if (this.etlJobType == EtlJobType.BROKER) {
             FileScanNode fileScanNode = new FileScanNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
@@ -467,7 +467,8 @@ public class LoadPlanner {
     }
 
     private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds,
-                                     boolean completeTabletSink, boolean forceReplicatedStorage) throws UserException {
+                                     boolean completeTabletSink, boolean forceReplicatedStorage) throws
+            StarRocksException {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
@@ -506,7 +507,7 @@ public class LoadPlanner {
         sinkFragment.setLoadGlobalDicts(globalDicts);
     }
 
-    public void completeTableSink(long txnId) throws AnalysisException, UserException {
+    public void completeTableSink(long txnId) throws AnalysisException, StarRocksException {
         if (destTable instanceof OlapTable) {
             OlapTableSink dataSink = (OlapTableSink) fragments.get(0).getSink();
             dataSink.init(loadId, txnId, dbId, timeoutS);

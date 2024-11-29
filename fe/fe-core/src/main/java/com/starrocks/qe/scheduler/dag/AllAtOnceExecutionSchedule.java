@@ -14,7 +14,7 @@
 
 package com.starrocks.qe.scheduler.dag;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
@@ -38,7 +38,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
     }
 
     @Override
-    public void schedule() throws RpcException, UserException {
+    public void schedule() throws RpcException, StarRocksException {
         List<DeployState> states = new ArrayList<>();
         for (List<ExecutionFragment> executionFragments : dag.getFragmentsInTopologicalOrderFromRoot()) {
             final DeployState deployState = deployer.createFragmentExecStates(executionFragments);

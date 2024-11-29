@@ -24,7 +24,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
@@ -122,7 +122,7 @@ public class DeletePlanner {
             try {
                 olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(), session.getExecTimeout());
                 olapTableSink.complete();
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new SemanticException(e.getMessage());
             }
 

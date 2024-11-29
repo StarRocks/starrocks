@@ -22,7 +22,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -105,7 +105,7 @@ public class ListPartitionInfoTest {
     }
 
     @Test
-    public void testMultiListPartition(@Injectable OlapTable dstTable) throws UserException {
+    public void testMultiListPartition(@Injectable OlapTable dstTable) throws StarRocksException {
 
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");

@@ -46,7 +46,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
@@ -283,7 +283,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt) throws UserException {
+    public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt) throws StarRocksException {
         RoutineLoadJob routineLoadJob = null;
         LoadDataSourceType type = LoadDataSourceType.valueOf(createRoutineLoadStmt.getTypeName());
         switch (type) {
@@ -294,7 +294,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 routineLoadJob = PulsarRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
                 break;
             default:
-                throw new UserException("Unknown data source type: " + type);
+                throw new StarRocksException("Unknown data source type: " + type);
         }
 
         routineLoadJob.setOrigStmt(createRoutineLoadStmt.getOrigStmt());
@@ -406,7 +406,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public void pauseRoutineLoadJob(PauseRoutineLoadStmt pauseRoutineLoadStmt)
-            throws UserException {
+            throws StarRocksException {
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(pauseRoutineLoadStmt.getDbFullName(),
                 pauseRoutineLoadStmt.getName());
 
@@ -419,7 +419,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 "routine load job has been paused by user").build());
     }
 
-    public void resumeRoutineLoadJob(ResumeRoutineLoadStmt resumeRoutineLoadStmt) throws UserException {
+    public void resumeRoutineLoadJob(ResumeRoutineLoadStmt resumeRoutineLoadStmt) throws StarRocksException {
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(resumeRoutineLoadStmt.getDbFullName(),
                 resumeRoutineLoadStmt.getName());
 
@@ -436,7 +436,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public void stopRoutineLoadJob(StopRoutineLoadStmt stopRoutineLoadStmt)
-            throws UserException {
+            throws StarRocksException {
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(stopRoutineLoadStmt.getDbFullName(),
                 stopRoutineLoadStmt.getName());
         routineLoadJob.updateState(RoutineLoadJob.JobState.STOPPED,
@@ -667,7 +667,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         warehouseLoadStatusInfoBuilder.withRemovedJob(routineLoadJob);
     }
 
-    public void updateRoutineLoadJob() throws UserException {
+    public void updateRoutineLoadJob() throws StarRocksException {
         readLock();
         try {
             for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
@@ -691,7 +691,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         RoutineLoadJob job = getJob(operation.getId());
         try {
             job.updateState(operation.getJobState(), null, true /* is replay */);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.error("should not happened", e);
         }
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, operation.getId())
@@ -720,7 +720,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     /**
      * Enter of altering a routine load job
      */
-    public void alterRoutineLoadJob(AlterRoutineLoadStmt stmt) throws UserException {
+    public void alterRoutineLoadJob(AlterRoutineLoadStmt stmt) throws StarRocksException {
         RoutineLoadJob job = checkPrivAndGetJob(stmt.getDbName(), stmt.getLabel());
         if (job.getState() != RoutineLoadJob.JobState.PAUSED) {
             throw new DdlException("Only supports modification of PAUSED jobs");
@@ -733,7 +733,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 stmt.getDataSourceProperties(), stmt.getOrigStmt(), false);
     }
 
-    public void replayAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) throws UserException, IOException {
+    public void replayAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) throws StarRocksException, IOException {
         RoutineLoadJob job = getJob(log.getJobId());
         Preconditions.checkNotNull(job, log.getJobId());
 

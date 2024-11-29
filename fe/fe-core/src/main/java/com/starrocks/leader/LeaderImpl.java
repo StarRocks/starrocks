@@ -75,7 +75,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -1311,7 +1311,7 @@ public class LeaderImpl {
                 response.setStatus(status);
                 return response;
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("commit remote txn failed, txn_id: {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));

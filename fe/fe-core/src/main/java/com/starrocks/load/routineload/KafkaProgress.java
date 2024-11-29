@@ -42,7 +42,7 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -156,7 +156,7 @@ public class KafkaProgress extends RoutineLoadProgress {
 
     // convert offset of OFFSET_END and OFFSET_BEGINNING to current offset number
     public void convertOffset(String brokerList, String topic, Map<String, String> properties, long warehouseId)
-            throws UserException {
+            throws StarRocksException {
         List<Integer> beginningPartitions = Lists.newArrayList();
         List<Integer> endPartitions = Lists.newArrayList();
         for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {

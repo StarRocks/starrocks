@@ -14,7 +14,7 @@
 
 package com.starrocks.http.rest.transaction;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.TransactionResult;
@@ -28,7 +28,7 @@ public interface TransactionOperationHandler {
     /**
      * Handle transaction management request.
      */
-    ResultWrapper handle(BaseRequest request, BaseResponse response) throws UserException;
+    ResultWrapper handle(BaseRequest request, BaseResponse response) throws StarRocksException;
 
     class ResultWrapper {
 

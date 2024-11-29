@@ -108,7 +108,7 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -2719,7 +2719,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * including SchemaChangeHandler and RollupHandler
      */
     @Override
-    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         AlterJobExecutor alterJobExecutor = new AlterJobExecutor();
         alterJobExecutor.process(stmt, context);
     }
@@ -2728,7 +2728,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * used for handling AlterViewStmt (the ALTER VIEW command).
      */
     @Override
-    public void alterView(AlterViewStmt stmt) throws UserException {
+    public void alterView(AlterViewStmt stmt) throws StarRocksException {
         new AlterJobExecutor().process(stmt, ConnectContext.get());
     }
 
@@ -4184,7 +4184,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // init here in case the stmt string from view.toSql() has some syntax error.
             try {
                 view.init();
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new DdlException("failed to init view stmt", e);
             }
 

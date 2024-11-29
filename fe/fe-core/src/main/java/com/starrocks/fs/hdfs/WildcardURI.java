@@ -17,7 +17,7 @@
 
 package com.starrocks.fs.hdfs;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,7 +43,7 @@ public class WildcardURI {
 
     private URI uri;
 
-    public WildcardURI(String path) throws UserException {
+    public WildcardURI(String path) throws StarRocksException {
         try {
             // 1. call URLEncoder.encode to encode all special character, like /, *, [, %
             // 2. recover the : and /
@@ -55,7 +55,7 @@ public class WildcardURI {
             uri.normalize();
         } catch (UnsupportedEncodingException | URISyntaxException e) {
             LOG.warn("failed to encoded uri: " + path, e);
-            throw new UserException("invalid input path {} " + path);
+            throw new StarRocksException("invalid input path {} " + path);
         }
     }
 

@@ -33,7 +33,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.FileScanNode;
@@ -133,7 +133,7 @@ public class LoadPlannerTest {
 
     @Test
     public void testParallelInstance(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
-                                     @Injectable Database db, @Injectable OlapTable table) throws UserException {
+                                     @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, true);
@@ -1168,7 +1168,7 @@ public class LoadPlannerTest {
 
     @Test
     public void testLoadLocalFile(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
-                                  @Injectable Database db, @Injectable OlapTable table) throws UserException {
+                                  @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, true);

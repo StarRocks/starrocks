@@ -25,7 +25,7 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.ColocatedBackendSelector;
@@ -198,7 +198,7 @@ public class DefaultSharedDataWorkerProviderTest {
     }
 
     @Test
-    public void testSelectWorker() throws UserException {
+    public void testSelectWorker() throws StarRocksException {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
@@ -242,7 +242,7 @@ public class DefaultSharedDataWorkerProviderTest {
 
     private static void testSelectNextWorkerHelper(WorkerProvider workerProvider,
                                                    Map<Long, ComputeNode> id2Worker)
-            throws UserException {
+            throws StarRocksException {
         Set<Long> selectedWorkers = new HashSet<>(id2Worker.size());
         for (int i = 0; i < id2Worker.size(); i++) {
             long workerId = workerProvider.selectNextWorker();
@@ -253,7 +253,7 @@ public class DefaultSharedDataWorkerProviderTest {
     }
 
     @Test
-    public void testSelectNextWorker() throws UserException {
+    public void testSelectNextWorker() throws StarRocksException {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
         blockList.hostBlacklist.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();

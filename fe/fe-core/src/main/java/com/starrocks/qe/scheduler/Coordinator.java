@@ -15,8 +15,8 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.planner.PlanFragment;
@@ -132,7 +132,7 @@ public abstract class Coordinator {
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
 
     public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
-            throws UserException {
+            throws StarRocksException {
         return List.of();
     }
 

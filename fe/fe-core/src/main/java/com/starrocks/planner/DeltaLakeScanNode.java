@@ -20,7 +20,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -103,7 +103,7 @@ public class DeltaLakeScanNode extends ScanNode {
     }
 
     public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames, boolean enableIncrementalScanRanges)
-            throws UserException {
+            throws StarRocksException {
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
         Engine engine = deltaLakeTable.getDeltaEngine();

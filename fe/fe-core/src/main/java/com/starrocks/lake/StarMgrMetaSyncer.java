@@ -28,7 +28,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -105,7 +105,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
-            } catch (UserException ignored1) {
+            } catch (StarRocksException ignored1) {
                 // ignore error
             }
         }

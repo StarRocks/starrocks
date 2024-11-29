@@ -15,7 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
@@ -136,9 +136,9 @@ public class TransactionStateBatch implements Writable {
         return transactionStates.size();
     }
 
-    public TransactionState index(int index) throws UserException {
+    public TransactionState index(int index) throws StarRocksException {
         if (index < 0 || index >= transactionStates.size()) {
-            throw new UserException("index out of bound");
+            throw new StarRocksException("index out of bound");
         }
         return transactionStates.get(index);
     }

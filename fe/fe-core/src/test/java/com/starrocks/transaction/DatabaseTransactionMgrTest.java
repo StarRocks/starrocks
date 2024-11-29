@@ -47,7 +47,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -91,7 +91,7 @@ public class DatabaseTransactionMgrTest {
 
     @Before
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
-            InvocationTargetException, NoSuchMethodException, SecurityException, UserException {
+            InvocationTargetException, NoSuchMethodException, SecurityException, StarRocksException {
         Config.label_keep_max_second = 10;
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
@@ -106,7 +106,7 @@ public class DatabaseTransactionMgrTest {
         lableToTxnId = addTransactionToTransactionMgr();
     }
 
-    public void prepareCommittedTransaction() throws UserException {
+    public void prepareCommittedTransaction() throws StarRocksException {
         long transactionId1 = masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
                         Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
@@ -134,7 +134,7 @@ public class DatabaseTransactionMgrTest {
 
     }
 
-    public Map<String, Long> addTransactionToTransactionMgr() throws UserException {
+    public Map<String, Long> addTransactionToTransactionMgr() throws StarRocksException {
         TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
         Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveTxnId());
         Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
@@ -266,7 +266,7 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
-    public void testNormal() throws UserException {
+    public void testNormal() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         assertEquals(8, masterDbTransMgr.getTransactionNum());
@@ -304,18 +304,18 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
-    public void testAbortTransactionWithAttachment() throws UserException {
+    public void testAbortTransactionWithAttachment() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
-        expectedEx.expect(UserException.class);
+        expectedEx.expect(StarRocksException.class);
         expectedEx.expectMessage("transaction not found");
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment();
         masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", txnCommitAttachment);
     }
 
     @Test
-    public void testAbortTransaction() throws UserException {
+    public void testAbortTransaction() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
@@ -337,7 +337,7 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
-    public void testFinishTransactionTableRemove() throws UserException {
+    public void testFinishTransactionTableRemove() throws StarRocksException {
         prepareCommittedTransaction();
         new MockUp<Database>() {
             @Mock
@@ -356,7 +356,7 @@ public class DatabaseTransactionMgrTest {
 
 
     @Test
-    public void testFinishTransactionPartitionRemove() throws UserException {
+    public void testFinishTransactionPartitionRemove() throws StarRocksException {
         prepareCommittedTransaction();
         new MockUp<OlapTable>() {
             @Mock
@@ -373,18 +373,18 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
     }
     @Test
-    public void testAbortTransactionWithNotFoundException() throws UserException {
+    public void testAbortTransactionWithNotFoundException() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
         long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
-        expectedEx.expect(UserException.class);
+        expectedEx.expect(StarRocksException.class);
         expectedEx.expectMessage("transaction not found");
         masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", null);
     }
 
     @Test
-    public void testGetTransactionIdByCoordinateBe() throws UserException {
+    public void testGetTransactionIdByCoordinateBe() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         List<Pair<Long, Long>> transactionInfoList = masterDbTransMgr.getTransactionIdByCoordinateBe("be1", 10);
@@ -515,7 +515,7 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
-    public void testFinishTransactionBatch() throws UserException {
+    public void testFinishTransactionBatch() throws StarRocksException {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
@@ -551,7 +551,7 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
-    public void testPublishVersionMissing() throws UserException {
+    public void testPublishVersionMissing() throws StarRocksException {
         TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);

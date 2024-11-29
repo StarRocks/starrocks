@@ -41,7 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
@@ -253,7 +253,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                             new ErrorReason(InternalErrorCode.META_NOT_FOUND_ERR, "meta not found: " + e.getMessage()),
                             false);
             throw e;
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             releaseBeSlot(routineLoadTaskInfo);
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
                     .updateState(JobState.PAUSED,

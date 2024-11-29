@@ -40,8 +40,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -102,18 +102,18 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
-    public void registerQuery(TUniqueId queryId, Coordinator coord) throws UserException {
+    public void registerQuery(TUniqueId queryId, Coordinator coord) throws StarRocksException {
         registerQuery(queryId, new QueryInfo(coord));
     }
 
     @Override
-    public void registerQuery(TUniqueId queryId, QueryInfo info) throws UserException {
+    public void registerQuery(TUniqueId queryId, QueryInfo info) throws StarRocksException {
         if (needLogRegisterAndUnregisterQueryId(info)) {
             LOG.info("register query id = {}", DebugUtil.printId(queryId));
         }
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
         if (result != null) {
-            throw new UserException("queryId " + queryId + " already exists");
+            throw new StarRocksException("queryId " + queryId + " already exists");
         }
         scanMonitorQueries();
     }

@@ -15,7 +15,7 @@
 
 package com.starrocks.lake;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
@@ -53,15 +53,15 @@ public class UtilsTest {
 
         new MockUp<LakeTablet>() {
             @Mock
-            public long getPrimaryComputeNodeId(long clusterId) throws UserException {
-                throw new UserException("Failed to get primary backend");
+            public long getPrimaryComputeNodeId(long clusterId) throws StarRocksException {
+                throw new StarRocksException("Failed to get primary backend");
             }
         };
 
         new MockUp<NodeSelector>() {
             @Mock
-            public Long seqChooseBackendOrComputeId() throws UserException {
-                throw new UserException("No backend or compute node alive.");
+            public Long seqChooseBackendOrComputeId() throws StarRocksException {
+                throw new StarRocksException("No backend or compute node alive.");
             }
         };
     }

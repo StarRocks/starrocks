@@ -15,7 +15,7 @@
 package com.starrocks.datacache;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -70,7 +70,7 @@ public class DataCacheSelectExecutor {
 
         if (connectContext.getState().isError()) {
             // throw exception if StmtExecutor execute failed
-            throw new UserException(connectContext.getState().getErrorMessage());
+            throw new StarRocksException(connectContext.getState().getErrorMessage());
         }
 
         DataCacheSelectMetrics metrics = null;

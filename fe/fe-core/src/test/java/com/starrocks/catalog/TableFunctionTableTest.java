@@ -17,7 +17,7 @@ package com.starrocks.catalog;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.qe.SqlModeHelper;
@@ -194,7 +194,8 @@ public class TableFunctionTableTest {
     public void testNoFilesFound() throws DdlException {
         new MockUp<HdfsUtil>() {
             @Mock
-            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
+            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws
+                    StarRocksException {
             }
         };
 
@@ -241,7 +242,8 @@ public class TableFunctionTableTest {
     public void testIllegalCSVTrimSpace() throws DdlException {
         new MockUp<HdfsUtil>() {
             @Mock
-            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
+            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws
+                    StarRocksException {
             }
         };
 

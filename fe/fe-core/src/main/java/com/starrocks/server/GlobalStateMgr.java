@@ -86,8 +86,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
@@ -1300,7 +1300,7 @@ public class GlobalStateMgr {
                                 LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
             LOG.warn("transfer to leader failed with error", t);

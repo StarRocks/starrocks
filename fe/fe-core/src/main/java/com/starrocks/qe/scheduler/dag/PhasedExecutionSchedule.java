@@ -18,7 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.qe.ConnectContext;
@@ -200,7 +200,7 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     }
 
     // schedule next
-    public void schedule() throws RpcException, UserException {
+    public void schedule() throws RpcException, StarRocksException {
         buildDeployStates();
         final int oldTaskCnt = inputScheduleTaskNums.getAndIncrement();
         if (oldTaskCnt == 0) {
@@ -212,7 +212,7 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         }
     }
 
-    private void doDeploy() throws RpcException, UserException {
+    private void doDeploy() throws RpcException, StarRocksException {
         if (deployStates.isEmpty()) {
             return;
         }
@@ -233,7 +233,7 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         }
     }
 
-    public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, UserException {
+    public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException {
         final FragmentInstance instance = dag.getInstanceByInstanceId(fragmentInstanceId);
         final PlanFragmentId fragmentId = instance.getFragmentId();
         final AtomicInteger countDowns = schedulingFragmentInstances.get(fragmentId);

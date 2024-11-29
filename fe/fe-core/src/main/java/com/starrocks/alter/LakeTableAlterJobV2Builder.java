@@ -25,7 +25,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,7 +48,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     }
 
     @Override
-    public AlterJobV2 build() throws UserException {
+    public AlterJobV2 build() throws StarRocksException {
         if (newIndexSchema.isEmpty() && !hasIndexChanged) {
             throw new DdlException("Nothing is changed. please check your alter stmt.");
         }

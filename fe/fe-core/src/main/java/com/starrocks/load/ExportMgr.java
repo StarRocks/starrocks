@@ -45,7 +45,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
@@ -154,7 +154,7 @@ public class ExportMgr implements MemoryTrackable {
         return matchedJob;
     }
 
-    public void cancelExportJob(CancelExportStmt stmt) throws UserException {
+    public void cancelExportJob(CancelExportStmt stmt) throws StarRocksException {
         ExportJob matchedJob = getExportJob(stmt.getDbName(), stmt.getQueryId());
         UUID queryId = stmt.getQueryId();
         if (matchedJob == null) {

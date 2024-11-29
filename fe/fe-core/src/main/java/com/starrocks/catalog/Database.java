@@ -48,7 +48,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
@@ -606,11 +606,12 @@ public class Database extends MetaObject implements Writable {
         return catalogName;
     }
 
-    public synchronized void addFunction(Function function) throws UserException {
+    public synchronized void addFunction(Function function) throws StarRocksException {
         addFunction(function, false, false);
     }
 
-    public synchronized void addFunction(Function function, boolean allowExists, boolean createIfNotExists) throws UserException {
+    public synchronized void addFunction(Function function, boolean allowExists, boolean createIfNotExists) throws
+            StarRocksException {
         addFunctionImpl(function, false, allowExists, createIfNotExists);
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(function);
     }
@@ -618,7 +619,7 @@ public class Database extends MetaObject implements Writable {
     public synchronized void replayAddFunction(Function function) {
         try {
             addFunctionImpl(function, true, false, false);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Preconditions.checkArgument(false);
         }
     }
@@ -633,12 +634,12 @@ public class Database extends MetaObject implements Writable {
     }
 
     private void addFunctionImpl(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists)
-            throws UserException {
+            throws StarRocksException {
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
         if (allowExists && createIfNotExists) {
             // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are now allowed to use together
-            throw new UserException(
+            throw new StarRocksException(
                     "\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together in the same CREATE statement");
         }
         if (!isReplay) {
@@ -648,7 +649,7 @@ public class Database extends MetaObject implements Writable {
                         LOG.info("create function [{}] which already exists", functionName);
                         return;
                     } else if (!allowExists) {
-                        throw new UserException("function already exists");
+                        throw new StarRocksException("function already exists");
                     }
                 }
             }
@@ -657,7 +658,7 @@ public class Database extends MetaObject implements Writable {
         name2Function.put(functionName, GlobalFunctionMgr.addOrReplaceFunction(function, existFuncs));
     }
 
-    public synchronized void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
+    public synchronized void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
         dropFunctionImpl(function, dropIfExists);
         GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(function);
     }
@@ -667,14 +668,14 @@ public class Database extends MetaObject implements Writable {
                                                            function.hasVarArgs());
         try {
             dropFunctionImpl(fnDesc, true);
-        } catch (UserException ignore) {
+        } catch (StarRocksException ignore) {
         }
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc functionSearchDesc) {
         try {
             dropFunctionImpl(functionSearchDesc, false);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Preconditions.checkArgument(false);
         }
     }
@@ -704,7 +705,7 @@ public class Database extends MetaObject implements Writable {
         return func;
     }
 
-    private void dropFunctionImpl(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
+    private void dropFunctionImpl(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
         if (existFuncs == null) {
@@ -712,7 +713,7 @@ public class Database extends MetaObject implements Writable {
                 LOG.info("drop function [{}] which does not exist", functionName);
                 return;
             }
-            throw new UserException("Unknown function, function=" + function.toString());
+            throw new StarRocksException("Unknown function, function=" + function.toString());
         }
         boolean isFound = false;
         List<Function> newFunctions = new ArrayList<>();
@@ -728,7 +729,7 @@ public class Database extends MetaObject implements Writable {
                 LOG.info("drop function [{}] which does not exist", functionName);
                 return;
             }
-            throw new UserException("Unknown function, function=" + function.toString());
+            throw new StarRocksException("Unknown function, function=" + function.toString());
         }
         if (newFunctions.isEmpty()) {
             name2Function.remove(functionName);

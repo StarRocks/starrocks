@@ -37,7 +37,7 @@ package com.starrocks.common;
 /**
  * Thrown for authorization errors encountered when accessing GlobalStateMgr objects.
  */
-public class AuthenticationException extends UserException {
+public class AuthenticationException extends StarRocksException {
     public AuthenticationException(String msg, Throwable cause) {
         super(msg, cause);
     }

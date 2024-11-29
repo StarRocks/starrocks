@@ -24,7 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
@@ -77,7 +77,7 @@ public class WarehouseManagerTest {
     }
 
     @Test
-    public void testGetAliveComputeNodes() throws UserException {
+    public void testGetAliveComputeNodes() throws StarRocksException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public NodeMgr getNodeMgr() {
@@ -125,7 +125,7 @@ public class WarehouseManagerTest {
     }
 
     @Test
-    public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws UserException {
+    public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws StarRocksException {
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(true);
@@ -159,7 +159,7 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
                 if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -202,7 +202,7 @@ public class WarehouseManagerTest {
     }
 
     @Test
-    public void testSelectWorkerGroupByWarehouseId_hasNoAliveNodes() throws UserException {
+    public void testSelectWorkerGroupByWarehouseId_hasNoAliveNodes() throws StarRocksException {
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(false);
@@ -236,7 +236,7 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
                 if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -286,7 +286,7 @@ public class WarehouseManagerTest {
 
     @Test
     public void testSelectWorkerGroupByWarehouseId_checkAliveNodesOnce(@Mocked WarehouseManager mockWarehouseMgr)
-            throws UserException {
+            throws StarRocksException {
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(false);
@@ -308,7 +308,7 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
                 if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }

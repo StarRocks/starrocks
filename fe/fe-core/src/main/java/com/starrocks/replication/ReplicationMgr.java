@@ -19,7 +19,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -63,7 +63,7 @@ public class ReplicationMgr extends FrontendDaemon {
         clearExpiredJobs();
     }
 
-    public void addReplicationJob(TTableReplicationRequest request) throws UserException {
+    public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
         ReplicationJob job = new ReplicationJob(request);
         addReplicationJob(job);
     }

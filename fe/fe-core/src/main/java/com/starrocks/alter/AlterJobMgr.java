@@ -56,7 +56,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -525,7 +525,7 @@ public class AlterJobMgr {
             view.setInlineViewDefWithSqlMode(inlineViewDef, alterViewInfo.getSqlMode());
             try {
                 view.init();
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new AlterJobException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);

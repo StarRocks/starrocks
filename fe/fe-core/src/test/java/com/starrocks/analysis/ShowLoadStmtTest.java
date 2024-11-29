@@ -36,7 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -84,7 +84,7 @@ public class ShowLoadStmtTest {
     }
 
     @Test
-    public void testNoDb() throws UserException, AnalysisException {
+    public void testNoDb() throws StarRocksException, AnalysisException {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase(null);
         analyzeFail("SHOW LOAD", "No database selected");
     }
@@ -109,7 +109,7 @@ public class ShowLoadStmtTest {
     }
 
     @Test
-    public void testWhere() throws UserException, AnalysisException {
+    public void testWhere() throws StarRocksException, AnalysisException {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         ShowLoadStmt stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM `testCluster:testDb` WHERE `label` = 'abc' LIMIT 10");
         Assert.assertEquals(10, stmt.getLimit());

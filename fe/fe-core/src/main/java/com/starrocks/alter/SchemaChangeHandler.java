@@ -82,7 +82,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.WriteQuorum;
@@ -159,7 +159,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private AlterJobV2 createOptimizeTableJob(
             OptimizeClause optimizeClause, Database db, OlapTable olapTable, Map<String, String> propertyMap)
-            throws UserException {
+            throws StarRocksException {
         if (olapTable.getState() != OlapTableState.NORMAL) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is not in NORMAL state");
         }
@@ -1316,7 +1316,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                           Map<Long, LinkedList<Column>> indexSchemaMap,
                                           Map<String, String> propertyMap,
                                           List<Index> indexes,
-                                          Set<String> modifyFieldColumns) throws UserException {
+                                          Set<String> modifyFieldColumns) throws StarRocksException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -1700,7 +1700,8 @@ public class SchemaChangeHandler extends AlterHandler {
     private AlterJobV2 createJobForProcessModifySortKeyColumn(long dbId, OlapTable olapTable,
                                                               Map<Long, LinkedList<Column>> indexSchemaMap,
                                                               List<Integer> sortKeyIdxes,
-                                                              List<Integer> sortKeyUniqueIds) throws UserException {
+                                                              List<Integer> sortKeyUniqueIds) throws
+            StarRocksException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -1814,7 +1815,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
     @VisibleForTesting
     @Nullable
-    public AlterJobV2 analyzeAndCreateJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable) throws UserException {
+    public AlterJobV2 analyzeAndCreateJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable) throws
+            StarRocksException {
         //alterClauses can or cannot light schema change
         if (olapTable == null) {
             throw new DdlException("olapTable is null");
@@ -2025,7 +2027,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
     @Override
     public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
-            throws UserException {
+            throws StarRocksException {
         AlterJobV2 schemaChangeJob = analyzeAndCreateJob(alterClauses, db, olapTable);
         if (schemaChangeJob == null) {
             return null;
@@ -2048,7 +2050,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     public AlterJobV2 createAlterMetaJob(AlterClause alterClause, Database db, OlapTable olapTable)
-            throws UserException {
+            throws StarRocksException {
         LakeTableAlterMetaJob alterMetaJob;
         if (alterClause instanceof ModifyTablePropertiesClause) {
             Map<String, String> properties = ((ModifyTablePropertiesClause) alterClause).getProperties();
@@ -2111,7 +2113,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     public ShowResultSet processLakeTableAlterMeta(AlterClause alterClause, Database db, OlapTable olapTable)
-            throws UserException {
+            throws StarRocksException {
         AlterJobV2 alterMetaJob = createAlterMetaJob(alterClause, db, olapTable);
         if (alterMetaJob == null) {
             return null;
@@ -2669,7 +2671,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processAddIndex(CreateIndexClause alterClause, OlapTable olapTable, List<Index> newIndexes)
-            throws UserException {
+            throws StarRocksException {
         Index newIndex = alterClause.getIndex();
         if (newIndex == null) {
             return;
@@ -2932,7 +2934,7 @@ public class SchemaChangeHandler extends AlterHandler {
         return job;
     }
 
-    private AlterJobV2 createJob(@NotNull SchemaChangeData schemaChangeData) throws UserException {
+    private AlterJobV2 createJob(@NotNull SchemaChangeData schemaChangeData) throws StarRocksException {
         AlterJobV2Builder jobBuilder = schemaChangeData.getTable().alterTable();
         return jobBuilder.withJobId(GlobalStateMgr.getCurrentState().getNextId())
                 .withDbId(schemaChangeData.getDatabase().getId())

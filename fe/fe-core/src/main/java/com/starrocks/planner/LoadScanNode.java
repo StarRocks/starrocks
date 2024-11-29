@@ -44,7 +44,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 
 import java.util.List;
@@ -56,7 +56,7 @@ public abstract class LoadScanNode extends ScanNode {
         super(id, desc, planNodeName);
     }
 
-    protected void initWhereExpr(Expr whereExpr, Analyzer analyzer) throws UserException {
+    protected void initWhereExpr(Expr whereExpr, Analyzer analyzer) throws StarRocksException {
         if (whereExpr == null) {
             return;
         }
@@ -73,7 +73,7 @@ public abstract class LoadScanNode extends ScanNode {
         for (SlotRef slot : slots) {
             SlotDescriptor slotDesc = dstDescMap.get(slot.getColumnName());
             if (slotDesc == null) {
-                throw new UserException("unknown column in where statement. "
+                throw new StarRocksException("unknown column in where statement. "
                         + "the column '" + slot.getColumnName() + "' in where clause must be in the target table.");
             }
             smap.getLhs().add(slot);
@@ -85,7 +85,7 @@ public abstract class LoadScanNode extends ScanNode {
         whereExpr = Expr.analyzeAndCastFold(whereExpr);
 
         if (!whereExpr.getType().isBoolean()) {
-            throw new UserException("where statement is not a valid statement return bool");
+            throw new StarRocksException("where statement is not a valid statement return bool");
         }
         addConjuncts(AnalyzerUtils.extractConjuncts(whereExpr));
     }

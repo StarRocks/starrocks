@@ -14,12 +14,8 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.alter.AlterJobV2;
-import com.starrocks.alter.OnlineOptimizeJobV2;
-import com.starrocks.alter.OptimizeJobV2;
-import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -31,7 +27,7 @@ import java.util.ArrayList;
 
 public class OptimizeJobV2BuilderTest {
     @Test
-    public void testBuildWithOptimizeClause() throws UserException {
+    public void testBuildWithOptimizeClause() throws StarRocksException {
         // Create a mock OlapTable
         OlapTable table = Mockito.mock(OlapTable.class);
         Mockito.when(table.getId()).thenReturn(123L);
@@ -60,7 +56,7 @@ public class OptimizeJobV2BuilderTest {
     }
 
     @Test
-    public void testBuildWithoutOptimizeClause() throws UserException {
+    public void testBuildWithoutOptimizeClause() throws StarRocksException {
         // Create a mock OlapTable
         OlapTable table = Mockito.mock(OlapTable.class);
         Mockito.when(table.getId()).thenReturn(123L);

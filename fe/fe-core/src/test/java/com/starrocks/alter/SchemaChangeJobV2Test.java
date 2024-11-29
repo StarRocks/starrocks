@@ -55,7 +55,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaVersionAndHash;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -331,7 +331,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     }
 
     public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue, String expectErrMsg)
-                throws UserException {
+                throws StarRocksException {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();
@@ -360,7 +360,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     }
 
     @Test
-    public void testModifyDynamicPartitionWithoutTableProperty() throws AlterJobException, UserException {
+    public void testModifyDynamicPartitionWithoutTableProperty() throws AlterJobException, StarRocksException {
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.ENABLE, "false",
                     "not a dynamic partition table");
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.TIME_UNIT, "day",

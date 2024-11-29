@@ -19,7 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
@@ -288,7 +288,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             anyString, anyString, anyString, anyString, anyString,
                             anyLong, anyInt, anyInt, (TransactionResult) any);
                     times = 1;
-                    result = new UserException("begin load task error");
+                    result = new StarRocksException("begin load task error");
                 }
             };
 
@@ -398,7 +398,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         public void prepareLoadTask(String label,
                                                     int channelId,
                                                     HttpHeaders headers,
-                                                    TransactionResult resp) throws UserException {
+                                                    TransactionResult resp) throws StarRocksException {
                             resp.setErrorMsg("prepare load task error");
                         }
 
@@ -430,7 +430,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         public void prepareLoadTask(String label,
                                                     int channelId,
                                                     HttpHeaders headers,
-                                                    TransactionResult resp) throws UserException {
+                                                    TransactionResult resp) throws StarRocksException {
                             resp.setOKMsg("");
                         }
 
@@ -438,7 +438,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     streamLoadMgr.tryPrepareLoadTaskTxn(anyString, (TransactionResult) any);
                     times = 1;
-                    result = new UserException("try prepare load task txn error");
+                    result = new StarRocksException("try prepare load task txn error");
                 }
             };
 
@@ -466,7 +466,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         public void prepareLoadTask(String label,
                                                     int channelId,
                                                     HttpHeaders headers,
-                                                    TransactionResult resp) throws UserException {
+                                                    TransactionResult resp) throws StarRocksException {
                             resp.setOKMsg("");
                         }
 
@@ -476,7 +476,8 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void tryPrepareLoadTaskTxn(String label, TransactionResult resp) throws UserException {
+                        public void tryPrepareLoadTaskTxn(String label, TransactionResult resp) throws
+                                StarRocksException {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -591,7 +592,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             (List<TabletFailInfo>) any,
                             (TxnCommitAttachment) any);
                     times = 1;
-                    result = new UserException("prepare transaction error");
+                    result = new StarRocksException("prepare transaction error");
 
                 }
             };
@@ -652,7 +653,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.commitLoadTask(anyString, (TransactionResult) any);
                     times = 1;
-                    result = new UserException("commit load task error");
+                    result = new StarRocksException("commit load task error");
                 }
             };
 
@@ -677,7 +678,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void commitLoadTask(String label, TransactionResult resp) throws UserException {
+                        public void commitLoadTask(String label, TransactionResult resp) throws StarRocksException {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -832,7 +833,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
                     times = 1;
-                    result = new UserException("commit prepared transaction error");
+                    result = new StarRocksException("commit prepared transaction error");
                 }
             };
 
@@ -982,7 +983,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
                     times = 1;
-                    result = new UserException("commit prepared transaction error");
+                    result = new StarRocksException("commit prepared transaction error");
                 }
             };
 
@@ -1119,7 +1120,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.rollbackLoadTask(anyString, (TransactionResult) any);
                     times = 1;
-                    result = new UserException("rollback load task error");
+                    result = new StarRocksException("rollback load task error");
                 }
             };
 
@@ -1144,7 +1145,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void rollbackLoadTask(String label, TransactionResult resp) throws UserException {
+                        public void rollbackLoadTask(String label, TransactionResult resp) throws StarRocksException {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -1299,7 +1300,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
                     times = 1;
-                    result = new UserException("abort transaction error");
+                    result = new StarRocksException("abort transaction error");
                 }
             };
 
@@ -1448,7 +1449,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString, (List<TabletFailInfo>) any);
                     times = 1;
-                    result = new UserException("abort transaction error");
+                    result = new StarRocksException("abort transaction error");
                 }
             };
 
@@ -1510,7 +1511,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                                 TransactionResult resp,
                                 String dbName,
                                 String tableName)
-                                throws UserException {
+                                throws StarRocksException {
                             resp.setErrorMsg("execute load task error");
                             return null;
                         }

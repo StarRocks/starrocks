@@ -18,7 +18,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
@@ -77,7 +77,7 @@ public class RoutineLoadJobMetaTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_auto");
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "rj", db.getId(), table.getId(), "", "");
 
-        Exception e = Assert.assertThrows(UserException.class,
+        Exception e = Assert.assertThrows(StarRocksException.class,
                 () -> routineLoadJob.plan(new TUniqueId(1, 2), 1, ""));
     }
 }

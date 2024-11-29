@@ -49,7 +49,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
@@ -144,7 +144,7 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testSinglePartition() throws UserException {
+    public void testSinglePartition() throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
@@ -177,7 +177,7 @@ public class OlapTableSinkTest {
     @Test
     public void testRangePartition(
             @Injectable RangePartitionInfo partInfo,
-            @Injectable MaterializedIndex index) throws UserException {
+            @Injectable MaterializedIndex index) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
 
         HashDistributionInfo distInfo = new HashDistributionInfo(
@@ -211,17 +211,17 @@ public class OlapTableSinkTest {
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         try {
             sink.complete();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
 
         }
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
 
-    @Test(expected = UserException.class)
+    @Test(expected = StarRocksException.class)
     public void testRangeUnknownPartition(
             @Injectable RangePartitionInfo partInfo,
-            @Injectable MaterializedIndex index) throws UserException {
+            @Injectable MaterializedIndex index) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
 
         long unknownPartId = 12345L;
@@ -421,7 +421,7 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testSingleListPartition() throws UserException {
+    public void testSingleListPartition() throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
                 Lists.newArrayList(new Column("province", Type.STRING)));
@@ -459,7 +459,7 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testImmutablePartition() throws UserException {
+    public void testImmutablePartition() throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
@@ -499,7 +499,7 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testInitialOpenPartition() throws UserException {
+    public void testInitialOpenPartition() throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
