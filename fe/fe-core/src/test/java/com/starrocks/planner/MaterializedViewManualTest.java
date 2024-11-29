@@ -252,8 +252,8 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "PARTITION BY ds \n" +
                 "DISTRIBUTED BY RANDOM \n" +
                 "AS SELECT \n" +
-                "count(distinct `order_id`) AS `order_num`, \n" +
-                "date_trunc('minute', `dt`) AS ds\n" +
+                "date_trunc('minute', `dt`) AS ds,\n" +
+                "bitmap_union(to_bitmap(`order_id`)) AS `order_num` \n" +
                 "FROM `test_partition_expr_tbl1`\n" +
                 "group by ds;";
         starRocksAssert.withMaterializedView(mv);
@@ -373,8 +373,8 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "PARTITION BY ds \n" +
                 "DISTRIBUTED BY RANDOM \n" +
                 "AS SELECT \n" +
-                "bitmap_union(to_bitmap(`order_id`)) AS `order_num`, \n" +
-                "date_trunc('hour', `dt`) AS ds\n" +
+                "date_trunc('hour', `dt`) AS ds,\n" +
+                "bitmap_union(to_bitmap(`order_id`)) AS `order_num` \n" +
                 "FROM `test_partition_expr_tbl1`\n" +
                 "group by ds;";
         starRocksAssert.withMaterializedView(mv);
@@ -430,8 +430,8 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "PARTITION BY ds \n" +
                 "DISTRIBUTED BY RANDOM \n" +
                 "AS SELECT \n" +
-                "bitmap_union(to_bitmap(`order_id`)) AS `order_num`, \n" +
-                "date_trunc('hour', `dt`) AS ds\n" +
+                "date_trunc('hour', `dt`) AS ds,\n" +
+                "bitmap_union(to_bitmap(`order_id`)) AS `order_num` \n" +
                 "FROM `test_partition_expr_tbl1`\n" +
                 "group by ds;";
         starRocksAssert.withMaterializedView(mv);
