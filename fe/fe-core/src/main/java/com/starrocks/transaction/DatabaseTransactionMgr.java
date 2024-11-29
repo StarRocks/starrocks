@@ -1206,6 +1206,7 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
+        resetTransactionStateTabletCommitInfos(transactionState);
         transactionState.notifyVisible();
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
@@ -1906,6 +1907,7 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
+        resetTransactionStateTabletCommitInfos(transactionState);
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
@@ -2065,6 +2067,15 @@ public class DatabaseTransactionMgr {
             return new ArrayList<>();
         } finally {
             readUnlock();
+        }
+    }
+
+    public void resetTransactionStateTabletCommitInfos(TransactionState transactionState) {
+        writeLock();
+        try {
+            transactionState.resetTabletCommitInfos();
+        } finally {
+            writeUnlock();
         }
     }
 }
