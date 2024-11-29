@@ -12,6 +12,8 @@ services:
       - DISABLE_VERSIONING='true'
       - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
       - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+    ports:
+        - 3000:3000
     volumes:
       - ../../en:/app/docusaurus/docs
       - ../../zh:/app/docusaurus/i18n/zh/docusaurus-plugin-content-docs/current
