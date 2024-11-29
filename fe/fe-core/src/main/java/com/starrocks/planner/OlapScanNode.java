@@ -84,6 +84,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.system.ComputeNode;
@@ -101,6 +102,7 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TTableSampleOptions;
 import com.starrocks.thrift.TVectorSearchOptions;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
@@ -182,6 +184,7 @@ public class OlapScanNode extends ScanNode {
     private List<List<LiteralExpr>> rowStoreKeyLiterals = Lists.newArrayList();
 
     private boolean usePkIndex = false;
+    private TableSampleClause sample;
 
     private long gtid = 0;
 
@@ -939,6 +942,10 @@ public class OlapScanNode extends ScanNode {
             output.append(prefix).append("Short Circuit Scan: true\n");
         }
 
+        if (sample != null) {
+            output.append(prefix).append(sample.explain()).append("\n");
+        }
+
         return output.toString();
     }
 
@@ -1104,6 +1111,11 @@ public class OlapScanNode extends ScanNode {
             }
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);
+            if (sample != null && sample.isUseSampling()) {
+                TTableSampleOptions sampleOptions = new TTableSampleOptions();
+                msg.olap_scan_node.setSample_options(sampleOptions);
+                sample.toThrift(sampleOptions);
+            }
         }
     }
 
@@ -1158,6 +1170,14 @@ public class OlapScanNode extends ScanNode {
 
     public void setUsePkIndex(boolean usePkIndex) {
         this.usePkIndex = usePkIndex;
+    }
+
+    public TableSampleClause getSample() {
+        return sample;
+    }
+
+    public void setSample(TableSampleClause sample) {
+        this.sample = sample;
     }
 
     @Override

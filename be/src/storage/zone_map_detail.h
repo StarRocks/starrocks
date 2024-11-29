@@ -27,13 +27,10 @@ public:
     ZoneMapDetail(const Datum& min_or_null_value, Datum max_value)
             : _has_null(min_or_null_value.is_null()),
               _min_value(min_or_null_value),
-              _max_value(std::move(std::move(max_value))),
+              _max_value(std::move(max_value)),
               _num_rows(0) {}
     ZoneMapDetail(Datum min_value, Datum max_value, bool has_null)
-            : _has_null(has_null),
-              _min_value(std::move(std::move(min_value))),
-              _max_value(std::move(std::move(max_value))),
-              _num_rows(0) {}
+            : _has_null(has_null), _min_value(std::move(min_value)), _max_value(std::move(max_value)), _num_rows(0) {}
 
     // methods
     bool has_null() const { return _has_null; }
@@ -48,6 +45,7 @@ public:
         return _min_value;
     }
     void set_num_rows(const size_t num_rows) { _num_rows = num_rows; }
+    // FIXME: it's not rows in the zone, but incorrectly set to the segment rows
     size_t num_rows() const { return _num_rows; }
 
 private:
