@@ -1,8 +1,8 @@
-# Generate PDFs from a Docusaurus v2 or v3 documentation site
+# Generate PDFs from the StarRocks Docusaurus documentation site
 
 Node.js code to:
-1. Generate the ordered list of URLs from documentation built with Docusaurus. This is done using code from [`docusaurus-prince-pdf`](https://github.com/signcl/docusaurus-prince-pdf)
-2. Open each page with [`puppeteer`](https://pptr.dev/) and save the content (without nav or the footer) as a PDF file
+1. Generate the ordered list of URLs from the documentation. This is done using code from [`docusaurus-prince-pdf`](https://github.com/signcl/docusaurus-prince-pdf).
+2. Convert each page to a PDF file with [`Gotenberg`](https://pptr.dev/).
 3. Combine the individual PDF files using [Ghostscript](https://www.ghostscript.com/) and [`pdfcombine`](https://github.com/tdegeus/pdfcombine.git).
 
 ## Onetime setup
@@ -11,62 +11,103 @@ Node.js code to:
 
 Clone this repo to your machine.
 
-### Node.js
+### The conversion environment
 
-Use Node.js version 21.
-
-### Puppeteer
-
-Add `puppeteer` and other dependencies by running this command in the repo directory
+The conversion process uses Docker Compose. Launch the environment by running the following command from the `starrocks/docs/docusaurus/PDF/` directory.
 
 ```bash
-yarn install
+docker compose up --detach --wait --wait-timeout 120 --build
 ```
 
-### pdfcombine
+> Tip
+>
+> All of the `docker compose` commands must be run from the `starrocks/docs/docusaurus/PDF/` directory.
 
-`pdfcombine` should be installed in a Python 3 virtual environment.
+Check the status:
 
-Setup the virtual environment from inside the `scrape-to-pdf` directory:
+> Tip
+>
+> If you do not have `jq` installed just run `docker compose ps`. The ouput using `jq` is easier to read, but you can get by with the more basic command.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+docker compose ps --format json | jq '{Service: .Service, State: .State, Status: .Status}'
 ```
 
-Install `pdfcombine`:
+Expected output:
 
 ```bash
-pip3 install pdfcombine
+{
+  "Service": "docusaurus",
+  "State": "running",
+  "Status": "Up 14 minutes"
+}
+{
+  "Service": "gotenberg",
+  "State": "running",
+  "Status": "Up 2 hours (healthy)"
+}
 ```
-
-### Install Ghostscript
-
-```bash
-brew install ghostscript
-```
-
-## Build your Docusaurus site and serve it
-
-It seems to be necessary to run `yarn serve` rather than ~`yarn start`~ to have `docusaurus-prince-pdf` crawl the pages.  I expect that there is a CSS class difference between development and production modes of Docusaurus.
-
-If you are using the Docker scripts from [StarRocks](https://github.com/StarRocks/starrocks/tree/main/docs/docusaurus/scripts) then run `./scripts/docker-image.sh && ./scripts/docker-build.sh`
 
 ## Get the URL of the "home" page
 
-Find the URL of the first page to crawl. It needs to be the landing, or home page of the site as the next step will generate a set of PDF files, one for each page of your site by extracting the landing page and looking for the "Next" button at the bottom right corner of each Docusaurus page. If you start from any page other than the first one, then you will only get a portion of the pages. For StarRocks documentation served using the `./scripts/docker-build.sh` script this will be:
+### Check to see if Docusaurus is serving the pages
+
+From the `PDF` directory check the logs of the `docusaurus` service:
 
 ```bash
-http://localhost:3000/zh/docs/introduction/StarRocks_intro/
+docker compose logs -f docusaurus
 ```
 
-## Generate a list of pages (URLs)
+When Docusaurus is ready you will see this line at the end of the log output:
+
+```bash
+docusaurus-1  | [SUCCESS] Serving "build" directory at: http://0.0.0.0:3000/
+```
+
+Stop watching the logs with CTRL-c
+
+### Find the initial URL
+
+First open the docs by launching a browser to the URL at the end of the log output, which should be [http://0.0.0.0:3000/](http://0.0.0.0:3000/).
+
+Next, change to the Chinese documentation if you are generating a PDF document of the Chinese documentation.
+
+Copy the URL of the starting page of the documentation that you would like to generate a PDF for.
+
+Save the URL.
+
+### Open a shell in the PDF build environment
+
+Launch a shell from the `starrocks/docs/docusaurus/PDF` directory:
+
+```bash
+docker compose exec -ti docusaurus bash
+```
+
+### Crawl
+
+The Docker Compose environment has two services:
+- `docusaurus`
+- `gotenberg`
+
+At a high level the process to create the PDF files is to:
+
+- Generate a list of URLs
+- for each URL in the list, signal the `gotenberg` service to connect to the `docusaurus` service and generate a PDF stream
+- Write the PDF stream to disk
+
+### Generate a list of pages (URLs)
+
+```bash
+http://docusaurus:3000/zh/docs/introduction/StarRocks_intro/
+```
+
 
 This command will crawl the docs and list the URLs in order:
 
 ```bash
 npm install -g docusaurus-prince-pdf
-npx docusaurus-prince-pdf --list-only -u http://localhost:3000/zh/docs/introduction/StarRocks_intro/ --file URLs.txt
+npx docusaurus-prince-pdf --list-only -u http://docusaurus:3000/zh/docs/introduction/StarRocks_intro/ --file URLs.txt
 ```
 
 <details>
@@ -74,16 +115,16 @@ npx docusaurus-prince-pdf --list-only -u http://localhost:3000/zh/docs/introduct
 
 This is the file format, using the StarRocks developer docs as an example:
 ```bash
-http://localhost:3000/zh/docs/developers/build-starrocks/Build_in_docker/
-http://localhost:3000/zh/docs/developers/build-starrocks/build_starrocks_on_ubuntu/
-http://localhost:3000/zh/docs/developers/build-starrocks/handbook/
-http://localhost:3000/zh/docs/developers/code-style-guides/protobuf-guides/
-http://localhost:3000/zh/docs/developers/code-style-guides/restful-api-standard/
-http://localhost:3000/zh/docs/developers/code-style-guides/thrift-guides/
-http://localhost:3000/zh/docs/developers/debuginfo/
-http://localhost:3000/zh/docs/developers/development-environment/IDEA/
-http://localhost:3000/zh/docs/developers/development-environment/ide-setup/
-http://localhost:3000/zh/docs/developers/trace-tools/Trace/%
+http://docusaurus:3000/zh/docs/developers/build-starrocks/Build_in_docker/
+http://docusaurus:3000/zh/docs/developers/build-starrocks/build_starrocks_on_ubuntu/
+http://docusaurus:3000/zh/docs/developers/build-starrocks/handbook/
+http://docusaurus:3000/zh/docs/developers/code-style-guides/protobuf-guides/
+http://docusaurus:3000/zh/docs/developers/code-style-guides/restful-api-standard/
+http://docusaurus:3000/zh/docs/developers/code-style-guides/thrift-guides/
+http://docusaurus:3000/zh/docs/developers/debuginfo/
+http://docusaurus:3000/zh/docs/developers/development-environment/IDEA/
+http://docusaurus:3000/zh/docs/developers/development-environment/ide-setup/
+http://docusaurus:3000/zh/docs/developers/trace-tools/Trace/%
 ```
 
 </details>
