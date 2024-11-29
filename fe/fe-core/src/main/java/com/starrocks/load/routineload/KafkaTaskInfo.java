@@ -41,6 +41,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
@@ -122,7 +123,15 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                 ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),
                 new ArrayList<>(partitionIdToOffset.keySet()), warehouseId);
         for (Map.Entry<Integer, Long> entry : latestOffsets.entrySet()) {
-            kafkaRoutineLoadJob.setPartitionOffset(entry.getKey(), entry.getValue());
+            Long cachedPartitionOffset = kafkaRoutineLoadJob.getPartitionOffset(entry.getKey());
+            Long localLatestOffset = cachedPartitionOffset == null ? KafkaProgress.OFFSET_END_VAL : cachedPartitionOffset;
+            if (entry.getValue() >= localLatestOffset) {
+                kafkaRoutineLoadJob.setPartitionOffset(entry.getKey(), entry.getValue());
+            } else {
+                LOG.warn("there is a brief offset fallback in partition: {}." +
+                        " local latest offset: {}, get latest offset: {}, task id: {}",
+                        entry.getKey(), localLatestOffset, entry.getValue(), DebugUtil.printId(id));
+            }
         }
 
         for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
