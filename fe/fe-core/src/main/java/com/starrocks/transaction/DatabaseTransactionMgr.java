@@ -1103,6 +1103,11 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
+<<<<<<< HEAD
+=======
+        resetTransactionStateTabletCommitInfos(transactionState);
+        transactionState.notifyVisible();
+>>>>>>> 86476df98d ([BugFix] With a high streamload frequency and too many tablets involved, TabletCommitInfos will take up too much memory. (#53329))
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
@@ -1825,6 +1830,7 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
+        resetTransactionStateTabletCommitInfos(transactionState);
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
@@ -1973,6 +1979,15 @@ public class DatabaseTransactionMgr {
             return new ArrayList<>();
         } finally {
             readUnlock();
+        }
+    }
+
+    public void resetTransactionStateTabletCommitInfos(TransactionState transactionState) {
+        writeLock();
+        try {
+            transactionState.resetTabletCommitInfos();
+        } finally {
+            writeUnlock();
         }
     }
 }
