@@ -92,8 +92,7 @@ private:
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
     os << "(flush time(ms)=" << stat.memtable_stats.flush_time_ns / 1000 / 1000 << ", flush count=" << stat.flush_count
-       << ")"
-       << ", flush flush_size_bytes = " << stat.memtable_stats.flush_memory_size;
+       << "), flush flush_size_bytes=" << stat.memtable_stats.flush_memory_size;
     return os;
 }
 

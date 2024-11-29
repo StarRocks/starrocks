@@ -1099,7 +1099,7 @@ void LocalTabletsChannel::_update_primary_replica_profile(DeltaWriter* writer, R
     }
     auto& replicate_stat = replicate_token->get_stat();
     ADD_AND_UPDATE_COUNTER(profile, "ReplicatePendingTaskCount", TUnit::UNIT, replicate_stat.num_pending_tasks);
-    ADD_AND_UPDATE_COUNTER(profile, "ReplicateExecutingTaskCount", TUnit::UNIT, replicate_stat.num_executing_tasks);
+    ADD_AND_UPDATE_COUNTER(profile, "ReplicateExecutingTaskCount", TUnit::UNIT, replicate_stat.num_running_tasks);
     ADD_AND_UPDATE_COUNTER(profile, "ReplicateFinishedTaskCount", TUnit::UNIT, replicate_stat.num_finished_tasks);
     ADD_AND_UPDATE_TIMER(profile, "ReplicateTaskPendingTime", replicate_stat.pending_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "ReplicateTaskExecuteTime", replicate_stat.execute_time_ns);
@@ -1123,7 +1123,7 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
     }
     auto& stat = segment_flush_token->get_stat();
     ADD_AND_UPDATE_COUNTER(profile, "FlushPendingTaskCount", TUnit::UNIT, stat.num_pending_tasks);
-    ADD_AND_UPDATE_COUNTER(profile, "FlushExecutingTaskCount", TUnit::UNIT, stat.num_executing_tasks);
+    ADD_AND_UPDATE_COUNTER(profile, "FlushExecutingTaskCount", TUnit::UNIT, stat.num_running_tasks);
     ADD_AND_UPDATE_COUNTER(profile, "FlushFinishedTaskCount", TUnit::UNIT, stat.num_finished_tasks);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", stat.pending_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskExecuteTime", stat.execute_time_ns);

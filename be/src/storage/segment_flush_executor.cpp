@@ -67,10 +67,10 @@ public:
         auto& stat = _flush_token->_stat;
         stat.num_pending_tasks -= 1;
         stat.pending_time_ns += MonotonicNanos() - _create_time_ns;
-        stat.num_executing_tasks += 1;
+        stat.num_running_tasks += 1;
         int64_t duration_ns = 0;
         DeferOp defer([&stat, &duration_ns]() {
-            stat.num_executing_tasks -= 1;
+            stat.num_running_tasks -= 1;
             stat.num_finished_tasks += 1;
             stat.execute_time_ns += duration_ns;
         });

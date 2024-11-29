@@ -43,7 +43,7 @@ class DeltaWriter;
 
 struct SegmentFlushStat {
     int32_t num_pending_tasks = 0;
-    int32_t num_executing_tasks = 0;
+    int32_t num_running_tasks = 0;
     int32_t num_finished_tasks = 0;
     int64_t pending_time_ns = 0;
     int64_t execute_time_ns = 0;
