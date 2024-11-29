@@ -38,7 +38,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -888,7 +887,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 || partitionDesc instanceof MultiItemListPartitionDesc
                 || partitionDesc instanceof SingleRangePartitionDesc) {
             checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
-            addPartitions(db, tableName, ImmutableList.of(partitionDesc), addPartitionClause);
+            addPartitions(db, tableName, Lists.newArrayList(partitionDesc), addPartitionClause);
         } else if (partitionDesc instanceof RangePartitionDesc) {
             checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
             addPartitions(db, tableName,
