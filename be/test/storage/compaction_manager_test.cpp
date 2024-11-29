@@ -476,4 +476,47 @@ TEST_F(CompactionManagerTest, test_compaction_update_thread_pool_num) {
     EXPECT_EQ(5, _engine->compaction_manager()->max_task_num());
 }
 
+TEST_F(CompactionManagerTest, test_get_compaction_status) {
+    auto tablet_meta = std::make_shared<TabletMeta>();
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(KeysType::DUP_KEYS);
+    auto schema = std::make_shared<const TabletSchema>(schema_pb);
+    tablet_meta->set_tablet_schema(schema);
+    DataDir data_dir("./data_dir");
+    auto tablet = Tablet::create_tablet_from_meta(tablet_meta, &data_dir);
+    tablet_meta->set_tablet_id(0);
+    auto compaction_context = std::make_unique<CompactionContext>();
+    compaction_context->policy = std::make_unique<DefaultCumulativeBaseCompactionPolicy>(tablet.get());
+    tablet->set_compaction_context(compaction_context);
+
+    std::vector<RowsetSharedPtr> mock_rowsets;
+    auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+    rs_meta_pb->set_rowset_id("123");
+    rs_meta_pb->set_start_version(0);
+    rs_meta_pb->set_end_version(1);
+    auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
+    auto rowset = std::make_shared<Rowset>(schema, "", rowset_meta);
+    mock_rowsets.emplace_back(rowset);
+
+    // generate compaction task
+    auto task = std::make_shared<MockCompactionTask>();
+    task->set_tablet(tablet);
+    task->set_task_id(1);
+    task->set_compaction_type(CUMULATIVE_COMPACTION);
+    task->set_input_rowsets(std::move(mock_rowsets));
+
+    _engine->compaction_manager()->init_max_task_num(10);
+    bool ret = _engine->compaction_manager()->register_task(task.get());
+    ASSERT_TRUE(ret);
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
+
+    std::string compaction_status;
+    tablet->get_compaction_status(&compaction_status);
+    ASSERT_TRUE(compaction_status.find("\"compaction_status\": \"RUNNING\"") != std::string::npos);
+    ASSERT_TRUE(compaction_status.find("\"rowset_id\": \"123\"") != std::string::npos);
+
+    _engine->compaction_manager()->clear_tasks();
+    ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+}
+
 } // namespace starrocks
