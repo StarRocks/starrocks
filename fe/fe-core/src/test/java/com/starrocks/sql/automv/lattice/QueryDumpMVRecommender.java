@@ -42,6 +42,7 @@ import com.starrocks.sql.automv.qe.RboOptimizer;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.MetaUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
+import com.starrocks.sql.automv.util.Result;
 import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
@@ -53,6 +54,8 @@ import org.apache.arrow.util.Preconditions;
 import org.apache.logging.log4j.core.config.Configurator;
 import org.bouncycastle.util.Strings;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -117,7 +120,12 @@ public class QueryDumpMVRecommender {
         Map<String, String> tableMataMap = (Map<String, String>) dumpJson.get("table_meta");
         String query = (String) dumpJson.get("statement");
         List<StatementBase> stmts = SqlParser.parse(query, starRocksAssert.getCtx().getSessionVariable());
-        QueryStatement queryStatement = (QueryStatement) stmts.get(0);
+        QueryStatement queryStatement;
+        if (stmts.get(0) instanceof QueryStatement) {
+            queryStatement = (QueryStatement) stmts.get(0);
+        } else {
+            throw new IllegalArgumentException("Not support " + stmts.get(0).getClass().getSimpleName());
+        }
         List<TableName> tableNames = CollectAstVisitor.collectTableNames(queryStatement, starRocksAssert.getCtx());
         Map<String, TableName> tableNamesWithCatalog = Maps.newHashMap();
         tableNames.forEach(tableName -> {
@@ -150,15 +158,19 @@ public class QueryDumpMVRecommender {
             List<StatementBase> statements =
                     SqlParser.parse(createTblSql, starRocksAssert.getCtx().getSessionVariable());
             StatementBase statementBase = statements.get(0);
-            CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
-            if (tableNamesWithCatalog.containsKey(dbTableName)) {
-                String catalog = Objects.requireNonNull(tableNamesWithCatalog.get(dbTableName).getCatalog());
-                String createTable = convertToOlapTable(createTableStmt, catalog).orElse(entry.getValue());
-                newTableMetaMap.put(entry.getKey(), createTable);
-                tableRefList.add(Pair.create(tableNamesWithCatalog.get(dbTableName), dbTableName));
-            } else if (!createTableStmt.getEngineName().equalsIgnoreCase("OLAP")) {
-                String createTable = convertToOlapTable(createTableStmt, null).orElse(entry.getValue());
-                newTableMetaMap.put(entry.getKey(), createTable);
+            if (statementBase instanceof CreateTableStmt) {
+                CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
+                if (tableNamesWithCatalog.containsKey(dbTableName)) {
+                    String catalog = Objects.requireNonNull(tableNamesWithCatalog.get(dbTableName).getCatalog());
+                    String createTable = convertToOlapTable(createTableStmt, catalog).orElse(entry.getValue());
+                    newTableMetaMap.put(entry.getKey(), createTable);
+                    tableRefList.add(Pair.create(tableNamesWithCatalog.get(dbTableName), dbTableName));
+                } else if (!createTableStmt.getEngineName().equalsIgnoreCase("OLAP")) {
+                    String createTable = convertToOlapTable(createTableStmt, null).orElse(entry.getValue());
+                    newTableMetaMap.put(entry.getKey(), createTable);
+                } else {
+                    newTableMetaMap.put(entry.getKey(), entry.getValue());
+                }
             } else {
                 newTableMetaMap.put(entry.getKey(), entry.getValue());
             }
@@ -215,6 +227,14 @@ public class QueryDumpMVRecommender {
                 }));
     }
 
+    private static String backtrace(Throwable err, int topN) {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        err.printStackTrace(pw);
+        List<String> lines = Stream.of(sw.toString().split("\n")).collect(Collectors.toList());
+        return String.join("\n", lines.subList(0, Math.min(topN, lines.size())));
+    }
+
     public StarRocksAssert getStarRocksAssert() {
         return starRocksAssert;
     }
@@ -233,8 +253,18 @@ public class QueryDumpMVRecommender {
                         .collect(Collectors.joining("\n"));
                 starRocksAssert.withMaterializedView(mv, () -> {
                     associateBaseTablesWithMV(starRocksAssert, mvName, pieces);
-                    Optional<Pair<String, String>> optFailMessages =
-                            UtFrameUtils.checkMVRewriteWithTracing(starRocksAssert.getCtx(), query, mvName);
+                    // Set materialized_view_rewrite_mode='force'
+                    starRocksAssert.getCtx().getSessionVariable().setMaterializedViewRewriteMode("force");
+                    Result<Optional<Pair<String, String>>> maybeOptFailMessages =
+                            Result.wrap(() ->
+                                    UtFrameUtils.checkMVRewriteWithTracing(starRocksAssert.getCtx(), query, mvName));
+                    Optional<Pair<String, String>> optFailMessages;
+                    if (maybeOptFailMessages.maybeError().isPresent()) {
+                        Throwable err = maybeOptFailMessages.maybeError().get();
+                        optFailMessages = Optional.of(Pair.create(err.getMessage(), backtrace(err, 10)));
+                    } else {
+                        optFailMessages = maybeOptFailMessages.mustUnwrap();
+                    }
                     if (optFailMessages.isPresent()) {
                         Pair<String, String> failMessages = optFailMessages.get();
                         String reason = failMessages.first;
@@ -337,29 +367,47 @@ public class QueryDumpMVRecommender {
 
     public List<MVResultWithRewriteTraceInfo> recommend(String dumpJson, Consumer<SessionVariable> svSetter)
             throws Exception {
-        dumpJson = rectifyQueryDump(starRocksAssert, dumpJson);
-        QueryDumpInfo dumpInfo = getDumpInfoFromJson(dumpJson);
-        System.out.println(dumpInfo.getOriginStmt());
-        return UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, svSetter, this::recommendMV);
+        Result<String> maybeDumpJson = Result.wrap(() -> rectifyQueryDump(starRocksAssert, dumpJson));
+        if (maybeDumpJson.maybeError().isPresent()) {
+            Throwable err = maybeDumpJson.maybeError().get();
+            PrettyPrinter printer = new PrettyPrinter();
+            printer.add("Querydump can be processed!").newLine();
+            printer.add(backtrace(err, 200));
+            MVResultWithRewriteTraceInfo info = new MVResultWithRewriteTraceInfo(null, printer.getResult(), null);
+            return Collections.singletonList(info);
+        }
+        String newQueryDump = maybeDumpJson.mustUnwrap();
+        QueryDumpInfo dumpInfo = getDumpInfoFromJson(newQueryDump);
+        // System.out.println(dumpInfo.getOriginStmt());
+        Result<List<MVResultWithRewriteTraceInfo>> maybeMVLists = Result.wrap(() ->
+                UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, svSetter, this::recommendMV));
+        if (maybeMVLists.maybeError().isPresent()) {
+            Throwable err = maybeMVLists.maybeError().get();
+            PrettyPrinter printer = new PrettyPrinter();
+            printer.add("Internal error happens!").newLine();
+            printer.add(backtrace(err, 200));
+            MVResultWithRewriteTraceInfo info = new MVResultWithRewriteTraceInfo(null, printer.getResult(), null);
+            return Collections.singletonList(info);
+        } else {
+            return maybeMVLists.mustUnwrap();
+        }
     }
 
     public List<String> recommendNoTraceInfo(String dumpJson, Consumer<SessionVariable> svSetter)
             throws Exception {
-        dumpJson = rectifyQueryDump(starRocksAssert, dumpJson);
-        QueryDumpInfo dumpInfo = getDumpInfoFromJson(dumpJson);
-        //System.out.println(dumpInfo.getOriginStmt());
-        return UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, svSetter, this::recommendMV)
+        return recommend(dumpJson, svSetter)
                 .stream()
-                .filter(mvResult -> mvResult.mvResult != null /*&& mvResult.rewriteFailReason == null &&
-                        mvResult.rewriteFailVerboseLogs == null*/)
+                .filter(mvResult -> mvResult.mvResult != null && mvResult.rewriteFailReason == null &&
+                        mvResult.rewriteFailVerboseLogs == null)
                 .map(mvResult -> mvResult.mvResult.get(2))
                 .collect(Collectors.toList());
     }
 
     public String recommendAndFormatOutput(String dumpJson, Consumer<SessionVariable> svSetter) throws Exception {
         Supplier<String> mvIdGen = Util.nextStringGenerator("Recommend MV ", "");
-        PrettyPrinter printer = new PrettyPrinter();
         List<MVResultWithRewriteTraceInfo> mvResultList = recommend(dumpJson, svSetter);
+
+        PrettyPrinter printer = new PrettyPrinter();
         if (mvResultList.size() == 1 && mvResultList.get(0).mvResult == null) {
             return mvResultList.get(0).rewriteFailReason;
         }

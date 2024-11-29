@@ -192,6 +192,11 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+        public OperatorStr visitLogicalTableFunction(OptExpression optExpression, Integer step) {
+            return visitDefault(optExpression, step);
+        }
+
+        @Override
         public OperatorStr visitLogicalCTEAnchor(OptExpression optExpression, Integer step) {
             OperatorStr leftChild = visit(optExpression.getInputs().get(0), step + 1);
             OperatorStr rightChild = visit(optExpression.getInputs().get(1), step + 1);

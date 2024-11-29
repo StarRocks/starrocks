@@ -34,6 +34,12 @@ import java.util.stream.Collectors;
 // required by MV schema.
 public class AggregateMVGenerator {
     public static Optional<QueryGenerateResult> generate(AggregatePiece aggPiece, MVGenerateContext context) {
+        boolean dimensionsAllCanGroupBy = aggPiece.getDimensions().values().stream()
+                .allMatch(column -> column.getType().canGroupBy());
+        if (!dimensionsAllCanGroupBy) {
+            return Optional.empty();
+        }
+
         PrettyPrinter mvSchema = new PrettyPrinter();
         QueryGenerateContext queryGenerateContext = QueryGenerateContext.of(context.isEnableGenerateTraceLog(), false,
                 context.getOptions().isRectifyTableName());
@@ -62,6 +68,9 @@ public class AggregateMVGenerator {
                     .filter(p -> collocateBucketKey.contains(p.first))
                     .collect(Collectors.toList());
         }
+        bucketKey = bucketKey.stream()
+                .filter(p -> p.second.getType().canDistributedBy())
+                .collect(Collectors.toList());
 
         List<String> mvDimensionColumns = bucketKey.stream()
                 .map(p -> columnAliases.get(p.first))
@@ -72,8 +81,7 @@ public class AggregateMVGenerator {
 
         final int maxOrderByColumns = context.getOptions().getMaxOrderByColumns();
         for (Pair<Integer, GenericColumn> columnPair : bucketKey) {
-            GenericColumn column = columnPair.second;
-            if (!column.getType().canDistributedBy() || candidateOrderByColumns.size() >= maxOrderByColumns) {
+            if (candidateOrderByColumns.size() >= maxOrderByColumns) {
                 break;
             }
             candidateOrderByColumns.add(columnPair);
