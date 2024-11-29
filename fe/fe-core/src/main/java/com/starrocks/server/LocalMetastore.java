@@ -125,6 +125,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.journal.SerializeException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
@@ -2225,6 +2226,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
             table.onCreate(db);
+        } catch (SerializeException e) {
+            db.unRegisterTableUnlocked(table);
+            LOG.warn("create table failed", e);
+            ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), e.getMessage());
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
