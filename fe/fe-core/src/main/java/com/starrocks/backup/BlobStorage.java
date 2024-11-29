@@ -42,7 +42,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
@@ -364,7 +364,7 @@ public class BlobStorage implements Writable {
                 byte[] readData;
                 try {
                     readData = reader.read(readLen);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     lastErrMsg = String.format("failed to read. "
                                     + "current read offset: %d, read length: %d,"
                                     + " file size: %d, file: %s. msg: %s",
@@ -440,7 +440,7 @@ public class BlobStorage implements Writable {
         Status status = Status.OK;
         try {
             HdfsUtil.writeFile(content.getBytes(StandardCharsets.UTF_8), remoteFile, brokerDesc);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             status = new Status(ErrCode.BAD_CONNECTION, "write exception: " + e.getMessage());
         }
         return status;
@@ -593,7 +593,7 @@ public class BlobStorage implements Writable {
 
                 try {
                     writer.write(bb, bytesRead);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     lastErrMsg = String.format("failed to write. "
                                     + "current write offset: %d, write length: %d,"
                                     + " file length: %d, file: %s. encounter TException: %s",
@@ -660,7 +660,7 @@ public class BlobStorage implements Writable {
 
         try {
             HdfsUtil.rename(origFilePath, destFilePath, brokerDesc);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to rename " + origFilePath + " to " + destFilePath + ", msg: " + e.getMessage());
         }
@@ -706,7 +706,7 @@ public class BlobStorage implements Writable {
         try {
             HdfsUtil.deletePath(remotePath, this.brokerDesc);
             LOG.info("finished to delete remote path {}.", remotePath);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to delete remote path: " + remotePath + ". msg: " + e.getMessage());
         }
@@ -764,7 +764,7 @@ public class BlobStorage implements Writable {
                 result.add(file);
             }
             LOG.info("finished to list remote path {}. get files: {}", remotePath, result);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to list remote path: " + remotePath + ". msg: " + e.getMessage());
         }
@@ -816,7 +816,7 @@ public class BlobStorage implements Writable {
                 return new Status(ErrCode.NOT_FOUND, "remote path does not exist: " + remotePath);
             }
             return Status.OK;
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to check remote path exist: " + remotePath
                             + ". msg: " + e.getMessage());

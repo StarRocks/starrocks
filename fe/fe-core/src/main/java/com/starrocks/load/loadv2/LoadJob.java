@@ -49,7 +49,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LoadPriority;
@@ -724,7 +724,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .abortTransaction(dbId, transactionId, failMsg.getMsg(),
                                 getTabletCommitInfos(), getTabletFailInfos(), null);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
                         .add("transaction_id", transactionId)
                         .add("error_msg", "failed to abort txn when job is cancelled. " + e.getMessage())
@@ -1085,7 +1085,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         if (!txnOperated) {
             return;
         }

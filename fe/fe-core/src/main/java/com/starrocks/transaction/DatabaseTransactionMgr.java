@@ -55,8 +55,8 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -265,7 +265,7 @@ public class DatabaseTransactionMgr {
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment,
                                    boolean writeEditLog)
-            throws UserException {
+            throws StarRocksException {
         Preconditions.checkNotNull(tabletCommitInfos, "tabletCommitInfos is null");
         Preconditions.checkNotNull(tabletFailInfos, "tabletFailInfos is null");
         // 1. check status
@@ -388,7 +388,7 @@ public class DatabaseTransactionMgr {
      * @return a {@link VisibleStateWaiter} object used to wait for the transaction become visible.
      */
     @NotNull
-    public VisibleStateWaiter commitPreparedTransaction(long transactionId) throws UserException {
+    public VisibleStateWaiter commitPreparedTransaction(long transactionId) throws StarRocksException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
@@ -488,7 +488,7 @@ public class DatabaseTransactionMgr {
                                                 @NotNull List<TabletCommitInfo> tabletCommitInfos,
                                                 @NotNull List<TabletFailInfo> tabletFailInfos,
                                                 @Nullable TxnCommitAttachment txnCommitAttachment)
-            throws UserException {
+            throws StarRocksException {
         prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, false);
         return commitPreparedTransaction(transactionId);
     }
@@ -503,7 +503,7 @@ public class DatabaseTransactionMgr {
                                  TxnCommitAttachment txnCommitAttachment,
                                  List<TabletCommitInfo> finishedTablets,
                                  List<TabletFailInfo> failedTablets)
-            throws UserException {
+            throws StarRocksException {
         if (transactionId < 0) {
             LOG.info("transaction id is {}, less than 0, maybe this is an old type load job, ignore abort operation",
                     transactionId);
@@ -976,7 +976,7 @@ public class DatabaseTransactionMgr {
         return true;
     }
 
-    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds) throws UserException {
+    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds) throws StarRocksException {
         TransactionState transactionState = getTransactionState(transactionId);
         // add all commit errors and publish errors to a single set
         if (errorReplicaIds == null) {
@@ -1413,7 +1413,7 @@ public class DatabaseTransactionMgr {
         txnIds.add(transactionState.getTransactionId());
     }
 
-    public void abortTransaction(String label, String reason) throws UserException {
+    public void abortTransaction(String label, String reason) throws StarRocksException {
         Preconditions.checkNotNull(label);
         long transactionId = -1;
         readLock();
@@ -1443,14 +1443,14 @@ public class DatabaseTransactionMgr {
         abortTransaction(transactionId, reason, null);
     }
 
-    public void abortAllRunningTransaction() throws UserException {
+    public void abortAllRunningTransaction() throws StarRocksException {
         for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
             abortTransaction(entry.getKey(), "The cluster is under safe mode!", null);
         }
     }
 
     public void abortTransaction(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)
-            throws UserException {
+            throws StarRocksException {
         abortTransaction(transactionId, true, reason, txnCommitAttachment,
                 Collections.emptyList(), Collections.emptyList());
     }
@@ -1465,7 +1465,7 @@ public class DatabaseTransactionMgr {
     }
 
     private boolean unprotectAbortTransaction(long transactionId, boolean abortPrepared, String reason)
-            throws UserException {
+            throws StarRocksException {
         TransactionState transactionState = unprotectedGetTransactionState(transactionId);
         if (transactionState == null) {
             throw new TransactionNotFoundException(transactionId);
@@ -1759,7 +1759,7 @@ public class DatabaseTransactionMgr {
             try {
                 abortTransaction(txnId, TXN_TIMEOUT_BY_MANAGER, null);
                 LOG.info("transaction [" + txnId + "] is timeout, abort it by transaction manager");
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 // abort may be failed. it is acceptable. just print a log
                 LOG.warn("abort timeout txn {} failed. msg: {}", txnId, e.getMessage());
             }
@@ -1845,7 +1845,8 @@ public class DatabaseTransactionMgr {
         return globalStateMgr;
     }
 
-    public void finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas) throws UserException {
+    public void finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas) throws
+            StarRocksException {
         Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
         if (db == null) {
             transactionState.writeLock();

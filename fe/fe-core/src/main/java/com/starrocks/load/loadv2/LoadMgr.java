@@ -47,8 +47,8 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.EtlJobType;
@@ -216,7 +216,7 @@ public class LoadMgr implements MemoryTrackable {
     }
 
     public void recordFinishedOrCacnelledLoadJob(long jobId, EtlJobType jobType, String failMsg, String trackingUrl)
-            throws UserException {
+            throws StarRocksException {
         LoadJob loadJob = getLoadJob(jobId);
         if (loadJob.isTxnDone() && !Strings.isNullOrEmpty(failMsg)) {
             throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name()
@@ -237,7 +237,7 @@ public class LoadMgr implements MemoryTrackable {
     public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
                                                EtlJobType jobType, long createTimestamp, long estimateScanRows,
                                                int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
-                                               Coordinator coordinator) throws UserException {
+                                               Coordinator coordinator) throws StarRocksException {
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -417,7 +417,7 @@ public class LoadMgr implements MemoryTrackable {
                     recordFinishedOrCacnelledLoadJob(
                             job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
                     LOG.warn("abort job: {}-{} since transaction status unknown", job.getLabel(), job.getId());
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     LOG.warn("failed to abort job: {}", job.getLabel(), e);
                 }
             }
@@ -489,7 +489,7 @@ public class LoadMgr implements MemoryTrackable {
                     } catch (TimeoutException e) {
                         // timeout, retry next time
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
-                    } catch (UserException e) {
+                    } catch (StarRocksException e) {
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
                     } catch (Exception e) {
@@ -504,7 +504,7 @@ public class LoadMgr implements MemoryTrackable {
                 .forEach(job -> {
                     try {
                         ((SparkLoadJob) job).updateLoadingStatus();
-                    } catch (UserException e) {
+                    } catch (StarRocksException e) {
                         LOG.warn("update load job loading status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
                     } catch (Exception e) {

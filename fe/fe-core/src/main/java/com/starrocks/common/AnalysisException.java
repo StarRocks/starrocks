@@ -22,7 +22,7 @@ package com.starrocks.common;
  * Use SemanticException instead
  */
 @Deprecated
-public class AnalysisException extends UserException {
+public class AnalysisException extends StarRocksException {
     public AnalysisException(String msg, Throwable cause) {
         super(msg, cause);
     }

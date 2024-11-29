@@ -71,7 +71,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -446,7 +446,7 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
-    private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws UserException {
+    private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws StarRocksException {
         if (!indexToPushBrokerReaderParams.containsKey(indexId)) {
             PushBrokerReaderParams pushBrokerReaderParams = new PushBrokerReaderParams();
             pushBrokerReaderParams.init(table.getSchemaByIndexId(indexId), brokerDesc);
@@ -455,7 +455,7 @@ public class SparkLoadJob extends BulkLoadJob {
         return indexToPushBrokerReaderParams.get(indexId);
     }
 
-    private Set<Long> submitPushTasks() throws UserException {
+    private Set<Long> submitPushTasks() throws StarRocksException {
         // check db exist
         Database db;
         try {
@@ -689,7 +689,7 @@ public class SparkLoadJob extends BulkLoadJob {
      * 1. Sends push tasks to Be
      * 2. Commit transaction after all push tasks execute successfully
      */
-    public void updateLoadingStatus() throws UserException {
+    public void updateLoadingStatus() throws StarRocksException {
         if (!checkState(JobState.LOADING)) {
             return;
         }
@@ -733,7 +733,7 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
-    private void tryCommitJob() throws UserException {
+    private void tryCommitJob() throws StarRocksException {
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
                 .add("txn_id", transactionId)
                 .add("msg", "Load job try to commit txn")
@@ -979,7 +979,7 @@ public class SparkLoadJob extends BulkLoadJob {
             this.tDescriptorTable = null;
         }
 
-        public void init(List<Column> columns, BrokerDesc brokerDesc) throws UserException {
+        public void init(List<Column> columns, BrokerDesc brokerDesc) throws StarRocksException {
             // Generate tuple descriptor
             DescriptorTable descTable = new DescriptorTable();
             TupleDescriptor destTupleDesc = descTable.createTupleDescriptor();

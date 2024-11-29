@@ -17,9 +17,9 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 
-public class PluginException extends UserException {
+public class PluginException extends StarRocksException {
     public PluginException(String msg) {
         super(msg);
     }

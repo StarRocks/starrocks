@@ -30,7 +30,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -243,7 +243,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                                 mvPartitionExprOpt.get());
                 refBaseTablePartitionMap.put(refBT, refTablePartitionKeyMap);
             }
-        } catch (UserException | SemanticException e) {
+        } catch (StarRocksException | SemanticException e) {
             LOG.warn("Partition differ collects ref base table partition failed.", e);
             return null;
         }

@@ -26,7 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -431,7 +431,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         // (FIXME) add this api just for tests of external table
         List<AlterClause> alterClauses = stmt.getAlterClauseList();
         for (AlterClause alterClause : alterClauses) {

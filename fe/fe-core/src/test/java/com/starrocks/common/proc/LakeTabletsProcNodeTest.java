@@ -31,7 +31,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -59,7 +59,8 @@ public class LakeTabletsProcNodeTest {
     }
 
     @Test
-    public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr, @Mocked WarehouseManager agent) throws UserException {
+    public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr, @Mocked WarehouseManager agent) throws
+            StarRocksException {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;

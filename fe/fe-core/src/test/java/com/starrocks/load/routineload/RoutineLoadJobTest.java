@@ -42,7 +42,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.InternalErrorCode;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.RoutineLoadDesc;
@@ -78,7 +78,7 @@ public class RoutineLoadJobTest {
     public void testAfterAbortedReasonOffsetOutOfRange(@Mocked GlobalStateMgr globalStateMgr,
                                                        @Injectable TransactionState transactionState,
                                                        @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
-            throws UserException {
+            throws StarRocksException {
 
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -112,7 +112,7 @@ public class RoutineLoadJobTest {
     @Test
     public void testAfterAborted(@Mocked RoutineLoadMgr routineLoadMgr,
                                  @Injectable TransactionState transactionState,
-                                 @Injectable KafkaTaskInfo routineLoadTaskInfo) throws UserException {
+                                 @Injectable KafkaTaskInfo routineLoadTaskInfo) throws StarRocksException {
         Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -181,7 +181,7 @@ public class RoutineLoadJobTest {
     @Test
     public void testAfterCommitted(@Mocked RoutineLoadMgr routineLoadMgr,
                                  @Injectable TransactionState transactionState,
-                                 @Injectable KafkaTaskInfo routineLoadTaskInfo) throws UserException {
+                                 @Injectable KafkaTaskInfo routineLoadTaskInfo) throws StarRocksException {
         Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -271,7 +271,7 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testKafkaGetShowInfo() throws UserException {
+    public void testKafkaGetShowInfo() throws StarRocksException {
         {
             // PAUSE state
             KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
@@ -346,7 +346,7 @@ public class RoutineLoadJobTest {
 
     @Test
     public void testGetShowInfoSharedData(@Mocked GlobalStateMgr globalStateMgr,
-                                          @Mocked WarehouseManager warehouseManager) throws UserException {
+                                          @Mocked WarehouseManager warehouseManager) throws StarRocksException {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -377,7 +377,7 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testUpdateWhileDbDeleted(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
+    public void testUpdateWhileDbDeleted(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -394,7 +394,7 @@ public class RoutineLoadJobTest {
 
     @Test
     public void testUpdateWhileTableDeleted(@Mocked GlobalStateMgr globalStateMgr,
-                                            @Injectable Database database) throws UserException {
+                                            @Injectable Database database) throws StarRocksException {
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -415,7 +415,7 @@ public class RoutineLoadJobTest {
     public void testUpdateWhilePartitionChanged(@Mocked GlobalStateMgr globalStateMgr,
                                                 @Injectable Database database,
                                                 @Injectable Table table,
-                                                @Injectable KafkaProgress kafkaProgress) throws UserException {
+                                                @Injectable KafkaProgress kafkaProgress) throws StarRocksException {
 
         new Expectations() {
             {
@@ -432,7 +432,7 @@ public class RoutineLoadJobTest {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
-                                                       long warehouseId) throws UserException {
+                                                       long warehouseId) throws StarRocksException {
                 return Lists.newArrayList(1, 2, 3);
             }
         };
