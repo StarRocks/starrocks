@@ -72,7 +72,6 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -122,10 +121,7 @@ import com.starrocks.transaction.TransactionState.TxnSourceType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -881,37 +877,6 @@ public class SparkLoadJob extends BulkLoadJob {
                     LOG.warn("Failed to delete file, filepath={}", file.getAbsolutePath());
                 }
             }
-        }
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        sparkResource.write(out);
-        sparkLoadAppHandle.write(out);
-        out.writeLong(etlStartTimestamp);
-        Text.writeString(out, appId);
-        Text.writeString(out, etlOutputPath);
-        out.writeInt(tabletMetaToFileInfo.size());
-        for (Map.Entry<String, Pair<String, Long>> entry : tabletMetaToFileInfo.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue().first);
-            out.writeLong(entry.getValue().second);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        sparkResource = (SparkResource) Resource.read(in);
-        sparkLoadAppHandle = SparkLoadAppHandle.read(in);
-        etlStartTimestamp = in.readLong();
-        appId = Text.readString(in);
-        etlOutputPath = Text.readString(in);
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String tabletMetaStr = Text.readString(in);
-            Pair<String, Long> fileInfo = Pair.create(Text.readString(in), in.readLong());
-            tabletMetaToFileInfo.put(tabletMetaStr, fileInfo);
         }
     }
 

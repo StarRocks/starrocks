@@ -40,7 +40,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -126,9 +125,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected JobState state = JobState.PENDING;
     @SerializedName("j")
     protected EtlJobType jobType;
-    // the auth info could be null when load job is created before commit named 'Persist auth info in load job'
-    @SerializedName("a")
-    protected AuthorizationInfo authorizationInfo;
 
     // optional properties
     // timeout second need to be reset in constructor of subclass
@@ -150,9 +146,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected int priority = LoadPriority.NORMAL_VALUE;
     @SerializedName("ln")
     protected long logRejectedRecordNum = 0;
-    // reuse deleteFlag as partialUpdate
-    // @Deprecated
-    // protected boolean deleteFlag = false;
 
     @SerializedName("c")
     protected long createTimestamp = -1;
@@ -1073,24 +1066,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         jobInfo.trackingUrl = loadingStatus.getTrackingUrl();
     }
 
-    public static LoadJob read(DataInput in) throws IOException {
-        LoadJob job = null;
-        EtlJobType type = EtlJobType.valueOf(Text.readString(in));
-        if (type == EtlJobType.BROKER) {
-            job = new BrokerLoadJob();
-        } else if (type == EtlJobType.SPARK) {
-            job = new SparkLoadJob();
-        } else if (type == EtlJobType.INSERT) {
-            job = new InsertLoadJob();
-        } else {
-            throw new IOException("Unknown load type: " + type.name());
-        }
-
-        job.isJobTypeRead(true);
-        job.readFields(in);
-        return job;
-    }
-
     @Override
     public long getCallbackId() {
         return id;
@@ -1261,73 +1236,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     @Override
     public void write(DataOutput out) throws IOException {
-        // Add the type of load secondly
-        Text.writeString(out, jobType.name());
-
-        out.writeLong(id);
-        out.writeLong(dbId);
-        Text.writeString(out, label);
-        Text.writeString(out, state.name());
-        out.writeLong(timeoutSecond);
-        out.writeLong(loadMemLimit);
-        out.writeDouble(maxFilterRatio);
-        // reuse deleteFlag as partialUpdate
-        // out.writeBoolean(deleteFlag);
-        out.writeBoolean(partialUpdate);
-        out.writeLong(createTimestamp);
-        out.writeLong(loadStartTimestamp);
-        out.writeLong(finishTimestamp);
-        if (failMsg == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            failMsg.write(out);
-        }
-        out.writeInt(progress);
-        loadingStatus.write(out);
-        out.writeBoolean(strictMode);
-        out.writeLong(transactionId);
-        if (authorizationInfo == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            authorizationInfo.write(out);
-        }
-        Text.writeString(out, timezone);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        if (!isJobTypeRead) {
-            jobType = EtlJobType.valueOf(Text.readString(in));
-            isJobTypeRead = true;
-        }
-
-        id = in.readLong();
-        dbId = in.readLong();
-        label = Text.readString(in);
-        state = JobState.valueOf(Text.readString(in));
-        timeoutSecond = in.readLong();
-        loadMemLimit = in.readLong();
-        maxFilterRatio = in.readDouble();
-        // reuse deleteFlag as partialUpdate
-        // deleteFlag = in.readBoolean();
-        partialUpdate = in.readBoolean();
-        createTimestamp = in.readLong();
-        loadStartTimestamp = in.readLong();
-        finishTimestamp = in.readLong();
-        if (in.readBoolean()) {
-            failMsg = new FailMsg();
-            failMsg.readFields(in);
-        }
-        progress = in.readInt();
-        loadingStatus.readFields(in);
-        strictMode = in.readBoolean();
-        transactionId = in.readLong();
-        if (in.readBoolean()) {
-            authorizationInfo = new AuthorizationInfo();
-            authorizationInfo.readFields(in);
-        }
-        timezone = Text.readString(in);
+        String json = GsonUtils.GSON.toJson(this);
+        Text.writeString(out, json);
     }
 
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {
