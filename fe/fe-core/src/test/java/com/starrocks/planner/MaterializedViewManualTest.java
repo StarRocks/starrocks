@@ -252,7 +252,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "PARTITION BY ds \n" +
                 "DISTRIBUTED BY RANDOM \n" +
                 "AS SELECT \n" +
-                "bitmap_union(to_bitmap(`order_id`)) AS `order_num`, \n" +
+                "count(distinct `order_id`) AS `order_num`, \n" +
                 "date_trunc('minute', `dt`) AS ds\n" +
                 "FROM `test_partition_expr_tbl1`\n" +
                 "group by ds;";
@@ -303,7 +303,10 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "PARTITION p2023041017 VALUES [(\"2023-04-10 17:00:00\"), (\"2023-04-10 18:00:00\")),\n" +
                 "PARTITION p2023041021 VALUES [(\"2023-04-10 21:00:00\"), (\"2023-04-10 22:00:00\"))\n" +
                 ")\n" +
-                "DISTRIBUTED BY HASH(`order_id`)";
+                "DISTRIBUTED BY HASH(`order_id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ");";
         starRocksAssert.withTable(tableSQL);
         String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
                 "PARTITION BY ds \n" +
@@ -361,7 +364,10 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "PARTITION p2023041017 VALUES [(\"2023-04-10 17:00:00\"), (\"2023-04-10 18:00:00\")),\n" +
                 "PARTITION p2023041021 VALUES [(\"2023-04-10 21:00:00\"), (\"2023-04-10 22:00:00\"))\n" +
                 ")\n" +
-                "DISTRIBUTED BY HASH(`order_id`)";
+                "DISTRIBUTED BY HASH(`order_id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ");";
         starRocksAssert.withTable(tableSQL);
         String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
                 "PARTITION BY ds \n" +
@@ -415,7 +421,10 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`order_id`, `dt`)\n" +
                 "PARTITION BY date_trunc('hour', `dt`)\n" + // with date_trunc partition expression
-                "DISTRIBUTED BY HASH(`order_id`)";
+                "DISTRIBUTED BY HASH(`order_id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ");";
         starRocksAssert.withTable(tableSQL);
         String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
                 "PARTITION BY ds \n" +
