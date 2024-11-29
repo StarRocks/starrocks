@@ -122,12 +122,7 @@ public:
         }
     }
 
-    void print_debug_info() {
-        for (int i = 0; i < _num_pages; i++) {
-            LOG(INFO) << "ordinals" << i << _ordinals.get()[i];
-            LOG(INFO) << "pages" << i << _pages.get()[i];
-        }
-    }
+    void print_debug_info();
 
 private:
     friend OrdinalPageIndexIterator;

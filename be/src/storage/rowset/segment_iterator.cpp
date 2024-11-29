@@ -16,10 +16,9 @@
 
 #include <algorithm>
 #include <memory>
-#include <stack>
 #include <unordered_map>
+#include <utility>
 
-#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
@@ -54,13 +53,13 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/common.h"
+#include "storage/rowset/data_sample.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
-#include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
 #include "types/array_type_info.h"
@@ -268,6 +267,11 @@ private:
 
     Status _apply_bitmap_index();
 
+    // Data sampling
+    Status _apply_data_sampling();
+    StatusOr<RowIdSparseRange> _sample_by_block();
+    StatusOr<RowIdSparseRange> _sample_by_page();
+
     Status _apply_del_vector();
 
     Status _init_inverted_index_iterators();
@@ -298,6 +302,8 @@ private:
     bool need_early_materialize_subfield(const FieldPtr& field);
 
     Status _init_ann_reader();
+
+    IndexReadOptions _index_read_options(ColumnId cid) const;
 
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
@@ -512,6 +518,8 @@ Status SegmentIterator::_init() {
         RETURN_IF_ERROR(_apply_del_vector());
     }
     RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+    RETURN_IF_ERROR(_apply_data_sampling());
+
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
@@ -2056,6 +2064,81 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
             },
             &new_root, &useless_root);
     pred_tree = PredicateTree::create(std::move(new_root));
+}
+
+StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_block() {
+    size_t rows_per_block = _segment->num_rows_per_block();
+    size_t total_rows = _segment->num_rows();
+    int64_t probability_percent = _opts.sample_options.probability_percent;
+    int64_t random_seed = _opts.sample_options.random_seed;
+
+    auto sampler = DataSample::make_block_sample(probability_percent, random_seed, rows_per_block, total_rows);
+    return sampler->sample(_opts.stats);
+}
+
+StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
+    RETURN_IF(_schema.num_fields() > 1, Status::InvalidArgument("page sample can only support at most 1 column"));
+
+    ColumnId cid = _schema.field(0)->id();
+    auto& column_iterator = _column_iterators[cid];
+    ColumnReader* column_reader = column_iterator->get_column_reader();
+    RETURN_IF(column_reader == nullptr, Status::InvalidArgument("Not support page smaple: no column_reader"));
+    int32_t num_data_pages = column_reader->num_data_pages();
+    PageIndexer page_indexer = [&](size_t page_index) { return column_reader->get_page_range(page_index); };
+
+    int64_t probability_percent = _opts.sample_options.probability_percent;
+    int64_t random_seed = _opts.sample_options.random_seed;
+    auto sampler = DataSample::make_page_sample(probability_percent, random_seed, num_data_pages, page_indexer);
+
+    if (column_reader->has_zone_map() && SortableZoneMap::is_support_data_type(column_reader->column_type())) {
+        IndexReadOptions opts = _index_read_options(cid);
+        ASSIGN_OR_RETURN(auto zonemap, column_reader->get_raw_zone_map(opts));
+        auto sorted = std::make_shared<SortableZoneMap>(column_reader->column_type(), std::move(zonemap));
+        sampler->with_zonemap(sorted);
+    }
+
+    return sampler->sample(_opts.stats);
+}
+
+Status SegmentIterator::_apply_data_sampling() {
+    RETURN_IF(!_opts.sample_options.enable_sampling, Status::OK());
+    RETURN_IF(_scan_range.empty(), Status::OK());
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+    RETURN_IF(_opts.sample_options.probability_percent <= 0, Status::InvalidArgument("probability_percent must > 0"));
+
+    DCHECK(_opts.sample_options.__isset.probability_percent);
+    DCHECK(_opts.sample_options.__isset.random_seed);
+    DCHECK(_opts.sample_options.__isset.sample_method);
+
+    SCOPED_RAW_TIMER(&_opts.stats->sample_time_ns);
+
+    SampleMethod::type sample_method = _opts.sample_options.sample_method;
+    RowIdSparseRange sampled_ranges;
+    switch (sample_method) {
+    case SampleMethod::type::BY_BLOCK: {
+        ASSIGN_OR_RETURN(sampled_ranges, _sample_by_block());
+        break;
+    }
+    case SampleMethod::type::BY_PAGE: {
+        ASSIGN_OR_RETURN(sampled_ranges, _sample_by_page());
+        break;
+    }
+    default:
+        return Status::InvalidArgument(fmt::format("unsupported sample_method: {}", sample_method));
+    }
+    _scan_range = _scan_range.intersection(sampled_ranges);
+
+    return {};
+}
+
+IndexReadOptions SegmentIterator::_index_read_options(ColumnId cid) const {
+    IndexReadOptions opts;
+    opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
+    opts.kept_in_memory = false;
+    opts.lake_io_opts = _opts.lake_io_opts;
+    opts.read_file = _column_files.at(cid).get();
+    opts.stats = _opts.stats;
+    return opts;
 }
 
 // filter rows by evaluating column predicates using bitmap indexes.
