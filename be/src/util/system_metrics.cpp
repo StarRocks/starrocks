@@ -288,10 +288,10 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
 }
 
 void SystemMetrics::_update_memory_metrics() {
-    size_t value = 0;
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #else
+    size_t value = 0;
     // Update the statistics cached by mallctl.
     uint64_t epoch = 1;
     size_t sz = sizeof(epoch);
