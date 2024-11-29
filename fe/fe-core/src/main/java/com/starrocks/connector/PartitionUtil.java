@@ -43,7 +43,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -295,7 +295,7 @@ public class PartitionUtil {
      * @param partitionColumn : the ref base table's partition column which mv's partition derives
      */
     public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn, Expr partitionExpr)
-            throws UserException {
+            throws StarRocksException {
         return ConnectorPartitionTraits.build(table).getPartitionKeyRange(partitionColumn, partitionExpr);
     }
 
@@ -303,7 +303,7 @@ public class PartitionUtil {
      * NOTE: Ensure result list cell's order is the same with partitionColumns.
      */
     public static Map<String, PListCell> getPartitionList(Table table, List<Column> partitionColumns)
-            throws UserException {
+            throws StarRocksException {
         return ConnectorPartitionTraits.build(table).getPartitionList(partitionColumns);
     }
 

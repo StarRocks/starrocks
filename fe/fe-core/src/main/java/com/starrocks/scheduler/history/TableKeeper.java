@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
@@ -93,7 +93,7 @@ public class TableKeeper {
         return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName) != null;
     }
 
-    public void createTable() throws UserException {
+    public void createTable() throws StarRocksException {
         RepoExecutor.getInstance().executeDDL(createTableSql);
     }
 

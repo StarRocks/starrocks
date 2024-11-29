@@ -33,7 +33,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -829,7 +829,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 Config.replication_transaction_timeout_sec);
     }
 
-    private void commitTransaction() throws UserException {
+    private void commitTransaction() throws StarRocksException {
         Pair<List<TabletCommitInfo>, List<TabletFailInfo>> tabletsCommitInfo = getTabletsCommitInfo();
 
         Map<Long, Long> partitionVersions = Maps.newHashMap();

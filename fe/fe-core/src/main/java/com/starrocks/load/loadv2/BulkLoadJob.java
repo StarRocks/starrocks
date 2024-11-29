@@ -44,7 +44,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -269,7 +269,7 @@ public abstract class BulkLoadJob extends LoadJob {
                         id, taskId, transactionId, failMsg.getMsg());
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
                         dbId, transactionId, failMsg.getMsg());
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("Loading task failed to abort transaction, job_id: {}, task_id: {}, txn_id: {}, " +
                         "task fail message: {}, abort exception:", id, taskId, transactionId, failMsg.getMsg(), e);
             }

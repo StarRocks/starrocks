@@ -38,7 +38,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -99,7 +99,7 @@ public class CheckDecommissionAction extends RestBaseAction {
 
             GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler().process(
                     Lists.newArrayList(decommissionBackendClause), null, null);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new DdlException(e.getMessage());
         }
 
