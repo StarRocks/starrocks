@@ -313,6 +313,13 @@ struct OlapReaderStatistics {
     std::unordered_map<std::string, int64_t> flat_json_hits;
     std::unordered_map<std::string, int64_t> merge_json_hits;
     std::unordered_map<std::string, int64_t> dynamic_json_hits;
+
+    // Counters for data sampling
+    int64_t sample_time_ns = 0;               // Records the time to prepare sample, actual IO time is not included
+    int64_t sample_size = 0;                  // Records the number of hits in the sample. Granularity can be BLOCK/PAGE
+    int64_t sample_population_size = 0;       // Records the total number of samples. Granularity can be BLOCK/PAGE
+    int64_t sample_build_histogram_count = 0; // Records the number of histogram built for sampling
+    int64_t sample_build_histogram_time_ns = 0; // Records the time to build histogram
 };
 
 // OlapWriterStatistics used to collect statistics when write data to storage

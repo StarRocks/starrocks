@@ -450,6 +450,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -5554,7 +5555,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+        if (context.sampleClause() != null) {
+            tableRelation.setSampleClause(visitSampleClause(context.sampleClause()));
+        }
+
         return tableRelation;
+    }
+
+    @Override
+    public TableSampleClause visitSampleClause(StarRocksParser.SampleClauseContext context) {
+        TableSampleClause result = new TableSampleClause(createPos(context));
+        if (context.propertyList() != null) {
+            Map<String, String> properties = getPropertyList(context.propertyList());
+            try {
+                result.analyzeProperties(properties);
+            } catch (AnalysisException e) {
+                throw new ParsingException(e.getMessage(), createPos(context));
+            }
+        }
+        return result;
     }
 
     @Override

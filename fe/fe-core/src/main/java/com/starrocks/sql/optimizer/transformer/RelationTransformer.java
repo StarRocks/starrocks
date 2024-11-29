@@ -638,6 +638,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                         .setHintsReplicaIds(node.getReplicaIds())
                         .setHasTableHints(node.hasTableHints())
                         .setUsePkIndex(node.isUsePkIndex())
+                        .setSample(node.getSampleClause())
                         .build();
             } else {
                 scanOperator = new LogicalBinlogScanOperator(

@@ -94,6 +94,8 @@ public:
     bool use_vector_index = false;
 
     VectorSearchOptionPtr vector_search_option = nullptr;
+
+    TTableSampleOptions sample_options;
 };
 
 } // namespace starrocks

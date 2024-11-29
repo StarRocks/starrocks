@@ -99,8 +99,9 @@ set(STORAGE_FILES
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
-    rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
+    rowset/data_sample.cpp
+    rowset/dict_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp

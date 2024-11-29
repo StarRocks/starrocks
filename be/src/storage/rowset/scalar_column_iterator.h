@@ -65,6 +65,8 @@ public:
 
     ordinal_t num_rows() const override { return _reader->num_rows(); }
 
+    bool has_zone_map() const override { return _reader->has_zone_map(); }
+
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
                                       const ColumnPredicate* del_predicate, SparseRange<>* range,
                                       CompoundNodeType pred_relationn) override;
