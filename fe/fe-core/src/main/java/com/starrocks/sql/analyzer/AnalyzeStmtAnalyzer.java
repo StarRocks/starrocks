@@ -131,6 +131,9 @@ public class AnalyzeStmtAnalyzer {
             }
 
             if (statement.getPartitionNames() != null) {
+                if (!analyzeTable.isNativeTableOrMaterializedView()) {
+                    throw new SemanticException("Analyze partition only support olap table");
+                }
                 List<Long> pidList = Lists.newArrayList();
                 for (String partitionName : statement.getPartitionNames().getPartitionNames()) {
                     Partition p = analyzeTable.getPartition(partitionName);
