@@ -312,6 +312,17 @@ public class Database extends MetaObject implements Writable {
         return true;
     }
 
+    public void unRegisterTableUnlocked(Table table) {
+        if (table == null) {
+            return;
+        }
+
+        idToTable.remove(table.getId());
+        if (!table.isTemporaryTable()) {
+            nameToTable.remove(table.getName());
+        }
+    }
+
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
         Table table;
         Locker locker = new Locker();

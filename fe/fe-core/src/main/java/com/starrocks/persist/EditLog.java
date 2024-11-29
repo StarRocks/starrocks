@@ -36,6 +36,7 @@ package com.starrocks.persist;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.authentication.UserAuthenticationInfo;
@@ -63,6 +64,7 @@ import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportFailMsg;
@@ -1150,9 +1152,10 @@ public class EditLog {
             entity.setOpCode(op);
             entity.setData(writable);
             entity.write(buffer);
-        } catch (IOException e) {
+        } catch (IOException | JsonParseException e) {
             // The old implementation swallow exception like this
-            LOG.info("failed to serialize, ", e);
+            LOG.info("failed to serialize journal data", e);
+            throw new SerializeException("failed to serialize journal data");
         }
         JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
 
