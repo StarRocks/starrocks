@@ -6,16 +6,26 @@ services:
       test: ["CMD", "curl", "--silent", "--fail", "http://localhost:3000/health"]
 
   docusaurus:
-    build: /Users/droscign/GitHub/starrocks/docs/docusaurus
+    build: ../
     environment:
       - NODE_OPTIONS="--max-old-space-size=8192"
       - DISABLE_VERSIONING='true'
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
     volumes:
-      - /Users/droscign/GitHub/starrocks/docs/en:/app/docusaurus/docs
-      - /Users/droscign/GitHub/starrocks/docs/zh:/app/docusaurus/i18n/zh/docusaurus-plugin-content-docs/current
+      - ../../en:/app/docusaurus/docs
+      - ../../zh:/app/docusaurus/i18n/zh/docusaurus-plugin-content-docs/current
     working_dir: /app/docusaurus
     entrypoint: >
-      /bin/sh -c "
+      /bin/bash -c "
+      cd PDF && yarn install &&
+      python3 -m venv .venv &&
+      source .venv/bin/activate &&
+      pip3 install pdfcombine &&
+      cd /app/docusaurus &&
+      yarn install &&
+      yarn build &&
+      yarn serve -p 3000 -h 0.0.0.0 &&
       tail -f /dev/null
       "
 

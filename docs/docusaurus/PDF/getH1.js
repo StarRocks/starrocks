@@ -3,13 +3,21 @@ const readline = require('node:readline');
 const axios = require('axios');
 const cheerio = require('cheerio');
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 async function getH1(url) {
   try {
     const response = await axios.get(url);
     const html = response.data;
 
     const $ = cheerio.load(html);
-    return $('h1').text();
+    const h1Text = $('h1').text();
+    if (h1Text !== "") { return h1Text; }
+      else { return "blank"; }
 
   } catch (error) {
     console.error('Error:', error);
@@ -28,7 +36,7 @@ async function callGotenberg(url, fileName) {
 
     child = exec(command, function(error, stdout, stderr){
 
-    console.log('stdout: ' + stdout);
+    //console.log('stdout: ' + stdout);
     console.log('stderr: ' + stderr);
 
     if(error !== null)
@@ -49,9 +57,9 @@ async function processLineByLine() {
 
   for await (const line of rl) {
     // Each line in input.txt will be successively available here as `line`.
-    console.log(`URL: ${line}`);
+    //console.log(`URL: ${line}`);
     await requestPage(line).then(resp => {
-    console.log(`done.\n`);
+    //console.log(`done.\n`);
   }).catch(err => {
     console.log(err);
   });
@@ -59,7 +67,7 @@ async function processLineByLine() {
 }
 
 async function requestPage(url) {
-  const fileName = (String(i).padStart(4, '0')).concat('.', 'pdf');
+  const fileName = 'PDFoutput/'.concat(String(i).padStart(4, '0')).concat('.', 'pdf');
 
   // Get the details to write the YAML file
   // We need title and filename
@@ -71,19 +79,32 @@ async function requestPage(url) {
     if (err) {
       console.error(err);
     } else {
-      console.log(`Title is ${pageTitle}`);
-      console.log(`Filename is ` + fileName );
+      //console.log(`Title is ${pageTitle}`);
+      //console.log(`Filename is ` + fileName );
       // file written successfully
     }
   });
 
   await callGotenberg(url, fileName);
 
+  // shelling out to run curl with no delay causes Gotenberg
+  // to fail
+  await sleep(2000);
   i++;
 
 }
 
-// Example usage:
+const yamlHeader = 'files:\n';
+
+fs.writeFile('./combine.yaml', yamlHeader, err => {
+  if (err) {
+    console.error(err);
+  } else {
+    // file written successfully
+  }
+});
+
 var i = 0;
+
 processLineByLine();
 
