@@ -1348,7 +1348,7 @@ void Tablet::get_compaction_status(std::string* json_result) {
                 version.SetString(version_value.c_str(), version_value.length(), root.GetAllocator());
                 value.AddMember("version", version, root.GetAllocator());
 
-                input_rowset_details.PushBack(value, input_rowset_details.GetAllocator());
+                input_rowset_details.PushBack(value, root.GetAllocator());
             }
             task.AddMember("input_rowset_details", input_rowset_details, root.GetAllocator());
             compaction_detail.AddMember("task", task, root.GetAllocator());
