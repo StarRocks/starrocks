@@ -428,7 +428,7 @@ public class Config extends ConfigBase {
     public static int table_keeper_interval_second = 30;
 
     @ConfField(mutable = true, comment = "Whether enable the task history archive feature")
-    public static boolean enable_task_history_archive = true;
+    public static boolean enable_task_history_archive = false;
 
     @ConfField(mutable = true)
     public static boolean enable_task_run_fe_evaluation = true;
