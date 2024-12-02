@@ -113,7 +113,7 @@ struct DSSketchState<LT, HLL> {
         if (LIKELY(ds_sketch_wrapper != nullptr)) {
             result = ds_sketch_wrapper->estimate_cardinality();
         }
-        for (size_t i = start; i < end; ++i) {
+        for (size_t i = start; i < end; ++i) {Starting compaction
             column->append(result);
         }
     }
@@ -125,9 +125,9 @@ private:
     static std::tuple<uint8_t, datasketches::target_hll_type> _parse_hll_sketch_args(FunctionContext* ctx) {
         uint8_t log_k = DEFAULT_HLL_LOG_K;
         datasketches::target_hll_type tgt_type = datasketches::HLL_6;
-        if (ctx->get_num_args() == 2) {
+        if (ctx->get_num_constant_columns() == 2) {
             log_k = (uint8_t)ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(1));
-        } else if (ctx->get_num_args() == 3) {
+        } else if (ctx->get_num_constant_columns() == 3) {
             log_k = (uint8_t)ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(1));
             Column* tgt_type_column = ColumnHelper::get_data_column(ctx->get_constant_column(2).get());
             std::string tgt_type_str = tgt_type_column->get(0).get_slice().to_string();
@@ -268,8 +268,8 @@ private:
     // parse k and rank_arr from args
     static std::tuple<uint16_t, DatumArray> _parse_sketch_args(FunctionContext* ctx) {
         uint16_t k = DEFAULT_QUANTILE_K;
-        if (ctx->get_num_args() > 1) {
-            if (ctx->get_num_args() > 2) {
+        if (ctx->get_num_constant_columns() > 1) {
+            if (ctx->get_num_constant_columns() > 2) {
                 k = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
                 if (k <= 1) {
                     k = DEFAULT_QUANTILE_K;
@@ -457,11 +457,11 @@ private:
         uint64_t counter_num = DEFAULT_COUNTER_NUM;
         uint8_t lg_max_map_size = DEFAULT_FREQUENT_LG_MAX_SIZE;
         uint8_t lg_start_map_size = DEFAULT_FREQUENT_LG_MIn_SIZE;
-        if (ctx->get_num_args() > 1) {
+        if (ctx->get_num_constant_columns() > 1) {
             counter_num = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(1));
-            if (ctx->get_num_args() > 2) {
+            if (ctx->get_num_constant_columns() > 2) {
                 lg_max_map_size = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
-                if (ctx->get_num_args() > 3) {
+                if (ctx->get_num_constant_columns() > 3) {
                     lg_start_map_size = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(3));
                 }
             }
