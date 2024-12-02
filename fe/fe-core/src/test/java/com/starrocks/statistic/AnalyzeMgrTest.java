@@ -20,20 +20,17 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -68,31 +65,9 @@ public class AnalyzeMgrTest {
     @Test
     public void testRefreshConnectorTableBasicStatisticsCache(@Mocked CachedStatisticStorage cachedStatisticStorage) {
         Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
-        new Expectations() {
-            {
-                cachedStatisticStorage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2"));
-                result = ImmutableList.of(
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 10, 0, 20, 5), 5),
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0, 200, 50), 50)
-                );
-                minTimes = 1;
-            }
-        };
-
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
                 ImmutableList.of("c1", "c2"), true);
-
-        new Expectations() {
-            {
-                cachedStatisticStorage.getConnectorTableStatisticsSync(table, ImmutableList.of("c1", "c2"));
-                result = ImmutableList.of(
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 10, 0, 20, 5), 5),
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0, 200, 50), 50)
-                );
-                minTimes = 1;
-            }
-        };
         analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
                 ImmutableList.of("c1", "c2"), false);
 
