@@ -10,6 +10,29 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.7
+
+发布日期：2024 年 11 月 29 日
+
+### 功能优化
+
+- 将 `unnest(bitmap_to_array)` 改写为 `unnest_bitmap` 以提升效率。[#52870](https://github.com/StarRocks/starrocks/pull/52870)
+- 降低 TXN Log 的写入和删除操作。[#42542](https://github.com/StarRocks/starrocks/pull/42542)
+
+### 问题修复
+
+修复了如下问题：
+
+- Power BI 连接外表失败。[#52977](https://github.com/StarRocks/starrocks/pull/52977)
+- 日志中误导性的 FE Thrift RPC 失败信息。[#52706](https://github.com/StarRocks/starrocks/pull/52706)
+- Routine Load 因事务过期而导致任务取消（目前仅有数据库或表不存在任务才会被取消）。[#50334](https://github.com/StarRocks/starrocks/pull/50334) 
+- 通过 HTTP 1.0 提交的 Stream Load 失败。[#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- 分区 ID 整数溢出。 [#52965](https://github.com/StarRocks/starrocks/pull/52965)
+- Hive Text Reader 无法识别最后一个空元素。[#52990](https://github.com/StarRocks/starrocks/pull/52990)
+- `array_map` 出现在 Join 条件中导致的问题。[#52911](https://github.com/StarRocks/starrocks/pull/52911)
+- 元数据 Cache 在高并发场景下的问题。[#52968](https://github.com/StarRocks/starrocks/pull/52968)
+- 从物化视图基表删除分区后，整个物化视图会被重新刷新。[#52740](https://github.com/StarRocks/starrocks/pull/52740)
+
 ## 3.3.6
 
 发布日期：2024 年 11 月 18 日
@@ -68,6 +91,7 @@ displayed_sidebar: docs
 - `SELECT @@autocommit` 的返回值从 BOOLEAN 类型改为 BIGINT 类型。 [#51946](https://github.com/StarRocks/starrocks/pull/51946)
 - 新增 FE 参数 `max_bucket_number_per_partition`，为单个分区增加分桶上限控制。 [#47852](https://github.com/StarRocks/starrocks/pull/47852)
 - 主键表默认开启内存占用检查。 [#52393](https://github.com/StarRocks/starrocks/pull/52393)
+- 优化导入策略，当 Compaction 任务无法及时完成时降低导入速度。[#52269](https://github.com/StarRocks/starrocks/pull/52269)
 
 ## 3.3.5
 
