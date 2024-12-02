@@ -488,9 +488,7 @@ public class Database extends MetaObject implements Writable {
         }
 
         idToTable.remove(table.getId());
-        if (!table.isTemporaryTable()) {
-            nameToTable.remove(table.getName());
-        }
+        nameToTable.remove(table.getName());
     }
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
