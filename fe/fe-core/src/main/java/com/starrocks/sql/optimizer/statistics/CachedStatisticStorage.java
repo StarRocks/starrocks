@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
@@ -122,17 +121,21 @@ public class CachedStatisticStorage implements StatisticStorage {
     }
 
     @Override
-    public void refreshTableStatistic(Table table) {
+    public void refreshTableStatistic(Table table, boolean isSync) {
         List<TableStatsCacheKey> statsCacheKeyList = new ArrayList<>();
         for (Partition partition : table.getPartitions()) {
             statsCacheKeyList.add(new TableStatsCacheKey(table.getId(), partition.getId()));
         }
 
         try {
-            CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> completableFuture
-                    = tableStatsCache.getAll(statsCacheKeyList);
-            if (completableFuture.isDone()) {
-                completableFuture.get();
+            TableStatsCacheLoader loader = new TableStatsCacheLoader();
+            CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> future = loader.asyncLoadAll(statsCacheKeyList,
+                    statsCacheRefresherExecutor);
+            if (isSync) {
+                Map<TableStatsCacheKey, Optional<Long>> result = future.get();
+                tableStatsCache.synchronous().putAll(result);
+            } else {
+                future.whenComplete((result, e) -> tableStatsCache.synchronous().putAll(result));
             }
         } catch (InterruptedException e) {
             LOG.warn(e);
@@ -143,13 +146,34 @@ public class CachedStatisticStorage implements StatisticStorage {
     }
 
     @Override
-    public void refreshTableStatisticSync(Table table) {
-        List<TableStatsCacheKey> statsCacheKeyList = new ArrayList<>();
-        for (Partition partition : table.getPartitions()) {
-            statsCacheKeyList.add(new TableStatsCacheKey(table.getId(), partition.getId()));
+    public void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
+        Preconditions.checkState(table != null);
+
+        // get Statistics Table column info, just return default column statistics
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId()) ||
+                !StatisticUtils.checkStatisticTableStateNormal()) {
+            return;
         }
 
-        tableStatsCache.synchronous().getAll(statsCacheKeyList);
+        List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
+        long tableId = table.getId();
+        for (String column : columns) {
+            cacheKeys.add(new ColumnStatsCacheKey(tableId, column));
+        }
+
+        try {
+            ColumnBasicStatsCacheLoader loader = new ColumnBasicStatsCacheLoader();
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> future =
+                    loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            if (isSync) {
+                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = future.get();
+                columnStatistics.synchronous().putAll(result);
+            } else {
+                future.whenComplete((res, e) -> columnStatistics.synchronous().putAll(res));
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh getColumnStatistics", e);
+        }
     }
 
     @Override
@@ -179,7 +203,8 @@ public class CachedStatisticStorage implements StatisticStorage {
                 realResult = result.get();
                 for (String column : columns) {
                     Optional<ConnectorTableColumnStats> columnStatistic =
-                            realResult.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), column), Optional.empty());
+                            realResult.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), column),
+                                    Optional.empty());
                     if (columnStatistic.isPresent()) {
                         columnStatistics.add(columnStatistic.get());
                     } else {
@@ -241,6 +266,33 @@ public class CachedStatisticStorage implements StatisticStorage {
             allKeys.add(key);
         }
         connectorTableCachedStatistics.synchronous().invalidateAll(allKeys);
+    }
+
+    @Override
+    public void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
+        Preconditions.checkState(table != null);
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return;
+        }
+
+        List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
+        for (String column : columns) {
+            cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), column));
+        }
+
+        try {
+            ConnectorColumnStatsCacheLoader loader = new ConnectorColumnStatsCacheLoader();
+            CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> future =
+                    loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            if (isSync) {
+                Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = future.get();
+                connectorTableCachedStatistics.synchronous().putAll(result);
+            } else {
+                future.whenComplete((res, e) -> connectorTableCachedStatistics.synchronous().putAll(res));
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh getConnectorTableStatistics", e);
+        }
     }
 
     @Override
@@ -313,46 +365,6 @@ public class CachedStatisticStorage implements StatisticStorage {
             }
         } catch (Exception e) {
             LOG.warn(e);
-            return getDefaultColumnStatisticList(columns);
-        }
-    }
-
-    @Override
-    public List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
-        Preconditions.checkState(table != null);
-
-        // get Statistics Table column info, just return default column statistics
-        if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
-            return getDefaultColumnStatisticList(columns);
-        }
-
-        if (!StatisticUtils.checkStatisticTableStateNormal()) {
-            return getDefaultColumnStatisticList(columns);
-        }
-
-        List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
-        long tableId = table.getId();
-        for (String column : columns) {
-            cacheKeys.add(new ColumnStatsCacheKey(tableId, column));
-        }
-
-        try {
-            Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result =
-                    columnStatistics.synchronous().getAll(cacheKeys);
-            List<ColumnStatistic> columnStatistics = new ArrayList<>();
-
-            for (String column : columns) {
-                Optional<ColumnStatistic> columnStatistic =
-                        result.getOrDefault(new ColumnStatsCacheKey(tableId, column), Optional.empty());
-                if (columnStatistic.isPresent()) {
-                    columnStatistics.add(columnStatistic.get());
-                } else {
-                    columnStatistics.add(ColumnStatistic.unknown());
-                }
-            }
-            return columnStatistics;
-        } catch (Exception e) {
-            LOG.warn("Get column statistic fail, message : " + e.getMessage());
             return getDefaultColumnStatisticList(columns);
         }
     }

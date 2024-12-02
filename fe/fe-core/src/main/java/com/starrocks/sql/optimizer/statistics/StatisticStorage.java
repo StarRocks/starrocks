@@ -32,10 +32,10 @@ public interface StatisticStorage {
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
-    default void refreshTableStatistic(Table table) {
+    default void refreshTableStatistic(Table table, boolean isSync) {
     }
 
-    default void refreshTableStatisticSync(Table table) {
+    default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
     ColumnStatistic getColumnStatistic(Table table, String column);
@@ -48,10 +48,6 @@ public interface StatisticStorage {
     default Map<Long, List<ColumnStatistic>> getColumnStatisticsOfPartitionLevel(Table table, List<Long> partitions,
                                                                                  List<String> columns) {
         return null;
-    }
-
-    default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
-        return getColumnStatistics(table, columns);
     }
 
     default List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
@@ -86,6 +82,9 @@ public interface StatisticStorage {
     }
 
     default void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
+    }
+
+    default void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
     default void expireConnectorHistogramStatistics(Table table, List<String> columns) {
