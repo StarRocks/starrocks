@@ -68,7 +68,7 @@ Stop watching the logs with CTRL-c
 
 ### Find the initial URL
 
-First open the docs by launching a browser to the URL at the end of the log output, which should be [http://0.0.0.0:3000/](http://0.0.0.0:3000/).
+First open the docs by launching a browser to the URL at the end of the log output, substituting `localhost` for 0.0.0.0, which should be [http://localhost:3000/](http://localhost:3000/).
 
 Next, change to the Chinese documentation if you are generating a PDF document of the Chinese documentation.
 
@@ -90,61 +90,15 @@ The Docker Compose environment has two services:
 - `docusaurus`
 - `gotenberg`
 
-At a high level the process to create the PDF files is to:
+Run the command:
 
-- Generate a list of URLs
-- for each URL in the list, signal the `gotenberg` service to connect to the `docusaurus` service and generate a PDF stream
-- Write the PDF stream to disk
-
-### Generate a list of pages (URLs)
-
-```bash
-http://docusaurus:3000/zh/docs/introduction/StarRocks_intro/
-```
-
-
-This command will crawl the docs and list the URLs in order:
-
-```bash
-npm install -g docusaurus-prince-pdf
-npx docusaurus-prince-pdf --list-only -u http://docusaurus:3000/zh/docs/introduction/StarRocks_intro/ --file URLs.txt
-```
-
-<details>
-  <summary>Expand to see URLs.txt sample</summary>
-
-This is the file format, using the StarRocks developer docs as an example:
-```bash
-http://docusaurus:3000/zh/docs/developers/build-starrocks/Build_in_docker/
-http://docusaurus:3000/zh/docs/developers/build-starrocks/build_starrocks_on_ubuntu/
-http://docusaurus:3000/zh/docs/developers/build-starrocks/handbook/
-http://docusaurus:3000/zh/docs/developers/code-style-guides/protobuf-guides/
-http://docusaurus:3000/zh/docs/developers/code-style-guides/restful-api-standard/
-http://docusaurus:3000/zh/docs/developers/code-style-guides/thrift-guides/
-http://docusaurus:3000/zh/docs/developers/debuginfo/
-http://docusaurus:3000/zh/docs/developers/development-environment/IDEA/
-http://docusaurus:3000/zh/docs/developers/development-environment/ide-setup/
-http://docusaurus:3000/zh/docs/developers/trace-tools/Trace/%
-```
-
-</details>
-
-
-## docusaurus-puppeteer-pdf.js
-
-This takes the URLs.txt generated above and:
-1. creates PDF files for each URL in the file
-2. creates the file `combine.yaml` which contains the titles of the pages and filenames. This is the input to the next step.
-
-```bash
-node docusaurus-puppeteer-pdf.js
-```
-
-> Note:
+> Tip
 >
-> Some characters in Markdown titles cause problems. The code has been written to remove square brackets (`[`, `]`) and colons (`:`) in titles as these were causing errors when running `pdfcombine` with the StarRocks docs. If you see errors when running `pdfcombine` you may have to edit `combine.yaml` and remove the offending characters.
->
-> Open an issue in this repo and send your `combine.yaml` if you need help.
+> The URL in the code sample is for the Chinese documentation, remove the `/zh/` if you want English.
+
+```bash
+node generatePdf.js http://localhost:3000/zh/docs/introduction/StarRocks_intro/
+```
 
 ## Join the individual PDF files
 
@@ -160,6 +114,16 @@ pdfcombine -y combine.yaml --title="StarRocks 2.5" -o StarRocks_2.5.pdf
 > `GPL Ghostscript 10.03.1: Missing glyph CID=93, glyph=005d in the font IAAAAA+Menlo-Regular . The output PDF may fail with some viewers.`
 >
 > I have not had any complaints about the missing glyph from readers of the documents produced with this.
+
+### Copy the PDF file to your local machine
+
+> Tip
+> Use the filename that you sepcified in the `pdfcombine` command, for example `StarRocks_2.5.pdf`:
+
+```bash
+docker compose cp docusaurus:/app/docusaurus/PDF/StarRocks_2.5.pdf .
+```
+
 
 ## Customizing the docs site for PDF
 
