@@ -888,7 +888,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         if (context.identifierList() == null) {
             if (context.partitionExpr() != null) {
-                List<ParseNode> multiDescList = Lists.newArrayList(); 
+                List<ParseNode> multiDescList = Lists.newArrayList();
                 for (StarRocksParser.PartitionExprContext partitionExpr : context.partitionExpr()) {
                     if (partitionExpr.identifier() != null) {
                         Identifier identifier = (Identifier) visit(partitionExpr.identifier());
@@ -2618,6 +2618,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 collect(toList());
         TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
         List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
 
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -2627,7 +2631,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AnalyzeStmt(tableName, columns, properties,
+        return new AnalyzeStmt(tableName, columns, partitionNames, properties,
                 context.SAMPLE() != null,
                 context.ASYNC() != null,
                 new AnalyzeBasicDesc(), createPos(context));
@@ -2743,7 +2747,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             bucket = Config.histogram_buckets_size;
         }
 
-        return new AnalyzeStmt(tableName, columns, properties, true,
+        return new AnalyzeStmt(tableName, columns, null, properties, true,
                 false, new AnalyzeHistogramDesc(bucket), createPos(context));
     }
 
