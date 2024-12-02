@@ -26,4 +26,6 @@ set enable_global_runtime_filter = false;
 function: assert_explain_not_contains("select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
 add into plan advisor select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t;
 function: assert_explain_contains("select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
+function: assert_trace_values_contains("select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
+
 clear plan advisor;

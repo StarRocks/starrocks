@@ -25,6 +25,8 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.feedback.OperatorTuningGuides;
+import com.starrocks.qe.feedback.PlanTuningAdvisor;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -966,6 +968,12 @@ public class Optimizer {
         // if we can change the distribution to adjust the plan because of skew data, bad statistics or something else.
         result = new MarkParentRequiredDistributionRule().rewrite(result, rootTaskContext);
         result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
+
+        OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()
+                .getOptimizedRecord(context.getQueryId());
+        if (optimizedRecord != null) {
+            Tracers.record(Tracers.Module.BASE, "DynamicTuningGuides", optimizedRecord.getExplainString());
+        }
         return result;
     }
 
