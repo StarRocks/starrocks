@@ -52,6 +52,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.validation.constraints.NotNull;
 
 /*
@@ -258,7 +259,7 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
      * Return the partitions that contains NULL partition values
      * e.g. PARTITION p_null VALUES IN (NULL)
      */
-    public List<Long> getNullValuePartitions() {
+    public Set<Long> getNullValuePartitions() {
         throw new NotImplementedException("not reachable");
     }
 

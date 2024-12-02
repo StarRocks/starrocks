@@ -30,7 +30,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.List;
+import java.util.Set;
 
 import static org.junit.Assert.assertTrue;
 
@@ -366,7 +366,7 @@ public class PartitionPruneTest extends PlanTestBase {
         {
             OlapTable t1 = (OlapTable) starRocksAssert.getTable("test", "t1_list");
             PartitionInfo partitionInfo = t1.getPartitionInfo();
-            List<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
+            Set<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
             Assert.assertEquals(1, nullValuePartitions.size());
         }
 
@@ -383,7 +383,7 @@ public class PartitionPruneTest extends PlanTestBase {
             OlapTable t3 = (OlapTable) starRocksAssert.getTable("test", "t3_composite");
             PartitionInfo partitionInfo = t3.getPartitionInfo();
 
-            List<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
+            Set<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
             Assert.assertEquals(0, nullValuePartitions.size());
 
             starRocksAssert.ddl("alter table t3_composite add partition pnull values in ((NULL, NULL))");
@@ -402,7 +402,7 @@ public class PartitionPruneTest extends PlanTestBase {
         {
             OlapTable t2 = (OlapTable) starRocksAssert.getTable("test", "t2_range");
             PartitionInfo partitionInfo = t2.getPartitionInfo();
-            List<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
+            Set<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
             Assert.assertEquals(1, nullValuePartitions.size());
         }
 

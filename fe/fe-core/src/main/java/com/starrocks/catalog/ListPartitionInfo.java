@@ -616,24 +616,22 @@ public class ListPartitionInfo extends PartitionInfo {
 
     /**
      * ListPartition would put the NULL value into a real NULL partition, whose partition value is NullLiteral
-     *
-     * @return
      */
     @Override
-    public List<Long> getNullValuePartitions() {
+    public Set<Long> getNullValuePartitions() {
         if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
             return idToLiteralExprValues.entrySet().stream()
                     .filter(x -> x.getValue().stream().anyMatch(LiteralExpr::isConstantNull))
                     .map(Map.Entry::getKey)
-                    .collect(Collectors.toList());
+                    .collect(Collectors.toSet());
         } else if (MapUtils.isNotEmpty(idToMultiLiteralExprValues)) {
             // only if all partition columns are NULL
             return idToMultiLiteralExprValues.entrySet().stream()
                     .filter(x -> x.getValue().stream().anyMatch(y -> y.stream().allMatch(LiteralExpr::isConstantNull)))
                     .map(Map.Entry::getKey)
-                    .collect(Collectors.toList());
+                    .collect(Collectors.toSet());
         } else {
-            return Lists.newArrayList();
+            return Sets.newHashSet();
         }
     }
 
