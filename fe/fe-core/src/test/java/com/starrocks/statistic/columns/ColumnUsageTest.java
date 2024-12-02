@@ -15,19 +15,33 @@
 package com.starrocks.statistic.columns;
 
 import com.google.common.base.Splitter;
+import com.starrocks.common.FeConstants;
+import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.statistic.StatisticsMetaManager;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 class ColumnUsageTest extends PlanTestBase {
+
+    @BeforeAll
+    public static void beforeClass() {
+        StatisticsMetaManager statistic = new StatisticsMetaManager();
+        statistic.createStatisticsTablesForTest();
+        TableKeeper keeper = PredicateColumnsStorage.createKeeper();
+        keeper.run();
+        FeConstants.runningUnitTest = true;
+    }
 
     @BeforeEach
     public void before() {
@@ -39,23 +53,24 @@ class ColumnUsageTest extends PlanTestBase {
         // normal predicate
         starRocksAssert.query("select * from t0 where v1 > 1").explainQuery();
         starRocksAssert.query("select * from information_schema.column_stats_usage where table_name = 't0'")
-                .explainContains("constant exprs", "'v1' | 'predicate'");
+                .explainContains("constant exprs", "'v1' | 'normal,predicate'");
 
         starRocksAssert.query("select * from test_all_type where lower(t1a) = '123' and t1e < 1.1").explainQuery();
         starRocksAssert.query("select * from information_schema.column_stats_usage where table_name = 'test_all_type'")
-                .explainContains("constant exprs", "'t1a' | 'predicate'");
+                .explainContains("constant exprs", "'t1a' | 'normal,predicate'");
 
         // group by
         starRocksAssert.query("select v2, v3, count(*) from t0 group by v2, v3").explainQuery();
         starRocksAssert.query("select * from information_schema.column_stats_usage where table_name = 't0'")
-                .explainContains("constant exprs", "'v1' | 'predicate'");
+                .explainContains("constant exprs", "'v1' | 'normal,predicate'");
 
         // join
         starRocksAssert.query("select * from t0 join t1 on t0.v2 = t1.v4").explainQuery();
         starRocksAssert.query("select * from information_schema.column_stats_usage where table_name = 't0'")
-                .explainContains(" 'v3' | 'group_by'", "'v2' | 'predicate,join,group_by'", "'v1' | 'predicate'");
+                .explainContains(" 'v3' | 'normal,group_by'", "'v2' | 'normal,predicate,join,group_by'",
+                        "'v1' | 'normal,predicate'");
         starRocksAssert.query("select * from information_schema.column_stats_usage where table_name = 't1'")
-                .explainContains("constant exprs", "'v4' | 'predicate,join'");
+                .explainContains("constant exprs", "'v4' | 'normal,predicate,join'");
     }
 
     @ParameterizedTest
@@ -132,6 +147,7 @@ class ColumnUsageTest extends PlanTestBase {
         AnalyzeStmt stmt = (AnalyzeStmt) AnalyzeTestUtil.analyzeSuccess(analyzeStmt);
         List<String> expect =
                 StringUtils.isNotEmpty(expectedColumns) ? Splitter.on(",").splitToList(expectedColumns) : List.of();
-        Assertions.assertEquals(expect, stmt.getColumnNames());
+        Assertions.assertEquals(expect.stream().sorted().collect(Collectors.toList()),
+                stmt.getColumnNames().stream().sorted().collect(Collectors.toList()));
     }
 }

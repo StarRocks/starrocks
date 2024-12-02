@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
@@ -54,7 +55,9 @@ import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.columns.PredicateColumnsStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -103,13 +106,14 @@ public class AnalyzeStmtTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(createStructTableSql);
+
     }
 
     @Test
     public void testAllColumns() {
         String sql = "analyze table db.tbl";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-        Assert.assertEquals(analyzeStmt.getColumnNames().size(), 0);
+        Assert.assertEquals(4, analyzeStmt.getColumnNames().size());
     }
 
     @Test
@@ -136,7 +140,7 @@ public class AnalyzeStmtTest {
 
         sql = "analyze table test.t0";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-        Assert.assertEquals(analyzeStmt.getColumnNames().size(), 0);
+        Assert.assertEquals(3, analyzeStmt.getColumnNames().size());
     }
 
     @Test
@@ -475,6 +479,11 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testAnalyzePredicateColumns() {
+        StatisticsMetaManager statistic = new StatisticsMetaManager();
+        statistic.createStatisticsTablesForTest();
+        TableKeeper keeper = PredicateColumnsStorage.createKeeper();
+        keeper.run();
+
         AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl all columns");
         Assert.assertTrue(stmt.isAllColumns());
         stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl predicate columns");

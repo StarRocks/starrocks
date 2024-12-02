@@ -387,7 +387,7 @@ class ParserTest {
         SessionVariable sessionVariable = new SessionVariable();
         try {
             SqlParser.parse(sql, sessionVariable).get(0);
-            fail("sql should fail.");
+            fail("sql should fail: " + sql);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             assertContains(e.getMessage(), expecting);
