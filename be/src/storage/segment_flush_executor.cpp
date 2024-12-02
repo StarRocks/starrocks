@@ -65,14 +65,14 @@ public:
     // BackendInternalServiceImpl<T>::tablet_writer_add_segment.
     void run() override {
         auto& stat = _flush_token->_stat;
-        stat.num_pending_tasks -= 1;
-        stat.pending_time_ns += MonotonicNanos() - _create_time_ns;
-        stat.num_running_tasks += 1;
+        stat.num_pending_tasks.fetch_add(-1, std::memory_order_relaxed);
+        stat.pending_time_ns.fetch_add(MonotonicNanos() - _create_time_ns, std::memory_order_relaxed);
+        stat.num_running_tasks.fetch_add(1, std::memory_order_relaxed);
         int64_t duration_ns = 0;
         DeferOp defer([&stat, &duration_ns]() {
-            stat.num_running_tasks -= 1;
-            stat.num_finished_tasks += 1;
-            stat.execute_time_ns += duration_ns;
+            stat.num_running_tasks.fetch_add(-1, std::memory_order_relaxed);
+            stat.num_finished_tasks.fetch_add(1, std::memory_order_relaxed);
+            stat.execute_time_ns.fetch_add(duration_ns, std::memory_order_relaxed);
         });
         SCOPED_RAW_TIMER(&duration_ns);
 
@@ -186,7 +186,7 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
     auto task = std::make_shared<SegmentFlushTask>(this, writer, cntl, request, response, done);
     auto submit_st = _flush_token->submit(task);
     if (submit_st.ok()) {
-        _stat.num_pending_tasks += 1;
+        _stat.num_pending_tasks.fetch_add(1, std::memory_order_relaxed);
         closure_guard.release();
     } else {
         task->release();
