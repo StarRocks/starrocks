@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.feedback.analyzer;
 
+import com.google.common.base.Predicates;
 import com.google.common.collect.Maps;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -22,15 +23,19 @@ import com.starrocks.qe.feedback.OperatorTuningGuides;
 import com.starrocks.qe.feedback.guide.LeftChildEstimationErrorTuningGuide;
 import com.starrocks.qe.feedback.guide.RightChildEstimationErrorTuningGuide;
 import com.starrocks.qe.feedback.guide.StreamingAggTuningGuide;
+import com.starrocks.qe.feedback.skeleton.ScanNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonBuilder;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.plan.DistributedEnvPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -113,5 +118,25 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
             PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
             Assert.assertTrue(tuningGuides.getTuningGuides(5).get(0) instanceof LeftChildEstimationErrorTuningGuide);
         }
+    }
+
+    @Test
+    public void testSameScanNode() throws Exception {
+        String sql = "select * from customer l join customer r on l.c_custkey = r.c_custkey";
+        ExecPlan execPlan = getExecPlan(sql);
+        OptExpression root = execPlan.getPhysicalPlan();
+        NodeExecStats left = new NodeExecStats(0, 500, 500, 0, 0, 0);
+        NodeExecStats right = new NodeExecStats(1, 20000000, 20000000, 0, 0, 0);
+        Map<Integer, NodeExecStats> map = Maps.newHashMap();
+        map.put(0, left);
+        map.put(1, right);
+        SkeletonBuilder skeletonBuilder = new SkeletonBuilder(map);
+        Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair = skeletonBuilder.buildSkeleton(root);
+        SkeletonNode rootSkeletonNode = pair.first;
+        List<ScanNode> scanNodeList = new ArrayList<>();
+        rootSkeletonNode.collectAll(Predicates.instanceOf(ScanNode.class), scanNodeList);
+        Assertions.assertNotEquals(scanNodeList.get(0), scanNodeList.get(1));
+        Assertions.assertEquals(scanNodeList.get(0).getTableIdentifier(), scanNodeList.get(1).getTableIdentifier());
+        Assertions.assertEquals(scanNodeList.get(0).getTableId(), scanNodeList.get(1).getTableId());
     }
 }
