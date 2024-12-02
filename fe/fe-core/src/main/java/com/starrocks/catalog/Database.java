@@ -482,6 +482,15 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
+    public void unRegisterTableUnlocked(Table table) {
+        if (table == null) {
+            return;
+        }
+
+        idToTable.remove(table.getId());
+        nameToTable.remove(table.getName());
+    }
+
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
         Table table;
         writeLock();

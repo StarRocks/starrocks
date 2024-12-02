@@ -66,7 +66,7 @@ public class LocalMetaStoreTest {
         Config.alter_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
 
-        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -254,5 +254,19 @@ public class LocalMetaStoreTest {
         } catch (RuntimeException e) {
             Assert.assertEquals("Cannot parse text to Duration", e.getMessage());
         }
+    }
+
+    @Test
+    public void testCreateTableSerializeException() {
+        final long tableId = 1000010L;
+        final String tableName = "test";
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        SerializeFailedTable table = new SerializeFailedTable(1000010L, "serialize_test");
+
+        Assert.assertThrows(DdlException.class, () -> localMetastore.onCreate(db, table, "", true));
+
+        Assert.assertNull(db.getTable(tableId));
+        Assert.assertNull(db.getTable(tableName));
     }
 }
