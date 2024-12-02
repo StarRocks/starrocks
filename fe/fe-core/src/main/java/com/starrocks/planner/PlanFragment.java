@@ -40,7 +40,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -61,8 +60,6 @@ import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.roaringbitmap.RoaringBitmap;
 
 import java.nio.ByteBuffer;
@@ -113,8 +110,6 @@ import java.util.stream.Stream;
  * fix that
  */
 public class PlanFragment extends TreeNode<PlanFragment> {
-    private static final Logger LOG = LogManager.getLogger(PlanFragment.class);
-
     // id for this plan fragment
     protected final PlanFragmentId fragmentId;
 
