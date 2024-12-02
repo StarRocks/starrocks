@@ -937,7 +937,8 @@ public class Utils {
             ScalarOperator impl = expr.getOp().getProjection().resolveColumnRef(ref);
             if (impl != null) {
                 List<ColumnRefOperator> subRefs = Utils.extractColumnRef(impl);
-                List<Pair<Table, Column>> subColumns = com.google.api.client.util.Lists.newArrayList();
+                subRefs.remove(impl);
+                List<Pair<Table, Column>> subColumns = Lists.newArrayList();
                 for (ColumnRefOperator subRef : subRefs) {
                     subColumns.addAll(ListUtils.emptyIfNull(resolveColumnRefRecursive(subRef, factory, expr)));
                 }
