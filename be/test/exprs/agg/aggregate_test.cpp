@@ -2722,4 +2722,214 @@ TEST_F(AggregateTest, test_get_aggregate_function_by_type) {
     }
 }
 
+TEST_F(AggregateTest, test_ds_hll) {
+    std::vector<TypeDescriptor> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("ds_hll_count_distinct", TYPE_DOUBLE, TYPE_BIGINT, false);
+
+    auto data_column1 = DoubleColumn::create();
+    data_column1->append(2.0);
+    data_column1->append(3.0);
+    data_column1->append(4.0);
+
+    auto data_column2 = DoubleColumn::create();
+    data_column2->append(5.0);
+    data_column2->append(6.0);
+
+    auto state1 = ManagedAggrState::create(ctx, func);
+    auto const_colunm1 = ColumnHelper::create_const_column<TYPE_INT>(17, 1);
+    Columns const_columns1;
+    const_columns1.emplace_back(data_column1);
+    const_columns1.emplace_back(const_colunm1);
+    local_ctx->set_constant_columns(const_columns1);
+    std::vector<const Column*> raw_columns1;
+    raw_columns1.resize(1);
+    raw_columns1[0] = data_column1.get();
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
+
+    auto state2 = ManagedAggrState::create(ctx, func);
+    auto const_colunm2 = ColumnHelper::create_const_column<TYPE_INT>(17, 1);
+    Columns const_columns2;
+    const_columns2.emplace_back(data_column2);
+    const_columns2.emplace_back(const_colunm2);
+    local_ctx->set_constant_columns(const_columns2);
+    std::vector<const Column*> raw_columns2;
+    raw_columns2.resize(1);
+    raw_columns2[0] = data_column2.get();
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), raw_columns2.data(), state2->state());
+
+    auto state3 = ManagedAggrState::create(ctx, func);
+    auto result_column = Int64Column::create();
+    ColumnPtr serde_column1 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
+    ColumnPtr serde_column2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
+
+    func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde_column2.get(), state3->state(), 0);
+
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
+    ASSERT_EQ(5, result_column->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_ds_theta) {
+    std::vector<TypeDescriptor> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("ds_theta", TYPE_DOUBLE, TYPE_BIGINT, false);
+
+    auto data_column1 = DoubleColumn::create();
+    data_column1->append(2.0);
+    data_column1->append(3.0);
+    data_column1->append(4.0);
+
+    auto data_column2 = DoubleColumn::create();
+    data_column2->append(5.0);
+    data_column2->append(6.0);
+
+    auto state1 = ManagedAggrState::create(ctx, func);
+    std::vector<const Column*> raw_columns1;
+    raw_columns1.resize(1);
+    raw_columns1[0] = data_column1.get();
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
+
+    auto state2 = ManagedAggrState::create(ctx, func);
+    std::vector<const Column*> raw_columns2;
+    raw_columns2.resize(1);
+    raw_columns2[0] = data_column2.get();
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), raw_columns2.data(), state2->state());
+
+    auto state3 = ManagedAggrState::create(ctx, func);
+    auto result_column = Int64Column::create();
+    ColumnPtr serde_column1 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
+    ColumnPtr serde_column2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
+
+    func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde_column2.get(), state3->state(), 0);
+
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
+    ASSERT_EQ(5, result_column->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_ds_quantile) {
+    std::vector<TypeDescriptor> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("ds_quantile", TYPE_DOUBLE, TYPE_ARRAY, false);
+
+    auto data_column1 = DoubleColumn::create();
+    data_column1->append(2.0);
+    data_column1->append(3.0);
+    data_column1->append(4.0);
+
+    auto data_column2 = DoubleColumn::create();
+    data_column2->append(5.0);
+    data_column2->append(6.0);
+
+    auto state1 = ManagedAggrState::create(ctx, func);
+    std::vector<const Column*> raw_columns1;
+    raw_columns1.resize(1);
+    raw_columns1[0] = data_column1.get();
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
+
+    auto state2 = ManagedAggrState::create(ctx, func);
+    std::vector<const Column*> raw_columns2;
+    raw_columns2.resize(1);
+    raw_columns2[0] = data_column2.get();
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), raw_columns2.data(), state2->state());
+
+    auto state3 = ManagedAggrState::create(ctx, func);
+    auto elem = DoubleColumn::create();
+    auto offsets = UInt32Column::create(0);
+    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+    ColumnPtr serde_column1 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
+    ColumnPtr serde_column2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
+
+    func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde_column2.get(), state3->state(), 0);
+
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
+    ASSERT_EQ(1, result_column->size());
+    ASSERT_EQ(4, result_column->get(0).get_array()[0].get_double());
+}
+
+TEST_F(AggregateTest, test_ds_frequent) {
+    std::vector<TypeDescriptor> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("ds_frequent", TYPE_DOUBLE, TYPE_ARRAY, false);
+
+    auto data_column1 = DoubleColumn::create();
+    data_column1->append(2.0);
+    data_column1->append(2.0);
+    data_column1->append(3.0);
+    data_column1->append(4.0);
+
+    auto data_column2 = DoubleColumn::create();
+    data_column2->append(5.0);
+    data_column1->append(2.0);
+    data_column2->append(6.0);
+
+    auto state1 = ManagedAggrState::create(ctx, func);
+    auto const_colunm1 = ColumnHelper::create_const_column<TYPE_BIGINT>(1, 1);
+    Columns const_columns1;
+    const_columns1.emplace_back(data_column1);
+    const_columns1.emplace_back(const_colunm1);
+    local_ctx->set_constant_columns(const_columns1);
+    std::vector<const Column*> raw_columns1;
+    raw_columns1.resize(1);
+    raw_columns1[0] = data_column1.get();
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
+
+    auto state2 = ManagedAggrState::create(ctx, func);
+    auto const_colunm2 = ColumnHelper::create_const_column<TYPE_BIGINT>(1, 1);
+    Columns const_columns2;
+    const_columns2.emplace_back(data_column2);
+    const_columns2.emplace_back(const_colunm2);
+    local_ctx->set_constant_columns(const_columns2);
+    std::vector<const Column*> raw_columns2;
+    raw_columns2.resize(1);
+    raw_columns2[0] = data_column2.get();
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), raw_columns2.data(), state2->state());
+
+    auto state3 = ManagedAggrState::create(ctx, func);
+    std::vector<std::string> field_name{"value", "count", "lower_bound", "upper_bound"};
+    auto value = NullableColumn::create(DoubleColumn::create(), NullColumn::create());
+    auto count = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto lower_bound = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto upper_bound = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    Columns fields{value, count, lower_bound, upper_bound};
+    auto elem = StructColumn::create(fields, field_name);
+
+    auto offsets = UInt32Column::create(0);
+    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+    ColumnPtr serde_column1 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
+    ColumnPtr serde_column2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
+
+    func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde_column2.get(), state3->state(), 0);
+
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
+    auto& elements_column = result_column->elements_column();
+    auto* nullable_struct_column = down_cast<NullableColumn*>(elements_column.get());
+    auto* struct_column = down_cast<StructColumn*>(nullable_struct_column->data_column().get());
+    ASSERT_EQ(struct_column->size(), 1);
+    ASSERT_EQ("{value:2,count:3,lower_bound:3,upper_bound:3}", struct_column->debug_item(0));
+}
+
 } // namespace starrocks
