@@ -101,7 +101,7 @@ public class SampleInfoTest extends PlanTestBase {
         InsertStmt insertStmt = (InsertStmt) stmt.get(0);
         Assert.assertTrue(insertStmt.getQueryStatement().getQueryRelation() instanceof UnionRelation);
         UnionRelation unionRelation = (UnionRelation) insertStmt.getQueryStatement().getQueryRelation();
-        Assert.assertTrue(unionRelation.getRelations().size() == 4);
+        Assert.assertEquals(2, unionRelation.getRelations().size());
         Assert.assertTrue(unionRelation.getRelations().get(0) instanceof SelectRelation);
         SelectRelation selectRelation = (SelectRelation) unionRelation.getRelations().get(0);
         Assert.assertTrue(selectRelation.getSelectList().getItems().size() == 12);

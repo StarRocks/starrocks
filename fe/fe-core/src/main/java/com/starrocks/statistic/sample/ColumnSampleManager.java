@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 
 import java.util.List;
 
@@ -27,8 +28,6 @@ public class ColumnSampleManager {
     private final List<ColumnStats> primitiveTypeStats = Lists.newArrayList();
 
     private final List<ColumnStats> complexTypeStats = Lists.newArrayList();
-
-    private static final int BATCH_SIZE = 64;
 
     private ColumnSampleManager() {
 
@@ -108,6 +107,10 @@ public class ColumnSampleManager {
     }
 
     public List<List<ColumnStats>> splitPrimitiveTypeStats() {
-        return Lists.partition(primitiveTypeStats, BATCH_SIZE);
+        int dop = 2;
+        if (ConnectContext.get() != null) {
+            dop = Math.max(dop, ConnectContext.get().getSessionVariable().getStatisticCollectParallelism());
+        }
+        return Lists.partition(primitiveTypeStats, dop);
     }
 }
