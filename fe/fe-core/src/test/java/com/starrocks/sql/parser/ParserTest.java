@@ -561,7 +561,6 @@ class ParserTest {
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
                 ");", ")"));
-        arguments.add(Arguments.of("analyze table tt abc", "';'"));
         arguments.add(Arguments.of("select 1,, from tbl", "a legal identifier"));
         arguments.add(Arguments.of("INSTALL PLUGIN FRO xxx", "FROM"));
         arguments.add(Arguments.of("select (1 + 1) + 1) from tbl", "';'"));
