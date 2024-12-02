@@ -57,8 +57,11 @@ public class PlanAdvisorExecutor {
 
         @Override
         public ShowResultSet visitAddPlanAdvisorStatement(AddPlanAdvisorStmt stmt, ConnectContext context) {
+            boolean enablePlanAnalyzer = context.getSessionVariable().isEnablePlanAnalyzer();
             try {
-                context.getSessionVariable().setEnablePlanAnalyzer(true);
+                if (!enablePlanAnalyzer) {
+                    context.getSessionVariable().setEnablePlanAnalyzer(true);
+                }
                 StmtExecutor executor = new StmtExecutor(context, stmt.getQueryStmt());
                 executor.execute();
                 String result;
@@ -74,7 +77,7 @@ public class PlanAdvisorExecutor {
                 throw new RuntimeException(e);
             } finally {
                 context.getState().reset();
-                context.getSessionVariable().setEnablePlanAnalyzer(false);
+                context.getSessionVariable().setEnablePlanAnalyzer(enablePlanAnalyzer);
             }
         }
 
