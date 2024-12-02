@@ -285,30 +285,23 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        GlobalStateMgr.getCurrentState().getStatisticStorage().expireTableAndColumnStatistics(table, columns);
         if (async) {
-            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatistic(table);
-            GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatistic(table, false);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshColumnStatistics(table, columns, false);
         } else {
-            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatisticSync(table);
-            GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatisticsSync(table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatistic(table, true);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshColumnStatistics(table, columns, true);
         }
     }
 
     public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
                                                           List<String> columns, boolean async) {
-
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
         if (table == null) {
             return;
         }
-
-        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
-        if (async) {
-            GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columns);
-        } else {
-            GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatisticsSync(table, columns);
-        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .refreshConnectorTableColumnStatistics(table, columns, async);
     }
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
