@@ -379,6 +379,19 @@ public class SelectStmtTest {
     }
 
     @Test
+    void testGroupByCountDistinctWithSkewHintLossPredicate() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql =
+                "select t from(select cast(k1 as int), count(distinct [skew] cast(k2 as int)) as t from db1.tbl1 group by cast(k1 as int)) temp where t > 1";
+        String s = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(s, s.contains(" 8:AGGREGATE (merge finalize)\n" +
+                "  |  output: sum(7: count)\n" +
+                "  |  group by: 5: cast\n" +
+                "  |  having: 7: count > 1"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     void testGroupByMultiColumnCountDistinctWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql =
