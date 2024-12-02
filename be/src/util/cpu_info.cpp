@@ -99,8 +99,9 @@ static struct {
     string name;
     int64_t flag;
 } flag_mappings[] = {
-        {"ssse3", CpuInfo::SSSE3},   {"sse4_1", CpuInfo::SSE4_1}, {"sse4_2", CpuInfo::SSE4_2},
-        {"popcnt", CpuInfo::POPCNT}, {"avx", CpuInfo::AVX},       {"avx2", CpuInfo::AVX2},
+        {"ssse3", CpuInfo::SSSE3},     {"sse4_1", CpuInfo::SSE4_1},     {"sse4_2", CpuInfo::SSE4_2},
+        {"popcnt", CpuInfo::POPCNT},   {"avx", CpuInfo::AVX},           {"avx2", CpuInfo::AVX2},
+        {"avx512f", CpuInfo::AVX512F}, {"avx512bw", CpuInfo::AVX512BW},
 };
 
 // Helper function to parse for hardware flags.
@@ -480,6 +481,53 @@ std::vector<size_t> CpuInfo::get_core_ids() {
     std::erase_if(core_ids, [&](const size_t core) { return offline_cores_.contains(core); });
 
     return core_ids;
+}
+
+std::vector<std::string> CpuInfo::unsupported_cpu_flags_from_current_env() {
+    std::vector<std::string> unsupported_flags;
+    for (auto& flag_mapping : flag_mappings) {
+        if (!is_supported(flag_mapping.flag)) {
+            // AVX is skipped due to there is no condition compile flags for it
+            // case CpuInfo::AVX:
+            bool unsupported = false;
+            switch (flag_mapping.flag) {
+#if defined(__x86_64__) && defined(__SSSE3__)
+            case CpuInfo::SSSE3:
+                unsupported = true;
+                break;
+#endif
+#if defined(__x86_64__) && defined(__SSE4_1__)
+            case CpuInfo::SSE4_1:
+                unsupported = true;
+                break;
+#endif
+#if defined(__x86_64__) && defined(__SSE4_2__)
+            case CpuInfo::SSE4_2:
+                unsupported = true;
+                break;
+#endif
+#if defined(__x86_64__) && defined(__AVX2__)
+            case CpuInfo::AVX2:
+                unsupported = true;
+                break;
+#endif
+#if defined(__x86_64__) && defined(__AVX512F__)
+            case CpuInfo::AVX512F:
+                unsupported = true;
+                break;
+#endif
+#if defined(__x86_64__) && defined(__AVX512BW__)
+            case CpuInfo::AVX512BW:
+                unsupported = true;
+                break;
+#endif
+            }
+            if (unsupported) {
+                unsupported_flags.push_back(flag_mapping.name);
+            }
+        }
+    }
+    return unsupported_flags;
 }
 
 } // namespace starrocks
