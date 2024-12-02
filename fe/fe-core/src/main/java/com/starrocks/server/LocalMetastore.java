@@ -125,6 +125,7 @@ import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
 import com.starrocks.epack.persist.CreateTableInfoEPack;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
+import com.starrocks.journal.SerializeException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
@@ -1950,6 +1951,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             withRowAccessPolicy);
                 }
             }
+        } catch (SerializeException e) {
+            db.unRegisterTableUnlocked(table);
+            LOG.warn("create table failed", e);
+            ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), e.getMessage());
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
