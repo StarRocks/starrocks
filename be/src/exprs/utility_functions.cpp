@@ -66,14 +66,19 @@ StatusOr<ColumnPtr> UtilityFunctions::sleep(FunctionContext* context, const Colu
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BOOLEAN> result(size);
+    auto& cancelled = context->state()->cancelled_ref();
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
             continue;
         }
 
-        auto value = data_column.value(row);
-        SleepFor(MonoDelta::FromSeconds(value));
+        int32_t seconds = data_column.value(row);
+        // TODO: don't use system sleep, which will block current thread
+        while (seconds-- > 0) {
+            RETURN_IF(cancelled.load(), Status::Cancelled("cancelled during sleep function"));
+            SleepFor(MonoDelta::FromSeconds(1));
+        }
         result.append(true);
     }
 

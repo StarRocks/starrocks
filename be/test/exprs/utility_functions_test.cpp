@@ -21,6 +21,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/random.h"
 #include "util/time.h"
@@ -56,6 +57,8 @@ TEST_F(UtilityFunctionsTest, versionTest) {
 TEST_F(UtilityFunctionsTest, sleepTest) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
+    RuntimeState state;
+    ptr->set_runtime_state(&state);
 
     // test sleep
     {
