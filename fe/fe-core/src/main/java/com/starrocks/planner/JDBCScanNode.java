@@ -176,17 +176,18 @@ public class JDBCScanNode extends ScanNode {
         }
         boolean isStarRocksTable = isStarRocksTable();
 
-        // Prepare clauses for hints
-        StringBuilder setVarHintClause = new StringBuilder();
-        StringBuilder setUserVariableHintClause = new StringBuilder();
-
         // Split the input into 'variableName=variableValue' string assignments and iterate over each assignment
-        String[] sessionVariableAssignments =
+        String[] jdbcExternalTableVariableAssignments =
                 jdbcExternalTableSessionVariables.split(",(?=(?:[^']*'[^']*')*[^']*$)");
-        for (String assignment : sessionVariableAssignments) {
-            validateSessionVariableAssignmentSyntax(assignment);
+
+        // Collect session variables and user defined variables
+        List<String> userVariableAssignments = new ArrayList<>();
+        List<String> sessionVariableAssignments = new ArrayList<>();
+        for (String assignment : jdbcExternalTableVariableAssignments) {
+            String trimmedAssignment = assignment.trim();
+            validateSessionVariableAssignmentSyntax(trimmedAssignment);
             // Check if user defined variable: starts with '@' e.g. @var1
-            if (assignment.startsWith("@")) {
+            if (trimmedAssignment.startsWith("@")) {
                 if (!isStarRocksTable) {
                     // StarRocks table supports User Defined variable in query hint but not plain MySQL
                     throw new UnsupportedOperationException("Sending user defined variables to JDBC external table is " +
@@ -194,45 +195,40 @@ public class JDBCScanNode extends ScanNode {
                             ". Please add \"database_type\" = \"starrocks\" to the JDBC resource properties on creation " +
                             "if you intend to propagate user defined variables to an external StarRocks cluster.");
                 }
-                if (setUserVariableHintClause.length() > 0) {
-                    setUserVariableHintClause.append(", ");
-                }
-                setUserVariableHintClause.append(assignment);
+                userVariableAssignments.add(trimmedAssignment);
             } else {
-                if (isStarRocksTable) {
-                    // To set more than 1 session variable for StarRocks cluster, use 1x SET_VAR hint and use
-                    // comma separated variable assignments
-                    // https://docs.starrocks.io/docs/sql-reference/System_variable/#set-variables-in-a-single-query-statement
-                    if (setVarHintClause.length() == 0) {
-                        setVarHintClause.append("/*+ SET_VAR\n  (\n  ");
-                    } else {
-                        setVarHintClause.append(",\n  ");
-                    }
-                    setVarHintClause.append(assignment);
-                } else {
-                    // For standard MySQL, set each session variable with its own SET_VAR hint
-                    // https://dev.mysql.com/doc/refman/8.4/en/optimizer-hints.html#optimizer-hints-set-var
-                    setVarHintClause.append("/*+ SET_VAR(").append(assignment).append(") */\n");
-                }
+                sessionVariableAssignments.add(trimmedAssignment);
             }
         }
 
-        // close SET_VAR hint clause for StarRocks database type
-        if (isStarRocksTable && setVarHintClause.length() > 0) {
-            setVarHintClause.append("\n  ) */\n");
-        }
-
-        if (setVarHintClause.length() > 0) {
+        // Construct SET_VAR hint for session variables and add to sessionVariableHints (get sent to jdbc_connector.cpp)
+        if (!sessionVariableAssignments.isEmpty()) {
+            StringBuilder setVarHintClause = new StringBuilder();
+            if (isStarRocksTable) {
+                // To set more than 1 session variable for StarRocks cluster, use 1x SET_VAR hint and use
+                // comma separated variable assignments
+                // https://docs.starrocks.io/docs/sql-reference/System_variable/#set-variables-in-a-single-query-statement
+                setVarHintClause.append("/*+ SET_VAR\n  (\n  ");
+                setVarHintClause.append(String.join(",\n  ", sessionVariableAssignments));
+                setVarHintClause.append("\n  ) */\n");
+            } else {
+                // For standard MySQL, set each session variable with its own SET_VAR hint
+                // https://dev.mysql.com/doc/refman/8.4/en/optimizer-hints.html#optimizer-hints-set-var
+                for (String assignment : sessionVariableAssignments) {
+                    setVarHintClause.append("/*+ SET_VAR(").append(assignment).append(") */\n");
+                }
+            }
             sessionVariableHints.add(setVarHintClause.toString());
         }
-        if (setUserVariableHintClause.length() > 0) {
-            sessionVariableHints.add("/*+ SET_USER_VARIABLE(" + setUserVariableHintClause + ") */\n");
+
+        // Construct SET_USER_VARIABLE hint and add to sessionVariableHints to get sent to jdbc_connector.cpp
+        if (!userVariableAssignments.isEmpty()) {
+            sessionVariableHints.add("/*+ SET_USER_VARIABLE(" + String.join(", ", userVariableAssignments) + ") */\n");
         }
     }
 
     private void validateSessionVariableAssignmentSyntax(String sessionVariableAssignment) {
-        String assignment = sessionVariableAssignment.trim();
-        int equalIndex = assignment.indexOf('=');
+        int equalIndex = sessionVariableAssignment.indexOf('=');
         if (equalIndex == -1) {
             throw new IllegalArgumentException("Malformed session variable assignment: " + sessionVariableAssignment);
         }

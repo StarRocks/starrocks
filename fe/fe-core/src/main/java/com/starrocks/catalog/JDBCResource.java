@@ -54,6 +54,15 @@ public class JDBCResource extends Resource {
     public static final String PASSWORD = "password";
     public static final String CHECK_SUM = "checksum";
     public static final String DRIVER_CLASS = "driver_class";
+
+    // DATABASE_TYPE: required for features which are database specific and extracting
+    // ProtocolType from JDBC url is not enough. e.g. for queries to other StarRocks clusters
+    // with mysql jdbc, getProtocolType returns MYSQL (using jdbc:mysql://host:port/db), but
+    // we need to know if database_type is STARROCKS specifically.
+    //
+    // Currently, this only needs to be set to "starrocks" if a user wants to send
+    // user defined variables to a remote StarRocks cluster: see function
+    // createJDBCTableSessionVariableHints in JDBCScanNode.java
     public static final String DATABASE_TYPE = "database_type";
 
     // @TODO is this necessary?

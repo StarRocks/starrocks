@@ -52,7 +52,13 @@ static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, 
                                 int64_t limit) {
     std::ostringstream oss;
     oss << "SELECT";
-    // for mysql, we can set session variable hints in select statement
+    // for mysql, we can set session variable hints in select statement.
+    // session_variable_hints is generated in JdbcScanNode.java in fe/fe-core
+    // for StarRocks remote cluster, we can run SET_USER_VARIABLE and SET_VAR hints:
+    //   -> SET_USER_VARIABLE: https://docs.starrocks.io/docs/administration/Query_planning/#user-defined-variable-hint
+    //   -> SET_VAR: https://docs.starrocks.io/docs/administration/Query_planning/#system-variable-hint
+    // for other mysql protocol clusters, run multiple SET_VAR hints to set multiple session variables
+    //   -> docs: https://dev.mysql.com/doc/refman/8.4/en/optimizer-hints.html#optimizer-hints-set-var
     if (jdbc_url.starts_with("jdbc:mysql")) {
         for (size_t i = 0; i < session_variable_hints.size(); i++) {
             oss << " " << session_variable_hints[i];
