@@ -66,6 +66,22 @@ public class SqlDigestBuilderTest extends PlanTestBase {
                     "|INSERT INTO `test`.`part_t1` PARTITION (p1) VALUES(?, ?, ?)",
             "insert overwrite part_t1 partition (p1) values(1,2,3) " +
                     "|INSERT OVERWRITE `test`.`part_t1` PARTITION (p1) VALUES(?, ?, ?)",
+
+            // massive compounds
+            "select * from t1 where v4=1 or v4=2 or v4=3 or v4=4 or v4=5 or v4=6 or v4=7 or v4=8 or v4=9 or v4=10 " +
+                    "or v4=11 or v4=12 or v4=13 or v4=14 or v4=15 or v4=16 or v4=17 or v4=18 " +
+                    "or v4=19 or v4=20| " +
+                    "SELECT * FROM test.t1 WHERE $massive_compounds[`test`.`t1`.`v4`]$",
+            "select * from t1 where v4+v5=1 or v4+v5=2 or v4+v5=3 or v4=4 or v4=5 or v4=6 or v4=7 or v4=8 or v4=9 or " +
+                    "v4=10 " +
+                    "or v4=11 or v4=12 or v4=13 or v4=14 or v4=15 or v4=16 or v4=17 or v4=18 " +
+                    "or v4=19 or v4=20| " +
+                    "SELECT * FROM test.t1 WHERE $massive_compounds[`test`.`t1`.`v4`,`test`.`t1`.`v5`]$",
+            "select * from t1 where v5 = 123 and (v4=1 or v4=2 or v4=3 or v4=4 or v4=5 or v4=6 or v4=7 or v4=8 or " +
+                    "v4=9 or v4=10 " +
+                    "or v4=11 or v4=12 or v4=13 or v4=14 or v4=15 or v4=16 or v4=17 or v4=18 " +
+                    "or v4=19 or v4=20)| " +
+                    "SELECT * FROM test.t1 WHERE $massive_compounds[`test`.`t1`.`v4`,`test`.`t1`.`v5`]$",
     })
     public void testBuild(String sql, String expectedDigest) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);

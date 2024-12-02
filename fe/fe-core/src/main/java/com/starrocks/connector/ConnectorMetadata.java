@@ -26,7 +26,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -281,7 +281,7 @@ public interface ConnectorMetadata {
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
-    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 
@@ -333,7 +333,7 @@ public interface ConnectorMetadata {
     default void createView(CreateViewStmt stmt) throws DdlException {
     }
 
-    default void alterView(AlterViewStmt stmt) throws DdlException, UserException {
+    default void alterView(AlterViewStmt stmt) throws DdlException, StarRocksException {
     }
 
     default CloudConfiguration getCloudConfiguration() {

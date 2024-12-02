@@ -46,7 +46,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -250,7 +250,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      * @param transactionId
      * @param tabletCommitInfos
      * @return a {@link VisibleStateWaiter} object used to wait for the transaction become visible.
-     * @throws UserException
+     * @throws StarRocksException
      * @throws TransactionCommitFailedException
      * @note it is necessary to optimize the `lock` mechanism and `lock` scope resulting from wait lock long time
      * @note callers should get db.write lock before call this api
@@ -260,7 +260,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                                                 @NotNull List<TabletCommitInfo> tabletCommitInfos,
                                                 @NotNull List<TabletFailInfo> tabletFailInfos,
                                                 @Nullable TxnCommitAttachment txnCommitAttachment)
-            throws UserException {
+            throws StarRocksException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
         }
@@ -274,7 +274,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     public void prepareTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment)
-            throws UserException {
+            throws StarRocksException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
         }
@@ -285,18 +285,18 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
-            throws UserException {
+            throws StarRocksException {
 
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbId);
-            throw new UserException("Database[" + dbId + "] does not exist");
+            throw new StarRocksException("Database[" + dbId + "] does not exist");
         }
         commitPreparedTransaction(db, transactionId, timeoutMillis);
     }
 
     public void commitPreparedTransaction(Database db, long transactionId, long timeoutMillis)
-            throws UserException {
+            throws StarRocksException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
         }
@@ -315,7 +315,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                 timeoutMillis, TimeUnit.MILLISECONDS)) {
             String errMsg = String.format("get database write lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
                     transactionId, db.getFullName(), timeoutMillis);
-            throw new UserException(errMsg);
+            throw new StarRocksException(errMsg);
         }
         try {
             waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
@@ -331,12 +331,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             // so we just return false to indicate publish timeout
             String errMsg = String.format("publish timeout: %d, transactionId=%d",
                     timeoutMillis, transactionId);
-            throw new UserException(errMsg);
+            throw new StarRocksException(errMsg);
         }
         if (!waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS)) {
             String errMsg = String.format("publish timeout: %d, transactionId=%d",
                     timeoutMillis, transactionId);
-            throw new UserException(errMsg);
+            throw new StarRocksException(errMsg);
         }
     }
 
@@ -344,7 +344,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                                                long transactionId,
                                                @NotNull List<TabletCommitInfo> tabletCommitInfos,
                                                @NotNull List<TabletFailInfo> tabletFailInfos,
-                                               long timeoutMillis) throws UserException {
+                                               long timeoutMillis) throws StarRocksException {
         try {
             return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, tabletFailInfos, timeoutMillis, null);
         } catch (LockTimeoutException e) {
@@ -363,7 +363,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      * @param txnCommitAttachment an optional attachment to include in the transaction commit
      * @return {@code true} if the transaction becomes visible within the given timeout,
      * {@code false} otherwise
-     * @throws UserException                    if an error occurs during the transaction commit
+     * @throws StarRocksException                    if an error occurs during the transaction commit
      * @throws TransactionCommitFailedException if the transaction commit fails due to a disabled load job
      * @note This method acquires the write lock on the database to commit transaction, callers should NOT already
      * hold the database lock when calling this method, otherwise it will lead to deadlock.
@@ -374,7 +374,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                                                @NotNull List<TabletFailInfo> tabletFailInfos,
                                                long timeoutMillis,
                                                @Nullable TxnCommitAttachment txnCommitAttachment)
-            throws UserException, LockTimeoutException {
+            throws StarRocksException, LockTimeoutException {
         long dueTime = timeoutMillis != 0 ? System.currentTimeMillis() + timeoutMillis : Long.MAX_VALUE;
         VisibleStateWaiter waiter = retryCommitOnRateLimitExceeded(db, transactionId, tabletCommitInfos,
                 tabletFailInfos, txnCommitAttachment, timeoutMillis);
@@ -395,7 +395,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      * @param txnCommitAttachment the optional {@link TxnCommitAttachment} object
      * @param timeoutMs           the timeout value in milliseconds for the commit operation
      * @return a {@link VisibleStateWaiter} object used to wait for the transaction to become visible
-     * @throws UserException if an error occurs during the commit operation
+     * @throws StarRocksException if an error occurs during the commit operation
      * @note This method acquires the write lock on the database to commit transaction, callers should NOT already
      * hold the database lock when calling this method, otherwise it will lead to deadlock.
      */
@@ -404,7 +404,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
             @Nullable TxnCommitAttachment txnCommitAttachment,
-            long timeoutMs) throws UserException, LockTimeoutException {
+            long timeoutMs) throws StarRocksException, LockTimeoutException {
         long startTime = System.currentTimeMillis();
         while (true) {
             try {
@@ -416,7 +416,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                 throw e;
             } catch (Exception e) {
                 LOG.warn("fail to commit", e);
-                throw new UserException("fail to execute commit task: " + e.getMessage(), e);
+                throw new StarRocksException("fail to execute commit task: " + e.getMessage(), e);
             }
         }
     }
@@ -442,7 +442,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     private VisibleStateWaiter commitTransactionUnderDatabaseWLock(
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
-            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws UserException, LockTimeoutException {
+            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws StarRocksException, LockTimeoutException {
         TransactionState transactionState = getTransactionState(db.getId(), transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         Locker locker = new Locker();
@@ -457,23 +457,23 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         }
     }
 
-    public void abortAllRunningTransactions() throws UserException {
+    public void abortAllRunningTransactions() throws StarRocksException {
         for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
             entry.getValue().abortAllRunningTransaction();
         }
     }
 
-    public void abortTransaction(long dbId, long transactionId, String reason) throws UserException {
+    public void abortTransaction(long dbId, long transactionId, String reason) throws StarRocksException {
         abortTransaction(dbId, transactionId, reason, Collections.emptyList());
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets)
-            throws UserException {
+            throws StarRocksException {
         abortTransaction(dbId, transactionId, reason, Collections.emptyList(), failedTablets, null);
     }
 
     public void abortTransaction(Long dbId, Long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)
-            throws UserException {
+            throws StarRocksException {
         abortTransaction(dbId, transactionId, reason, Collections.emptyList(), Collections.emptyList(),
                 txnCommitAttachment);
     }
@@ -482,19 +482,19 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                                  List<TabletCommitInfo> finishedTablets,
                                  List<TabletFailInfo> failedTablets,
                                  TxnCommitAttachment txnCommitAttachment)
-            throws UserException {
+            throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.abortTransaction(transactionId, true, reason, txnCommitAttachment,
                 finishedTablets, failedTablets);
     }
 
     // for http cancel stream load api
-    public void abortTransaction(Long dbId, String label, String reason) throws UserException {
+    public void abortTransaction(Long dbId, String label, String reason) throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.abortTransaction(label, reason);
     }
 
-    public TTransactionStatus getTxnStatus(Database db, long transactionId) throws UserException {
+    public TTransactionStatus getTxnStatus(Database db, long transactionId) throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
         return dbTransactionMgr.getTxnStatus(transactionId);
     }
@@ -554,24 +554,25 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      * @param errorReplicaIds
      * @return
      */
-    public void finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds) throws UserException {
+    public void finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds) throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds);
     }
 
     public void finishTransactionBatch(long dbId, TransactionStateBatch stateBatch, Set<Long> errorReplicaIds)
-            throws UserException {
+            throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.finishTransactionBatch(stateBatch, errorReplicaIds);
     }
 
-    public void finishTransactionNew(TransactionState txnState, Set<Long> publishErrorReplicas) throws UserException {
+    public void finishTransactionNew(TransactionState txnState, Set<Long> publishErrorReplicas) throws
+            StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txnState.getDbId());
         dbTransactionMgr.finishTransactionNew(txnState, publishErrorReplicas);
     }
 
     public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas,
-                                  Set<Long> unfinishedBackends) throws UserException {
+                                  Set<Long> unfinishedBackends) throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txn.getDbId());
         return dbTransactionMgr.canTxnFinished(txn, errReplicas, unfinishedBackends);
     }
@@ -819,7 +820,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txnInfo.first);
                 dbTransactionMgr.abortTransaction(txnInfo.second, false, "coordinate BE is down", null,
                         Collections.emptyList(), Collections.emptyList());
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("Abort txn on coordinate BE {} failed, msg={}", coordinateHost, e.getMessage());
             }
         }

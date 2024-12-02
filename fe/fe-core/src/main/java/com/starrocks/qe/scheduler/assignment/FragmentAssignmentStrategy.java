@@ -14,7 +14,7 @@
 
 package com.starrocks.qe.scheduler.assignment;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 
@@ -35,7 +35,7 @@ public interface FragmentAssignmentStrategy {
      * The strategy to instantiates multiple parallel instances of each fragment and assign them to appropriate workers.
      *
      * @param executionFragment the fragment need to be assigned.
-     * @throws UserException if there is no available worker.
+     * @throws StarRocksException if there is no available worker.
      */
-    void assignFragmentToWorker(ExecutionFragment executionFragment) throws UserException;
+    void assignFragmentToWorker(ExecutionFragment executionFragment) throws StarRocksException;
 }

@@ -18,7 +18,7 @@ import com.google.api.client.util.Sets;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -64,7 +64,7 @@ public class ColocatedBackendSelector implements BackendSelector {
     }
 
     @Override
-    public void computeScanRangeAssignment() throws UserException {
+    public void computeScanRangeAssignment() throws StarRocksException {
         colocatedAssignment.recordAssignedScanNode(scanNode);
 
         Map<Integer, Long> bucketSeqToWorkerId = colocatedAssignment.seqToWorkerId;
@@ -115,7 +115,7 @@ public class ColocatedBackendSelector implements BackendSelector {
 
     // Make sure each host have average bucket to scan
     private void computeExecAddressForBucketSeq(TScanRangeLocations seqLocation, Integer bucketSeq)
-            throws UserException {
+            throws StarRocksException {
         Map<Long, Integer> buckendIdToBucketCountMap = colocatedAssignment.backendIdToBucketCount;
         int minBucketNum = Integer.MAX_VALUE;
         long minBackendId = Long.MAX_VALUE;

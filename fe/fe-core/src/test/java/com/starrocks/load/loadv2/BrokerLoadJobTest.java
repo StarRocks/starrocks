@@ -45,7 +45,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
@@ -338,7 +338,8 @@ public class BrokerLoadJobTest {
                                          @Injectable boolean txnOperated,
                                          @Injectable String txnStatusChangeReason,
                                          @Mocked LeaderTaskExecutor leaderTaskExecutor,
-                                         @Mocked GlobalTransactionMgr globalTransactionMgr) throws LoadException, UserException {
+                                         @Mocked GlobalTransactionMgr globalTransactionMgr) throws LoadException,
+            StarRocksException {
         new Expectations() {
             {
                 globalTransactionMgr.beginTransaction(anyLong, Lists.newArrayList(), anyString, (TUniqueId) any,
@@ -466,7 +467,7 @@ public class BrokerLoadJobTest {
 
     @Test
     public void testTaskAbortTransactionOnTimeoutFailure(@Mocked GlobalTransactionMgr globalTransactionMgr,
-            @Injectable long taskId, @Injectable FailMsg failMsg) throws UserException {
+            @Injectable long taskId, @Injectable FailMsg failMsg) throws StarRocksException {
         new Expectations() {
             {
                 globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
@@ -482,7 +483,7 @@ public class BrokerLoadJobTest {
             {
                 globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
                 times = 1;
-                result = new UserException("Artificial exception");
+                result = new StarRocksException("Artificial exception");
             }
         };
 
@@ -763,7 +764,7 @@ public class BrokerLoadJobTest {
                                        @Injectable LoadTask loadTask1,
                                        @Mocked GlobalStateMgr globalStateMgr,
                                        @Injectable Database database,
-                                       @Mocked GlobalTransactionMgr transactionMgr) throws UserException {
+                                       @Mocked GlobalTransactionMgr transactionMgr) throws StarRocksException {
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
         Map<Long, LoadTask> idToTasks = Maps.newHashMap();

@@ -61,7 +61,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -822,7 +822,7 @@ public class RestoreJobTest {
 
         new MockUp<View>() {
             @Mock
-            public synchronized QueryStatement getQueryStatement() throws UserException {
+            public synchronized QueryStatement getQueryStatement() throws StarRocksException {
                 return null;
             }
         };
@@ -848,7 +848,7 @@ public class RestoreJobTest {
         {
             new MockUp<View>() {
                 @Mock
-                public synchronized QueryStatement init() throws UserException {
+                public synchronized QueryStatement init() throws StarRocksException {
                     return null;
                 }
             };
@@ -887,7 +887,7 @@ public class RestoreJobTest {
         {
             new MockUp<View>() {
                 @Mock
-                public synchronized QueryStatement init() throws UserException {
+                public synchronized QueryStatement init() throws StarRocksException {
                     return null;
                 }
             };

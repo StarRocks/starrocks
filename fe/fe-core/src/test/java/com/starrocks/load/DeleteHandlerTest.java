@@ -32,7 +32,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockException;
@@ -232,7 +232,7 @@ public class DeleteHandlerTest {
             {
                 try {
                     globalTransactionMgr.abortTransaction(db.getId(), anyLong, anyString);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                 }
                 minTimes = 0;
             }
@@ -382,9 +382,9 @@ public class DeleteHandlerTest {
                     globalTransactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
                             (TxnCommitAttachment) any);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                 }
-                result = new UserException("commit fail");
+                result = new StarRocksException("commit fail");
             }
         };
 
