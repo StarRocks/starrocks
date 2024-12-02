@@ -204,55 +204,6 @@ public class LocalMetaStoreTest {
             Assert.assertEquals("Cannot parse text to Duration", e.getMessage());
         }
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testRenameColumnException() throws Exception {
-        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
-
-        try {
-            Table table = new HiveTable();
-            localMetastore.renameColumn(null, table, null);
-            Assert.fail("should not happen");
-        } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE);
-        }
-
-        Database db = localMetastore.getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
-        try {
-            localMetastore.renameColumn(new Database(1, "_statistics_"), table, null);
-            Assert.fail("should not happen");
-        } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB);
-        }
-
-        try {
-            OlapTable olapTable = new OlapTable();
-            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-            localMetastore.renameColumn(db, olapTable, null);
-            Assert.fail("should not happen");
-        } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE);
-        }
-
-        try {
-            ColumnRenameClause columnRenameClause = new ColumnRenameClause("k4", "k5");
-            localMetastore.renameColumn(db, table, columnRenameClause);
-            Assert.fail("should not happen");
-        } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_BAD_FIELD_ERROR);
-        }
-
-        try {
-            ColumnRenameClause columnRenameClause = new ColumnRenameClause("k3", "k2");
-            localMetastore.renameColumn(db, table, columnRenameClause);
-            Assert.fail("should not happen");
-        } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_DUP_FIELDNAME);
-        }
-    }
 
     @Test
     public void testCreateTableSerializeException() {
@@ -267,5 +218,4 @@ public class LocalMetaStoreTest {
         Assert.assertNull(db.getTable(tableId));
         Assert.assertNull(db.getTable(tableName));
     }
->>>>>>> eb61f0753b ([BugFix] Fix the issue where FE restart fails when creating a table containing too many tablets (#53062))
 }
