@@ -256,5 +256,4 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
         }
         return false;
     }
-
 }
