@@ -38,7 +38,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TupleId;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -59,11 +61,12 @@ import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.roaringbitmap.RoaringBitmap;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedList;
@@ -72,7 +75,6 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -111,6 +113,8 @@ import java.util.stream.Stream;
  * fix that
  */
 public class PlanFragment extends TreeNode<PlanFragment> {
+    private static final Logger LOG = LogManager.getLogger(PlanFragment.class);
+
     // id for this plan fragment
     protected final PlanFragmentId fragmentId;
 
@@ -416,6 +420,25 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setOutputExprs(List<Expr> outputExprs) {
         this.outputExprs = Expr.cloneList(outputExprs, null);
+    }
+
+    public boolean checkFragmentTupleId(DescriptorTable descriptorTable) {
+        Queue<PlanNode> queue = Lists.newLinkedList();
+        queue.add(planRoot);
+        while (!queue.isEmpty()) {
+            PlanNode node = queue.poll();
+            boolean isValid =
+                    node.getTupleIds().stream().allMatch(tupleId -> descriptorTable.getTupleDesc(tupleId) != null);
+            if (!isValid) {
+                // query dump should be able to work
+                if (ConnectContext.get() != null && (ConnectContext.get().isHTTPQueryDump())) {
+                    return true;
+                }
+                return false;
+            }
+            queue.addAll(node.getChildren());
+        }
+        return true;
     }
 
     /**

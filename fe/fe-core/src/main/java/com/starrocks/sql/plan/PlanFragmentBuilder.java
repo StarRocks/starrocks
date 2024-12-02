@@ -220,6 +220,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -411,7 +412,23 @@ public class PlanFragmentBuilder {
             }
         }
 
+        if (!checkTupleId(execPlan.getDescTbl(), execPlan.getFragments().get(0))) {
+            throw new StarRocksPlannerException("TupleId check failed", INTERNAL_ERROR);
+        }
+
         return execPlan;
+    }
+
+    private static boolean checkTupleId(DescriptorTable descriptorTable, PlanFragment root) {
+        Queue<PlanFragment> queue = Lists.newLinkedList();
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            PlanFragment planFragment = queue.poll();
+            if (!planFragment.checkFragmentTupleId(descriptorTable)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static class PhysicalPlanTranslator extends OptExpressionVisitor<PlanFragment, ExecPlan> {
