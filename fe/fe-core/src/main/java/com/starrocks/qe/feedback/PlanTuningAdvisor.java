@@ -58,6 +58,9 @@ public class PlanTuningAdvisor {
     }
 
     public OperatorTuningGuides.OptimizedRecord getOptimizedRecord(UUID queryId) {
+        if (queryId == null) {
+            return null;
+        }
         return optimizedQueryRecords.get(queryId);
     }
 
