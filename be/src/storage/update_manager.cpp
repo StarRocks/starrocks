@@ -559,7 +559,7 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     }
 
     if (config::test_reach_timeout > 0) {
-        sleep(test_reach_timeout);
+        sleep(config::test_reach_timeout);
     }
 
     // tablet maybe dropped during ingestion, add some log
