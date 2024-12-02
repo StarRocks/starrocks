@@ -76,8 +76,6 @@ public class PlanTuningAdvisor {
         optimizedQueryRecords.clear();
     }
 
-
-
     public void deleteTuningGuides(UUID queryId) {
         for (Map.Entry<PlanTuningCacheKey, OperatorTuningGuides> entry : cache.asMap().entrySet()) {
             if (entry.getValue().getOriginalQueryId().equals(queryId)) {
