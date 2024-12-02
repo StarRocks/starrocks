@@ -318,6 +318,7 @@ public class SelectStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
     void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         // array is not supported now
@@ -348,6 +349,17 @@ public class SelectStmtTest {
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL"));
+=======
+    void testGroupByCountDistinctWithSkewHintLossPredicate() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql =
+                "select t from(select cast(k1 as int), count(distinct [skew] cast(k2 as int)) as t from db1.tbl1 group by cast(k1 as int)) temp where t > 1";
+        String s = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(s, s.contains(" 8:AGGREGATE (merge finalize)\n" +
+                "  |  output: sum(7: count)\n" +
+                "  |  group by: 5: cast\n" +
+                "  |  having: 7: count > 1"));
+>>>>>>> 51537af57a ([BugFix] fix agg skew hint losing having (#53427))
         FeConstants.runningUnitTest = false;
     }
 
