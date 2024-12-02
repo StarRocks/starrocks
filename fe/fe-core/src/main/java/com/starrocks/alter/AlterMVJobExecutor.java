@@ -250,7 +250,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
             curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES,
                     propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES));
-            materializedView.getTableProperty().setExcludedRefreshTables(excludedTriggerTables);
+            materializedView.getTableProperty().setExcludedRefreshTables(excludedRefreshBaseTables);
             isChanged = true;
         }
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
