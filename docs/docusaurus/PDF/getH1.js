@@ -2,14 +2,10 @@ const fs = require('node:fs');
 const readline = require('node:readline');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const process = require('process');
+const util = require('node:util');
 
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-async function getH1(url) {
+async function getPageTitle(url) {
   try {
     const response = await axios.get(url);
     const html = response.data;
@@ -24,17 +20,29 @@ async function getH1(url) {
   }
 }
 
-async function callGotenberg(url, fileName) {
+function getUrls(url) {
+    var execSync = require('child_process').execSync;
+
+    // the URL that the user has is to `localhost`, which needs to be
+    // modified to the `docusaurus` service in the compose environment
+    let docusaurusUrl = url.replace("localhost", "docusaurus");
+
+    var command = `npx docusaurus-prince-pdf --list-only -u ${docusaurusUrl} --file URLs.txt`
+
+    try {
+        const {stdout, stderr} = execSync(command);
+    } catch (error) {
+        console.log(error);
+    }
+};
+
+async function callGotenberg(docusaurusUrl, fileName) {
     //var util = require('util');
-    var exec = require('child_process').exec;
+    var execSync = require('child_process').execSync;
 
-    var command = `curl --request POST http://gotenberg:3000/forms/chromium/convert/url --form url=${url} -o ${fileName}`
+    var command = `curl --request POST http://gotenberg:3000/forms/chromium/convert/url --form url=${docusaurusUrl} -o ${fileName}`
 
-    // curl --request POST \
-    // http://gotenberg:3000/forms/chromium/convert/url \
-    // --form url=$line -o ${padded}.pdf
-
-    child = exec(command, function(error, stdout, stderr){
+    child = execSync(command, function(error, stdout, stderr){
 
     //console.log('stdout: ' + stdout);
     console.log('stderr: ' + stderr);
@@ -71,7 +79,7 @@ async function requestPage(url) {
 
   // Get the details to write the YAML file
   // We need title and filename
-    const pageTitle = await getH1(url);
+    const pageTitle = await getPageTitle(url);
     const cleanedTitle = pageTitle.replaceAll('\[', '').replaceAll('\]', '').replaceAll(':', '').replaceAll(' | StarRocks', '')
   const pageDetails = `    - file: ${fileName}\n      title: ${cleanedTitle}\n`;
 
@@ -86,25 +94,33 @@ async function requestPage(url) {
   });
 
   await callGotenberg(url, fileName);
-
-  // shelling out to run curl with no delay causes Gotenberg
-  // to fail
-  await sleep(2000);
   i++;
 
 }
 
-const yamlHeader = 'files:\n';
 
-fs.writeFile('./combine.yaml', yamlHeader, err => {
-  if (err) {
-    console.error(err);
-  } else {
-    // file written successfully
-  }
-});
+
+
+function main(ms) {
+    // startingUrl is the URL for the first page of the docs
+    // Get all of the URLs and write to URLs.txt
+    getUrls(startingUrl);
+
+    console.log(startingUrl);
+
+    const yamlHeader = 'files:\n';
+
+    fs.writeFile('./combine.yaml', yamlHeader, err => {
+        if (err) {
+            console.error(err);
+        } else {
+            // file written successfully
+        }
+    });
+
+    processLineByLine();
+};
 
 var i = 0;
-
-processLineByLine();
-
+const startingUrl = process.argv[2];
+main();
