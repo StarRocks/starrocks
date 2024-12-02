@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler.dag;
 
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
@@ -40,6 +41,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
     @Override
     public void schedule() throws RpcException, StarRocksException {
         List<DeployState> states = new ArrayList<>();
+        int deployRound = 1;
         for (List<ExecutionFragment> executionFragments : dag.getFragmentsInTopologicalOrderFromRoot()) {
             final DeployState deployState = deployer.createFragmentExecStates(executionFragments);
             deployer.deployFragments(deployState);
@@ -51,10 +53,13 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
             if (states.isEmpty()) {
                 break;
             }
+            deployRound += 1;
             for (DeployState state : states) {
                 deployer.deployFragments(state);
             }
         }
+
+        Tracers.count(Tracers.Module.SCHEDULER, "DeployRound", deployRound);
     }
 
     public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) {
