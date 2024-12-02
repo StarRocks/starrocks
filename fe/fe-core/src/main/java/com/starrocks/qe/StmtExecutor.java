@@ -2765,17 +2765,17 @@ public class StmtExecutor {
                         Preconditions.checkState(partitionVersionMap.size() <= 1);
                         if (partitionVersionMap.size() == 1) {
                             attachment = new InsertTxnCommitAttachment(
-                                    loadedRows, partitionVersionMap.values().iterator().next());
+                                    loadedRows, partitionVersionMap.values().iterator().next(), coord.getLoadCounters());
                         } else if (partitionVersionMap.size() == 0) {
-                            attachment = new InsertTxnCommitAttachment(loadedRows);
+                            attachment = new InsertTxnCommitAttachment(loadedRows, coord.getLoadCounters());
                         }
                         LOG.debug("insert overwrite txn {} with partition version map {}", transactionId,
                                 partitionVersionMap);
                     } else {
-                        attachment = new InsertTxnCommitAttachment(loadedRows);
+                        attachment = new InsertTxnCommitAttachment(loadedRows, coord.getLoadCounters());
                     }
                 } else {
-                    attachment = new InsertTxnCommitAttachment(loadedRows);
+                    attachment = new InsertTxnCommitAttachment(loadedRows, coord.getLoadCounters());
                 }
                 VisibleStateWaiter visibleWaiter = transactionMgr.retryCommitOnRateLimitExceeded(
                         database,
