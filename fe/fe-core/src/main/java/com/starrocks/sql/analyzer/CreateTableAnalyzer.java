@@ -23,15 +23,18 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -57,6 +60,7 @@ import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.collections.CollectionUtils;
@@ -472,6 +476,7 @@ public class CreateTableAnalyzer {
                     try {
                         PartitionDescAnalyzer.analyze(partitionDesc);
                         partitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
+                        analyzeDynamicPartitionDesc(stmt);
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
@@ -512,6 +517,53 @@ public class CreateTableAnalyzer {
                 }
             }
         }
+    }
+
+    private static void analyzeDynamicPartitionDesc(CreateTableStmt stmt) throws SemanticException {
+        PartitionDesc partitionDesc = stmt.getPartitionDesc();
+        if (partitionDesc.getType() != PartitionType.RANGE) {
+            return;
+        }
+        if (!(partitionDesc instanceof RangePartitionDesc)) {
+            return;
+        }
+        RangePartitionDesc rangePartitionDesc = (RangePartitionDesc)partitionDesc;
+        List<String> partitionColNames = rangePartitionDesc.getPartitionColNames();
+        List<ColumnDef> columnDefList = stmt.getColumnDefs();
+        ColumnDef firstPartitionColumn = findPartitionColumn(partitionColNames, columnDefList);
+        if (firstPartitionColumn == null) {
+            return;
+        }
+        if (!firstPartitionColumn.getType().isDate()) {
+            return;
+        }
+        Map<String, String> otherProperties = stmt.getProperties();
+        TableProperty tableProperty = new TableProperty(otherProperties);
+        tableProperty.buildDynamicProperty();
+        DynamicPartitionProperty dynamicPartitionProperty = tableProperty.getDynamicPartitionProperty();
+        if (dynamicPartitionProperty == null) {
+            return;
+        }
+        String timeUnit = tableProperty.getDynamicPartitionProperty().getTimeUnit();
+        String hourTimeUnit = TimestampArithmeticExpr.TimeUnit.HOUR.toString();
+        if (timeUnit != null && timeUnit.equalsIgnoreCase(hourTimeUnit)) {
+            throw new SemanticException("Dynamic partition tables that are partitioned by hours " +
+                    "need to set the partition column type to datetime");
+        }
+    }
+
+    private static ColumnDef findPartitionColumn(List<String> partitionColNames,
+                                                 List<ColumnDef> columnDefs) {
+        ColumnDef firstPartitionColumn = null;
+        for (String partitionCol : partitionColNames) {
+            for (ColumnDef columnDef : columnDefs) {
+                if (columnDef.getName().equalsIgnoreCase(partitionCol)) {
+                    firstPartitionColumn = columnDef;
+                    break;
+                }
+            }
+        }
+        return firstPartitionColumn;
     }
 
     public static void analyzeDistributionDesc(CreateTableStmt stmt) {
