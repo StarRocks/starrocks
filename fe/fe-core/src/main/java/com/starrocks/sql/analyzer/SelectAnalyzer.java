@@ -32,6 +32,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
@@ -203,7 +204,9 @@ public class SelectAnalyzer {
             if (item.isStar()) {
                 List<Field> fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
                         : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()))
-                        .stream().filter(Field::isVisible).collect(Collectors.toList());
+                        .stream().filter(Field::isVisible)
+                        .filter(field -> !field.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX))
+                        .collect(Collectors.toList());
                 List<String> unknownTypeFields = fields.stream()
                         .filter(field -> field.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
                         .map(Field::getName).collect(Collectors.toList());
