@@ -24,19 +24,22 @@ public class ScanNode extends SkeletonNode {
 
     private final long tableId;
 
-    private final String tableName;
+    private final String tableIdentifier;
 
     public ScanNode(OptExpression optExpression,
                     NodeExecStats nodeExecStats, SkeletonNode parent) {
         super(optExpression, nodeExecStats, parent);
         PhysicalScanOperator scanOperator = (PhysicalScanOperator) optExpression.getOp();
         tableId = scanOperator.getTable().getId();
-        tableName = scanOperator.getTable().getName();
+        tableIdentifier = scanOperator.getTable().getTableIdentifier();
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), tableId);
+    public long getTableId() {
+        return tableId;
+    }
+
+    public String getTableIdentifier() {
+        return tableIdentifier;
     }
 
     @Override
@@ -45,14 +48,18 @@ public class ScanNode extends SkeletonNode {
             return true;
         }
 
-        if (!super.equals(o)) {
-            return false;
-        }
-
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         ScanNode scanNode = (ScanNode) o;
-        return tableId == scanNode.tableId;
+        return tableId == scanNode.tableId && Objects.equals(tableIdentifier, scanNode.tableIdentifier);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), tableId, tableIdentifier);
     }
 }

@@ -88,7 +88,6 @@ public class PlanAdvisorExecutor {
             String result = String.format("Clear all plan advisor in FE(%s) successfully. Advisor size: %d",
                     GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName(), size);
             return new ShowResultSet(COLUMN_META, List.of(List.of(result)));
-
         }
 
         @Override
