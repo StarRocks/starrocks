@@ -107,7 +107,7 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testCreateMVProperties() throws Exception {
+    public void testCreateMVProperties1() throws Exception {
         starRocksAssert
                 .withTable("CREATE TABLE t1 \n" +
                         "(\n" +
@@ -149,6 +149,54 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
             starRocksAssert.dropMaterializedView("mv1");
         });
     }
+
+    @Test
+    public void testCreateMVProperties2() throws Exception {
+        starRocksAssert
+                .withTable("CREATE TABLE t1 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE t2 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
+                "PARTITION BY date_trunc('day', k1)\n"
+                + "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "AS \n" +
+                "select k1 from (SELECT * FROM t1 UNION ALL SELECT * FROM t2) t group by k1\n", () -> {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv =
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+            Assert.assertTrue(mv.shouldRefreshTable("t1"));
+            Assert.assertTrue(mv.shouldRefreshTable("t2"));
+
+            String alterSql = "ALTER MATERIALIZED VIEW mv1 SET ('excluded_refresh_tables' = 't2')";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(stmt);
+            Assert.assertTrue(mv.shouldRefreshTable("t1"));
+            Assert.assertFalse(mv.shouldRefreshTable("t2"));
+
+            // cleanup
+            starRocksAssert.dropTable("t1");
+            starRocksAssert.dropTable("t2");
+            starRocksAssert.dropMaterializedView("mv1");
+        });
+    }
+
 
     @Test
     public void testNormal() throws Exception {
