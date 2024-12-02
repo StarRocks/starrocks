@@ -2138,6 +2138,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
 
+    @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample")
+    public static boolean histogram_enable_table_sample = true;
+
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
 
