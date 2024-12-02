@@ -20,7 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.OriginStatement;
 
 import java.util.HashMap;
@@ -190,5 +190,5 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
-    public abstract AlterJobV2 build() throws UserException;
+    public abstract AlterJobV2 build() throws StarRocksException;
 }

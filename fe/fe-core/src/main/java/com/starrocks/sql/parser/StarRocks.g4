@@ -2145,7 +2145,7 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? (
+    : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? sampleClause? (
         AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
@@ -2171,6 +2171,10 @@ pivotAggregationExpression
 
 pivotValue
     : (literalExpression | literalExpressionList) (AS? (identifier | string))?
+    ;
+
+sampleClause
+    : SAMPLE propertyList?
     ;
 
 argumentList

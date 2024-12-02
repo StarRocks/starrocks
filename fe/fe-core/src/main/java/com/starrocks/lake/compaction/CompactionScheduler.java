@@ -26,7 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -228,7 +228,7 @@ public class CompactionScheduler extends Daemon {
             List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
             transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
                     Collections.emptyList(), null);
-        } catch (UserException ex) {
+        } catch (StarRocksException ex) {
             LOG.error("Fail to abort txn " + job.getTxnId(), ex);
         }
     }
@@ -339,12 +339,12 @@ public class CompactionScheduler extends Daemon {
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
             boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority)
-            throws UserException, RpcException {
+            throws StarRocksException, RpcException {
         List<CompactionTask> tasks = new ArrayList<>();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (node == null) {
-                throw new UserException("Node " + entry.getKey() + " has been dropped");
+                throw new StarRocksException("Node " + entry.getKey() + " has been dropped");
             }
 
             LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
@@ -403,7 +403,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job, boolean forceCommit)
-            throws UserException {
+            throws StarRocksException {
         List<TabletCommitInfo> commitInfoList = job.buildTabletCommitInfo();
 
         Database db = stateMgr.getLocalMetastore().getDb(partition.getDbId());
@@ -440,7 +440,7 @@ public class CompactionScheduler extends Daemon {
             List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
             transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
                     Collections.emptyList(), null);
-        } catch (UserException ex) {
+        } catch (StarRocksException ex) {
             LOG.error(ex);
         }
     }

@@ -308,22 +308,7 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to
         RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _runtime_profile.get()));
-        auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
-        for (auto& [filter_id, desc] : descriptors) {
-            if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
-                continue;
-            }
-            auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
-            ExecEnv::GetInstance()->add_rf_event({_state->query_id(), filter_id, BackendOptions::get_localhost(),
-                                                  strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
-                                                                      this->_plan_node_id, grf != nullptr)});
-
-            if (grf == nullptr) {
-                continue;
-            }
-
-            desc->set_shared_runtime_filter(grf);
-        }
+        acquire_runtime_filter(state);
     }
     return Status::OK();
 }
@@ -384,6 +369,28 @@ bool OperatorFactory::has_topn_filter() const {
     }
     auto* global_rf_collector = _runtime_filter_collector->get_rf_probe_collector();
     return global_rf_collector != nullptr && global_rf_collector->has_topn_filter();
+}
+
+void OperatorFactory::acquire_runtime_filter(RuntimeState* state) {
+    if (_runtime_filter_collector == nullptr) {
+        return;
+    }
+    auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
+    for (auto& [filter_id, desc] : descriptors) {
+        if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
+            continue;
+        }
+        auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
+        ExecEnv::GetInstance()->add_rf_event({state->query_id(), filter_id, BackendOptions::get_localhost(),
+                                              strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
+                                                                  this->_plan_node_id, grf != nullptr)});
+
+        if (grf == nullptr) {
+            continue;
+        }
+
+        desc->set_shared_runtime_filter(grf);
+    }
 }
 
 } // namespace starrocks::pipeline

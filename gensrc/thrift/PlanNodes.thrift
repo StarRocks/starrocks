@@ -549,6 +549,19 @@ struct TVectorSearchOptions {
   10: optional double k_factor;
 }
 
+enum SampleMethod {
+  BY_BLOCK,
+  BY_PAGE,
+}
+
+struct TTableSampleOptions {
+  1: optional bool enable_sampling;
+  2: optional SampleMethod sample_method;
+  3: optional i64 random_seed;
+  4: optional i64 probability_percent;
+    
+}
+
 // If you find yourself changing this struct, see also TLakeScanNode
 struct TOlapScanNode {
   1: required Types.TTupleId tuple_id
@@ -581,6 +594,7 @@ struct TOlapScanNode {
   37: optional i64 schema_id
 
   40: optional TVectorSearchOptions vector_search_options
+  41: optional TTableSampleOptions sample_options;
 }
 
 struct TJDBCScanNode {

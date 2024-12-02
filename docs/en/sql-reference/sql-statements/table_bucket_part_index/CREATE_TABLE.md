@@ -671,6 +671,46 @@ PROPERTIES (
   > - This parameter is only supported for shared-nothing clusters since v3.2.0.
   > - If you need to enable fast schema evolution for tables in a shared-data cluster, you must configure fast schema evolution at the cluster level using FE dynamic parameter `enable_fast_schema_evolution`.
 
+#### Forbid Base Compaction
+
+`base_compaction_forbidden_time_ranges`: The time range within which Base Compaction is forbidden for the table. When this property is set, the system performs Base Compaction on eligible tablets only outside the specified time range. This property is supported from v3.2.13.
+
+> **NOTE**
+>
+> Make sure that the number of data loading to the table does not exceed 500 during the period when Base Compaction is forbidden.
+
+The value of `base_compaction_forbidden_time_ranges` follows the [Quartz cron syntax](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm), and only supports these fields: `<minute> <hour> <day-of-the-month> <month> <day-of-the-week>`, where `<minute>` must be `*`.
+
+```Plain
+crontab_param_value ::= [ "" | crontab ]
+
+crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
+```
+
+- When this property is not set or set to `""` (an empty string), Base Compaction is not forbidden at any time.
+- When this property is set to `* * * * *`, Base Compaction is always forbidden.
+- Other values follow the Quartz cron syntax.
+  - An independent value indicates the unit time of a field. For example, `8` in the `<hour>` field means 8:00-8:59.
+  - A value range indicates the time range of a field. For example, `8-9` in the `<hour>` field means 8:00-9:59.
+  - Multiple value ranges separated by commas indicate multiple time ranges of the field.
+  - `<day of the week>` has a starting value of `1` for Sunday, and `7` stands for Saturday.
+
+Example:
+
+```SQL
+-- Forbid Base Compaction from 8:00 am to 9:00 pm every day.
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * *'
+
+-- Forbid Base Compaction from 0:00 am to 5:00 am and from 9:00 pm to 11:00 pm every day.
+'base_compaction_forbidden_time_ranges' = '* 0-4,21-22 * * *'
+
+-- Forbid Base Compaction from Monday to Friday (that is, allow it on Saturday and Sunday).
+'base_compaction_forbidden_time_ranges' = '* * * * 2-6'
+
+-- Forbid Base Compaction from 8:00 am to 9:00 pm every working day (that is, Monday to Friday).
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
+```
+
 ## Examples
 
 ### Create an Aggregate table that uses Hash bucketing and columnar storage

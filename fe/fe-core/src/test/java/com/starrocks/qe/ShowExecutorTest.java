@@ -70,7 +70,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
@@ -500,7 +500,7 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
+    public void testShowPartitions(@Mocked Analyzer analyzer) throws StarRocksException {
 
         new MockUp<SystemInfoService>() {
             @Mock

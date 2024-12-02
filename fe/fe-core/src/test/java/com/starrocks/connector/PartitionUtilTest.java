@@ -32,7 +32,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HivePartitionName;
@@ -246,7 +246,7 @@ public class PartitionUtilTest {
     }
 
     @Test
-    public void testGetPartitionRange(@Mocked HiveTable table) throws UserException {
+    public void testGetPartitionRange(@Mocked HiveTable table) throws StarRocksException {
         Column partitionColumn = new Column("date", Type.DATE);
         List<String> partitionNames = ImmutableList.of("date=2022-08-02", "date=2022-08-19", "date=2022-08-21",
                 "date=2022-09-01", "date=2022-10-01", "date=2022-12-02");
@@ -259,7 +259,8 @@ public class PartitionUtilTest {
         };
         new MockUp<MetadataMgr>() {
             @Mock
-            public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+            public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                                   ConnectorMetadatRequestContext requestContext) {
                 return partitionNames;
             }
         };
