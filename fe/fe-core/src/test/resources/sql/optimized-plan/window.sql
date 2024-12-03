@@ -223,8 +223,7 @@ select * from (select v2,v3,row_number() over(partition by v3,v2 order by v3) as
 ANALYTIC ({4: row_number()=row_number()} [3: v3, 2: v2] [3: v3 ASC NULLS FIRST] ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     TOP-N (order by [[3: v3 ASC NULLS FIRST, 2: v2 ASC NULLS FIRST]])
         EXCHANGE SHUFFLE[3, 2]
-            PREDICATE 2: v2 = 3: v3
-                SCAN (columns[2: v2, 3: v3] predicate[null])
+            SCAN (columns[2: v2, 3: v3] predicate[2: v2 = 3: v3])
 [end]
 
 [sql]
@@ -233,8 +232,7 @@ select * from (select v2,v3,row_number() over(partition by v3,v2 order by v1) as
 ANALYTIC ({4: row_number()=row_number()} [3: v3, 2: v2] [1: v1 ASC NULLS FIRST] ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     TOP-N (order by [[3: v3 ASC NULLS FIRST, 2: v2 ASC NULLS FIRST, 1: v1 ASC NULLS FIRST]])
         EXCHANGE SHUFFLE[3, 2]
-            PREDICATE 2: v2 = 3: v3
-                SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+            SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3: v3])
 [end]
 
 [sql]
@@ -437,4 +435,3 @@ AGGREGATE ([GLOBAL] aggregate [{5: count=count(5: count)}] group by [[]] having 
         AGGREGATE ([LOCAL] aggregate [{5: count=count()}] group by [[]] having [null]
             SCAN (columns[2: v2] predicate[2: v2 = 2])
 [end]
-

@@ -595,7 +595,7 @@ public class LimitTest extends PlanTestBase {
                 "on a.v3 = t1.v4 join t2 on v4 = v7 join t2 as b" +
                 " on a.v1 = b.v7 where b.v8 > t1.v5 limit 10";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "15:HASH JOIN\n" +
+        assertContains(plan, "14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
@@ -606,7 +606,7 @@ public class LimitTest extends PlanTestBase {
                 "on a.v3 + 1 = t1.v4 join t2 on v4 = v7 join t2 as b" +
                 " on a.v3 + 2 = b.v7 where b.v8 > t1.v5 limit 10";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "16:HASH JOIN\n" +
+        assertContains(plan, "15:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: add = 4: v4\n" +

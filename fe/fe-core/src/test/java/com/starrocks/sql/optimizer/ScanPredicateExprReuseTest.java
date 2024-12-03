@@ -53,19 +53,17 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 1: v1 BITSHIFTLEFT 1 = 10, 2: v2 = 5");
         }
-        // 2. all predicates can't be pushed down
         {
             String sql = "select * from t0 where v1 > v2";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  1:SELECT\n" +
-                    "  |  predicates: 1: v1 > 2: v2");
+            assertContains(plan, "PREDICATES: 1: v1 > 2: v2");
         }
         {
             String sql = "select * from t0 where v1 > v2 or v1 = 10";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  1:SELECT\n" +
-                    "  |  predicates: (1: v1 > 2: v2) OR (1: v1 = 10)");
+            assertContains(plan, " PREDICATES: (1: v1 > 2: v2) OR (1: v1 = 10)");
         }
+        // 2. all predicates can't be pushed down
         {
             String sql = "select * from tarray where all_match(x->x>10, v3)";
             String plan = getFragmentPlan(sql);

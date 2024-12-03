@@ -839,21 +839,9 @@ public class ExpressionTest extends PlanTestBase {
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 IN (0, c1) ", "(1: c0 = 0) OR (1: c0 = 2: c1)");
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 IN (0, c1, c2) ",
                 "((1: c0 = 0) OR (1: c0 = 2: c1)) OR (1: c0 = 3: c2)");
-        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (0, c1) ", "  1:SELECT\n" +
-                "  |  predicates: 1: c0 != 2: c1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: test_in_pred_norm\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 1: c0 != 0");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (0, c1) ", "1: c0 != 0, 1: c0 != 2: c1");
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (0, c1, c2) ",
-                "  1:SELECT\n" +
-                        "  |  predicates: 1: c0 != 2: c1, 1: c0 != 3: c2\n" +
-                        "  |  \n" +
-                        "  0:OlapScanNode\n" +
-                        "     TABLE: test_in_pred_norm\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 1: c0 != 0");
+                "1: c0 != 0, 1: c0 != 2: c1, 1: c0 != 3: c2");
 
         // contains cast expression
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('1970-01-01', '1970-01-01', '1970-02-01') ",
@@ -1588,7 +1576,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testInPredicate() throws Exception {
         String sql = "select * from t0 where v1 in (v2, v3, 3, 4, 5) ";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "predicates: ((1: v1 IN (3, 4, 5)) OR (1: v1 = 2: v2)) OR (1: v1 = 3: v3)");
+        assertContains(plan, "PREDICATES: ((1: v1 IN (3, 4, 5)) OR (1: v1 = 2: v2)) OR (1: v1 = 3: v3)");
     }
 
     @Test

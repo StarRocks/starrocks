@@ -190,8 +190,7 @@ LEFT SEMI JOIN (join-predicate [3: v3 = 5: v4] post-join-predicate [null])
             AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[3: v3]] having [null]
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE SHUFFLE[5]
-        PREDICATE 6: v5 = 7: v6
-            SCAN (columns[5: v4, 6: v5, 7: v6] predicate[5: v4 IS NOT NULL])
+        SCAN (columns[5: v4, 6: v5, 7: v6] predicate[5: v4 IS NOT NULL AND 6: v5 = 7: v6])
 [end]
 
 [sql]
@@ -242,8 +241,7 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [3: v3 = 5: v4] post-join-predicate [n
             AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[3: v3]] having [null]
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        PREDICATE 6: v5 = 7: v6
-            SCAN (columns[5: v4, 6: v5, 7: v6] predicate[null])
+        SCAN (columns[5: v4, 6: v5, 7: v6] predicate[6: v5 = 7: v6])
 [end]
 
 [sql]

@@ -1,5 +1,5 @@
 [planCount]
-4
+2
 [plan-1]
 TOP-N (order by [[77: count DESC NULLS LAST, 2: S_NAME ASC NULLS FIRST]])
     TOP-N (order by [[77: count DESC NULLS LAST, 2: S_NAME ASC NULLS FIRST]])
@@ -12,18 +12,16 @@ TOP-N (order by [[77: count DESC NULLS LAST, 2: S_NAME ASC NULLS FIRST]])
                             EXCHANGE SHUFFLE[9]
                                 INNER JOIN (join-predicate [26: O_ORDERKEY = 9: L_ORDERKEY] post-join-predicate [null])
                                     SCAN (columns[26: O_ORDERKEY, 28: O_ORDERSTATUS] predicate[28: O_ORDERSTATUS = F])
-                                    EXCHANGE BROADCAST
+                                    EXCHANGE SHUFFLE[9]
                                         INNER JOIN (join-predicate [11: L_SUPPKEY = 1: S_SUPPKEY] post-join-predicate [null])
-                                            PREDICATE 21: L_RECEIPTDATE > 20: L_COMMITDATE
-                                                SCAN (columns[20: L_COMMITDATE, 21: L_RECEIPTDATE, 9: L_ORDERKEY, 11: L_SUPPKEY] predicate[null])
+                                            SCAN (columns[20: L_COMMITDATE, 21: L_RECEIPTDATE, 9: L_ORDERKEY, 11: L_SUPPKEY] predicate[21: L_RECEIPTDATE > 20: L_COMMITDATE])
                                             EXCHANGE BROADCAST
                                                 INNER JOIN (join-predicate [4: S_NATIONKEY = 36: N_NATIONKEY] post-join-predicate [null])
                                                     SCAN (columns[1: S_SUPPKEY, 2: S_NAME, 4: S_NATIONKEY] predicate[null])
                                                     EXCHANGE BROADCAST
                                                         SCAN (columns[36: N_NATIONKEY, 37: N_NAME] predicate[37: N_NAME = CANADA])
                     EXCHANGE SHUFFLE[59]
-                        PREDICATE 71: L_RECEIPTDATE > 70: L_COMMITDATE
-                            SCAN (columns[70: L_COMMITDATE, 71: L_RECEIPTDATE, 59: L_ORDERKEY, 61: L_SUPPKEY] predicate[null])
+                        SCAN (columns[70: L_COMMITDATE, 71: L_RECEIPTDATE, 59: L_ORDERKEY, 61: L_SUPPKEY] predicate[71: L_RECEIPTDATE > 70: L_COMMITDATE])
 [end]
 
 

@@ -79,6 +79,9 @@ public class PullUpScanPredicateRule extends TransformationRule {
             return Lists.newArrayList();
         }
 
+        // After applying some rules, the ScanOperator may generate some projection columns, e.g. `RemoveAggregationFromAggTableRule`
+        // In order to reuse existing columns as much as possible,
+        // we need to replace the expressions in the predicate with the column that appears in the projection.
         Map<ScalarOperator, ColumnRefOperator> translatingMap = new HashMap<>();
         if (logicalScanOperator.getProjection() != null) {
             logicalScanOperator.getProjection().getColumnRefMap().forEach((k, v) -> {

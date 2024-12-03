@@ -130,8 +130,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         EXCHANGE GATHER
-            PREDICATE 6: v5 = 7: v6
-                SCAN (columns[6: v5, 7: v6] predicate[null]) Limit 1
+            SCAN (columns[6: v5, 7: v6] predicate[6: v5 = 7: v6]) Limit 1
 [end]
 
 [sql]
@@ -174,8 +173,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
         AGGREGATE ([GLOBAL] aggregate [{9: count=count(9: count)}] group by [[]] having [9: count = 0]
             EXCHANGE GATHER
                 AGGREGATE ([LOCAL] aggregate [{9: count=count(1)}] group by [[]] having [null]
-                    PREDICATE 6: v5 = 7: v6
-                        SCAN (columns[6: v5, 7: v6] predicate[null])
+                    SCAN (columns[6: v5, 7: v6] predicate[6: v5 = 7: v6])
 [end]
 
 [sql]
@@ -721,4 +719,3 @@ LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
                 AGGREGATE ([LOCAL] aggregate [{12: countRows=count(1)}] group by [[]] having [null]
                     SCAN (columns[7: v7] predicate[null])
 [end]
-

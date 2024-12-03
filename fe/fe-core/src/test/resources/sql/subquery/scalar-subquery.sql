@@ -42,7 +42,7 @@ PLAN FRAGMENT 1
      partitions=1/1
      rollup: t0
      tabletRatio=3/3
-     tabletList=10005,10007,10009
+     tabletList=10006,10008,10010
      cardinality=1
      avgRowSize=2.0
 
@@ -76,7 +76,7 @@ PLAN FRAGMENT 3
      partitions=1/1
      rollup: t3
      tabletRatio=3/3
-     tabletList=10040,10042,10044
+     tabletList=10046,10048,10050
      cardinality=1
      avgRowSize=1.0
 [end]
@@ -156,7 +156,7 @@ PLAN FRAGMENT 2
      partitions=1/1
      rollup: t3
      tabletRatio=3/3
-     tabletList=10040,10042,10044
+     tabletList=10046,10048,10050
      cardinality=1
      avgRowSize=2.0
 
@@ -175,7 +175,7 @@ PLAN FRAGMENT 3
      partitions=1/1
      rollup: t0
      tabletRatio=3/3
-     tabletList=10005,10007,10009
+     tabletList=10006,10008,10010
      cardinality=1
      avgRowSize=3.0
 [end]
@@ -272,7 +272,7 @@ PLAN FRAGMENT 2
      partitions=1/1
      rollup: t3
      tabletRatio=3/3
-     tabletList=10040,10042,10044
+     tabletList=10046,10048,10050
      cardinality=1
      avgRowSize=5.0
 
@@ -297,7 +297,7 @@ PLAN FRAGMENT 3
      partitions=1/1
      rollup: t0
      tabletRatio=3/3
-     tabletList=10005,10007,10009
+     tabletList=10006,10008,10010
      cardinality=1
      avgRowSize=4.0
 [end]
@@ -497,6 +497,8 @@ INNER JOIN (join-predicate [2: v2 = 4: v4] post-join-predicate [null])
                                 SCAN (columns[4: v4, 5: v5] predicate[null])
 [end]
 
+/* test PushDownApplyAggFilterRule */
+/* test PushDownApplyAggFilterRule */
 /* test PushDownApplyAggFilterRule */
 /* test PushDownApplyAggFilterRule */
 

@@ -81,11 +81,13 @@ public class GroupingSetTest extends PlanTestBase {
 
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = v2;";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("2:REPEAT_NODE\n" +
+        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 = 2: v2"));
-        assertContains(plan, "  1:SELECT\n" +
-                "  |  predicates: 1: v1 = 2: v2");
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 2: v2"));
 
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 <=> v2;";
         plan = getFragmentPlan(sql);

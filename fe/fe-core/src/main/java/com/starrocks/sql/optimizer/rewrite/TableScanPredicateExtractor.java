@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -148,6 +149,22 @@ public class TableScanPredicateExtractor {
                 }
             }
             return true;
+        }
+
+        private Boolean isTableColumn(ScalarOperator op) {
+            if (op instanceof ColumnRefOperator && columnRefOperatorColumnMap.containsKey((ColumnRefOperator) op)) {
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public Boolean visitBinaryPredicate(BinaryPredicateOperator op, CanFullyPushDownVisitorContext context) {
+            // we allow two column comparison
+            if (isTableColumn(op.getChild(0)) && isTableColumn(op.getChild(1))) {
+                return true;
+            }
+            return visit(op, context);
         }
 
         @Override
