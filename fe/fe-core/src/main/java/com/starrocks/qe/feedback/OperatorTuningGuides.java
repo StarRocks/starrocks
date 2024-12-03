@@ -124,6 +124,7 @@ public class OperatorTuningGuides {
         public OperatorTuningGuides getOperatorTuningGuides() {
             return operatorTuningGuides;
         }
+
         public String getExplainString() {
             StringBuilder sb = new StringBuilder();
             sb.append("Plan had been tuned by Plan Advisor.").append("\n");
