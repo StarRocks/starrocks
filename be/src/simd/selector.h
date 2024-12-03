@@ -17,7 +17,7 @@
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
-#elif defined(__ARM_NEON__) && defined(__aarch64__)
+#elif defined(__ARM_NEON) && defined(__aarch64__)
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif
@@ -27,6 +27,7 @@
 
 #include "column/type_traits.h"
 #include "gutil/port.h"
+#include "gutil/strings/fastmem.h"
 #include "simd/simd_utils.h"
 #include "types/logical_type.h"
 
@@ -227,35 +228,49 @@ constexpr bool neon_could_use_common_select_if() {
 }
 
 template <typename T, bool left_const = false, bool right_const = false>
-inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T*& a, const T*& b, int size) {
+inline void neon_select_if_common_implement_u8(uint8_t*& selector, T*& dst, const T*& a, const T*& b, int size) {
     const T* dst_end = dst + size;
     constexpr int data_size = sizeof(T);
     constexpr int neon_width = 16; // NEON register width is 128 bits (16 bytes)
+
+    uint8x16_t vec_a;
+    if constexpr (left_const) {
+        vec_a = vdupq_n_u8(*reinterpret_cast<const uint8_t*>(a));
+    }
+
+    uint8x16_t vec_b;
+    if constexpr (right_const) {
+        vec_b = vdupq_n_u8(*reinterpret_cast<const uint8_t*>(b));
+    }
 
     // Process 16 bytes of data at a time
     while (dst + neon_width < dst_end) {
         // Load 16 selector masks
         uint8x16_t loaded_mask = vld1q_u8(selector);
-        // vceqq_u8: Compare each element in two NEON registers, returns 0xFF if equal, 0x00 if not
-        loaded_mask = vceqq_u8(loaded_mask, vdupq_n_u8(0));
-        // vmvnq_u8: Bitwise NOT of each element in NEON register, so non-zero becomes 0xFF, zero becomes 0x00
-        loaded_mask = vmvnq_u8(loaded_mask);
+        // loaded_mask[i] = selector[i] != 0 ? 0xFF : 0x00
+        loaded_mask = vtstq_u8(loaded_mask, loaded_mask);
 
-        if constexpr (data_size == 1) { // int8/uint8/bool
+        if (vmaxvq_u8(loaded_mask) == 0) { // Select all the rhs.
+            if constexpr (right_const) {
+                vst1q_u8(reinterpret_cast<uint8_t*>(dst), vec_b);
+            } else {
+                strings::memcpy_inlined(dst, b, neon_width * data_size);
+            }
+        } else if (vminvq_u8(loaded_mask)) { // Select all the lhs.
+            if constexpr (left_const) {
+                vst1q_u8(reinterpret_cast<uint8_t*>(dst), vec_a);
+            } else {
+                strings::memcpy_inlined(dst, a, neon_width * data_size);
+            }
+        } else {
             // Load vector a
-            uint8x16_t vec_a;
             if constexpr (!left_const) {
                 vec_a = vld1q_u8(reinterpret_cast<const uint8_t*>(a));
-            } else {
-                vec_a = vdupq_n_u8(*reinterpret_cast<const uint8_t*>(a));
             }
 
             // Load vector b
-            uint8x16_t vec_b;
             if constexpr (!right_const) {
                 vec_b = vld1q_u8(reinterpret_cast<const uint8_t*>(b));
-            } else {
-                vec_b = vdupq_n_u8(*reinterpret_cast<const uint8_t*>(b));
             }
 
             // Select result based on mask
@@ -263,25 +278,69 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
 
             // Store result
             vst1q_u8(reinterpret_cast<uint8_t*>(dst), result);
+        }
 
-        } else if constexpr (data_size == 2) { // int16
+        dst += neon_width;
+        selector += neon_width;
+        if constexpr (!left_const) {
+            a += neon_width;
+        }
+        if constexpr (!right_const) {
+            b += neon_width;
+        }
+    }
+}
+
+template <typename T, bool left_const = false, bool right_const = false>
+inline void neon_select_if_common_implement_u16(uint8_t*& selector, T*& dst, const T*& a, const T*& b, int size) {
+    const T* dst_end = dst + size;
+    constexpr int data_size = sizeof(T);
+    constexpr int neon_width = 16; // NEON register width is 128 bits (16 bytes)
+
+    uint16x8_t vec_a;
+    if constexpr (left_const) {
+        vec_a = vdupq_n_u16(*reinterpret_cast<const uint16_t*>(a));
+    }
+
+    uint16x8_t vec_b;
+    if constexpr (right_const) {
+        vec_b = vdupq_n_u16(*reinterpret_cast<const uint16_t*>(b));
+    }
+
+    // Process 16 bytes of data at a time
+    while (dst + neon_width < dst_end) {
+        // Load 16 selector masks
+        uint8x16_t loaded_mask = vld1q_u8(selector);
+        // loaded_mask[i] = selector[i] != 0 ? 0xFF : 0x00
+        loaded_mask = vtstq_u8(loaded_mask, loaded_mask);
+
+        if (vmaxvq_u8(loaded_mask) == 0) { // Select all the rhs.
+            if constexpr (right_const) {
+                for (int i = 0; i < 2; i++) {
+                    vst1q_u16(reinterpret_cast<uint16_t*>(dst) + i * 8, vec_b);
+                }
+            } else {
+                strings::memcpy_inlined(dst, b, neon_width * data_size);
+            }
+        } else if (vminvq_u8(loaded_mask)) { // Select all the lhs.
+            if constexpr (left_const) {
+                for (int i = 0; i < 2; i++) {
+                    vst1q_u16(reinterpret_cast<uint16_t*>(dst) + i * 8, vec_a);
+                }
+            } else {
+                strings::memcpy_inlined(dst, a, neon_width * data_size);
+            }
+        } else {
             // Process 2 groups, each handling 8 int16
             for (int i = 0; i < 2; i++) {
                 // Load vector a
-                uint16x8_t vec_a;
                 if constexpr (!left_const) {
                     // vld1q_u16: Load 8 consecutive 16-bit values into NEON register
                     vec_a = vld1q_u16(reinterpret_cast<const uint16_t*>(a) + i * 8);
-                } else {
-                    // vdupq_n_u16: Copy a 16-bit value to all elements in the register
-                    vec_a = vdupq_n_u16(*reinterpret_cast<const uint16_t*>(a));
                 }
 
-                uint16x8_t vec_b;
                 if constexpr (!right_const) {
                     vec_b = vld1q_u16(reinterpret_cast<const uint16_t*>(b) + i * 8);
-                } else {
-                    vec_b = vdupq_n_u16(*reinterpret_cast<const uint16_t*>(b));
                 }
 
                 // Convert first 8 uint8 masks to uint16 masks using lookup table, effectively duplicating each uint8
@@ -294,21 +353,67 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
                 vst1q_u16(reinterpret_cast<uint16_t*>(dst) + i * 8, result);
                 loaded_mask = vextq_u8(loaded_mask, loaded_mask, 8);
             }
-        } else if constexpr (data_size == 4) { // int32/float
+        }
+
+        dst += neon_width;
+        selector += neon_width;
+        if constexpr (!left_const) {
+            a += neon_width;
+        }
+        if constexpr (!right_const) {
+            b += neon_width;
+        }
+    }
+}
+
+template <typename T, bool left_const = false, bool right_const = false>
+inline void neon_select_if_common_implement_u32(uint8_t*& selector, T*& dst, const T*& a, const T*& b, int size) {
+    const T* dst_end = dst + size;
+    constexpr int data_size = sizeof(T);
+    constexpr int neon_width = 16; // NEON register width is 128 bits (16 bytes)
+
+    uint32x4_t vec_a;
+    if constexpr (left_const) {
+        vec_a = vdupq_n_u32(*reinterpret_cast<const uint32_t*>(a));
+    }
+
+    uint32x4_t vec_b;
+    if constexpr (right_const) {
+        vec_b = vdupq_n_u32(*reinterpret_cast<const uint32_t*>(b));
+    }
+
+    // Process 16 bytes of data at a time
+    while (dst + neon_width < dst_end) {
+        // Load 16 selector masks
+        uint8x16_t loaded_mask = vld1q_u8(selector);
+        // loaded_mask[i] = selector[i] != 0 ? 0xFF : 0x00
+        loaded_mask = vtstq_u8(loaded_mask, loaded_mask);
+
+        if (vmaxvq_u8(loaded_mask) == 0) { // Select all the rhs.
+            if constexpr (right_const) {
+                for (int i = 0; i < 4; i++) {
+                    vst1q_u32(reinterpret_cast<uint32_t*>(dst) + i * 4, vec_b);
+                }
+            } else {
+                strings::memcpy_inlined(dst, b, neon_width * data_size);
+            }
+        } else if (vminvq_u8(loaded_mask)) { // Select all the lhs.
+            if constexpr (left_const) {
+                for (int i = 0; i < 4; i++) {
+                    vst1q_u32(reinterpret_cast<uint32_t*>(dst) + i * 4, vec_a);
+                }
+            } else {
+                strings::memcpy_inlined(dst, a, neon_width * data_size);
+            }
+        } else {
             // Process 4 groups, each handling 4 int32
             for (int i = 0; i < 4; i++) {
-                uint32x4_t vec_a;
                 if constexpr (!left_const) {
                     vec_a = vld1q_u32(reinterpret_cast<const uint32_t*>(a) + i * 4);
-                } else {
-                    vec_a = vdupq_n_u32(*reinterpret_cast<const uint32_t*>(a));
                 }
 
-                uint32x4_t vec_b;
                 if constexpr (!right_const) {
                     vec_b = vld1q_u32(reinterpret_cast<const uint32_t*>(b) + i * 4);
-                } else {
-                    vec_b = vdupq_n_u32(*reinterpret_cast<const uint32_t*>(b));
                 }
 
                 uint8x16_t index = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
@@ -319,21 +424,67 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
                 vst1q_u32(reinterpret_cast<uint32_t*>(dst) + i * 4, result);
                 loaded_mask = vextq_u8(loaded_mask, loaded_mask, 4);
             }
-        } else if constexpr (data_size == 8) { // int64/double
+        }
+
+        dst += neon_width;
+        selector += neon_width;
+        if constexpr (!left_const) {
+            a += neon_width;
+        }
+        if constexpr (!right_const) {
+            b += neon_width;
+        }
+    }
+}
+
+template <typename T, bool left_const = false, bool right_const = false>
+inline void neon_select_if_common_implement_u64(uint8_t*& selector, T*& dst, const T*& a, const T*& b, int size) {
+    const T* dst_end = dst + size;
+    constexpr int data_size = sizeof(T);
+    constexpr int neon_width = 16; // NEON register width is 128 bits (16 bytes)
+
+    uint64x2_t vec_a;
+    if constexpr (left_const) {
+        vec_a = vdupq_n_u64(*reinterpret_cast<const uint64_t*>(a));
+    }
+
+    uint64x2_t vec_b;
+    if constexpr (right_const) {
+        vec_b = vdupq_n_u64(*reinterpret_cast<const uint64_t*>(b));
+    }
+
+    // Process 16 bytes of data at a time
+    while (dst + neon_width < dst_end) {
+        // Load 16 selector masks
+        uint8x16_t loaded_mask = vld1q_u8(selector);
+        // loaded_mask[i] = selector[i] != 0 ? 0xFF : 0x00
+        loaded_mask = vtstq_u8(loaded_mask, loaded_mask);
+
+        if (vmaxvq_u8(loaded_mask) == 0) { // Select all the rhs.
+            if constexpr (right_const) {
+                for (int i = 0; i < 8; i++) {
+                    vst1q_u64(reinterpret_cast<uint64_t*>(dst) + i * 2, vec_b);
+                }
+            } else {
+                strings::memcpy_inlined(dst, b, neon_width * data_size);
+            }
+        } else if (vminvq_u8(loaded_mask)) { // Select all the lhs.
+            if constexpr (left_const) {
+                for (int i = 0; i < 8; i++) {
+                    vst1q_u64(reinterpret_cast<uint64_t*>(dst) + i * 2, vec_a);
+                }
+            } else {
+                strings::memcpy_inlined(dst, a, neon_width * data_size);
+            }
+        } else {
             // Process 8 groups, each handling 2 int64
             for (int i = 0; i < 8; i++) {
-                uint64x2_t vec_a;
                 if constexpr (!left_const) {
                     vec_a = vld1q_u64(reinterpret_cast<const uint64_t*>(a) + i * 2);
-                } else {
-                    vec_a = vdupq_n_u64(*reinterpret_cast<const uint64_t*>(a));
                 }
 
-                uint64x2_t vec_b;
                 if constexpr (!right_const) {
                     vec_b = vld1q_u64(reinterpret_cast<const uint64_t*>(b) + i * 2);
-                } else {
-                    vec_b = vdupq_n_u64(*reinterpret_cast<const uint64_t*>(b));
                 }
 
                 uint8x16_t index = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1};
@@ -347,14 +498,28 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
             }
         }
 
-        dst += 16;
-        selector += 16;
-        if (!left_const) {
-            a += 16;
+        dst += neon_width;
+        selector += neon_width;
+        if constexpr (!left_const) {
+            a += neon_width;
         }
-        if (!right_const) {
-            b += 16;
+        if constexpr (!right_const) {
+            b += neon_width;
         }
+    }
+}
+
+template <typename T, bool left_const = false, bool right_const = false>
+inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T*& a, const T*& b, int size) {
+    constexpr int data_size = sizeof(T);
+    if constexpr (data_size == 1) { // int8/uint8/bool
+        neon_select_if_common_implement_u8<T, left_const, right_const>(selector, dst, a, b, size);
+    } else if constexpr (data_size == 2) { // int16
+        neon_select_if_common_implement_u16<T, left_const, right_const>(selector, dst, a, b, size);
+    } else if constexpr (data_size == 4) { // int32/float
+        neon_select_if_common_implement_u32<T, left_const, right_const>(selector, dst, a, b, size);
+    } else if constexpr (data_size == 8) { // int64/double
+        neon_select_if_common_implement_u64<T, left_const, right_const>(selector, dst, a, b, size);
     }
 }
 

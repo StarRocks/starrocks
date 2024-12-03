@@ -223,7 +223,7 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto bhs, _children[0]->evaluate_checked(context, ptr));
-        int true_count = ColumnHelper::count_true_with_notnull(bhs);
+        const int true_count = ColumnHelper::count_true_with_notnull(bhs);
 
         ASSIGN_OR_RETURN(auto lhs, _children[1]->evaluate_checked(context, ptr));
         if (true_count == bhs->size()) {
@@ -285,20 +285,18 @@ public:
 private:
     ColumnPtr get_null_column(int num_rows, ColumnPtr& input_col) {
         if (input_col->only_null()) {
-            auto res = UInt8Column::create(num_rows);
-            res->get_data().assign(num_rows, 1);
-            return res;
+            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(1, num_rows);
         } else if (input_col->is_nullable()) {
             return down_cast<NullableColumn*>(input_col.get())->null_column();
         } else {
-            return UInt8Column::create(num_rows);
+            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(0, num_rows);
         }
     }
     ColumnPtr get_data_column(int num_rows, ColumnPtr& input_col) {
         if (input_col->only_null()) {
             auto res = ColumnHelper::create_column(type(), false);
-            res->resize(num_rows);
-            return res;
+            res->resize(1);
+            return ConstColumn::create(std::move(res), num_rows);
         } else if (input_col->is_nullable()) {
             return down_cast<NullableColumn*>(input_col.get())->data_column();
         } else {

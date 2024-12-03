@@ -53,6 +53,16 @@ count_zero(const T* data, size_t size) {
                                                _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 48)), zero16)))
                                        << 48u));
     }
+#elif defined(__ARM_NEON) && defined(__aarch64__) && defined(__POPCNT__)
+    const T* end16 = data + (size / 16 * 16);
+    for (; data < end16; data += 16) {
+        uint8x16_t vdata = vld1q_u8(data);
+        // result[i] = vdata[i] == 0 ? 0xFF : 0x00
+        uint8x16_t result = vceqq_u8(vdata, vdupq_n_u8(0));
+        // result[i] = result[i] & 0x1
+        result = vandq_u8(result, vdupq_n_u8(1));
+        count += vaddvq_u8(result);
+    }
 #endif
 
     for (; data < end; ++data) {
