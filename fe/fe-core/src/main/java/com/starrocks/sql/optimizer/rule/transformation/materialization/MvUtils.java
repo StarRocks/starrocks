@@ -436,6 +436,12 @@ public class MvUtils {
                 && !(operator instanceof LogicalJoinOperator)) {
             return false;
         }
+        if (operator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
+            if (olapScanOperator.isSample()) {
+                return false;
+            }
+        }
         for (OptExpression child : root.getInputs()) {
             if (!isLogicalSPJ(child)) {
                 return false;
@@ -445,6 +451,12 @@ public class MvUtils {
     }
 
     public static boolean isLogicalSPJGOperator(Operator operator) {
+        if (operator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
+            if (olapScanOperator.isSample()) {
+                return false;
+            }
+        }
         return (operator instanceof LogicalScanOperator)
                 || (operator instanceof LogicalProjectOperator)
                 || (operator instanceof LogicalFilterOperator)
