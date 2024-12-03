@@ -147,20 +147,36 @@ public class MVColumnPruner {
                 projection.getColumnRefMap().values().forEach(s -> requiredOutputColumns.union(s.getUsedColumns()));
             }
             List<ColumnRefOperator> unionOutputColRefs = unionOperator.getOutputColumnRefOp();
-            List<Integer> unionOutputIdxes = Lists.newArrayList();
+            List<Integer> newUnionOutputIdxes = Lists.newArrayList();
             List<ColumnRefOperator> newUnionOutputColRefs = Lists.newArrayList();
             for (int i = 0; i < unionOutputColRefs.size(); i++) {
                 ColumnRefOperator columnRefOperator = unionOutputColRefs.get(i);
                 if (requiredOutputColumns.contains(columnRefOperator.getId())) {
-                    unionOutputIdxes.add(i);
+                    newUnionOutputIdxes.add(i);
                     newUnionOutputColRefs.add(columnRefOperator);
                 }
+            }
+
+            // if all output columns are selected, no need to prune
+            if (newUnionOutputIdxes.size() == unionOutputColRefs.size()) {
+                for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
+                    requiredOutputColumns.union(optExpression.getChildOutputColumns(childIdx));
+                }
+                List<OptExpression> children = visitChildren(optExpression);
+                return OptExpression.create(optExpression.getOp(), children);
+            }
+            // choose the smallest column ref if no column ref is selected to avoid empty output
+            if (newUnionOutputIdxes.isEmpty()) {
+                ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(unionOutputColRefs);
+                newUnionOutputColRefs.add(smallestColumn);
+                requiredOutputColumns.union(smallestColumn);
+                newUnionOutputIdxes.add(unionOutputColRefs.indexOf(smallestColumn));
             }
             List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
             for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
                 List<ColumnRefOperator> childOutputCols = unionOperator.getChildOutputColumns().get(childIdx);
                 List<ColumnRefOperator> newChildOutputCols = Lists.newArrayList();
-                unionOutputIdxes.stream()
+                newUnionOutputIdxes.stream()
                         .map(idx -> childOutputCols.get(idx))
                         .forEach(x -> {
                             requiredOutputColumns.union(x);
