@@ -204,6 +204,7 @@ Status BlockCache::shutdown() {
         _disk_space_monitor->stop();
     }
     _initialized.store(false, std::memory_order_relaxed);
+    _kv_cache.reset();
     return st;
 }
 
