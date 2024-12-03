@@ -220,6 +220,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
         PartitionInfo partitionInfo = table.getPartitionInfo();
+        Set<Long> nullPartitions = partitionInfo.getNullValuePartitions();
 
         List<Long> pruned = Lists.newArrayList();
         if (hasMinMax.first) {
@@ -228,7 +229,13 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             if (CollectionUtils.isEmpty(sorted)) {
                 return null;
             }
-            pruned.add(sorted.get(0));
+            for (long partitionId : sorted) {
+                pruned.add(partitionId);
+                // at least reserve one non-null partition, null-partition might be useless
+                if (!nullPartitions.contains(partitionId)) {
+                    break;
+                }
+            }
         }
 
         if (hasMinMax.second) {
@@ -237,7 +244,13 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             if (CollectionUtils.isEmpty(sorted)) {
                 return null;
             }
-            pruned.add(sorted.get(0));
+            for (long partitionId : sorted) {
+                pruned.add(partitionId);
+                // at least reserve one non-null partition, null-partition might be useless
+                if (!nullPartitions.contains(partitionId)) {
+                    break;
+                }
+            }
         }
 
         LogicalOlapScanOperator scan = new LogicalOlapScanOperator.Builder()
