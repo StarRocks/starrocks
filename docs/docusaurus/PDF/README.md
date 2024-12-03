@@ -1,9 +1,9 @@
 # Generate PDFs from the StarRocks Docusaurus documentation site
 
 Node.js code to:
-1. Generate the ordered list of URLs from the documentation. This is done using code from [`docusaurus-prince-pdf`](https://github.com/signcl/docusaurus-prince-pdf).
-2. Convert each page to a PDF file with [`Gotenberg`](https://pptr.dev/).
-3. Combine the individual PDF files using [Ghostscript](https://www.ghostscript.com/) and [`pdfcombine`](https://github.com/tdegeus/pdfcombine.git).
+1. Generate the ordered list of URLs from the documentation. This is done using code from `docusaurus-prince-pdf`.
+2. Convert each page to a PDF file with Gotenberg.
+3. Combine the individual PDF files using Ghostscript and `pdfcombine`.
 
 ## Onetime setup
 
@@ -68,7 +68,7 @@ Stop watching the logs with CTRL-c
 
 ### Find the initial URL
 
-First open the docs by launching a browser to the URL at the end of the log output, substituting `localhost` for 0.0.0.0, which should be [http://localhost:3000/](http://localhost:3000/).
+First open the docs by launching a browser to the URL at the end of the log output, which should be [http://0.0.0.0:3000/](http://0.0.0.0:3000/).
 
 Next, change to the Chinese documentation if you are generating a PDF document of the Chinese documentation.
 
@@ -84,11 +84,13 @@ Launch a shell from the `starrocks/docs/docusaurus/PDF` directory:
 docker compose exec -ti docusaurus bash
 ```
 
-### Crawl
+and `cd` into the `PDF` directory:
 
-The Docker Compose environment has two services:
-- `docusaurus`
-- `gotenberg`
+```bash
+cd /app/docusaurus/PDF
+```
+
+### Crawl the docs and generate the PDFs
 
 Run the command:
 
@@ -97,14 +99,18 @@ Run the command:
 > The URL in the code sample is for the Chinese documentation, remove the `/zh/` if you want English.
 
 ```bash
-node generatePdf.js http://localhost:3000/zh/docs/introduction/StarRocks_intro/
+node generatePdf.js http://0.0.0.0:3000/zh/docs/introduction/StarRocks_intro/
 ```
 
 ## Join the individual PDF files
 
+> Note:
+>
+> There are 900+ PDF files and more than 4,000 pages in total. Combining takes hours, just let it run.
+
 ```bash
 source .venv/bin/activate
-pdfcombine -y combine.yaml --title="StarRocks 2.5" -o StarRocks_2.5.pdf
+pdfcombine -y combine.yaml --title="StarRocks 3.3" -o ../../PDFoutput/StarRocks_3.3.pdf
 ```
 
 > Note:
@@ -115,19 +121,15 @@ pdfcombine -y combine.yaml --title="StarRocks 2.5" -o StarRocks_2.5.pdf
 >
 > I have not had any complaints about the missing glyph from readers of the documents produced with this.
 
-### Copy the PDF file to your local machine
+## Finished file
 
-> Tip
-> Use the filename that you sepcified in the `pdfcombine` command, for example `StarRocks_2.5.pdf`:
-
-```bash
-docker compose cp docusaurus:/app/docusaurus/PDF/StarRocks_2.5.pdf .
-```
-
+The individual PDF files and the combined file will be on your local machine in `starrocks/docs/PDFoutput/`
 
 ## Customizing the docs site for PDF
 
-Some things do not make sense to have in the PDF, like the Feedback form at the bottom of the page. Removing the Feedback form from the PDF can be done with CSS. This snippet is added to the Docusaurus CSS file `src/css/custom.css`:
+Gotenberg generates the PDF files without the side navigation, header, and footer as these components are not displayed when the `media` is set to `print`. In our docs it does not make sense to have the edit URLs or Feedback widget show. These are filtered out using CSS by adding `display: none` to the classes of these objects when `@media print`.
+
+Removing the Feedback form from the PDF can be done with CSS. This snippet is added to the Docusaurus CSS file `src/css/custom.css`:
 
 ```css
 /* When we generate PDF files we do not need to show the feedback widget. */
@@ -137,3 +139,10 @@ Some things do not make sense to have in the PDF, like the Feedback form at the 
     }
 }
 ```
+
+## Links
+
+- [`docusaurus-prince-pdf`](https://github.com/signcl/docusaurus-prince-pdf)
+- [`Gotenberg`](https://pptr.dev/)
+- [Ghostscript](https://www.ghostscript.com/)
+- [`pdfcombine`](https://github.com/tdegeus/pdfcombine.git)
