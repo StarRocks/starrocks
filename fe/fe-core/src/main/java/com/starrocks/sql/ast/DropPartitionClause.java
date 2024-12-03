@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.analysis.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -28,6 +29,7 @@ public class DropPartitionClause extends AlterTableClause {
     private final boolean forceDrop;
     private final MultiRangePartitionDesc multiRangePartitionDesc;
     private final List<String> partitionNames;
+    private final Expr dropWhereExpr;
 
     //Object Resolved by Analyzer
     private List<String> resolvedPartitionNames;
@@ -45,6 +47,7 @@ public class DropPartitionClause extends AlterTableClause {
         this.forceDrop = forceDrop;
         this.multiRangePartitionDesc = null;
         this.partitionNames = null;
+        this.dropWhereExpr = null;
     }
 
     public DropPartitionClause(boolean ifExists, List<String> partitionNames, boolean isTempPartition,
@@ -56,6 +59,7 @@ public class DropPartitionClause extends AlterTableClause {
         this.forceDrop = forceDrop;
         this.multiRangePartitionDesc = null;
         this.partitionNames = partitionNames;
+        this.dropWhereExpr = null;
     }
 
     public DropPartitionClause(boolean ifExists, MultiRangePartitionDesc multiRangePartitionDesc, boolean isTempPartition,
@@ -67,6 +71,23 @@ public class DropPartitionClause extends AlterTableClause {
         this.forceDrop = forceDrop;
         this.multiRangePartitionDesc = multiRangePartitionDesc;
         this.partitionNames = null;
+        this.dropWhereExpr = null;
+    }
+
+    public DropPartitionClause(boolean ifExists, Expr whereExpr, boolean isTempPartition,
+                               boolean forceDrop, NodePosition pos) {
+        super(AlterOpType.DROP_PARTITION, pos);
+        this.ifExists = ifExists;
+        this.partitionName = null;
+        this.isTempPartition = isTempPartition;
+        this.forceDrop = forceDrop;
+        this.multiRangePartitionDesc = null;
+        this.partitionNames = null;
+        this.dropWhereExpr = whereExpr;
+    }
+
+    public Expr getDropWhereExpr() {
+        return dropWhereExpr;
     }
 
     public List<String> getResolvedPartitionNames() {

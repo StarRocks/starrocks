@@ -30,6 +30,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -117,6 +118,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector.getPartitionNamesByExpr;
 
 public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext> {
     private final Table table;
@@ -1229,13 +1231,12 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {
         if (clause.getMultiRangePartitionDesc() != null) {
-            MultiRangePartitionDesc multiRangePartitionDesc = clause.getMultiRangePartitionDesc();
-            PartitionDescAnalyzer.analyze(multiRangePartitionDesc);
-
             if (!(table instanceof OlapTable)) {
-                throw new SemanticException("Can't add multi-range partition to table type is not olap");
+                throw new SemanticException("Can't drop partitions with multi-range since it is not olap table");
             }
             OlapTable olapTable = (OlapTable) table;
+            MultiRangePartitionDesc multiRangePartitionDesc = clause.getMultiRangePartitionDesc();
+            PartitionDescAnalyzer.analyze(multiRangePartitionDesc);
             PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(multiRangePartitionDesc, olapTable);
 
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -1254,6 +1255,27 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             clause.setResolvedPartitionNames(Lists.newArrayList(clause.getPartitionName()));
         } else if (clause.getPartitionNames() != null) {
             clause.setResolvedPartitionNames(clause.getPartitionNames());
+        } else if (clause.getDropWhereExpr() != null) {
+            // do check drop partition expression
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("Can't drop partitions with where expression since it is not olap table");
+            }
+            OlapTable olapTable = (OlapTable) table;
+            if (!olapTable.getPartitionInfo().isPartitioned()) {
+                throw new SemanticException("Can't drop partitions with where expression since it is not a partition table");
+            }
+            if (clause.isTempPartition()) {
+                throw new SemanticException("Can't drop temp partitions with where expression and `TEMPORARY` keyword");
+            }
+            if (clause.isSetIfExists()) {
+                throw new SemanticException("Can't drop partitions with where expression and `IF EXISTS` keyword");
+            }
+            Expr expr = clause.getDropWhereExpr();
+            Database db = context.getGlobalStateMgr().getMetadataMgr()
+                    .getDb(context.getCurrentCatalog(), context.getDatabase());
+            TableName tableName = new TableName(db.getFullName(), table.getName());
+            List<String> dropPartitionNames = getPartitionNamesByExpr(context, tableName, olapTable, expr, true);
+            clause.setResolvedPartitionNames(dropPartitionNames);
         }
 
         if (table instanceof OlapTable) {

@@ -600,6 +600,10 @@ public class StarRocksAssert {
                 action.accept(createTableStmt.getTableName());
             }
         } catch (Exception e) {
+<<<<<<< HEAD
+=======
+            e.printStackTrace();
+>>>>>>> e34f18a5a ([Feature] (Part 1) Support drop partitions with common expressions (#53118))
             Assert.fail("Do action failed:" + e.getMessage());
         } finally {
             if (action != null) {
@@ -607,7 +611,11 @@ public class StarRocksAssert {
                     try {
                         dropTable(table);
                     } catch (Exception e) {
+<<<<<<< HEAD
                         // ignore exceptions
+=======
+                        e.printStackTrace();
+>>>>>>> e34f18a5a ([Feature] (Part 1) Support drop partitions with common expressions (#53118))
                     }
                 }
             }
