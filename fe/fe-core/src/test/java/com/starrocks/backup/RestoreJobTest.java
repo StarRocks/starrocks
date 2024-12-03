@@ -201,6 +201,14 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = beIds;
 
+                systemInfoService.getBackend(anyLong);
+                minTimes = 0;
+                result = null;
+
+                systemInfoService.getComputeNode(anyLong);
+                minTimes = 0;
+                result = null;
+
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 minTimes = 0;
                 result = com.starrocks.common.Status.OK;
@@ -376,6 +384,14 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = beIds;
 
+                systemInfoService.getBackend(anyLong);
+                minTimes = 0;
+                result = null;
+
+                systemInfoService.getComputeNode(anyLong);
+                minTimes = 0;
+                result = null;
+
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 minTimes = 0;
                 result = com.starrocks.common.Status.OK;
@@ -536,6 +552,14 @@ public class RestoreJobTest {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = beIds;
+
+                systemInfoService.getBackend(anyLong);
+                minTimes = 0;
+                result = null;
+
+                systemInfoService.getComputeNode(anyLong);
+                minTimes = 0;
+                result = null;
 
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 minTimes = 0;
