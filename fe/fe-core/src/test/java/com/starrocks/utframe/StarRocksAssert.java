@@ -587,6 +587,38 @@ public class StarRocksAssert {
         return withTables(List.of(table), action);
     }
 
+    public StarRocksAssert withTable(String sql, ExceptionConsumer action) {
+        return withTables(sql, action);
+    }
+
+    public StarRocksAssert withTables(String sql,
+                                      ExceptionConsumer action) {
+        Set<String> tables = Sets.newHashSet();
+        try {
+            CreateTableStmt createTableStmt =
+                    (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            utCreateTableWithRetry(createTableStmt, ctx);
+            tables.add(createTableStmt.getTableName());
+            if (action != null) {
+                action.accept(createTableStmt.getTableName());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail("Do action failed:" + e.getMessage());
+        } finally {
+            if (action != null) {
+                for (String table : tables) {
+                    try {
+                        dropTable(table);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+        return this;
+    }
+
     /**
      * Create table and insert datas into the table and do actions.
      */
