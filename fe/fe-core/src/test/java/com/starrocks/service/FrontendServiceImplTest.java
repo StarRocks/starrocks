@@ -1153,6 +1153,7 @@ public class FrontendServiceImplTest {
         request.keys = Lists.newArrayList("adaptive_choose_instances_threshold");
         request.values = Lists.newArrayList("98");
         impl.setConfig(request);
+
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
         List<List<String>> configs = Config.getConfigInfo(matcher);
         Assert.assertEquals("98", configs.get(0).get(2));
