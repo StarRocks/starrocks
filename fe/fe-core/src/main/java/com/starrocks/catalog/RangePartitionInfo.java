@@ -359,6 +359,32 @@ public class RangePartitionInfo extends PartitionInfo {
         return sortedList;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public List<Long> getSortedPartitions(boolean asc) {
+        Map<Long, Range<PartitionKey>> tmpMap = idToRange;
+        List<Map.Entry<Long, Range<PartitionKey>>> sortedList = Lists.newArrayList(tmpMap.entrySet());
+        sortedList.sort(asc ? RangeUtils.RANGE_MAP_ENTRY_COMPARATOR : RangeUtils.RANGE_MAP_ENTRY_COMPARATOR.reversed());
+        if (sortedList.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        return sortedList.stream().map(Map.Entry::getKey).collect(Collectors.toList());
+    }
+
+    /**
+     * For RangePartition, NULL value would be put in the MIN_VALUE partition but not a real NULL.
+     * It's a little bit tricky, as that partition might contain NULL, or might not.
+     */
+    @Override
+    public Set<Long> getNullValuePartitions() {
+        return idToRange.entrySet().stream()
+                .filter(x -> x.getValue().lowerEndpoint().isMinValue())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+    }
+
+>>>>>>> 5bad4af508 ([BugFix] fix partition min/max prune with null-value partitions (#53235))
     // get a sorted range list, exclude partitions which ids are in 'excludePartitionIds'
     public List<Range<PartitionKey>> getRangeList(Set<Long> excludePartitionIds, boolean isTemp) {
         Map<Long, Range<PartitionKey>> tmpMap = idToRange;

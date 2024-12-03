@@ -56,6 +56,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.validation.constraints.NotNull;
 
 /*
@@ -278,6 +279,14 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
             idToReplicationNum.put(partitionId, replicationNum);
             idToInMemory.put(partitionId, in.readBoolean());
         }
+    }
+
+    /**
+     * Return the partitions that contains NULL partition values
+     * e.g. PARTITION p_null VALUES IN (NULL)
+     */
+    public Set<Long> getNullValuePartitions() {
+        throw new NotImplementedException("not reachable");
     }
 
     @Override
