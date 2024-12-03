@@ -208,6 +208,7 @@ set(EXEC_FILES
         ./http/datacache_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
+        ./http/action/update_config_action_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/io_profiler_test.cpp
@@ -278,6 +279,7 @@ set(EXEC_FILES
         ./storage/rowset/bloom_filter_index_reader_writer_test.cpp
         ./storage/rowset/column_reader_writer_test.cpp
         ./storage/rowset/dict_page_test.cpp
+        ./storage/rowset/data_sample_test.cpp
         ./storage/rowset/encoding_info_test.cpp
         ./storage/rowset/frame_of_reference_page_test.cpp
         ./storage/rowset/map_column_rw_test.cpp
@@ -375,11 +377,15 @@ set(EXEC_FILES
         ./runtime/mem_pool_test.cpp
         ./runtime/mem_tracker_test.cpp
         ./runtime/result_queue_mgr_test.cpp
+        ./runtime/batch_write/batch_write_mgr_test.cpp
+        ./runtime/batch_write/batch_write_util_test.cpp
+        ./runtime/batch_write/isomorphic_batch_write_test.cpp
         #./runtime/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
+        ./runtime/time_bounded_stream_load_pipe_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/user_function_cache_test.cpp

@@ -1127,7 +1127,7 @@ void Tablet::delete_all_files() {
     // Release resources like memory and disk space.
     // we have to call list_versions first, or else error occurs when
     // removing hash_map item and iterating hash_map concurrently.
-    std::shared_lock rdlock(_meta_lock);
+    std::unique_lock wlock(_meta_lock);
     for (const auto& it : _rs_version_map) {
         (void)it.second->remove();
     }
@@ -1348,7 +1348,7 @@ void Tablet::get_compaction_status(std::string* json_result) {
                 version.SetString(version_value.c_str(), version_value.length(), root.GetAllocator());
                 value.AddMember("version", version, root.GetAllocator());
 
-                input_rowset_details.PushBack(value, input_rowset_details.GetAllocator());
+                input_rowset_details.PushBack(value, root.GetAllocator());
             }
             task.AddMember("input_rowset_details", input_rowset_details, root.GetAllocator());
             compaction_detail.AddMember("task", task, root.GetAllocator());
@@ -1830,7 +1830,7 @@ void Tablet::_get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs)
     }
 
     if (_updates) {
-        _updates->rewrite_rs_meta();
+        _updates->rewrite_rs_meta(true);
     }
 }
 

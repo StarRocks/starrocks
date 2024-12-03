@@ -65,7 +65,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
@@ -270,7 +270,7 @@ public class PlanFragmentBuilder {
         Collections.reverse(execPlan.getFragments());
 
         // Create a fake table sink here, replaced it after created the MV
-        PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt);
+        PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt, null);
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createStmt.getTableName().getDb()).getId();
         MaterializedView view = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
@@ -851,6 +851,7 @@ public class PlanFragmentBuilder {
             scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
             scanNode.setGtid(node.getGtid());
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
+            scanNode.setSample(node.getSample());
             currentExecGroup.add(scanNode);
             // set tablet
             try {
@@ -888,7 +889,7 @@ public class PlanFragmentBuilder {
                         if (CollectionUtils.isEmpty(selectTabletIds)) {
                             continue;
                         }
-                        selectedNonEmptyPartitionIds.add(physicalPartition.getId());
+                        selectedNonEmptyPartitionIds.add(partitionId);
                         Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
@@ -905,7 +906,7 @@ public class PlanFragmentBuilder {
                 }
                 scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
                 scanNode.setTotalTabletsNum(totalTabletsNum);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
                         "Build Exec OlapScanNode fail, scan info is invalid", INTERNAL_ERROR, e);
             }
@@ -1265,7 +1266,7 @@ public class PlanFragmentBuilder {
             } catch (AnalysisException e) {
                 LOG.warn("Delta lake scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("Delta scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
@@ -1477,7 +1478,7 @@ public class PlanFragmentBuilder {
                     HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                     prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
                 }
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("Iceberg scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
@@ -1837,7 +1838,7 @@ public class PlanFragmentBuilder {
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
                 scanNode.assignNodes();
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
             scanNode.setShardScanRanges(scanNode.computeShardLocations(node.getSelectedIndex()));
@@ -3413,6 +3414,7 @@ public class PlanFragmentBuilder {
                         .collect(Collectors.toList());
                 SelectNode selectNode =
                         new SelectNode(context.getNextNodeId(), consumeFragment.getPlanRoot(), predicates);
+                this.currentExecGroup.add(selectNode, true);
                 selectNode.computeStatistics(optExpression.getStatistics());
                 consumeFragment.setPlanRoot(selectNode);
             }
@@ -3761,7 +3763,7 @@ public class PlanFragmentBuilder {
             currentExecGroup.add(binlogScanNode, true);
             try {
                 binlogScanNode.computeScanRanges();
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
                         "Failed to compute scan ranges for StreamScanNode, " + e.getMessage(), INTERNAL_ERROR);
             }
@@ -3832,7 +3834,7 @@ public class PlanFragmentBuilder {
             try {
                 BrokerFileGroup grp = new BrokerFileGroup(table, scanColumns);
                 fileGroups.add(grp);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
                         INTERNAL_ERROR);
@@ -3849,7 +3851,7 @@ public class PlanFragmentBuilder {
             try {
                 scanNode.init(analyzer);
                 scanNode.finalizeStats(analyzer);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
                         INTERNAL_ERROR);

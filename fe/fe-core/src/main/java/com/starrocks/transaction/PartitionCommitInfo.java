@@ -51,7 +51,7 @@ import javax.annotation.Nullable;
 public class PartitionCommitInfo implements Writable {
 
     @SerializedName(value = "partitionId")
-    private long partitionId;
+    private long physicalPartitionId;
     @SerializedName(value = "version")
     private long version;
 
@@ -92,19 +92,19 @@ public class PartitionCommitInfo implements Writable {
 
     }
 
-    public PartitionCommitInfo(long partitionId, long version, long visibleTime) {
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime) {
         super();
-        this.partitionId = partitionId;
+        this.physicalPartitionId = physicalPartitionId;
         this.version = version;
         this.versionTime = visibleTime;
     }
 
-    public PartitionCommitInfo(long partitionId, long version, long visibleTime,
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime,
                                List<ColumnId> invalidDictCacheColumns,
                                List<ColumnId> validDictCacheColumns,
                                List<Long> dictCollectedVersions) {
         super();
-        this.partitionId = partitionId;
+        this.physicalPartitionId = physicalPartitionId;
         this.version = version;
         this.versionTime = visibleTime;
         this.invalidDictCacheColumns = invalidDictCacheColumns;
@@ -127,8 +127,8 @@ public class PartitionCommitInfo implements Writable {
         this.versionTime = time;
     }
 
-    public long getPartitionId() {
-        return partitionId;
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
     }
 
     public long getVersion() {
@@ -191,7 +191,7 @@ public class PartitionCommitInfo implements Writable {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("partitionid=");
-        sb.append(partitionId);
+        sb.append(physicalPartitionId);
         sb.append(", version=").append(version);
         sb.append(", versionHash=").append(0);
         sb.append(", versionTime=").append(versionTime);

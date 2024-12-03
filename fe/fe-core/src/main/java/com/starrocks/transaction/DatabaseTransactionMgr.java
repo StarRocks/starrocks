@@ -55,8 +55,8 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -265,7 +265,7 @@ public class DatabaseTransactionMgr {
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment,
                                    boolean writeEditLog)
-            throws UserException {
+            throws StarRocksException {
         Preconditions.checkNotNull(tabletCommitInfos, "tabletCommitInfos is null");
         Preconditions.checkNotNull(tabletFailInfos, "tabletFailInfos is null");
         // 1. check status
@@ -388,7 +388,7 @@ public class DatabaseTransactionMgr {
      * @return a {@link VisibleStateWaiter} object used to wait for the transaction become visible.
      */
     @NotNull
-    public VisibleStateWaiter commitPreparedTransaction(long transactionId) throws UserException {
+    public VisibleStateWaiter commitPreparedTransaction(long transactionId) throws StarRocksException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
@@ -488,7 +488,7 @@ public class DatabaseTransactionMgr {
                                                 @NotNull List<TabletCommitInfo> tabletCommitInfos,
                                                 @NotNull List<TabletFailInfo> tabletFailInfos,
                                                 @Nullable TxnCommitAttachment txnCommitAttachment)
-            throws UserException {
+            throws StarRocksException {
         prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, false);
         return commitPreparedTransaction(transactionId);
     }
@@ -503,7 +503,7 @@ public class DatabaseTransactionMgr {
                                  TxnCommitAttachment txnCommitAttachment,
                                  List<TabletCommitInfo> finishedTablets,
                                  List<TabletFailInfo> failedTablets)
-            throws UserException {
+            throws StarRocksException {
         if (transactionId < 0) {
             LOG.info("transaction id is {}, less than 0, maybe this is an old type load job, ignore abort operation",
                     transactionId);
@@ -897,8 +897,8 @@ public class DatabaseTransactionMgr {
                 }
                 PartitionInfo partitionInfo = table.getPartitionInfo();
                 for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                    long partitionId = partitionCommitInfo.getPartitionId();
-                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                    long physicalPartitionId = partitionCommitInfo.getPhysicalPartitionId();
+                    PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
                     // partition maybe dropped between commit and publish version, ignore it
                     if (partition == null) {
                         continue;
@@ -913,8 +913,8 @@ public class DatabaseTransactionMgr {
                     }
 
                     List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
-                    int quorumNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
-                    int replicaNum = partitionInfo.getReplicationNum(partitionId);
+                    int quorumNum = partitionInfo.getQuorumNum(partition.getParentId(), table.writeQuorum());
+                    int replicaNum = partitionInfo.getReplicationNum(partition.getParentId());
                     for (MaterializedIndex index : allIndices) {
                         for (Tablet tablet : index.getTablets()) {
                             int successHealthyReplicaNum = 0;
@@ -976,7 +976,7 @@ public class DatabaseTransactionMgr {
         return true;
     }
 
-    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds) throws UserException {
+    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds) throws StarRocksException {
         TransactionState transactionState = getTransactionState(transactionId);
         // add all commit errors and publish errors to a single set
         if (errorReplicaIds == null) {
@@ -1038,13 +1038,13 @@ public class DatabaseTransactionMgr {
                         continue;
                     }
                     for (PartitionCommitInfo partitionCommitInfo : idToPartitionCommitInfo.values()) {
-                        long partitionId = partitionCommitInfo.getPartitionId();
-                        PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                        long physicalPartitionId = partitionCommitInfo.getPhysicalPartitionId();
+                        PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                         // partition maybe dropped between commit and publish version, ignore this error
-                        if (partition == null) {
-                            droppedPartitionIds.add(partitionId);
+                        if (physicalPartition == null) {
+                            droppedPartitionIds.add(physicalPartitionId);
                             LOG.warn("partition {} is dropped, skip version check and remove it from transaction state {}",
-                                    partitionId,
+                                    physicalPartitionId,
                                     transactionState);
                             continue;
                         }
@@ -1052,19 +1052,19 @@ public class DatabaseTransactionMgr {
                         if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                                 !transactionState.isVersionOverwrite() &&
                                 !partitionCommitInfo.isDoubleWrite() &&
-                                partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                                physicalPartition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                             // prevent excessive logging
                             if (transactionState.getLastErrTimeMs() + 3000 < System.nanoTime() / 1000000) {
                                 LOG.debug("transactionId {} partition {} commitInfo version {} is not equal with " +
                                                 "partition visible version {} plus one, need wait",
                                         transactionId,
-                                        partitionId,
+                                        physicalPartitionId,
                                         partitionCommitInfo.getVersion(),
-                                        partition.getVisibleVersion());
+                                        physicalPartition.getVisibleVersion());
                             }
                             String errMsg =
                                     String.format("wait for publishing partition %d version %d. self version: %d. table %d",
-                                            partitionId, partition.getVisibleVersion() + 1,
+                                            physicalPartitionId, physicalPartition.getVisibleVersion() + 1,
                                             partitionCommitInfo.getVersion(), tableId);
                             transactionState.setErrorMsg(errMsg);
                             return;
@@ -1074,10 +1074,10 @@ public class DatabaseTransactionMgr {
                             continue;
                         }
 
-                        int quorumReplicaNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
+                        int quorumReplicaNum = partitionInfo.getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
 
                         List<MaterializedIndex> allIndices =
-                                transactionState.getPartitionLoadedTblIndexes(tableId, partition);
+                                transactionState.getPartitionLoadedTblIndexes(tableId, physicalPartition);
                         for (MaterializedIndex index : allIndices) {
                             for (Tablet tablet : index.getTablets()) {
                                 int healthReplicaNum = 0;
@@ -1099,7 +1099,7 @@ public class DatabaseTransactionMgr {
                                         }
                                         // this means the replica is a healthy replica,
                                         // it is healthy in the past and does not have error in current load
-                                        if (replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
+                                        if (replica.checkVersionCatchUp(physicalPartition.getVisibleVersion(), true)) {
                                             // during rollup, the rollup replica's last failed version < 0,
                                             // it may be treated as a normal replica.
 
@@ -1121,7 +1121,7 @@ public class DatabaseTransactionMgr {
                                             // then we will detect this and set C's last failed version to 10 and last success version to 11
                                             // this logic has to be replayed in checkpoint thread
                                             replica.updateVersionInfo(replica.getVersion(),
-                                                    partition.getVisibleVersion(),
+                                                    physicalPartition.getVisibleVersion(),
                                                     partitionCommitInfo.getVersion());
                                             LOG.warn("transaction state {} has error, the replica [{}] not appeared " +
                                                             "in error replica list and its version not equal to partition " +
@@ -1147,8 +1147,8 @@ public class DatabaseTransactionMgr {
                                     String errMsg = String.format(
                                             "publish on tablet %d failed. succeed replica num %d less than quorum %d."
                                                     + " table: %d, partition: %d, publish version: %d",
-                                            tablet.getId(), healthReplicaNum, quorumReplicaNum, tableId, partitionId,
-                                            partition.getVisibleVersion() + 1);
+                                            tablet.getId(), healthReplicaNum, quorumReplicaNum, tableId, physicalPartitionId,
+                                            physicalPartition.getVisibleVersion() + 1);
                                     transactionState.setErrorMsg(errMsg);
                                     hasError = true;
                                 }
@@ -1207,6 +1207,7 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
+        resetTransactionStateTabletCommitInfos(transactionState);
         transactionState.notifyVisible();
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
@@ -1247,7 +1248,7 @@ public class DatabaseTransactionMgr {
                     .values().iterator();
             while (partitionCommitInfoIterator.hasNext()) {
                 PartitionCommitInfo partitionCommitInfo = partitionCommitInfoIterator.next();
-                long partitionId = partitionCommitInfo.getPartitionId();
+                long partitionId = partitionCommitInfo.getPhysicalPartitionId();
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 // partition maybe dropped between commit and publish version, ignore this error
                 if (partition == null) {
@@ -1261,13 +1262,13 @@ public class DatabaseTransactionMgr {
                     ReplicationTxnCommitAttachment replicationTxnAttachment = (ReplicationTxnCommitAttachment) transactionState
                             .getTxnCommitAttachment();
                     Map<Long, Long> partitionVersions = replicationTxnAttachment.getPartitionVersions();
-                    long newVersion = partitionVersions.get(partitionCommitInfo.getPartitionId());
+                    long newVersion = partitionVersions.get(partitionCommitInfo.getPhysicalPartitionId());
                     long versionDiff = newVersion - partition.getVisibleVersion();
                     partitionCommitInfo.setVersion(newVersion);
                     partitionCommitInfo.setDataVersion(partition.getDataVersion() + versionDiff);
                     Map<Long, Long> partitionVersionEpochs = replicationTxnAttachment.getPartitionVersionEpochs();
                     if (partitionVersionEpochs != null) {
-                        long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPartitionId());
+                        long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPhysicalPartitionId());
                         partitionCommitInfo.setVersionEpoch(newVersionEpoch);
                     }
                 } else if (transactionState.isVersionOverwrite()) {
@@ -1412,7 +1413,7 @@ public class DatabaseTransactionMgr {
         txnIds.add(transactionState.getTransactionId());
     }
 
-    public void abortTransaction(String label, String reason) throws UserException {
+    public void abortTransaction(String label, String reason) throws StarRocksException {
         Preconditions.checkNotNull(label);
         long transactionId = -1;
         readLock();
@@ -1442,14 +1443,14 @@ public class DatabaseTransactionMgr {
         abortTransaction(transactionId, reason, null);
     }
 
-    public void abortAllRunningTransaction() throws UserException {
+    public void abortAllRunningTransaction() throws StarRocksException {
         for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
             abortTransaction(entry.getKey(), "The cluster is under safe mode!", null);
         }
     }
 
     public void abortTransaction(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)
-            throws UserException {
+            throws StarRocksException {
         abortTransaction(transactionId, true, reason, txnCommitAttachment,
                 Collections.emptyList(), Collections.emptyList());
     }
@@ -1464,7 +1465,7 @@ public class DatabaseTransactionMgr {
     }
 
     private boolean unprotectAbortTransaction(long transactionId, boolean abortPrepared, String reason)
-            throws UserException {
+            throws StarRocksException {
         TransactionState transactionState = unprotectedGetTransactionState(transactionId);
         if (transactionState == null) {
             throw new TransactionNotFoundException(transactionId);
@@ -1502,7 +1503,7 @@ public class DatabaseTransactionMgr {
                 List<Comparable> tableInfo = new ArrayList<>();
                 tableInfo.add(entry.getKey());
                 tableInfo.add(Joiner.on(", ").join(entry.getValue().getIdToPartitionCommitInfo().values().stream().map(
-                        PartitionCommitInfo::getPartitionId).collect(Collectors.toList())));
+                        PartitionCommitInfo::getPhysicalPartitionId).collect(Collectors.toList())));
                 tableInfos.add(tableInfo);
             }
         } finally {
@@ -1758,7 +1759,7 @@ public class DatabaseTransactionMgr {
             try {
                 abortTransaction(txnId, TXN_TIMEOUT_BY_MANAGER, null);
                 LOG.info("transaction [" + txnId + "] is timeout, abort it by transaction manager");
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 // abort may be failed. it is acceptable. just print a log
                 LOG.warn("abort timeout txn {} failed. msg: {}", txnId, e.getMessage());
             }
@@ -1844,7 +1845,8 @@ public class DatabaseTransactionMgr {
         return globalStateMgr;
     }
 
-    public void finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas) throws UserException {
+    public void finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas) throws
+            StarRocksException {
         Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
         if (db == null) {
             transactionState.writeLock();
@@ -1907,6 +1909,7 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
+        resetTransactionStateTabletCommitInfos(transactionState);
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
@@ -2066,6 +2069,15 @@ public class DatabaseTransactionMgr {
             return new ArrayList<>();
         } finally {
             readUnlock();
+        }
+    }
+
+    public void resetTransactionStateTabletCommitInfos(TransactionState transactionState) {
+        writeLock();
+        try {
+            transactionState.resetTabletCommitInfos();
+        } finally {
+            writeUnlock();
         }
     }
 }

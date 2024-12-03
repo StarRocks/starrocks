@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
@@ -72,7 +73,8 @@ public class MetaScanNode extends ScanNode {
         if (selectPartitionNames.isEmpty()) {
             partitions = olapTable.getPhysicalPartitions();
         } else {
-            partitions = selectPartitionNames.stream().map(olapTable::getPartition).collect(Collectors.toList());
+            partitions = selectPartitionNames.stream().map(olapTable::getPartition)
+                    .map(Partition::getDefaultPhysicalPartition).collect(Collectors.toList());
         }
 
         for (PhysicalPartition partition : partitions) {
@@ -126,7 +128,8 @@ public class MetaScanNode extends ScanNode {
                 boolean tabletIsNull = true;
                 for (Replica replica : allQueryableReplicas) {
                     ComputeNode node =
-                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                    .getBackendOrComputeNode(replica.getBackendId());
                     if (node == null) {
                         LOG.debug("replica {} not exists", replica.getBackendId());
                         continue;
@@ -194,5 +197,10 @@ public class MetaScanNode extends ScanNode {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
+    }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
     }
 }

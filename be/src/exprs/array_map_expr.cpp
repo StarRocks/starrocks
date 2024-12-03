@@ -60,6 +60,20 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
 
     return Status::OK();
 }
+Status ArrayMapExpr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    RETURN_IF_ERROR(Expr::open(state, context, scope));
+    for (auto [_, expr] : _outer_common_exprs) {
+        RETURN_IF_ERROR(expr->open(state, context, scope));
+    }
+    return Status::OK();
+}
+
+void ArrayMapExpr::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    for (auto [_, expr] : _outer_common_exprs) {
+        expr->close(state, context, scope);
+    }
+    Expr::close(state, context, scope);
+}
 
 template <bool all_const_input, bool independent_lambda_expr>
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chunk* chunk,
@@ -387,9 +401,10 @@ std::string ArrayMapExpr::debug_string() const {
 
 int ArrayMapExpr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     int num = Expr::get_slot_ids(slot_ids);
-    for (const auto& [slot_id, _] : _outer_common_exprs) {
+    for (const auto& [slot_id, expr] : _outer_common_exprs) {
         slot_ids->push_back(slot_id);
         num++;
+        num += (expr->get_slot_ids(slot_ids));
     }
     return num;
 }

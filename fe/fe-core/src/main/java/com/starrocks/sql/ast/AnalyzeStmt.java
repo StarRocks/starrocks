@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
@@ -33,15 +32,18 @@ public class AnalyzeStmt extends StatementBase {
     private final boolean isSample;
     private boolean isAsync;
     private boolean isExternal = false;
+    private PartitionNames partitionNames;
+    private List<Long> partitionIds = null;
     private Map<String, String> properties;
     private final AnalyzeTypeDesc analyzeTypeDesc;
 
-    public AnalyzeStmt(TableName tbl, List<Expr> columns, Map<String, String> properties,
+    public AnalyzeStmt(TableName tbl, List<Expr> columns, PartitionNames partitionNames, Map<String, String> properties,
                        boolean isSample, boolean isAsync,
                        AnalyzeTypeDesc analyzeTypeDesc, NodePosition pos) {
         super(pos);
         this.tbl = tbl;
         this.columns = columns;
+        this.partitionNames = partitionNames;
         this.isSample = isSample;
         this.isAsync = isAsync;
         this.properties = properties;
@@ -98,6 +100,18 @@ public class AnalyzeStmt extends StatementBase {
 
     public void setExternal(boolean isExternal) {
         this.isExternal = isExternal;
+    }
+
+    public PartitionNames getPartitionNames() {
+        return partitionNames;
+    }
+
+    public void setPartitionIds(List<Long> partitionIds) {
+        this.partitionIds = partitionIds;
+    }
+
+    public List<Long> getPartitionIds() {
+        return partitionIds;
     }
 
     @Override

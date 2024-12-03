@@ -74,6 +74,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -81,7 +82,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.WriteQuorum;
@@ -118,6 +119,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -157,7 +159,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private AlterJobV2 createOptimizeTableJob(
             OptimizeClause optimizeClause, Database db, OlapTable olapTable, Map<String, String> propertyMap)
-            throws UserException {
+            throws StarRocksException {
         if (olapTable.getState() != OlapTableState.NORMAL) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is not in NORMAL state");
         }
@@ -1314,7 +1316,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                           Map<Long, LinkedList<Column>> indexSchemaMap,
                                           Map<String, String> propertyMap,
                                           List<Index> indexes,
-                                          Set<String> modifyFieldColumns) throws UserException {
+                                          Set<String> modifyFieldColumns) throws StarRocksException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -1525,13 +1527,17 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 2. check compatible
+            Map<String, Column> originSchemaMap = buildSchemaMapFromList(originSchema, true,
+                    CaseSensibility.COLUMN.getCaseSensibility());
+
             for (Column alterColumn : alterSchema) {
                 if (modifyFieldColumns.contains(alterColumn.getName())) {
                     continue;
                 }
-                Optional<Column> col = originSchema.stream().filter(c -> c.nameEquals(alterColumn.getName(), true)).findFirst();
-                if (col.isPresent() && !alterColumn.equals(col.get())) {
-                    col.get().checkSchemaChangeAllowed(alterColumn);
+                Column col = getColumnFromSchemaMap(originSchemaMap, alterColumn.getName(), true,
+                        CaseSensibility.COLUMN.getCaseSensibility());
+                if (col != null && !alterColumn.equals(col)) {
+                    col.checkSchemaChangeAllowed(alterColumn);
                 }
             }
 
@@ -1602,6 +1608,42 @@ public class SchemaChangeHandler extends AlterHandler {
         return dataBuilder.build();
     }
 
+    protected static Map<String, Column> buildSchemaMapFromList(List<Column> schema, boolean ignorePrefix,
+                                                                boolean caseSensibility) {
+        Map<String, Column> schemaMap = Maps.newHashMap();
+        if (ignorePrefix) {
+            if (caseSensibility) {
+                schema.forEach(col -> schemaMap.put(Column.removeNamePrefix(col.getName()), col));
+            } else {
+                schema.forEach(col -> schemaMap.put(Column.removeNamePrefix(col.getName()).toLowerCase(), col));
+            }
+        } else {
+            if (caseSensibility) {
+                schema.forEach(col -> schemaMap.put(col.getName(), col));
+            } else {
+                schema.forEach(col -> schemaMap.put(col.getName().toLowerCase(), col));
+            }
+        }
+        return schemaMap;
+    }
+
+    protected static Column getColumnFromSchemaMap(Map<String, Column> originSchemaMap, String col,
+                                                   boolean ignorePrefix, boolean caseSensibility) {
+        if (caseSensibility) {
+            if (ignorePrefix) {
+                return originSchemaMap.get(Column.removeNamePrefix(col));
+            } else {
+                return originSchemaMap.get(col);
+            }
+        } else {
+            if (ignorePrefix) {
+                return originSchemaMap.get(Column.removeNamePrefix(col).toLowerCase());
+            } else {
+                return originSchemaMap.get(col.toLowerCase());
+            }
+        }
+    }
+
     private void checkPartitionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexId)
             throws DdlException {
         // Since partition key and distribution key's schema change can only happen in base index,
@@ -1658,7 +1700,8 @@ public class SchemaChangeHandler extends AlterHandler {
     private AlterJobV2 createJobForProcessModifySortKeyColumn(long dbId, OlapTable olapTable,
                                                               Map<Long, LinkedList<Column>> indexSchemaMap,
                                                               List<Integer> sortKeyIdxes,
-                                                              List<Integer> sortKeyUniqueIds) throws UserException {
+                                                              List<Integer> sortKeyUniqueIds) throws
+            StarRocksException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -1772,7 +1815,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
     @VisibleForTesting
     @Nullable
-    public AlterJobV2 analyzeAndCreateJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable) throws UserException {
+    public AlterJobV2 analyzeAndCreateJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable) throws
+            StarRocksException {
         //alterClauses can or cannot light schema change
         if (olapTable == null) {
             throw new DdlException("olapTable is null");
@@ -1983,7 +2027,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
     @Override
     public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
-            throws UserException {
+            throws StarRocksException {
         AlterJobV2 schemaChangeJob = analyzeAndCreateJob(alterClauses, db, olapTable);
         if (schemaChangeJob == null) {
             return null;
@@ -2006,7 +2050,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     public AlterJobV2 createAlterMetaJob(AlterClause alterClause, Database db, OlapTable olapTable)
-            throws UserException {
+            throws StarRocksException {
         LakeTableAlterMetaJob alterMetaJob;
         if (alterClause instanceof ModifyTablePropertiesClause) {
             Map<String, String> properties = ((ModifyTablePropertiesClause) alterClause).getProperties();
@@ -2017,13 +2061,38 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             boolean enablePersistentIndex = false;
+            String persistentIndexType = "";
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
+                persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
+                        TableProperty.CLOUD_NATIVE_INDEX_TYPE);
                 boolean oldEnablePersistentIndex = olapTable.enablePersistentIndex();
-                if (oldEnablePersistentIndex == enablePersistentIndex) {
-                    LOG.info(String.format("table: %s enable_persistent_index is %s, nothing need to do",
-                            olapTable.getName(), enablePersistentIndex));
+                String oldPersistentIndexType = olapTable.getPersistentIndexType() == TPersistentIndexType.LOCAL ?
+                        TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
+                if (oldEnablePersistentIndex == enablePersistentIndex
+                        && persistentIndexType == oldPersistentIndexType) {
+                    LOG.info(String.format("table: %s enable_persistent_index is %s persistent_index_type is %s, "
+                            +  "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
+                    return null;
+                }
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                        && !enablePersistentIndex) {
+                    throw new DdlException("enable_persistent_index is false, can not set persistent_index_type");
+                }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+                // only support set persistent_index_type when enable_persistent_index is true
+                enablePersistentIndex = olapTable.enablePersistentIndex();
+                if (!enablePersistentIndex) {
+                    throw new DdlException("enable_persistent_index is false, can not set persistent_index_type");
+                }
+                String oldPersistentIndexType = olapTable.getPersistentIndexType() == TPersistentIndexType.LOCAL ?
+                        TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
+                persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
+                        TableProperty.CLOUD_NATIVE_INDEX_TYPE);
+                if (oldPersistentIndexType.equals(persistentIndexType)) {
+                    LOG.info(String.format("table: %s persistent_index_type is %s, nothing need to do",
+                            olapTable.getName(), persistentIndexType));
                     return null;
                 }
             } else {
@@ -2035,7 +2104,7 @@ public class SchemaChangeHandler extends AlterHandler {
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(),
                     olapTable.getId(), olapTable.getName(), timeoutSecond,
-                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex);
+                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex, persistentIndexType);
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");
@@ -2044,7 +2113,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     public ShowResultSet processLakeTableAlterMeta(AlterClause alterClause, Database db, OlapTable olapTable)
-            throws UserException {
+            throws StarRocksException {
         AlterJobV2 alterMetaJob = createAlterMetaJob(alterClause, db, olapTable);
         if (alterMetaJob == null) {
             return null;
@@ -2602,7 +2671,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processAddIndex(CreateIndexClause alterClause, OlapTable olapTable, List<Index> newIndexes)
-            throws UserException {
+            throws StarRocksException {
         Index newIndex = alterClause.getIndex();
         if (newIndex == null) {
             return;
@@ -2865,7 +2934,7 @@ public class SchemaChangeHandler extends AlterHandler {
         return job;
     }
 
-    private AlterJobV2 createJob(@NotNull SchemaChangeData schemaChangeData) throws UserException {
+    private AlterJobV2 createJob(@NotNull SchemaChangeData schemaChangeData) throws StarRocksException {
         AlterJobV2Builder jobBuilder = schemaChangeData.getTable().alterTable();
         return jobBuilder.withJobId(GlobalStateMgr.getCurrentState().getNextId())
                 .withDbId(schemaChangeData.getDatabase().getId())

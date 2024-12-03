@@ -49,7 +49,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -127,7 +127,7 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
-    public void testNormalPlan() throws UserException {
+    public void testNormalPlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -168,7 +168,7 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
-    public void testPartialUpdatePlan() throws UserException {
+    public void testPartialUpdatePlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -211,7 +211,7 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
-    public void testPartialUpdateMode() throws UserException {
+    public void testPartialUpdateMode() throws StarRocksException {
         StreamLoadKvParams param = new StreamLoadKvParams(
                 Collections.singletonMap(HTTP_PARTIAL_UPDATE_MODE, "column"));
         UUID uuid = UUID.randomUUID();

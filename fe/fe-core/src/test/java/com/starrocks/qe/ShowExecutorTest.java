@@ -58,6 +58,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -69,7 +70,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
@@ -104,6 +105,7 @@ import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
@@ -188,12 +190,22 @@ public class ShowExecutorTest {
         MaterializedIndex index2 = new MaterializedIndex();
 
         // mock partition
+        PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
+        new Expectations(physicalPartition) {
+            {
+                physicalPartition.getBaseIndex();
+                minTimes = 0;
+                result = index1;
+            }
+        };
+
+        // mock partition
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {
             {
-                partition.getBaseIndex();
+                partition.getDefaultPhysicalPartition();
                 minTimes = 0;
-                result = index1;
+                result = physicalPartition;
             }
         };
 
@@ -488,7 +500,7 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
+    public void testShowPartitions(@Mocked Analyzer analyzer) throws StarRocksException {
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -1160,6 +1172,14 @@ public class ShowExecutorTest {
                                 "PARTITION BY (year, dt)\n" +
                                 "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
                     resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowKeysFromTable() {
+        ShowIndexStmt stmt = new ShowIndexStmt("test_db",
+                new TableName(null, "test_db", "test_table"));
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+        Assert.assertEquals(0, resultSet.getResultRows().size());
     }
 
     @Test

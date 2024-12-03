@@ -22,6 +22,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
@@ -257,5 +258,13 @@ public class AlterTest {
             e.printStackTrace();
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testAlterWarehouse() throws Exception {
+        Exception e = Assert.assertThrows(DdlException.class, () ->
+                starRocksAssert.ddl("alter warehouse default_warehouse set ('compute_replica'='2')")
+        );
+        Assert.assertEquals("Multi-Warehouse is not implemented", e.getMessage());
     }
 }

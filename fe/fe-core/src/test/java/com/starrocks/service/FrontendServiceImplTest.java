@@ -27,6 +27,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
@@ -47,8 +48,6 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.thrift.TAuthInfo;
-import com.starrocks.thrift.TBatchWriteRequest;
-import com.starrocks.thrift.TBatchWriteResult;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
@@ -71,6 +70,8 @@ import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
+import com.starrocks.thrift.TMergeCommitRequest;
+import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -1161,7 +1162,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testLoadTxnCommitRateLimitExceeded() throws UserException, TException, LockTimeoutException {
+    public void testLoadTxnCommitRateLimitExceeded() throws StarRocksException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1177,7 +1178,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testLoadTxnCommitTimeout() throws UserException, TException, LockTimeoutException {
+    public void testLoadTxnCommitTimeout() throws StarRocksException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1191,7 +1192,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testLoadTxnCommitFailed() throws UserException, TException, LockTimeoutException {
+    public void testLoadTxnCommitFailed() throws StarRocksException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1199,13 +1200,13 @@ public class FrontendServiceImplTest {
         request.txnId = 1001L;
         request.setAuth_code(100);
         request.commitInfos = new ArrayList<>();
-        doThrow(new UserException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
+        doThrow(new StarRocksException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
         TLoadTxnCommitResult result = impl.loadTxnCommit(request);
         Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, result.status.status_code);
     }
 
     @Test
-    public void testStreamLoadPutTimeout() throws UserException, TException, LockTimeoutException {
+    public void testStreamLoadPutTimeout() throws StarRocksException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.db = "test";
@@ -1220,7 +1221,7 @@ public class FrontendServiceImplTest {
     @Test
     public void testRequestBatchWrite() throws Exception {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
-        TBatchWriteRequest request = new TBatchWriteRequest();
+        TMergeCommitRequest request = new TMergeCommitRequest();
         request.setDb("test");
         request.setTbl("site_access_hour");
         request.setUser("root");
@@ -1243,7 +1244,7 @@ public class FrontendServiceImplTest {
 
         // test success request
         {
-            TBatchWriteResult result = impl.requestBatchWrite(request);
+            TMergeCommitResult result = impl.requestMergeCommit(request);
             assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
             assertEquals("test_label", result.getLabel());
         }
@@ -1251,13 +1252,13 @@ public class FrontendServiceImplTest {
         // test authentication failure
         {
             request.setUser("fake_user");
-            TBatchWriteResult result = impl.requestBatchWrite(request);
+            TMergeCommitResult result = impl.requestMergeCommit(request);
             assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
         }
     }
 
     @Test
-    public void testMetaNotFound() throws UserException {
+    public void testMetaNotFound() throws StarRocksException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.db = "test";
@@ -1266,20 +1267,20 @@ public class FrontendServiceImplTest {
         request.setFileType(TFileType.FILE_STREAM);
         request.setLoadId(new TUniqueId(1, 2));
 
-        Exception e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        Exception e = Assert.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
         Assert.assertTrue(e.getMessage().contains("unknown table"));
 
         request.tbl = "v";
-        e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        e = Assert.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
         Assert.assertTrue(e.getMessage().contains("load table type is not OlapTable"));
 
         request.tbl = "mv";
-        e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        e = Assert.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
         Assert.assertTrue(e.getMessage().contains("is a materialized view"));
     }
 
     @Test
-    public void testAddListPartitionConcurrency() throws UserException, TException {
+    public void testAddListPartitionConcurrency() throws StarRocksException, TException {
         new MockUp<GlobalTransactionMgr>() {
             @Mock
             public TransactionState getTransactionState(long dbId, long transactionId) {

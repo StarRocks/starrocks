@@ -395,6 +395,11 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(" multi_distinct_count(11: S_ADDRESS), " +
                 "multi_distinct_count(12: S_COMMENT)"));
+
+        sql = "select max(a) from (select count(distinct S_ADDRESS) a from supplier)t";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "multi_distinct_count(9: count)");
+
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         sql = "select max(S_ADDRESS), count(distinct S_ADDRESS) from supplier group by S_ADDRESS;";
         plan = getFragmentPlan(sql);

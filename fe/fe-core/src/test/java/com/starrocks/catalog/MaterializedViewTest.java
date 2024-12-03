@@ -24,7 +24,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.planner.MaterializedViewTestBase;
@@ -169,7 +169,7 @@ public class MaterializedViewTest {
         Assert.assertTrue(pInfo1 instanceof SinglePartitionInfo);
 
         MaterializedIndex index = new MaterializedIndex(3, IndexState.NORMAL);
-        Partition partition = new Partition(2, "mv_name", index, distributionInfo);
+        Partition partition = new Partition(2, 22, "mv_name", index, distributionInfo);
         mv.addPartition(partition);
         Partition tmpPartition = mv.getPartition("mv_name");
         Assert.assertTrue(tmpPartition != null);
@@ -194,7 +194,7 @@ public class MaterializedViewTest {
         Assert.assertEquals("new_name_2", mv2.getName());
         PartitionInfo pInfo2 = mv2.getPartitionInfo();
         Assert.assertTrue(pInfo2 instanceof RangePartitionInfo);
-        Partition partition2 = new Partition(3, "p1", index, distributionInfo);
+        Partition partition2 = new Partition(3, 33, "p1", index, distributionInfo);
         mv2.addPartition(partition2);
         Partition tmpPartition2 = mv2.getPartition("p1");
         Assert.assertTrue(tmpPartition2 != null);
@@ -286,7 +286,7 @@ public class MaterializedViewTest {
         MaterializedView oldMv = (MaterializedView) table;
         Assert.assertTrue(oldMv.getRefreshScheme().isAsync());
         Assert.assertTrue(oldMv.getRefreshScheme().toString().contains("MvRefreshScheme"));
-        Map<Table, Column> partitionMap = oldMv.getRefBaseTablePartitionColumns();
+        Map<Table, List<Column>> partitionMap = oldMv.getRefBaseTablePartitionColumns();
         Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         Assert.assertTrue(partitionMap.containsKey(table1));
         List<Table.TableType> baseTableType = oldMv.getBaseTableTypes();
@@ -787,7 +787,7 @@ public class MaterializedViewTest {
                     + ")" +
                     "as select k2, sum(v1) as total from table1 group by k2;";
         Assert.assertThrows("Duplicate index name 'index1'",
-                    UserException.class,
+                    StarRocksException.class,
                     () -> starRocksAssert.withMaterializedView(mvSql));
 
         String mvSql2 = "create materialized view index_mv_to_check " +
@@ -807,7 +807,7 @@ public class MaterializedViewTest {
                     + ")" +
                     "as select k2, sum(v1) as total from table1 group by k2;";
         Assert.assertThrows("Duplicate column name 'k2' in index",
-                    UserException.class,
+                    StarRocksException.class,
                     () -> starRocksAssert.withMaterializedView(mvSql2));
     }
 

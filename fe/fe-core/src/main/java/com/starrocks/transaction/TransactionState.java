@@ -46,8 +46,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
@@ -427,6 +427,12 @@ public class TransactionState implements Writable {
         this.tabletCommitInfos.addAll(infos);
     }
 
+    public void resetTabletCommitInfos() {
+        // With a high streamload frequency and too many tablets involved,
+        // TabletCommitInfos will take up too much memory.
+        tabletCommitInfos = null;
+    }
+
     public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
         if (this.tabletCommitInfos == null) {
@@ -616,7 +622,7 @@ public class TransactionState implements Writable {
     public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated,
                                     TxnStateChangeCallback callback,
                                     String txnStatusChangeReason)
-            throws UserException {
+            throws StarRocksException {
         // after status changed
         if (callback != null) {
             switch (transactionStatus) {
@@ -897,7 +903,7 @@ public class TransactionState implements Writable {
 
         List<TPartitionVersionInfo> partitionVersions = new ArrayList<>(partitionCommitInfos.size());
         for (PartitionCommitInfo commitInfo : partitionCommitInfos) {
-            TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPartitionId(),
+            TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPhysicalPartitionId(),
                     commitInfo.getVersion(), 0);
             if (commitInfo.isDoubleWrite()) {
                 version.setIs_double_write(true);

@@ -24,7 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
@@ -1322,14 +1322,14 @@ public class AuthorizationMgrTest {
         try {
             SetRoleExecutor.execute(stmt, ctx);
             Assert.fail();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Assert.assertTrue(e.getMessage().contains("Cannot find role bad_role"));
         }
         try {
             SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                     "set role 'test_set_role_1', 'test_set_role_3'", ctx), ctx);
             Assert.fail();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Assert.assertTrue(e.getMessage().contains("Role test_set_role_3 is not granted"));
         }
 
@@ -1337,7 +1337,7 @@ public class AuthorizationMgrTest {
             SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                     "set role all except 'test_set_role_1', 'test_set_role_3'", ctx), ctx);
             Assert.fail();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Assert.assertTrue(e.getMessage().contains("Role test_set_role_3 is not granted"));
         }
 

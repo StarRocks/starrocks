@@ -573,10 +573,11 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
     }
 
-    DCHECK_EQ(rows_read, chunk->get()->num_rows());
-
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
     _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, rows_read);
+
+    // check after partition/extended column added
+    DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
     return Status::OK();
 }
@@ -673,6 +674,10 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             if (rows_read != 0) {
                 ColumnHelper::merge_two_filters(row_delete_filter, &_chunk_filter, nullptr);
                 rows_read = SIMD::count_nonzero(_chunk_filter);
+                if (rows_read == 0) {
+                    // If rows_read = 0, we need to set chunk size = 0 and bypass filter chunk directly
+                    ck->set_num_rows(0);
+                }
             }
 
             if (rows_read != 0 && rows_read != ck->num_rows()) {

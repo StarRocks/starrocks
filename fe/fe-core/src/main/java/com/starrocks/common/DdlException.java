@@ -17,7 +17,7 @@
 
 package com.starrocks.common;
 
-public class DdlException extends UserException {
+public class DdlException extends StarRocksException {
     public DdlException(String msg) {
         super(msg);
     }

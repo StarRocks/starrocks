@@ -23,10 +23,12 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -126,6 +128,21 @@ public class AnalyzeStmtAnalyzer {
                     realColumnNames.add(colName);
                 }
                 statement.setColumnNames(realColumnNames);
+            }
+
+            if (statement.getPartitionNames() != null) {
+                if (!analyzeTable.isNativeTableOrMaterializedView()) {
+                    throw new SemanticException("Analyze partition only support olap table");
+                }
+                List<Long> pidList = Lists.newArrayList();
+                for (String partitionName : statement.getPartitionNames().getPartitionNames()) {
+                    Partition p = analyzeTable.getPartition(partitionName);
+                    if (p == null) {
+                        throw new SemanticException("Partition '%s' not found", partitionName);
+                    }
+                    pidList.add(p.getId());
+                }
+                statement.setPartitionIds(pidList);
             }
 
             analyzeProperties(statement.getProperties());
@@ -311,13 +328,13 @@ public class AnalyzeStmtAnalyzer {
                 } else {
                     List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNames(tableName.getCatalog(), tableName.getDb(),
-                                    tableName.getTbl());
+                                    tableName.getTbl(), ConnectorMetadatRequestContext.DEFAULT);
                     List<PartitionKey> keys = new ArrayList<>();
                     try {
                         for (String partName : partitionNames) {
                             List<String> values = toPartitionValues(partName);
                             PartitionKey partitionKey = createPartitionKey(values, analyzeTable.getPartitionColumns(),
-                                    analyzeTable.getType());
+                                    analyzeTable);
                             keys.add(partitionKey);
                         }
                     } catch (AnalysisException e) {

@@ -61,6 +61,7 @@ class LoadPathMgr;
 class LoadStreamMgr;
 class StreamContextMgr;
 class TransactionMgr;
+class BatchWriteMgr;
 class MemTracker;
 class MetricRegistry;
 class StorageEngine;
@@ -148,6 +149,7 @@ public:
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
+    MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
     MemTracker* jemalloc_fragmentation_traker() { return _jemalloc_fragmentation_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
@@ -227,6 +229,9 @@ private:
     // The memory used for datacache
     std::shared_ptr<MemTracker> _datacache_mem_tracker;
 
+    // The memory used for poco connection pool
+    std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
+
     std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
 };
 
@@ -294,6 +299,7 @@ public:
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
+    BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
 
@@ -383,6 +389,7 @@ private:
     BrpcStubCache* _brpc_stub_cache = nullptr;
     StreamContextMgr* _stream_context_mgr = nullptr;
     TransactionMgr* _transaction_mgr = nullptr;
+    BatchWriteMgr* _batch_write_mgr = nullptr;
 
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 

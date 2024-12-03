@@ -39,6 +39,7 @@
 #include "exec/workgroup/work_group.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
+#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
@@ -237,12 +238,12 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         }
     }
 
-    int scan_node_number = 1;
-    if (query_globals.__isset.scan_node_number) {
-        scan_node_number = query_globals.scan_node_number;
+    int connector_scan_node_number = 1;
+    if (query_globals.__isset.connector_scan_node_number) {
+        connector_scan_node_number = query_globals.connector_scan_node_number;
     }
     _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_ratio,
-                                 wg.get(), runtime_state, scan_node_number);
+                                 wg.get(), runtime_state, connector_scan_node_number);
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
@@ -623,6 +624,21 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
         return Status::OK();
     }
     std::vector<StreamLoadContext*> stream_load_contexts;
+
+    bool success = false;
+    DeferOp defer_op([&] {
+        if (!success) {
+            for (auto& ctx : stream_load_contexts) {
+                ctx->body_sink->cancel(Status::Cancelled("Failed to prepare stream load pipe"));
+                if (ctx->enable_batch_write) {
+                    exec_env->batch_write_mgr()->unregister_stream_load_pipe(ctx);
+                } else {
+                    exec_env->stream_context_mgr()->remove_channel_context(ctx);
+                }
+            }
+        }
+    });
+
     for (; iter != scan_range_map.end(); iter++) {
         for (; iter2 != iter->second.end(); iter2++) {
             for (const auto& scan_range : iter2->second) {
@@ -634,19 +650,30 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                 TFileFormatType::type format = broker_scan_range.ranges[0].format_type;
                 TUniqueId load_id = broker_scan_range.ranges[0].load_id;
                 long txn_id = broker_scan_range.params.txn_id;
+                bool is_batch_write =
+                        broker_scan_range.__isset.enable_batch_write && broker_scan_range.enable_batch_write;
                 StreamLoadContext* ctx = nullptr;
-                RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
-                        exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
-                DeferOp op([&] {
-                    if (ctx->unref()) {
-                        delete ctx;
-                    }
-                });
-                RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                if (is_batch_write) {
+                    ASSIGN_OR_RETURN(ctx, BatchWriteMgr::create_and_register_pipe(
+                                                  exec_env, exec_env->batch_write_mgr(), db_name, table_name,
+                                                  broker_scan_range.batch_write_parameters, label, txn_id, load_id,
+                                                  broker_scan_range.batch_write_interval_ms));
+                } else {
+                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
+                            exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
+                    DeferOp op([&] {
+                        if (ctx->unref()) {
+                            delete ctx;
+                        }
+                    });
+                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                }
                 stream_load_contexts.push_back(ctx);
             }
         }
     }
+
+    success = true;
     _fragment_ctx->set_stream_load_contexts(stream_load_contexts);
     return Status::OK();
 }
@@ -890,6 +917,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     {
         SCOPED_TIMER(prepare_instance_timer);
         SCOPED_TIMER(prepare_driver_timer);
+        _fragment_ctx->acquire_runtime_filters();
         RETURN_IF_ERROR(_fragment_ctx->prepare_active_drivers());
     }
     prepare_success = true;

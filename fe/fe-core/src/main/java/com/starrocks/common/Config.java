@@ -591,6 +591,19 @@ public class Config extends ConfigBase {
     public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
     /**
+     * Timeout seconds for doing checkpoint
+     */
+    @ConfField(mutable = true)
+    public static long checkpoint_timeout_seconds = 24 * 3600;
+
+    /**
+     * True to only do checkpoint on leader node.
+     * False to do checkpoint on the node with low memory usage.
+     */
+    @ConfField(mutable = true)
+    public static boolean checkpoint_only_on_leader = false;
+
+    /**
      * the max txn number which bdbje can roll back when trying to rejoin the group
      */
     @ConfField
@@ -2098,6 +2111,9 @@ public class Config extends ConfigBase {
             "we would use sample statistics instead of full statistics")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
 
+    @ConfField(mutable = true)
+    public static boolean statistic_use_meta_statistics = true;
+
     /**
      * default bucket size of histogram statistics
      */
@@ -2121,6 +2137,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
+
+    @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample")
+    public static boolean histogram_enable_table_sample = true;
 
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
@@ -3309,4 +3328,22 @@ public class Config extends ConfigBase {
     public static int batch_write_idle_ms = 3600000;
 
     public static int batch_write_executor_threads_num = 4096;
+
+    /**
+     * Enable Arrow Flight SQL server only when the port is set to positive value.
+     */
+    @ConfField
+    public static int arrow_flight_port = -1;
+
+    @ConfField(mutable = true)
+    public static int arrow_token_cache_size = 1024;
+
+    @ConfField(mutable = true)
+    public static int arrow_token_cache_expire = 3600;
+
+    public static int batch_write_be_assigner_schedule_interval_ms = 5000;
+
+    @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
+            "between any two nodes before triggering a balance")
+    public static double batch_write_be_assigner_balance_factor_threshold = 0.1;
 }

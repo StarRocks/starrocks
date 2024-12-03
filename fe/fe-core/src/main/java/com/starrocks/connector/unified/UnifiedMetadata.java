@@ -22,6 +22,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -150,9 +151,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange versionRange) {
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
         ConnectorMetadata metadata = metadataOfTable(databaseName, tableName);
-        return metadata.listPartitionNames(databaseName, tableName, versionRange);
+        return metadata.listPartitionNames(databaseName, tableName, requestContext);
     }
 
     @Override
@@ -196,12 +197,6 @@ public class UnifiedMetadata implements ConnectorMetadata {
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getPartitions(table, partitionNames);
-    }
-
-    @Override
-    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit, TableVersionRange version) {
-        ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getPrunedPartitions(table, predicate, limit, version);
     }
 
     @Override

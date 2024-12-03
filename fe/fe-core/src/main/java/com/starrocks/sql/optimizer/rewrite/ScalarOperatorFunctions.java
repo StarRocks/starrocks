@@ -52,6 +52,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormat;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -414,6 +416,26 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "jodatime_format", argTypes = {DATETIME, VARCHAR},
+                    returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "jodatime_format", argTypes = {DATE, VARCHAR},
+                    returnType = VARCHAR, isMonotonic = true)
+    })
+    public static ConstantOperator jodatimeFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
+        String format = fmtLiteral.getVarchar();
+        if (format.isEmpty()) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+        org.joda.time.format.DateTimeFormatter formatter = DateTimeFormat.forPattern(format);
+        DateTime jodaDateTime = new DateTime(date.getDatetime()
+                .atZone(ZoneId.systemDefault()) // Associate with the default time zone of the system
+                .toInstant()
+                .toEpochMilli());
+        return ConstantOperator.createVarchar(jodaDateTime.toString(formatter));
+    }
+
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR, isMonotonic = true),
             @ConstantFunction(name = "to_iso8601", argTypes = {DATE}, returnType = VARCHAR, isMonotonic = true)
     })
@@ -610,8 +632,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = BIGINT),
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = BIGINT)
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = BIGINT, isMonotonic = true),
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = BIGINT, isMonotonic = true)
     })
     public static ConstantOperator unixTimestamp(ConstantOperator arg) {
         LocalDateTime dt = arg.getDatetime();
@@ -624,8 +646,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR),
-            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR, isMonotonic = true)
     })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
         long value = 0;
@@ -644,7 +666,7 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR)
+            @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR, isMonotonic = true),
     })
     public static ConstantOperator fromUnixTimeMs(ConstantOperator unixTime) throws AnalysisException {
         long millisecond = unixTime.getBigint();
@@ -660,8 +682,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR),
-            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR)
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR, isMonotonic = true)
     })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral)
             throws AnalysisException {

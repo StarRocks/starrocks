@@ -218,7 +218,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                 Maps.newHashMap());
         for (String col : columnNames) {
             String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
-                    db, t0, 3L, col);
+                    db, t0, 3L, col, 0.1);
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, "0:OlapScanNode\n" +

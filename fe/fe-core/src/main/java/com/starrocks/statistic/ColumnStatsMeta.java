@@ -87,7 +87,7 @@ public class ColumnStatsMeta {
     }
 
     public String simpleString() {
-        if (type == StatsConstants.AnalyzeType.SAMPLE) {
+        if (type == StatsConstants.AnalyzeType.SAMPLE && sampledPartitionsHashValue != null) {
             return String.format("(%s,%s,sampled_partition_size=%d,all_partition_size=%d)", columnName, type,
                     sampledPartitionsHashValue.size(), allPartitionSize);
         } else {

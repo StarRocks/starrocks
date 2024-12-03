@@ -44,9 +44,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableVersion;
@@ -383,7 +384,7 @@ public class MetadataMgr {
         }
     }
 
-    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
@@ -616,16 +617,13 @@ public class MetadataMgr {
         return connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
     }
 
-    public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
-        return listPartitionNames(catalogName, dbName, tableName, TableVersionRange.empty());
-    }
-
-    public List<String> listPartitionNames(String catalogName, String dbName, String tableName, TableVersionRange versionRange) {
+    public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                           ConnectorMetadatRequestContext requestContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().listPartitionNames(dbName, tableName, versionRange).forEach(partitionNames::add);
+                connectorMetadata.get().listPartitionNames(dbName, tableName, requestContext).forEach(partitionNames::add);
             } catch (Exception e) {
                 LOG.error("Failed to listPartitionNames on [{}.{}]", catalogName, dbName, e);
                 throw e;
@@ -657,20 +655,6 @@ public class MetadataMgr {
             }
         }
         return ImmutableList.copyOf(partitionNames.build());
-    }
-
-    public List<PartitionKey> getPrunedPartitions(String catalogName, Table table, ScalarOperator predicate,
-                                                  long limit, TableVersionRange version) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        if (connectorMetadata.isPresent()) {
-            try {
-                return connectorMetadata.get().getPrunedPartitions(table, predicate, limit, version);
-            } catch (Exception e) {
-                LOG.error("Failed to getPrunedPartitions on [{}.{}]", catalogName, table, e);
-                throw e;
-            }
-        }
-        return new ArrayList<>();
     }
 
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {

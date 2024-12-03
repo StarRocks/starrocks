@@ -25,6 +25,8 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.feedback.OperatorTuningGuides;
+import com.starrocks.qe.feedback.PlanTuningAdvisor;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -49,6 +51,7 @@ import com.starrocks.sql.optimizer.rule.transformation.CTEProduceAddProjectionRu
 import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergEqualityDeleteRewriteRule;
@@ -74,6 +77,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteUnnestBitmapRule;
 import com.starrocks.sql.optimizer.rule.transformation.SchemaTableEvaluateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
@@ -366,6 +370,12 @@ public class Optimizer {
         // initialize mv rewrite strategy finally
         mvRewriteStrategy = MvRewriteStrategy.prepareRewriteStrategy(context, connectContext, logicOperatorTree);
         OptimizerTraceUtil.logMVPrepare("MV rewrite strategy: {}", mvRewriteStrategy);
+
+        // TODO(stephen): enable agg push down when query exists related mvs.
+        if (context.getQueryMaterializationContext() != null &&
+                !context.getQueryMaterializationContext().getValidCandidateMVs().isEmpty()) {
+            context.getSessionVariable().setCboPushDownAggregateMode(-1);
+        }
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
@@ -441,6 +451,7 @@ public class Optimizer {
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
             // It's necessary for external table since its predicate is not used directly after push down.
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY_OPERATOR);
             ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         }
     }
@@ -506,6 +517,9 @@ public class Optimizer {
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INLINE_CTE);
             CTEUtils.collectCteOperators(tree, context);
         }
+
+        ruleRewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
+        CTEUtils.collectCteOperators(tree, context);
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new IcebergPartitionsTableRewriteRule());
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.AGGREGATE_REWRITE);
@@ -647,6 +661,8 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.META_SCAN_REWRITE);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
+        // before MergeProjectWithChildRule, after INLINE_CTE and MergeApplyWithTableFunction
+        ruleRewriteIterative(tree, rootTaskContext, RewriteUnnestBitmapRule.getInstance());
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
@@ -952,6 +968,12 @@ public class Optimizer {
         // if we can change the distribution to adjust the plan because of skew data, bad statistics or something else.
         result = new MarkParentRequiredDistributionRule().rewrite(result, rootTaskContext);
         result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
+
+        OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()
+                .getOptimizedRecord(context.getQueryId());
+        if (optimizedRecord != null) {
+            Tracers.record(Tracers.Module.BASE, "DynamicTuningGuides", optimizedRecord.getExplainString());
+        }
         return result;
     }
 

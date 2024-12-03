@@ -82,6 +82,7 @@ public class JDBCTable extends Table {
         validate(properties);
     }
 
+    @Override
     public String getResourceName() {
         return resourceName;
     }
@@ -91,11 +92,13 @@ public class JDBCTable extends Table {
         return catalogName;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return dbName;
     }
 
-    public String getJdbcTable() {
+    @Override
+    public String getCatalogTableName() {
         return jdbcTable;
     }
 

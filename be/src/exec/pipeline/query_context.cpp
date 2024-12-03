@@ -110,7 +110,7 @@ void QueryContext::cancel(const Status& status) {
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
                                     std::optional<double> spill_mem_reserve_ratio, workgroup::WorkGroup* wg,
-                                    RuntimeState* runtime_state, int scan_node_number) {
+                                    RuntimeState* runtime_state, int connector_scan_node_number) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
@@ -142,7 +142,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
             _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
         }
         _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
-                new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, scan_node_number));
+                new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, connector_scan_node_number));
 
         {
             MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
@@ -158,17 +158,6 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
                     _profile->name() + "/connector_scan", connector_scan_parent);
         }
     });
-}
-
-MemTracker* QueryContext::operator_mem_tracker(int32_t plan_node_id) {
-    std::lock_guard<std::mutex> l(_operator_mem_trackers_lock);
-    auto it = _operator_mem_trackers.find(plan_node_id);
-    if (it != _operator_mem_trackers.end()) {
-        return it->second.get();
-    }
-    auto mem_tracker = std::make_shared<MemTracker>();
-    _operator_mem_trackers[plan_node_id] = mem_tracker;
-    return mem_tracker.get();
 }
 
 Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {

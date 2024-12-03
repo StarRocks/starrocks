@@ -79,6 +79,8 @@ public abstract class ConnectorPartitionTraits {
 
     protected Table table;
 
+    protected boolean queryMVRewrite = false;
+
     public static boolean isSupported(Table.TableType tableType) {
         return TRAITS_TABLE.containsKey(tableType);
     }
@@ -151,8 +153,15 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract PartitionKey createEmptyKey();
 
-    public abstract String getDbName();
+    public String getCatalogDBName() {
+        return table.getCatalogDBName();
+    }
 
+    /**
+     * `createPartitionKeyWithType` is deprecated, use `createPartitionKey` instead.
+     * partition values should take care time zone for Iceberg table which is handled by `createPartitionKey`.
+     */
+    @Deprecated
     public abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
 
     public abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
@@ -180,7 +189,7 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
-    public abstract Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException;
+    public abstract Map<String, PListCell> getPartitionList(List<Column> partitionColumns) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
@@ -217,4 +226,12 @@ public abstract class ConnectorPartitionTraits {
      * inconsistency between the two systems, so we add extraSeconds
      */
     public abstract LocalDateTime getTableLastUpdateTime(int extraSeconds);
+
+    public void setQueryMVRewrite(boolean value) {
+        queryMVRewrite = value;
+    }
+
+    public boolean isQueryMVRewrite() {
+        return queryMVRewrite;
+    }
 }

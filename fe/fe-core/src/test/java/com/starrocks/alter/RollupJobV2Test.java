@@ -51,7 +51,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -109,7 +109,7 @@ public class RollupJobV2Test extends DDLTestBase {
     }
 
     @Test
-    public void testRunRollupJobConcurrentLimit() throws UserException {
+    public void testRunRollupJobConcurrentLimit() throws StarRocksException {
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         alterClauses.add(clause);
@@ -129,7 +129,7 @@ public class RollupJobV2Test extends DDLTestBase {
     }
 
     @Test
-    public void testAddSchemaChange() throws UserException {
+    public void testAddSchemaChange() throws StarRocksException {
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         alterClauses.add(clause);
@@ -163,9 +163,12 @@ public class RollupJobV2Test extends DDLTestBase {
         // runPendingJob
         rollupJob.runPendingJob();
         assertEquals(AlterJobV2.JobState.WAITING_TXN, rollupJob.getJobState());
-        assertEquals(2, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
-        assertEquals(1, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
-        assertEquals(1, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        assertEquals(2, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+        assertEquals(1, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+        assertEquals(1, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         rollupJob.runWaitingTxnJob();
@@ -204,7 +207,7 @@ public class RollupJobV2Test extends DDLTestBase {
         assertEquals(1, alterJobsV2.size());
         RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
 
-        MaterializedIndex baseIndex = testPartition.getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
         assertEquals(MaterializedIndex.IndexState.NORMAL, baseIndex.getState());
         assertEquals(Partition.PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.ROLLUP, olapTable.getState());
@@ -226,9 +229,12 @@ public class RollupJobV2Test extends DDLTestBase {
         replica1.setState(Replica.ReplicaState.NORMAL);
         rollupJob.runPendingJob();
         assertEquals(AlterJobV2.JobState.WAITING_TXN, rollupJob.getJobState());
-        assertEquals(2, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
-        assertEquals(1, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
-        assertEquals(1, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        assertEquals(2, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+        assertEquals(1, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+        assertEquals(1, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         rollupJob.runWaitingTxnJob();

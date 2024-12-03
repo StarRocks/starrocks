@@ -33,7 +33,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -737,18 +737,18 @@ public class ReplicationJob implements GsonPostProcessable {
     private static Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
-        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(partition.getName());
-            Preconditions.checkState(partition.getCommittedVersion() == partition.getVisibleVersion(),
-                    "Partition " + partition.getName() + " in table " + table.getName()
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(physicalPartition.getName());
+            Preconditions.checkState(physicalPartition.getCommittedVersion() == physicalPartition.getVisibleVersion(),
+                    "Partition " + physicalPartition.getName() + " in table " + table.getName()
                             + " publish version not finished");
-            Preconditions.checkState(partition.getVisibleVersion() <= srcPartition.getVisibleVersion(),
-                    "Target visible version: " + partition.getVisibleVersion()
+            Preconditions.checkState(physicalPartition.getVisibleVersion() <= srcPartition.getVisibleVersion(),
+                    "Target visible version: " + physicalPartition.getVisibleVersion()
                             + " is larger than source visible version: " + srcPartition.getVisibleVersion());
-            if (partition.getVisibleVersion() == srcPartition.getVisibleVersion()) {
+            if (physicalPartition.getVisibleVersion() == srcPartition.getVisibleVersion()) {
                 continue;
             }
-            PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, partition, srcPartition,
+            PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, physicalPartition, srcPartition,
                     srcSystemInfoService);
             partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
         }
@@ -829,7 +829,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 Config.replication_transaction_timeout_sec);
     }
 
-    private void commitTransaction() throws UserException {
+    private void commitTransaction() throws StarRocksException {
         Pair<List<TabletCommitInfo>, List<TabletFailInfo>> tabletsCommitInfo = getTabletsCommitInfo();
 
         Map<Long, Long> partitionVersions = Maps.newHashMap();
@@ -987,6 +987,10 @@ public class ReplicationJob implements GsonPostProcessable {
 
         if (runningTasks.isEmpty() && finishedTasks.size() == taskNum) {
             return true;
+        }
+
+        if (runningTasks.size() < 10) {
+            LOG.info("Unfinished tasks: {}, details: {}", runningTasks.size(), runningTasks.values());
         }
 
         return false;

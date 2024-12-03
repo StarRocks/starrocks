@@ -35,6 +35,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -249,6 +250,13 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX +
                                 " must be bool type(false/true)");
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE).equalsIgnoreCase("CLOUD_NATIVE") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE).equalsIgnoreCase("LOCAL")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE +
+                                " must be CLOUD_NATIVE or LOCAL");
             }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") &&
@@ -1102,6 +1110,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             try {
                 OlapTable olapTable = (OlapTable) table;
                 PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                upgradeDeprecatedSingleItemListPartitionDesc(olapTable, partitionDescList, clause, partitionInfo);
                 analyzeAddPartition(olapTable, partitionDescList, clause, partitionInfo);
             } catch (DdlException | AnalysisException | NotImplementedException e) {
                 throw new SemanticException(e.getMessage());
@@ -1109,6 +1118,29 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         }
 
         return null;
+    }
+
+    /**
+     * {@link SingleItemListPartitionDesc}
+     */
+    private void upgradeDeprecatedSingleItemListPartitionDesc(OlapTable table,
+                                                              List<PartitionDesc> partitionDescs,
+                                                              AddPartitionClause addPartitionClause,
+                                                              PartitionInfo partitionInfo) throws AnalysisException {
+        if (!partitionInfo.isListPartition()) {
+            return;
+        }
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        boolean addSingleColumnPartition = partitionDescs.get(0) instanceof SingleItemListPartitionDesc;
+        if (addSingleColumnPartition &&
+                !listPartitionInfo.isMultiColumnPartition() &&
+                listPartitionInfo.isDeFactoMultiItemPartition()) {
+            Preconditions.checkState(partitionDescs.size() == 1);
+            MultiItemListPartitionDesc newDesc =
+                    ((SingleItemListPartitionDesc) partitionDescs.get(0)).upgradeToMultiItem();
+            partitionDescs.set(0, newDesc);
+            addPartitionClause.setPartitionDesc(newDesc);
+        }
     }
 
     private void analyzeAddPartition(OlapTable olapTable, List<PartitionDesc> partitionDescs,

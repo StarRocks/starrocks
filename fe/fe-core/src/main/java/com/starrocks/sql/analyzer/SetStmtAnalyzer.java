@@ -29,7 +29,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -147,7 +147,7 @@ public class SetStmtAnalyzer {
                 checkRangeLongVariable(resolvedExpression, SessionVariable.EXEC_MEM_LIMIT,
                         SessionVariable.MIN_EXEC_MEM_LIMIT, null);
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new SemanticException(e.getMessage());
         }
 
@@ -157,6 +157,11 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.QUERY_TIMEOUT,
+                    1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.INSERT_TIMEOUT,
                     1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
         }
 

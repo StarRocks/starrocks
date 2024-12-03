@@ -40,7 +40,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.qe.ConnectContext;
@@ -379,7 +379,7 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
-    public void testAnalyzeWithDuplicateProperty() throws UserException {
+    public void testAnalyzeWithDuplicateProperty() throws StarRocksException {
         String jobName = "job1";
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);

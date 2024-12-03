@@ -277,7 +277,7 @@ public final class SparkDpp implements java.io.Serializable {
                                     LOG.warn("invalid bucket key:" + curBucketKey);
                                     continue;
                                 }
-                                int partitionId = Integer.parseInt(bucketKey[0]);
+                                long partitionId = Long.parseLong(bucketKey[0]);
                                 int bucketId = Integer.parseInt(bucketKey[1]);
                                 dstPath = String.format(pathPattern, tableId, partitionId, indexMeta.indexId,
                                         bucketId, indexMeta.schemaHash);
@@ -550,7 +550,7 @@ public final class SparkDpp implements java.io.Serializable {
                             long hashValue = DppUtils.getHashValue(row, distributeColumns, dstTableSchema);
                             int bucketId =
                                     (int) ((hashValue & 0xffffffff) % partitionInfo.partitions.get(pid).bucketNum);
-                            long partitionId = partitionInfo.partitions.get(pid).partitionId;
+                            long partitionId = partitionInfo.partitions.get(pid).physicalPartitionId;
                             // bucketKey is partitionId_bucketId
                             String bucketKey = partitionId + "_" + bucketId;
 
@@ -1229,7 +1229,7 @@ public final class SparkDpp implements java.io.Serializable {
                 int reduceNum = 0;
                 for (EtlJobConfig.EtlPartition partition : partitionInfo.partitions) {
                     for (int i = 0; i < partition.bucketNum; i++) {
-                        bucketKeyMap.put(partition.partitionId + "_" + i, reduceNum);
+                        bucketKeyMap.put(partition.physicalPartitionId + "_" + i, reduceNum);
                         reduceNum++;
                     }
                 }
@@ -1266,7 +1266,7 @@ public final class SparkDpp implements java.io.Serializable {
                     int partitionSize = partitionInfo.partitions.size();
                     for (int i = 0; i < partitionSize; ++i) {
                         EtlJobConfig.EtlPartition partition = partitionInfo.partitions.get(i);
-                        if (fileGroup.partitions.contains(partition.partitionId)) {
+                        if (fileGroup.partitions.contains(partition.physicalPartitionId)) {
                             fileGroupPartitions.add(partition);
                             if (!partitionRangeKeys.isEmpty()) {
                                 fileGroupPartitionRangeKeys.add(partitionRangeKeys.get(i));

@@ -856,8 +856,17 @@ public class NodeMgr {
             unlock();
 
             if (fe != null) {
-                GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+                dropFrontendHook(fe);
             }
+        }
+    }
+
+    private void dropFrontendHook(Frontend fe) {
+        GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+
+        GlobalStateMgr.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
+        if (RunMode.isSharedDataMode()) {
+            StarMgrServer.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
         }
     }
 
@@ -1022,6 +1031,10 @@ public class NodeMgr {
         return frontends.get(name);
     }
 
+    public Frontend getSelfFe() {
+        return frontends.get(nodeName);
+    }
+
     public int getFollowerCnt() {
         int cnt = 0;
         for (Frontend fe : frontends.values()) {
@@ -1134,8 +1147,7 @@ public class NodeMgr {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             setFrontendConfig(stmt.getConfig().getMap());
             List<Frontend> allFrontends = getFrontends(null);
-            int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
-                    + Config.thrift_rpc_timeout_ms;
+            int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
             StringBuilder errMsg = new StringBuilder();
             for (Frontend fe : allFrontends) {
                 if (fe.getHost().equals(getSelfNode().first)) {

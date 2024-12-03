@@ -46,7 +46,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.planner.BlackHoleTableSink;
@@ -400,10 +400,9 @@ public class InsertPlanner {
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
-                    olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(),
-                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
                     olapTableSink.complete();
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {

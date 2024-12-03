@@ -44,11 +44,13 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServer;
-import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
@@ -81,6 +83,7 @@ import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ExecPlan;
@@ -635,7 +638,7 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
-    private void deliverExecFragments(boolean needDeploy) throws RpcException, UserException {
+    private void deliverExecFragments(boolean needDeploy) throws RpcException, StarRocksException {
         lock();
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
             Deployer deployer =
@@ -651,7 +654,7 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
-            throws UserException {
+            throws StarRocksException {
         List<DeployState> updatedStates = new ArrayList<>();
         if (!jobSpec.isIncrementalScanRanges()) {
             return updatedStates;
@@ -705,18 +708,18 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)
-            throws UserException, RpcException {
+            throws StarRocksException, RpcException {
         cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
         switch (Objects.requireNonNull(status.getErrorCode())) {
             case TIMEOUT:
-                throw new UserException("query timeout. backend id: " + execution.getWorker().getId());
+                throw new StarRocksException("query timeout. backend id: " + execution.getWorker().getId());
             case THRIFT_RPC_ERROR:
                 SimpleScheduler.addToBlocklist(execution.getWorker().getId());
                 throw new RpcException(
                         String.format("rpc failed with %s: %s", execution.getWorker().getHost(), status.getErrorMsg()),
                         failure);
             default:
-                throw new UserException(status.getErrorMsg(), failure);
+                throw new StarRocksException(status.getErrorMsg(), failure);
         }
     }
 
@@ -861,7 +864,7 @@ public class DefaultCoordinator extends Coordinator {
             return shortCircuitExecutor.getNext();
         }
         if (receiver == null) {
-            throw new UserException("There is no receiver.");
+            throw new StarRocksException("There is no receiver.");
         }
 
         RowBatch resultBatch;
@@ -907,8 +910,11 @@ public class DefaultCoordinator extends Coordinator {
                 if (copyStatus.isCancelled() &&
                         copyStatus.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
                     ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
+                } else if (copyStatus.isTimeout()) {
+                    ErrorReport.reportTimeoutException(
+                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout, errMsg);
                 }
-                throw new UserException(ec, errMsg);
+                throw new StarRocksException(ec, errMsg);
             }
         }
 
@@ -1165,6 +1171,11 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     public boolean tryProcessProfileAsync(Consumer<Boolean> task) {
+        if (connectContext instanceof ArrowFlightSqlConnectContext) {
+            queryProfile.addListener(task);
+            return true;
+        }
+
         if (executionDAG.getExecutions().isEmpty() && (!isShortCircuit)) {
             return false;
         }
@@ -1317,5 +1328,9 @@ public class DefaultCoordinator extends Coordinator {
 
     private void execShortCircuit() throws Exception {
         shortCircuitExecutor.exec();
+    }
+
+    public ResultReceiver getReceiver() {
+        return receiver;
     }
 }

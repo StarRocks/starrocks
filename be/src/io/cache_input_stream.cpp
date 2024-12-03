@@ -394,6 +394,7 @@ void CacheInputStream::_populate_to_cache(const char* p, int64_t offset, int64_t
         options.evict_probability = _datacache_evict_probability;
         options.priority = _priority;
         options.ttl_seconds = _ttl_seconds;
+        options.frequency = _frequency;
         if (options.async && sb) {
             auto cb = [sb](int code, const std::string& msg) {
                 // We only need to keep the shared buffer pointer

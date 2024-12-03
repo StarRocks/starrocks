@@ -23,6 +23,10 @@
 
 #include <memory>
 
+#include "fs/s3/pool_base.h"
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
+
 namespace starrocks::poco {
 
 struct ConnectionTimeouts {
@@ -38,16 +42,16 @@ struct ConnectionTimeouts {
             : connection_timeout(connection_timeout_), send_timeout(send_timeout_), receive_timeout(receive_timeout_) {}
 };
 
+using PooledHTTPSessionPtr = PoolBase<Poco::Net::HTTPClientSession>::Entry;
 using HTTPSessionPtr = std::shared_ptr<Poco::Net::HTTPClientSession>;
 
 bool isHTTPS(const Poco::URI& uri);
 
-HTTPSessionPtr makeHTTPSessionImpl(const std::string& host, Poco::UInt16 port, bool https, bool keep_alive,
-                                   bool resolve_host = true);
-
 void setTimeouts(Poco::Net::HTTPClientSession& session, const ConnectionTimeouts& timeouts);
 
-HTTPSessionPtr makeHTTPSession(const Poco::URI& uri, const ConnectionTimeouts& timeouts, bool resolve_host);
+HTTPSessionPtr makeHTTPSessionImpl(const std::string& host, Poco::UInt16 port, bool https, bool keep_alive);
+
+PooledHTTPSessionPtr makeHTTPSession(const Poco::URI& uri, const ConnectionTimeouts& timeouts, bool resolve_host);
 
 std::string getCurrentExceptionMessage();
 
@@ -58,6 +62,58 @@ enum ResponseCode {
     SUCCESS_RESPONSE_MAX = 299,
     TOO_MANY_REQUEST = 429,
     SERVICE_UNAVALIABLE = 503
+};
+
+class EndpointHTTPSessionPool : public PoolBase<Poco::Net::HTTPClientSession> {
+public:
+    using Base = PoolBase<Poco::Net::HTTPClientSession>;
+    EndpointHTTPSessionPool(std::string host, uint16_t port, bool is_https)
+            : Base(ENDPOINT_POOL_SIZE), _host(std::move(host)), _port(port), _is_https(is_https) {
+        _mem_tracker = GlobalEnv::GetInstance()->poco_connection_pool_mem_tracker();
+    }
+
+private:
+    ObjectPtr allocObject() override;
+
+    static constexpr size_t ENDPOINT_POOL_SIZE = 1024;
+
+    const std::string _host;
+    const uint16_t _port;
+    const bool _is_https;
+    MemTracker* _mem_tracker = nullptr;
+};
+
+class HTTPSessionPools {
+private:
+    struct Key {
+        std::string host;
+        uint16_t port;
+        bool is_https;
+
+        bool operator==(const Key& rhs) const {
+            return std::tie(host, port, is_https) == std::tie(rhs.host, rhs.port, rhs.is_https);
+        }
+    };
+
+    struct Hasher {
+        uint32_t operator()(const Key& k) const {
+            return std::hash<std::string>()(k.host) ^ std::hash<uint16_t>()(k.port) ^ std::hash<bool>()(k.is_https);
+        }
+    };
+
+public:
+    using EndpointPoolPtr = std::shared_ptr<EndpointHTTPSessionPool>;
+    static HTTPSessionPools& instance();
+
+    PooledHTTPSessionPtr getSession(const Poco::URI& uri, const ConnectionTimeouts& timeouts, bool resolve_host);
+
+    void shutdown();
+
+private:
+    HTTPSessionPools() = default;
+
+    std::mutex _mutex;
+    std::unordered_map<Key, EndpointPoolPtr, Hasher> _endpoint_pools;
 };
 
 } // namespace starrocks::poco

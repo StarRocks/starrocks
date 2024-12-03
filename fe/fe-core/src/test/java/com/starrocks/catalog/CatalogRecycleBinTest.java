@@ -118,6 +118,8 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testGetPartition() throws Exception {
+        FakeEditLog fakeEditLog = new FakeEditLog();
+
         CatalogRecycleBin bin = new CatalogRecycleBin();
         List<Column> columns = Lists.newArrayList(new Column("k1", ScalarType.createVarcharType(10)));
         Range<PartitionKey> range =
@@ -126,9 +128,9 @@ public class CatalogRecycleBinTest {
                         PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
                         BoundType.CLOSED);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
-        Partition partition = new Partition(1L, "pt", new MaterializedIndex(), null);
+        Partition partition = new Partition(1L, 3L, "pt", new MaterializedIndex(), null);
         bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition, range, dataProperty, (short) 1, false, null));
-        Partition partition2 = new Partition(2L, "pt", new MaterializedIndex(), null);
+        Partition partition2 = new Partition(2L, 4L, "pt", new MaterializedIndex(), null);
         bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition2, range, dataProperty, (short) 1, false, null));
 
         Partition recycledPart = bin.getPartition(1L);
@@ -151,15 +153,15 @@ public class CatalogRecycleBinTest {
                         PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
                         BoundType.CLOSED);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
-        Partition partition = new Partition(1L, "pt", new MaterializedIndex(), null);
+        Partition partition = new Partition(1L, 3L, "pt", new MaterializedIndex(), null);
         bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition, range, dataProperty, (short) 1, false, null));
-        Partition partition2 = new Partition(2L, "pt", new MaterializedIndex(), null);
+        Partition partition2 = new Partition(2L, 4L, "pt", new MaterializedIndex(), null);
         bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition2, range, dataProperty, (short) 1, false, null));
 
-        PhysicalPartition recycledPart = bin.getPhysicalPartition(1L);
+        PhysicalPartition recycledPart = bin.getPhysicalPartition(3L);
         Assert.assertNotNull(recycledPart);
-        recycledPart = bin.getPartition(2L);
-        Assert.assertEquals(2L, recycledPart.getId());
+        recycledPart = bin.getPhysicalPartition(4L);
+        Assert.assertEquals(4L, recycledPart.getId());
     }
 
     @Test
@@ -222,6 +224,7 @@ public class CatalogRecycleBinTest {
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+        long physicalPartitionId = 6L;
         long replicaId = 10L;
         long backendId = 20L;
 
@@ -257,7 +260,7 @@ public class CatalogRecycleBinTest {
         index.addTablet(tablet, tabletMeta);
 
         // Partition
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -290,12 +293,13 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testAddTabletToInvertedIndexWithLocalTabletError(@Mocked GlobalStateMgr globalStateMgr,
-                                                            @Mocked Database db) {
+                                                                 @Mocked Database db) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+        long physicalPartitionId = 6L;
         long replicaId = 10L;
         long backendId = 20L;
 
@@ -330,7 +334,7 @@ public class CatalogRecycleBinTest {
         index.addTablet(tablet, tabletMeta);
 
         // Partition
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -574,9 +578,9 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testRecyclePartition(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
-        Partition p1 = new Partition(111, "uno", null, null);
-        Partition p2SameName = new Partition(22, "dos", null, null);
-        Partition p2 = new Partition(222, "dos", null, null);
+        Partition p1 = new Partition(111, 112, "uno", null, null);
+        Partition p2SameName = new Partition(22, 221, "dos", null, null);
+        Partition p2 = new Partition(222, 223, "dos", null, null);
 
         new Expectations() {
             {

@@ -436,6 +436,12 @@ public class MvUtils {
                 && !(operator instanceof LogicalJoinOperator)) {
             return false;
         }
+        if (operator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
+            if (olapScanOperator.isSample()) {
+                return false;
+            }
+        }
         for (OptExpression child : root.getInputs()) {
             if (!isLogicalSPJ(child)) {
                 return false;
@@ -445,6 +451,12 @@ public class MvUtils {
     }
 
     public static boolean isLogicalSPJGOperator(Operator operator) {
+        if (operator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
+            if (olapScanOperator.isSample()) {
+                return false;
+            }
+        }
         return (operator instanceof LogicalScanOperator)
                 || (operator instanceof LogicalProjectOperator)
                 || (operator instanceof LogicalFilterOperator)
@@ -991,7 +1003,11 @@ public class MvUtils {
             return new BoolLiteral(true);
         }
         // to avoid duplicate values
-        return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
+        if (values.size() == 1) {
+            return new BinaryPredicate(BinaryType.EQ, slotRef, values.get(0));
+        } else {
+            return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
+        }
     }
 
     /**
@@ -1433,9 +1449,16 @@ public class MvUtils {
         return Optional.of(matches.get(0).cast());
     }
 
-    public static boolean isStr2Date(Expr expr) {
+    public static boolean isFuncCallExpr(Expr expr, String expectFuncName) {
+        if (expr == null) {
+            return false;
+        }
         return expr instanceof FunctionCallExpr
-                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
+                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(expectFuncName);
+    }
+
+    public static boolean isStr2Date(Expr expr) {
+        return isFuncCallExpr(expr, FunctionSet.STR2DATE);
     }
 
     public static Map<String, String> getPartitionProperties(MaterializedView materializedView) {
@@ -1495,21 +1518,18 @@ public class MvUtils {
      * @param table             the base table to find the specific partition expr
      * @return the mv partition expr if found, otherwise empty
      */
-    public static Optional<MVPartitionExpr> getMvPartitionExpr(Map<Expr, SlotRef> partitionExprMaps, Table table) {
+    public static List<MVPartitionExpr> getMvPartitionExpr(Map<Expr, SlotRef> partitionExprMaps, Table table) {
         if (partitionExprMaps == null || partitionExprMaps.isEmpty() || table == null) {
-            return Optional.empty();
+            return null;
         }
         return partitionExprMaps.entrySet().stream()
                 .filter(entry -> SRStringUtils.areTableNamesEqual(table, entry.getValue().getTblNameWithoutAnalyzed().getTbl()))
                 .map(entry -> new MVPartitionExpr(entry.getKey(), entry.getValue()))
-                .findFirst();
+                .collect(Collectors.toList());
     }
 
     /**
-     * Get the column by slot ref from table's columns
-     *
-     * @param columns base table's columns
-     * @param slotRef the base table's partition slot ref to find
+     * Get the column by slot ref from table's columns.
      * @return the column if found, otherwise empty
      */
     public static Optional<Column> getColumnBySlotRef(List<Column> columns, SlotRef slotRef) {
@@ -1530,15 +1550,35 @@ public class MvUtils {
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 
-    public static ScalarOperator convertPartitionKeysToListPredicate(ScalarOperator partitionColRef,
+    public static ScalarOperator convertPartitionKeysToListPredicate(List<ScalarOperator> partitionColRefs,
                                                                      Collection<PartitionKey> partitionRanges) {
         List<ScalarOperator> values = Lists.newArrayList();
-        for (PartitionKey partitionKey : partitionRanges) {
-            LiteralExpr literalExpr = partitionKey.getKeys().get(0);
-            ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
-            values.add(upperBound);
+        if (partitionColRefs.size() == 1) {
+            for (PartitionKey partitionKey : partitionRanges) {
+                List<LiteralExpr> literalExprs = partitionKey.getKeys();
+                Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
+                LiteralExpr literalExpr = literalExprs.get(0);
+                ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                values.add(upperBound);
+            }
+            return MvUtils.convertToInPredicate(partitionColRefs.get(0), values);
+        } else {
+            for (PartitionKey partitionKey : partitionRanges) {
+                List<LiteralExpr> literalExprs = partitionKey.getKeys();
+                Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
+                // TODO: use row operator instead
+                List<ScalarOperator> predicates = Lists.newArrayList();
+                for (int i = 0; i < literalExprs.size(); i++) {
+                    ScalarOperator partitionColRef = partitionColRefs.get(i);
+                    LiteralExpr literalExpr = literalExprs.get(i);
+                    ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                    ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ, partitionColRef, upperBound);
+                    predicates.add(eq);
+                }
+                values.add(Utils.compoundAnd(predicates));
+            }
+            return Utils.compoundOr(values);
         }
-        return MvUtils.convertToInPredicate(partitionColRef, values);
     }
 
     /**

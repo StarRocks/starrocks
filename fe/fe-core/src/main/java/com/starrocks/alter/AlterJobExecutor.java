@@ -41,7 +41,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -160,7 +160,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
                 assert table instanceof OlapTable;
                 schemaChangeHandler.process(statement.getAlterClauseList(), db, (OlapTable) table);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new AlterJobException(e.getMessage());
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
@@ -349,7 +349,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
                 schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
-            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
                 if (table.isCloudNativeTable()) {
                     Locker locker = new Locker();
                     locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -361,6 +362,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
                     isSynchronous = false;
                 } else {
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+                        throw new DdlException("StarRocks doesn't support alter persistent_index_type under shared-nothing mode");
+                    }
                     schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                             TTabletMetaType.ENABLE_PERSISTENT_INDEX);
                 }
@@ -383,8 +387,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                             TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
                 } catch (Exception e) {
-                    LOG.warn("Failed to update base compaction forbidden time ranges: ", e);
-                    throw new DdlException("Failed to update base compaction forbidden time ranges: " + e.getMessage());
+                    LOG.warn("Failed to update base compaction forbidden time ranges: " + tableName.getTbl(), e);
+                    throw new DdlException("Failed to update base compaction forbidden time ranges for "
+                            + tableName.getTbl() + ": " + e.getMessage());
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
@@ -459,7 +464,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
                 isSynchronous = false;
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new AlterJobException(e.getMessage(), e);
         }
         return null;

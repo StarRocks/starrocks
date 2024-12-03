@@ -180,13 +180,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
 
         sql = "select format_datetime(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')";
-        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 11:10:20");
 
         sql = "select format_datetime(date '2023-06-25', 'yyyyMMdd HH:mm:ss');";
-        assertPlanContains(sql, "jodatime_format('2023-06-25', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 00:00:00");
 
         sql = "select to_char(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss');";
-        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 11:10:20");
 
         sql = "select parse_datetime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')";
         assertPlanContains(sql, "str_to_jodatime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')");
@@ -347,6 +347,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select json_extract_scalar(json_parse('{\"a\": {\"b\": 1}}'), '$.a.b');";
         assertPlanContains(sql, "CAST(json_query(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b') AS VARCHAR)");
     }
+
+    @Test
+    public void testExtractFnTransform() throws Exception {
+        String sql = "SELECT extract(dow FROM TIMESTAMP '2022-10-20 05:10:00')";
+        assertPlanContains(sql, "dayofweek_iso('2022-10-20 05:10:00')");
+        sql = "SELECT extract(week FROM TIMESTAMP '2022-10-20 05:10:00')";
+        assertPlanContains(sql, "week_iso('2022-10-20 05:10:00')");
+    }
+
 
     @Test
     public void testBitFnTransform() throws Exception {

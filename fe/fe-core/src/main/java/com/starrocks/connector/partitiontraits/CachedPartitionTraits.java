@@ -113,8 +113,8 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public String getDbName() {
-        return delegate.getDbName();
+    public String getCatalogDBName() {
+        return delegate.getCatalogDBName();
     }
 
     @Override
@@ -156,9 +156,9 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException {
+    public Map<String, PListCell> getPartitionList(List<Column> partitionColumns) throws AnalysisException {
         return getCacheWithException("getPartitionList",
-                () -> delegate.getPartitionList(partitionColumn), () -> Maps.newHashMap());
+                () -> delegate.getPartitionList(partitionColumns), () -> Maps.newHashMap());
     }
 
     @Override

@@ -27,7 +27,6 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -103,6 +102,7 @@ public class StatisticUtils {
         context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
+        context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
         context.getSessionVariable().setCboCteReuse(true);
         context.getSessionVariable().setCboCTERuseRatio(0);
@@ -208,7 +208,7 @@ public class StatisticUtils {
 
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
-                if (partition.getBaseIndex().getTablets().stream()
+                if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
                     return false;
                 }
@@ -220,7 +220,7 @@ public class StatisticUtils {
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
-            long maxTime = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
+            long maxTime = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
                     .max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else {
@@ -245,7 +245,7 @@ public class StatisticUtils {
     }
 
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
-        long time = partition.getVisibleVersionTime();
+        long time = partition.getDefaultPhysicalPartition().getVisibleVersionTime();
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(time), Clock.systemDefaultZone().getZone());
     }
 
@@ -330,7 +330,7 @@ public class StatisticUtils {
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_uuid",  new TypeDef(tableUUIDType)),
+                    new ColumnDef("table_uuid", new TypeDef(tableUUIDType)),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
@@ -476,17 +476,16 @@ public class StatisticUtils {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
 
         if (table.isHiveTable() || table.isHudiTable()) {
-            HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
-                    hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(hiveMetaStoreTable.getCatalogName(),
-                    hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(table.getCatalogName(),
+                    table.getCatalogDBName(), table.getCatalogTableName());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(table.getCatalogName(),
+                    table.getCatalogDBName(), table.getCatalogTableName());
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
-                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
-                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
         } else {
             LOG.warn("drop statistics after drop table, table type is not supported, table type: {}",
                     table.getType().name());

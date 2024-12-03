@@ -43,7 +43,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.PartitionUtil;
@@ -99,10 +99,7 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.Mv
 public class MvPartitionCompensator {
     private static final Logger LOG = LogManager.getLogger(MvPartitionCompensator.class);
 
-    /**
-     * External scan operators should be supported if it has been supported in
-     * {@link com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner}
-     */
+    // supported external scan types for partition compensate
     public static final ImmutableSet<OperatorType> SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES =
             ImmutableSet.<OperatorType>builder()
                     .add(OperatorType.LOGICAL_HIVE_SCAN)
@@ -113,6 +110,15 @@ public class MvPartitionCompensator {
             ImmutableSet.<OperatorType>builder()
                     .add(OperatorType.LOGICAL_OLAP_SCAN)
                     .addAll(SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES)
+                    .build();
+
+    /**
+     * External scan operators could use {@link com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner}
+     * to prune partitions, so we need to compensate partition predicates for them.
+     */
+    public static final ImmutableSet<OperatorType> SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES =
+            ImmutableSet.<OperatorType>builder()
+                    .add(OperatorType.LOGICAL_HIVE_SCAN)
                     .build();
 
     /**
@@ -217,8 +223,7 @@ public class MvPartitionCompensator {
                                                          MVCompensation mvCompensation,
                                                          OptExpression mvQueryPlan) {
         MaterializedView mv = mvContext.getMv();
-        Map<Table, Column> refBaseTableAndColumnMap = mv.getRefBaseTablePartitionColumns();
-        if (refBaseTableAndColumnMap == null) {
+        if (mv.getRefBaseTablePartitionColumns() == null) {
             return null;
         }
         Map<Table, BaseCompensation<?>> refTableCompensations = mvCompensation.getCompensations();
@@ -437,6 +442,10 @@ public class MvPartitionCompensator {
 
     private static List<ScalarOperator> compensatePartitionPredicateForExternalTables(MaterializationContext mvContext,
                                                                                       LogicalScanOperator scanOperator) {
+        if (!SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES.contains(scanOperator.getOpType())) {
+            return Lists.newArrayList();
+        }
+
         ScanOperatorPredicates scanOperatorPredicates = null;
         try {
             scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
@@ -471,8 +480,13 @@ public class MvPartitionCompensator {
         if (partitionTableAndColumns == null) {
             return null;
         }
+        Optional<Expr> mvPartitionOpt = mv.getRangePartitionFirstExpr();
+        if (mvPartitionOpt.isEmpty()) {
+            return null;
+        }
+        Expr mvPartitionExpr = mvPartitionOpt.get();
         Column partitionColumn = partitionTableAndColumns.second;
-        boolean isConvertToDate = PartitionUtil.isConvertToDate(mv.getPartitionExpr(), partitionColumn);
+        boolean isConvertToDate = PartitionUtil.isConvertToDate(mvPartitionExpr, partitionColumn);
         for (PartitionKey selectedPartitionKey : scanOperatorPredicates.getSelectedPartitionKeys()) {
             try {
                 LiteralExpr literalExpr = selectedPartitionKey.getKeys().get(0);
@@ -610,7 +624,7 @@ public class MvPartitionCompensator {
                 return null;
             }
         }
-        return MvUtils.convertPartitionKeysToListPredicate(partitionColRef, keys);
+        return MvUtils.convertPartitionKeysToListPredicate(Lists.newArrayList(partitionColRef), keys);
     }
 
     private static ScalarOperator convertPartitionKeysToPredicate(ScalarOperator partitionColumn,
@@ -685,7 +699,11 @@ public class MvPartitionCompensator {
         }
 
         Column partitionColumn = partitionTableAndColumns.second;
-        Expr partitionExpr = mv.getPartitionExpr();
+        Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (mvPartitionExprOpt.isEmpty()) {
+            return null;
+        }
+        Expr partitionExpr = mvPartitionExprOpt.get();
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(mvPlan);
         for (LogicalScanOperator scanOperator : scanOperators) {
             // Since mv's plan disabled partition prune, no need to compensate partition predicate for non ref base tables.
@@ -750,20 +768,24 @@ public class MvPartitionCompensator {
             Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
         // materialized view latest partition ranges except to-refresh partitions
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
-
-        List<Range<PartitionKey>> refBaseTableRanges = Lists.newArrayList();
+        Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (mvPartitionExprOpt.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        Expr mvPartitionExpr = mvPartitionExprOpt.get();
+        List<Range<PartitionKey>> refBaseTableRanges;
         try {
-            // todo: support list partition mv
-            refBaseTableRanges = Lists.newArrayList(PartitionUtil.getPartitionKeyRange(partitionByTable, partitionColumn,
-                    MaterializedView.getPartitionExpr(mv)).values());
-        } catch (UserException e) {
+            Map<String, Range<PartitionKey>> refBaseTableRangeMap =
+                    PartitionUtil.getPartitionKeyRange(partitionByTable, partitionColumn, mvPartitionExpr);
+            refBaseTableRanges = refBaseTableRangeMap.values().stream().collect(Collectors.toList());
+        } catch (StarRocksException e) {
             LOG.warn("Materialized view Optimizer compute partition range failed.", e);
             return Lists.newArrayList();
         }
 
         // date to varchar range
         Map<Range<PartitionKey>, Range<PartitionKey>> baseRangeMapping = null;
-        boolean isConvertToDate = PartitionUtil.isConvertToDate(mv.getPartitionExpr(), partitionColumn);
+        boolean isConvertToDate = PartitionUtil.isConvertToDate(mvPartitionExpr, partitionColumn);
         if (isConvertToDate) {
             baseRangeMapping = Maps.newHashMap();
             // convert varchar range to date range

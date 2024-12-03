@@ -57,6 +57,7 @@ setup(
         "sqlalchemy>=2.0",
         "sqlalchemy-utils>=0.41.2",
         "pymysql>=1.1.0",
+        "alembic>=1.4.0"
     ],
     setup_requires=["pytest-runner"],
     tests_require=["pytest", "mock"],

@@ -75,6 +75,8 @@ private:
     // collect del files which are above cloud native index's rebuild point
     void _collect_del_files_above_rebuild_point(RowsetMetadataPB* rowset,
                                                 std::vector<DelfileWithRowsetId>* collect_del_files);
+    // clean sstable meta after alter type
+    void _sstable_meta_clean_after_alter_type();
 
 private:
     Tablet _tablet;

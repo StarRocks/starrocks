@@ -82,7 +82,7 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
         if (is_independent) {
             SlotId slot_id = ctx->next_slot_id++;
 #ifdef DEBUG
-            expr_ctx->root()->for_each_slot_id([expr_ctx, new_slot_id = slot_id](SlotId slot_id) {
+            expr_ctx->root()->for_each_slot_id([new_slot_id = slot_id](SlotId slot_id) {
                 DCHECK_NE(new_slot_id, slot_id) << "slot_id " << new_slot_id << " already exists in expr_ctx";
             });
 #endif
@@ -208,7 +208,7 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
 
 StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk* chunk) {
     for (auto i = 0; i < _common_sub_expr.size(); ++i) {
-        auto sub_col = EVALUATE_NULL_IF_ERROR(context, _common_sub_expr[i], chunk);
+        ASSIGN_OR_RETURN(auto sub_col, context->evaluate(_common_sub_expr[i], chunk));
         chunk->append_column(sub_col, _common_sub_expr_ids[i]);
     }
     return get_child(0)->evaluate_checked(context, chunk);

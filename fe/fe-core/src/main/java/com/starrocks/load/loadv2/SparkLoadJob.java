@@ -54,7 +54,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Resource;
@@ -71,8 +71,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -122,10 +121,7 @@ import com.starrocks.transaction.TransactionState.TxnSourceType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -450,7 +446,7 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
-    private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws UserException {
+    private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws StarRocksException {
         if (!indexToPushBrokerReaderParams.containsKey(indexId)) {
             PushBrokerReaderParams pushBrokerReaderParams = new PushBrokerReaderParams();
             pushBrokerReaderParams.init(table.getSchemaByIndexId(indexId), brokerDesc);
@@ -459,7 +455,7 @@ public class SparkLoadJob extends BulkLoadJob {
         return indexToPushBrokerReaderParams.get(indexId);
     }
 
-    private Set<Long> submitPushTasks() throws UserException {
+    private Set<Long> submitPushTasks() throws StarRocksException {
         // check db exist
         Database db;
         try {
@@ -501,17 +497,17 @@ public class SparkLoadJob extends BulkLoadJob {
 
                     Set<Long> partitionIds = entry.getValue();
                     for (long partitionId : partitionIds) {
-                        Partition partition = table.getPartition(partitionId);
-                        if (partition == null) {
+                        PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+                        if (physicalPartition == null) {
                             LOG.warn("partition does not exist. id: {}", partitionId);
                             continue;
                         }
-                        long partitionVersion = partition.getVisibleVersion();
+                        long partitionVersion = physicalPartition.getVisibleVersion();
 
                         hasLoadPartitions = true;
                         int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
 
-                        List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
+                        List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.ALL);
                         for (MaterializedIndex index : indexes) {
                             long indexId = index.getId();
                             int schemaHash = indexToSchemaHash.get(indexId);
@@ -693,7 +689,7 @@ public class SparkLoadJob extends BulkLoadJob {
      * 1. Sends push tasks to Be
      * 2. Commit transaction after all push tasks execute successfully
      */
-    public void updateLoadingStatus() throws UserException {
+    public void updateLoadingStatus() throws StarRocksException {
         if (!checkState(JobState.LOADING)) {
             return;
         }
@@ -737,7 +733,7 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
-    private void tryCommitJob() throws UserException {
+    private void tryCommitJob() throws StarRocksException {
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
                 .add("txn_id", transactionId)
                 .add("msg", "Load job try to commit txn")
@@ -884,37 +880,6 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        sparkResource.write(out);
-        sparkLoadAppHandle.write(out);
-        out.writeLong(etlStartTimestamp);
-        Text.writeString(out, appId);
-        Text.writeString(out, etlOutputPath);
-        out.writeInt(tabletMetaToFileInfo.size());
-        for (Map.Entry<String, Pair<String, Long>> entry : tabletMetaToFileInfo.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue().first);
-            out.writeLong(entry.getValue().second);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        sparkResource = (SparkResource) Resource.read(in);
-        sparkLoadAppHandle = SparkLoadAppHandle.read(in);
-        etlStartTimestamp = in.readLong();
-        appId = Text.readString(in);
-        etlOutputPath = Text.readString(in);
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String tabletMetaStr = Text.readString(in);
-            Pair<String, Long> fileInfo = Pair.create(Text.readString(in), in.readLong());
-            tabletMetaToFileInfo.put(tabletMetaStr, fileInfo);
-        }
-    }
-
     /**
      * log load job update info when job state changed to etl or loading
      */
@@ -1014,7 +979,7 @@ public class SparkLoadJob extends BulkLoadJob {
             this.tDescriptorTable = null;
         }
 
-        public void init(List<Column> columns, BrokerDesc brokerDesc) throws UserException {
+        public void init(List<Column> columns, BrokerDesc brokerDesc) throws StarRocksException {
             // Generate tuple descriptor
             DescriptorTable descTable = new DescriptorTable();
             TupleDescriptor destTupleDesc = descTable.createTupleDescriptor();

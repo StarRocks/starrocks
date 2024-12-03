@@ -48,7 +48,7 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
@@ -415,7 +415,7 @@ public class StarOSAgent {
         return workerId;
     }
 
-    public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+    public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
         prepare();
         List<ShardGroupInfo> shardGroupInfos = null;
         try {
@@ -425,6 +425,7 @@ public class StarOSAgent {
                     .putLabels("dbId", String.valueOf(dbId))
                     .putLabels("tableId", String.valueOf(tableId))
                     .putLabels("partitionId", String.valueOf(partitionId))
+                    .putLabels("indexId", String.valueOf(indexId))
                     .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                     .build());
             shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
@@ -589,30 +590,30 @@ public class StarOSAgent {
         return result;
     }
 
-    public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
+    public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
         return getPrimaryComputeNodeIdByShard(shardId, DEFAULT_WORKER_GROUP_ID);
     }
 
-    public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+    public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
         Set<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId, true);
         if (backendIds.isEmpty()) {
             // If BE stops, routine load task may catch UserException during load plan,
             // and the job state will changed to PAUSED.
             // The job will automatically recover from PAUSED to RUNNING if the error code is REPLICA_FEW_ERR
             // when all BEs become alive.
-            throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+            throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
                     "Failed to get primary backend. shard id: " + shardId);
         }
         return backendIds.iterator().next();
     }
 
     public Set<Long> getAllNodeIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
-            throws UserException {
+            throws StarRocksException {
         try {
             ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
             return getAllNodeIdsByShard(shardInfo, onlyPrimary);
         } catch (StarClientException e) {
-            throw new UserException(e);
+            throw new StarRocksException(e);
         }
     }
 
@@ -683,7 +684,7 @@ public class StarOSAgent {
         return false; // return false if any error happens
     }
 
-    public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+    public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
         List<Long> nodeIds = new ArrayList<>();
         prepare();
         try {
@@ -695,11 +696,11 @@ public class StarOSAgent {
             }
             return nodeIds;
         } catch (StarClientException e) {
-            throw new UserException("Failed to get workers by group id. error: " + e.getMessage());
+            throw new StarRocksException("Failed to get workers by group id. error: " + e.getMessage());
         }
     }
 
-    public List<String> listWorkerGroupIpPort(long workerGroupId) throws UserException {
+    public List<String> listWorkerGroupIpPort(long workerGroupId) throws StarRocksException {
         List<String> addresses = new ArrayList<>();
         prepare();
         try {
@@ -712,7 +713,7 @@ public class StarOSAgent {
             }
             return addresses;
         } catch (StarClientException e) {
-            throw new UserException("Fail to get workers by default group id, error: " + e.getMessage());
+            throw new StarRocksException("Fail to get workers by default group id, error: " + e.getMessage());
         }
     }
 
@@ -733,7 +734,7 @@ public class StarOSAgent {
         }
     }
 
-    public long createWorkerGroup(String size) throws DdlException {
+    public long createWorkerGroup(String size, int replicaNumber) throws DdlException {
         prepare();
 
         // size should be x0, x1, x2, x4...
@@ -743,12 +744,22 @@ public class StarOSAgent {
         WorkerGroupDetailInfo result = null;
         try {
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap());
+                    Collections.emptyMap(), replicaNumber);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
         }
         return result.getGroupId();
+    }
+
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
+        prepare();
+        try {
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to update worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
     }
 
     public void deleteWorkerGroup(long groupId) throws DdlException {
@@ -782,8 +793,8 @@ public class StarOSAgent {
         return shardInfos.get(0);
     }
 
-    public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long partitionId) {
-        String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(partitionId));
-        return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, partitionId)).build();
+    public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long physicalPartitionId) {
+        String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(physicalPartitionId));
+        return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, physicalPartitionId)).build();
     }
 }

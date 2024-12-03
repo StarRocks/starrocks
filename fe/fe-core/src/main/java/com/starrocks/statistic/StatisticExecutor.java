@@ -22,11 +22,11 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
@@ -143,9 +143,8 @@ public class StatisticExecutor {
         List<TStatisticData> columnStats = Lists.newArrayList();
         if (CollectionUtils.isNotEmpty(columnWithFullStats)) {
             List<String> columnNamesForStats = columnWithFullStats.stream().map(ColumnStatsMeta::getColumnName)
-                            .collect(Collectors.toList());
-            List<Type> columnTypesForStats =
-                    columnWithFullStats.stream()
+                    .collect(Collectors.toList());
+            List<Type> columnTypesForStats = columnWithFullStats.stream()
                             .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
                             .collect(Collectors.toList());
 
@@ -156,10 +155,20 @@ public class StatisticExecutor {
         }
         if (CollectionUtils.isNotEmpty(columnWithSampleStats)) {
             List<String> columnNamesForStats = columnWithSampleStats.stream().map(ColumnStatsMeta::getColumnName)
-                            .collect(Collectors.toList());
-            String statsSql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNamesForStats);
-            List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
-            columnStats.addAll(tStatisticData);
+                    .collect(Collectors.toList());
+            if (Config.statistic_use_meta_statistics) {
+                List<Type> columnTypesForStats = columnWithSampleStats.stream()
+                        .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
+                        .collect(Collectors.toList());
+                String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
+                        dbId, tableId, columnNamesForStats, columnTypesForStats);
+                List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
+                columnStats.addAll(tStatisticData);
+            } else {
+                String statsSql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNamesForStats);
+                List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
+                columnStats.addAll(tStatisticData);
+            }
         }
         return columnStats;
     }
@@ -270,7 +279,7 @@ public class StatisticExecutor {
         }
 
         OlapTable olapTable = (OlapTable) table;
-        long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
+        long version = olapTable.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
                 .max(Long::compareTo).orElse(0L);
         String columnName = MetaUtils.getColumnNameByColumnId(dbId, tableId, columnId);
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
@@ -509,6 +518,9 @@ public class StatisticExecutor {
         context.setQueryId(UUIDUtil.genUUID());
         if (Config.enable_print_sql) {
             LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
+        }
+        if (FeConstants.enableUnitStatistics) {
+            return Collections.emptyList();
         }
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);

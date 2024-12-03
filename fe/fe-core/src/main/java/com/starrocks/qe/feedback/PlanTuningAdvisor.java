@@ -58,6 +58,9 @@ public class PlanTuningAdvisor {
     }
 
     public OperatorTuningGuides.OptimizedRecord getOptimizedRecord(UUID queryId) {
+        if (queryId == null) {
+            return null;
+        }
         return optimizedQueryRecords.get(queryId);
     }
 
@@ -75,8 +78,6 @@ public class PlanTuningAdvisor {
         cache.invalidateAll();
         optimizedQueryRecords.clear();
     }
-
-
 
     public void deleteTuningGuides(UUID queryId) {
         for (Map.Entry<PlanTuningCacheKey, OperatorTuningGuides> entry : cache.asMap().entrySet()) {
