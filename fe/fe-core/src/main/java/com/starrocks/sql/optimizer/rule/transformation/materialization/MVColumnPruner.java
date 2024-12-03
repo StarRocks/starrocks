@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -140,11 +141,38 @@ public class MVColumnPruner {
         }
 
         public OptExpression visitLogicalUnion(OptExpression optExpression, Void context) {
-            for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
-                requiredOutputColumns.union(optExpression.getChildOutputColumns(childIdx));
+            LogicalUnionOperator unionOperator = optExpression.getOp().cast();
+            if (unionOperator.getProjection() != null) {
+                Projection projection = optExpression.getOp().getProjection();
+                projection.getColumnRefMap().values().forEach(s -> requiredOutputColumns.union(s.getUsedColumns()));
             }
+            List<ColumnRefOperator> unionOutputColRefs = unionOperator.getOutputColumnRefOp();
+            List<Integer> unionOutputIdxes = Lists.newArrayList();
+            List<ColumnRefOperator> newUnionOutputColRefs = Lists.newArrayList();
+            for (int i = 0; i < unionOutputColRefs.size(); i++) {
+                ColumnRefOperator columnRefOperator = unionOutputColRefs.get(i);
+                if (requiredOutputColumns.contains(columnRefOperator.getId())) {
+                    unionOutputIdxes.add(i);
+                    newUnionOutputColRefs.add(columnRefOperator);
+                }
+            }
+            List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
+            for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
+                List<ColumnRefOperator> childOutputCols = unionOperator.getChildOutputColumns().get(childIdx);
+                List<ColumnRefOperator> newChildOutputCols = Lists.newArrayList();
+                unionOutputIdxes.stream()
+                        .map(idx -> childOutputCols.get(idx))
+                        .forEach(x -> {
+                            requiredOutputColumns.union(x);
+                            newChildOutputCols.add(x);
+                        });
+                newChildOutputColumns.add(newChildOutputCols);
+            }
+            LogicalUnionOperator newUnionOperator = new LogicalUnionOperator(newUnionOutputColRefs, newChildOutputColumns,
+                    unionOperator.isUnionAll(), unionOperator.isFromIcebergEqualityDeleteRewrite());
+            newUnionOperator.setProjection(optExpression.getOp().getProjection());
             List<OptExpression> children = visitChildren(optExpression);
-            return OptExpression.create(optExpression.getOp(), children);
+            return OptExpression.create(newUnionOperator, children);
         }
 
         // NOTE: filter and join operator will not be kept in plan after mv rewrite,
