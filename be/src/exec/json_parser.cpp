@@ -24,8 +24,7 @@ const size_t MAX_RAW_JSON_LEN = 64;
 
 JsonDocumentStreamParser::JsonDocumentStreamParser(simdjson::ondemand::parser* parser) : JsonParser(parser) {
     _batch_size = (config::json_parse_many_batch_size > simdjson::dom::MINIMAL_BATCH_SIZE)
-                          ? config::json_parse_many_batch_size
-                          : simdjson::dom::DEFAULT_BATCH_SIZE * 10 /* About 10MB */;
+                          ? config::json_parse_many_batch_size : simdjson::dom::DEFAULT_BATCH_SIZE;
 }
 
 Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated) noexcept {
@@ -34,7 +33,8 @@ Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated)
         _len = len;
 
         _doc_stream = _parser->iterate_many(data, len,
-                                            config::enable_dynamic_batch_size_for_json_parse_many ? _batch_size : _len);
+                                            config::enable_dynamic_batch_size_for_json_parse_many ?
+                                            std::min(_batch_size, _len) : _len);
 
         _doc_stream_itr = _doc_stream.begin();
 
