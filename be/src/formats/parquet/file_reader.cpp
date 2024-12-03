@@ -333,7 +333,7 @@ bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
             LOG(WARNING) << "filter row group failed: " << res.status().message();
             return false;
         }
-        if (res.value().has_value() && res.value()->empty()) {
+        if (res.value().has_value() && res.value()->span_size() == 0) {
             // no rows selected, the whole row group can be filtered
             return true;
         }

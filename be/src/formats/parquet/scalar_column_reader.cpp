@@ -23,11 +23,10 @@
 
 namespace starrocks::parquet {
 
-Status FixedValueColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                         SparseRange<uint64_t>* row_ranges,
-                                                         CompoundNodeType pred_relation, const uint64_t rg_first_row,
-                                                         const uint64_t rg_num_rows) const {
-    DCHECK(row_ranges->empty());
+StatusOr<bool> FixedValueColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                                 CompoundNodeType pred_relation,
+                                                                 const uint64_t rg_first_row,
+                                                                 const uint64_t rg_num_rows) const {
     ZoneMapDetail zone_map{_fixed_value, _fixed_value, _fixed_value.is_null()};
     auto is_satisfy = [&](const ZoneMapDetail& detail) {
         if (pred_relation == CompoundNodeType::AND) {
@@ -38,10 +37,7 @@ Status FixedValueColumnReader::row_group_zone_map_filter(const std::vector<const
         }
     };
 
-    if (is_satisfy(zone_map)) {
-        row_ranges->add({rg_first_row, rg_first_row + rg_num_rows});
-    }
-    return Status::OK();
+    return is_satisfy(zone_map);
 }
 
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
@@ -276,16 +272,13 @@ void ScalarColumnReader::select_offset_index(const SparseRange<uint64_t>& range,
     _reader = std::make_unique<StoredColumnReaderWithIndex>(std::move(_reader), _offset_index_ctx.get(), has_dict_page);
 }
 
-Status ScalarColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                     SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
-                                                     const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
-    DCHECK(row_ranges->empty());
-    const uint64_t rg_end_row = rg_first_row + rg_num_rows;
-
+StatusOr<bool> ScalarColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                             CompoundNodeType pred_relation,
+                                                             const uint64_t rg_first_row,
+                                                             const uint64_t rg_num_rows) const {
     if (!get_chunk_metadata()->meta_data.__isset.statistics || get_column_parquet_field() == nullptr) {
         // statistics is not existed, select all
-        row_ranges->add({rg_first_row, rg_end_row});
-        return Status::OK();
+        return true;
     }
 
     bool has_null = true;
@@ -324,8 +317,7 @@ Status ScalarColumnReader::row_group_zone_map_filter(const std::vector<const Col
 
     if (!zone_map_detail.has_value()) {
         // ZoneMapDetail not set, means select all
-        row_ranges->add({rg_first_row, rg_end_row});
-        return Status::OK();
+        return true;
     }
 
     auto is_satisfy = [&](const ZoneMapDetail& detail) {
@@ -337,11 +329,7 @@ Status ScalarColumnReader::row_group_zone_map_filter(const std::vector<const Col
         }
     };
 
-    if (is_satisfy(zone_map_detail.value())) {
-        row_ranges->add({rg_first_row, rg_end_row});
-    }
-
-    return Status::OK();
+    return is_satisfy(zone_map_detail.value());
 }
 
 } // namespace starrocks::parquet

@@ -43,9 +43,9 @@ public:
         return Status::NotSupported("Not implemented");
     }
 
-    Status row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                     SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
-                                     const uint64_t rg_first_row, const uint64_t rg_num_rows) const override;
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override;
 
 private:
     const Datum _fixed_value;
@@ -117,9 +117,9 @@ public:
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
 
-    Status row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                     SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
-                                     const uint64_t rg_first_row, const uint64_t rg_num_rows) const override;
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, uint64_t rg_first_row,
+                                             uint64_t rg_num_rows) const override;
 
 private:
     // Returns true if all of the data pages in the column chunk are dict encoded

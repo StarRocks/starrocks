@@ -41,8 +41,11 @@ struct ZoneMapEvaluator {
                 // ColumnReader not found, select all by default
                 cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
             } else if (level == FilterLevel::ROW_GROUP) {
-                RETURN_IF_ERROR(column_reader->row_group_zone_map_filter(col_preds, &cur_row_ranges, Type, rg_first_row,
-                                                                         rg_num_rows));
+                ASSIGN_OR_RETURN(bool is_selected,
+                                 column_reader->row_group_zone_map_filter(col_preds, Type, rg_first_row, rg_num_rows));
+                if (is_selected) {
+                    cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
+                }
             } else {
                 return Status::InternalError("not supported yet");
             }
