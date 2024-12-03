@@ -15,6 +15,7 @@ services:
     ports:
         - 3000:3000
     volumes:
+      - ../../PDFoutput:/app/PDFoutput
       - ../../en:/app/docusaurus/docs
       - ../../zh:/app/docusaurus/i18n/zh/docusaurus-plugin-content-docs/current
     working_dir: /app/docusaurus

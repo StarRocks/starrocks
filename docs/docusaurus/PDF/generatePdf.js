@@ -23,9 +23,11 @@ async function getPageTitle(url) {
 function getUrls(url) {
     var execSync = require('child_process').execSync;
 
-    // the URL that the user has is to `localhost`, which needs to be
-    // modified to the `docusaurus` service in the compose environment
-    let docusaurusUrl = url.replace("localhost", "docusaurus");
+    // the URL that the user has is to `0.0.0.0` or `localhost`, 
+    // which needs to be modified to the `docusaurus` service 
+    // in the Docker compose environment
+    let docusaurusUrl = 
+        url.replace("localhost", "docusaurus").replace("0.0.0.0", "docusaurus");
 
     var command = `npx docusaurus-prince-pdf --list-only -u ${docusaurusUrl} --file URLs.txt`
 
@@ -75,7 +77,7 @@ async function processLineByLine() {
 }
 
 async function requestPage(url) {
-  const fileName = 'PDFoutput/'.concat(String(i).padStart(4, '0')).concat('.', 'pdf');
+  const fileName = '../../PDFoutput/'.concat(String(i).padStart(4, '0')).concat('.', 'pdf');
 
   // Get the details to write the YAML file
   // We need title and filename

@@ -1,9 +1,0 @@
-#!/usr/bin/bash
-counter=1
-while IFS= read -r line || [[ -n "$line" ]]; do
-    printf -v padded "%04d" $counter
-    curl --request POST \
-       http://gotenberg:3000/forms/chromium/convert/url \
-       --form url=$line -o ${padded}.pdf
-    ((counter+=1))
-done < URLs.txt
