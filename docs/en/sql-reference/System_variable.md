@@ -402,12 +402,6 @@ Default value: `true`.
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v2.5
 
-### enable_filter_unused_columns_in_scan_stage
-
-* **Description**: Whether to filter unused column at the Scan stage. Please disable this optimization before data migration using [Cross-cluster Data Migration Tool](../administration/data_migration_tool.md) as it may cause a crash during queries against the migrated data.
-* **Default**: true
-* **Introduced in**: v3.1
-
 ### enable_gin_filter
 
 * **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
