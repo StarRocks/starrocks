@@ -314,64 +314,6 @@ bool ConnectorScanOperator::has_shared_chunk_source() const {
     return !active_inputs.empty();
 }
 
-size_t ConnectorScanOperator::num_buffered_chunks() const {
-    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& buffer = factory->get_chunk_buffer();
-    return buffer.size(_driver_sequence);
-}
-
-ChunkPtr ConnectorScanOperator::get_chunk_from_buffer() {
-    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& buffer = factory->get_chunk_buffer();
-    ChunkPtr chunk = nullptr;
-    if (buffer.try_get(_driver_sequence, &chunk)) {
-        return chunk;
-    }
-    return nullptr;
-}
-
-size_t ConnectorScanOperator::buffer_size() const {
-    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& buffer = factory->get_chunk_buffer();
-    return buffer.limiter()->size();
-}
-
-size_t ConnectorScanOperator::buffer_capacity() const {
-    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& buffer = factory->get_chunk_buffer();
-    return buffer.limiter()->capacity();
-}
-
-size_t ConnectorScanOperator::buffer_memory_usage() const {
-    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& buffer = factory->get_chunk_buffer();
-    return buffer.memory_usage();
-}
-
-size_t ConnectorScanOperator::default_buffer_capacity() const {
-    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& buffer = factory->get_chunk_buffer();
-    return buffer.limiter()->default_capacity();
-}
-
-ChunkBufferTokenPtr ConnectorScanOperator::pin_chunk(int num_chunks) {
-    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& buffer = factory->get_chunk_buffer();
-    return buffer.limiter()->pin(num_chunks);
-}
-
-bool ConnectorScanOperator::is_buffer_full() const {
-    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& buffer = factory->get_chunk_buffer();
-    return buffer.limiter()->is_full();
-}
-
-void ConnectorScanOperator::set_buffer_finished() {
-    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& buffer = factory->get_chunk_buffer();
-    buffer.set_finished(_driver_sequence);
-}
-
 connector::ConnectorType ConnectorScanOperator::connector_type() {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     return scan_node->connector_type();
