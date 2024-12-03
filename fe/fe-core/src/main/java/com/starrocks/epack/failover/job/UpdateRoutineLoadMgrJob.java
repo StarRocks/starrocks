@@ -4,7 +4,7 @@ package com.starrocks.epack.failover.job;
 
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.load.routineload.RoutineLoadMgrEPack;
 import com.starrocks.load.routineload.ErrorReason;
@@ -54,7 +54,7 @@ public class UpdateRoutineLoadMgrJob extends FailoverGroupJob {
                             new ErrorReason(InternalErrorCode.MANUAL_PAUSE_ERR,
                                     "Failover group " + failoverGroup.getName() + " pauses routine load job"),
                             true);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     failoverGroup.addErrorMessage("Failed to update routine load job state " + e.getMessage());
                     LOG.warn("Failed to update routine load job state ", e);
                     continue;

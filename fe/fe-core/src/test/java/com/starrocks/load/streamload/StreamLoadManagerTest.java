@@ -20,7 +20,7 @@ import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.persist.EditLog;
@@ -145,7 +145,7 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testBeginStreamLoadTask() throws UserException {
+    public void testBeginStreamLoadTask() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
@@ -174,7 +174,7 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testChannelIdEqualChannelNum() throws UserException {
+    public void testChannelIdEqualChannelNum() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
@@ -194,7 +194,7 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testGetTaskByName() throws UserException {
+    public void testGetTaskByName() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -216,7 +216,7 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testGetTaskByNameWithNullLabelName() throws UserException {
+    public void testGetTaskByNameWithNullLabelName() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -238,7 +238,7 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testGetTaskByIdWhenMatched() throws UserException {
+    public void testGetTaskByIdWhenMatched() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -261,7 +261,7 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testGetTaskByIdWhenNotMatched() throws UserException {
+    public void testGetTaskByIdWhenNotMatched() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -279,7 +279,7 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testStreamLoadTaskAfterCommit() throws UserException {
+    public void testStreamLoadTaskAfterCommit() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";

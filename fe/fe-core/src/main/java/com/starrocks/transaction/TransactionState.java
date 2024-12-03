@@ -46,8 +46,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
@@ -622,7 +622,7 @@ public class TransactionState implements Writable {
     public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated,
                                     TxnStateChangeCallback callback,
                                     String txnStatusChangeReason)
-            throws UserException {
+            throws StarRocksException {
         // after status changed
         if (callback != null) {
             switch (transactionStatus) {

@@ -15,10 +15,10 @@
 package com.starrocks.lake;
 
 import com.staros.client.StarClientException;
-import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.lake.StarOSAgentEpack;
+import com.starrocks.persist.ShardInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
@@ -60,8 +60,8 @@ public class UtilsTest {
 
         new MockUp<LakeTablet>() {
             @Mock
-            public long getPrimaryComputeNodeId(long clusterId) throws UserException {
-                throw new UserException("Failed to get primary backend");
+            public long getPrimaryComputeNodeId(long clusterId) throws StarRocksException {
+                throw new StarRocksException("Failed to get primary backend");
             }
 
             @Mock

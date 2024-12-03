@@ -39,7 +39,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
@@ -161,7 +161,7 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
      * return false when successfully commit but publish unfinished.
      * A UserException thrown if both commit and publish failed.
      */
-    public abstract boolean commitImpl(Database db, long timeoutMs) throws UserException;
+    public abstract boolean commitImpl(Database db, long timeoutMs) throws StarRocksException;
 
     protected abstract List<TabletCommitInfo> getTabletCommitInfos();
 
@@ -177,7 +177,7 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
             }
             status = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
                     getTransactionState(db.getId(), getTransactionId()).getTransactionStatus();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             if (cancel(DeleteMgr.CancelType.COMMIT_FAIL, e.getMessage())) {
                 throw new DdlException(e.getMessage(), e);
             } else {

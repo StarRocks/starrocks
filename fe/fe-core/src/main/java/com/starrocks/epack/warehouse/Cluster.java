@@ -15,7 +15,7 @@
 package com.starrocks.epack.warehouse;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.StarOSAgent;
@@ -67,7 +67,7 @@ public class Cluster implements Writable {
     public List<Long> getComputeNodeIds() {
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
             return new ArrayList<>();
         }

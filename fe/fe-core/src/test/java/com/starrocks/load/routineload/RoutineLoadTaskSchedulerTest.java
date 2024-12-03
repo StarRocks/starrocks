@@ -38,7 +38,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TRoutineLoadTask;
@@ -169,13 +169,13 @@ public class RoutineLoadTaskSchedulerTest {
 
         new MockUp<KafkaTaskInfo>() {
             @Mock
-            public boolean readyToExecute() throws UserException {
+            public boolean readyToExecute() throws StarRocksException {
                 return true;
             }
 
             @Mock
-            public TRoutineLoadTask createRoutineLoadTask() throws UserException {
-                throw new UserException("txn does not exist: 1");
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+                throw new StarRocksException("txn does not exist: 1");
             }
         };
 
@@ -186,8 +186,8 @@ public class RoutineLoadTaskSchedulerTest {
             }
 
             @Mock
-            public TRoutineLoadTask createRoutineLoadTask() throws UserException {
-                throw new UserException("txn does not exist: 1");
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+                throw new StarRocksException("txn does not exist: 1");
             }
         };
 
@@ -197,7 +197,7 @@ public class RoutineLoadTaskSchedulerTest {
         try {
             routineLoadTaskScheduler.scheduleOneTask(routineLoadTaskInfo1);
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof UserException);
+            Assert.assertTrue(e instanceof StarRocksException);
             Assert.assertEquals("txn does not exist: 1", e.getMessage());
             Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.state);
         }
@@ -251,12 +251,12 @@ public class RoutineLoadTaskSchedulerTest {
 
         new MockUp<KafkaTaskInfo>() {
             @Mock
-            public boolean readyToExecute() throws UserException {
+            public boolean readyToExecute() throws StarRocksException {
                 return true;
             }
 
             @Mock
-            public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
                 throw new MetaNotFoundException("database 1 does not exist");
             }
         };
@@ -268,7 +268,7 @@ public class RoutineLoadTaskSchedulerTest {
             }
 
             @Mock
-            public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
                 throw new MetaNotFoundException("database 1 does not exist");
             }
         };

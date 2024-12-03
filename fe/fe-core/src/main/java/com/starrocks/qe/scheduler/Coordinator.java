@@ -15,8 +15,8 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.planner.PlanFragment;
@@ -54,16 +54,16 @@ public abstract class Coordinator {
         Coordinator createQueryScheduler(ConnectContext context,
                                          List<PlanFragment> fragments,
                                          List<ScanNode> scanNodes,
-                                         TDescriptorTable descTable) throws UserException;
+                                         TDescriptorTable descTable) throws StarRocksException;
 
         Coordinator createInsertScheduler(ConnectContext context,
                                           List<PlanFragment> fragments,
                                           List<ScanNode> scanNodes,
-                                          TDescriptorTable descTable) throws UserException;
+                                          TDescriptorTable descTable) throws StarRocksException;
 
-        Coordinator createBrokerLoadScheduler(LoadPlanner loadPlanner) throws UserException;
+        Coordinator createBrokerLoadScheduler(LoadPlanner loadPlanner) throws StarRocksException;
 
-        Coordinator createStreamLoadScheduler(LoadPlanner loadPlanner) throws UserException;
+        Coordinator createStreamLoadScheduler(LoadPlanner loadPlanner) throws StarRocksException;
 
         Coordinator createSyncStreamLoadScheduler(StreamLoadPlanner planner, TNetworkAddress address);
 
@@ -132,7 +132,7 @@ public abstract class Coordinator {
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
 
     public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
-            throws UserException {
+            throws StarRocksException {
         return List.of();
     }
 

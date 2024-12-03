@@ -67,7 +67,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.profile.Timer;
@@ -636,7 +636,7 @@ public class UtFrameUtils {
     }
 
     private static DefaultCoordinator createScheduler(ConnectContext context, StatementBase statementBase, ExecPlan execPlan)
-            throws UserException {
+            throws StarRocksException {
         context.setExecutionId(new TUniqueId(1, 2));
         DefaultCoordinator scheduler;
         if (statementBase instanceof DmlStmt) {

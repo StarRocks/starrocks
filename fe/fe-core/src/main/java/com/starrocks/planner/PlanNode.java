@@ -48,7 +48,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -545,7 +545,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Call this once on the root of the plan tree before calling toThrift().
      * Subclasses need to override this.
      */
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
         for (PlanNode child : children) {
             child.finalizeStats(analyzer);
         }
@@ -581,7 +581,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return outputSmap;
     }
 
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
     }
 
     /**
@@ -621,7 +621,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      *
      * @throws AnalysisException
      */
-    protected void createDefaultSmap(Analyzer analyzer) throws UserException {
+    protected void createDefaultSmap(Analyzer analyzer) throws StarRocksException {
         ExprSubstitutionMap combinedChildSmap = getCombinedChildSmap();
         outputSmap =
                 ExprSubstitutionMap.compose(outputSmap, combinedChildSmap, analyzer);

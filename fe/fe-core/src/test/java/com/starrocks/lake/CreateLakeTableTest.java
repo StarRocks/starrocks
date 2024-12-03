@@ -23,7 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
@@ -96,7 +96,7 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testCreateLakeTable() throws UserException {
+    public void testCreateLakeTable() throws StarRocksException {
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
@@ -137,7 +137,7 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testCreateLakeTableWithStorageCache() throws UserException {
+    public void testCreateLakeTableWithStorageCache() throws StarRocksException {
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key_cache (key1 int, key2 varchar(10))\n" +
@@ -317,7 +317,7 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testCreateLakeTableListPartition() throws UserException {
+    public void testCreateLakeTableListPartition() throws StarRocksException {
         // list partition
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.list_partition (dt date not null, key2 varchar(10))\n" +

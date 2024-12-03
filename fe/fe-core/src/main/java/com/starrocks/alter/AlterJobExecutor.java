@@ -42,7 +42,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -162,7 +162,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
                 assert table instanceof OlapTable;
                 schemaChangeHandler.process(statement.getAlterClauseList(), db, (OlapTable) table);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new AlterJobException(e.getMessage());
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
@@ -467,7 +467,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
                 isSynchronous = false;
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new AlterJobException(e.getMessage(), e);
         }
         return null;

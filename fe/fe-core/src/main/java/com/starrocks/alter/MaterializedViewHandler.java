@@ -58,7 +58,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
@@ -371,7 +371,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
             LOG.info("finished to create materialized view job: {}", mvJob.getJobId());
             return mvJob;
-        } catch (UserException exception) {
+        } catch (StarRocksException exception) {
             throw new DdlException(exception.getMessage());
         }
     }

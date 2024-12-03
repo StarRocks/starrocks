@@ -26,7 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
@@ -473,7 +473,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
     }
 
-    public static RoutineLoadDesc buildLoadDesc(List<ParseNode> loadPropertyList) throws UserException {
+    public static RoutineLoadDesc buildLoadDesc(List<ParseNode> loadPropertyList) throws StarRocksException {
         if (loadPropertyList == null) {
             return null;
         }
@@ -523,7 +523,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 partitionNames);
     }
 
-    public void checkJobProperties() throws UserException {
+    public void checkJobProperties() throws StarRocksException {
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !PROPERTIES_SET.contains(entity)).findFirst();
         if (optional.isPresent()) {
@@ -545,10 +545,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             try {
                 maxFilterRatio = Double.valueOf(maxFilterRatioStr);
             } catch (NumberFormatException exception) {
-                throw new UserException("Incorrect format of max_filter_ratio", exception);
+                throw new StarRocksException("Incorrect format of max_filter_ratio", exception);
             }
             if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
-                throw new UserException(MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
+                throw new StarRocksException(MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
             }
         }
 
@@ -594,7 +594,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 format = "avro";
                 jsonPaths = jobProperties.get(JSONPATHS);
             } else {
-                throw new UserException("Format type is invalid. format=`" + format + "`");
+                throw new StarRocksException("Format type is invalid. format=`" + format + "`");
             }
         } else {
             format = "csv"; // default csv
@@ -618,16 +618,16 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             try {
                 taskConsumeSecond = Long.parseLong(taskConsumeSecondStr);
             } catch (NumberFormatException e) {
-                throw new UserException(e.getMessage());
+                throw new StarRocksException(e.getMessage());
             }
             String taskTimeoutSecondStr = jobProperties.get(TASK_TIMEOUT_SECOND);
             try {
                 taskTimeoutSecond = Long.parseLong(taskTimeoutSecondStr);
             } catch (NumberFormatException e) {
-                throw new UserException(e.getMessage());
+                throw new StarRocksException(e.getMessage());
             }
             if (taskConsumeSecond >= taskTimeoutSecond) {
-                throw new UserException("task_timeout_second must be larger than task_consume_second");
+                throw new StarRocksException("task_timeout_second must be larger than task_consume_second");
             }
         } else if (jobProperties.containsKey(TASK_CONSUME_SECOND) || jobProperties.containsKey(TASK_TIMEOUT_SECOND)) {
             if (jobProperties.containsKey(TASK_CONSUME_SECOND)) {
@@ -635,7 +635,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 try {
                     taskConsumeSecond = Long.parseLong(taskConsumeSecondStr);
                 } catch (NumberFormatException e) {
-                    throw new UserException(e.getMessage());
+                    throw new StarRocksException(e.getMessage());
                 }
                 taskTimeoutSecond = taskConsumeSecond * TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
             }
@@ -644,7 +644,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 try {
                     taskTimeoutSecond = Long.parseLong(taskTimeoutSecondStr);
                 } catch (NumberFormatException e) {
-                    throw new UserException(e.getMessage());
+                    throw new StarRocksException(e.getMessage());
                 }
                 taskConsumeSecond = taskTimeoutSecond / TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
             }

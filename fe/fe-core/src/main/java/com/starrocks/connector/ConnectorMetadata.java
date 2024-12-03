@@ -29,7 +29,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -284,7 +284,7 @@ public interface ConnectorMetadata {
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
-    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         TableName dbTableName = stmt.getTbl();
         String dbName = dbTableName.getDb();
         Database db = getDb(dbName);
@@ -344,7 +344,7 @@ public interface ConnectorMetadata {
     default void createView(CreateViewStmt stmt) throws DdlException {
     }
 
-    default void alterView(AlterViewStmt stmt) throws DdlException, UserException {
+    default void alterView(AlterViewStmt stmt) throws DdlException, StarRocksException {
     }
 
     default CloudConfiguration getCloudConfiguration() {

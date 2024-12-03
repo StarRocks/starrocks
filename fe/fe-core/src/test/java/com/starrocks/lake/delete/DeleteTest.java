@@ -37,7 +37,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -200,7 +200,7 @@ public class DeleteTest {
     }
 
     @Test
-    public void testNormal() throws UserException, RpcException {
+    public void testNormal() throws StarRocksException, RpcException {
         setUpExpectation();
         TransactionState transactionState = new TransactionState();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
@@ -280,7 +280,7 @@ public class DeleteTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testBeDeleteFail() throws UserException {
+    public void testBeDeleteFail() throws StarRocksException {
         setUpExpectation();
         new MockUp<BrpcProxy>() {
             @Mock
@@ -365,7 +365,7 @@ public class DeleteTest {
     }
 
     @Test
-    public void testBeDeleteArrayType() throws UserException {
+    public void testBeDeleteArrayType() throws StarRocksException {
         setUpExpectationWithoutExec();
         new MockUp<BrpcProxy>() {
             @Mock

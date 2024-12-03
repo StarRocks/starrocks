@@ -18,7 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
@@ -62,7 +62,7 @@ public class StreamLoadTaskTest {
     }
 
     @Test
-    public void testAfterCommitted() throws UserException {
+    public void testAfterCommitted() throws StarRocksException {
         streamLoadTask.setCoordinator(coord);
         new Expectations() {
             {
@@ -82,7 +82,7 @@ public class StreamLoadTaskTest {
     }
 
     @Test
-    public void testAfterAborted() throws UserException {
+    public void testAfterAborted() throws StarRocksException {
         streamLoadTask.setCoordinator(coord);
         new Expectations() {
             {
@@ -120,9 +120,9 @@ public class StreamLoadTaskTest {
             }
         };
 
-        ExceptionChecker.expectThrowsWithMsg(UserException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
-        ExceptionChecker.expectThrowsWithMsg(UserException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
     }
 
@@ -171,7 +171,7 @@ public class StreamLoadTaskTest {
     }
 
     @Test
-    public void testBuildProfile() throws UserException {
+    public void testBuildProfile() throws StarRocksException {
         streamLoadTask.setCoordinator(coord);
         streamLoadTask.setIsSyncStreamLoad(true);
         new Expectations() {

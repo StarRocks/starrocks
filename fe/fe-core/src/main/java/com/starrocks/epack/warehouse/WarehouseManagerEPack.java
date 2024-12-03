@@ -11,7 +11,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.DropWarehouseLog;
@@ -92,7 +92,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getWorkersByWorkerGroup(warehouse.getAnyAvailableCluster().getWorkerGroupId());
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
             return new ArrayList<>();
         }
@@ -105,7 +105,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getWorkersByWorkerGroup(warehouse.getAnyAvailableCluster().getWorkerGroupId());
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
             return new ArrayList<>();
         }

@@ -28,7 +28,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -157,7 +157,7 @@ public class UpdatePlanner {
                 try {
                     olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(), session.getExecTimeout());
                     olapTableSink.complete();
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }
             } else if (targetTable instanceof SystemTable) {

@@ -40,7 +40,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -447,7 +447,7 @@ public class SystemInfoServiceTest {
         Assert.assertEquals(1, computeNods.size());
 
         // test seqChooseBackendOrComputeId func
-        Exception exception = Assertions.assertThrows(UserException.class, () -> {
+        Exception exception = Assertions.assertThrows(StarRocksException.class, () -> {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
         Assert.assertTrue(exception.getMessage().contains("No backend alive."));
@@ -466,7 +466,7 @@ public class SystemInfoServiceTest {
             }
         };
 
-        exception = Assert.assertThrows(UserException.class, () -> {
+        exception = Assert.assertThrows(StarRocksException.class, () -> {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
         Assert.assertTrue(exception.getMessage().contains("No backend or compute node alive."));

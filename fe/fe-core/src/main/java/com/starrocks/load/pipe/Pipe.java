@@ -27,7 +27,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -181,7 +181,7 @@ public class Pipe implements GsonPostProcessable {
     /**
      * Poll event from data source
      */
-    public void poll() throws UserException {
+    public void poll() throws StarRocksException {
         long nextPollTime = lastPolledTime + pollIntervalSecond;
         if (System.currentTimeMillis() / 1000 < nextPollTime) {
             return;

@@ -9,7 +9,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
@@ -230,7 +230,7 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
     }
 
     public TFailoverGroupHandshakeResponse handleHandshakeRequest(TFailoverGroupHandshakeRequest request)
-            throws UserException {
+            throws StarRocksException {
         FailoverGroup failoverGroup = nameToFailoverGroup.get(request.getFailover_group_name());
         if (failoverGroup == null) {
             TFailoverGroupHandshakeResponse response = new TFailoverGroupHandshakeResponse();
@@ -243,7 +243,7 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
     }
 
     public TFailoverGroupRequestMetaResponse handleRequestMetaRequest(TFailoverGroupRequestMetaRequest request)
-            throws UserException, IOException {
+            throws StarRocksException, IOException {
         FailoverGroup failoverGroup = nameToFailoverGroup.get(request.getFailover_group_name());
         if (failoverGroup == null) {
             TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();

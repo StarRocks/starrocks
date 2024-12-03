@@ -20,7 +20,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
@@ -104,7 +104,7 @@ public class CoordinatorPreprocessor {
 
     @VisibleForTesting
     CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes, ConnectContext context)
-            throws UserException {
+            throws StarRocksException {
         workerProviderFactory = newWorkerProviderFactory();
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
@@ -210,7 +210,7 @@ public class CoordinatorPreprocessor {
     /**
      * Reset state of all the fragments set in Coordinator, when retrying the same query with the fragments.
      */
-    private void resetExec() throws UserException {
+    private void resetExec() throws StarRocksException {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         workerProvider = workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
@@ -245,7 +245,7 @@ public class CoordinatorPreprocessor {
     }
 
     @VisibleForTesting
-    void computeFragmentInstances() throws UserException {
+    void computeFragmentInstances() throws StarRocksException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
             fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
         }
@@ -261,7 +261,8 @@ public class CoordinatorPreprocessor {
         executionDAG.finalizeDAG();
     }
 
-    public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws UserException {
+    public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws
+            StarRocksException {
         execFragment.getScanRangeAssignment().clear();
         for (FragmentInstance instance : execFragment.getInstances()) {
             instance.resetAllScanRanges();

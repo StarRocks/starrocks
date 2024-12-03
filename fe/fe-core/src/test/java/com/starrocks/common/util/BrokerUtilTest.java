@@ -40,7 +40,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -80,7 +80,7 @@ public class BrokerUtilTest {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Collections.singletonList("k1"));
             assertEquals(1, columns.size());
             assertEquals(Collections.singletonList("v1"), columns);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             fail();
         }
 
@@ -88,14 +88,14 @@ public class BrokerUtilTest {
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Collections.singletonList("k1"));
             fail();
-        } catch (UserException ignored) {
+        } catch (StarRocksException ignored) {
         }
 
         path = "/path/to/dir/k1=v1/xxx.csv";
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Collections.singletonList("k2"));
             fail();
-        } catch (UserException ignored) {
+        } catch (StarRocksException ignored) {
         }
 
         path = "/path/to/dir/k1=v2/k1=v1/xxx.csv";
@@ -103,7 +103,7 @@ public class BrokerUtilTest {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Collections.singletonList("k1"));
             assertEquals(1, columns.size());
             assertEquals(Collections.singletonList("v1"), columns);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             fail();
         }
 
@@ -112,7 +112,7 @@ public class BrokerUtilTest {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2"));
             assertEquals(2, columns.size());
             assertEquals(Lists.newArrayList("v1", "v2"), columns);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             fail();
         }
 
@@ -120,14 +120,14 @@ public class BrokerUtilTest {
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2"));
             fail();
-        } catch (UserException ignored) {
+        } catch (StarRocksException ignored) {
         }
 
         path = "/path/to/dir/k2=v2/k1=v1/xxx.csv";
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2", "k3"));
             fail();
-        } catch (UserException ignored) {
+        } catch (StarRocksException ignored) {
         }
 
         path = "/path/to/dir/k2=v2//k1=v1//xxx.csv";
@@ -135,7 +135,7 @@ public class BrokerUtilTest {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2"));
             assertEquals(2, columns.size());
             assertEquals(Lists.newArrayList("v1", "v2"), columns);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             fail();
         }
 
@@ -144,7 +144,7 @@ public class BrokerUtilTest {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2"));
             assertEquals(2, columns.size());
             assertEquals(Lists.newArrayList("v1", "=v2="), columns);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             fail();
         }
 
@@ -152,14 +152,14 @@ public class BrokerUtilTest {
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2"));
             fail();
-        } catch (UserException ignored) {
+        } catch (StarRocksException ignored) {
         }
 
         path = "/path/to/dir/k1=2/a/xxx.csv";
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Collections.singletonList("k1"));
             fail();
-        } catch (UserException ignored) {
+        } catch (StarRocksException ignored) {
             ignored.printStackTrace();
         }
 
@@ -168,7 +168,7 @@ public class BrokerUtilTest {
     @Test
     public void testReadFile(@Mocked TFileBrokerService.Client client, @Mocked GlobalStateMgr globalStateMgr,
                              @Injectable BrokerMgr brokerMgr)
-            throws TException, UserException {
+            throws TException, StarRocksException {
         // list response
         TBrokerListResponse listResponse = new TBrokerListResponse();
         TBrokerOperationStatus status = new TBrokerOperationStatus();
@@ -230,7 +230,7 @@ public class BrokerUtilTest {
     @Test
     public void testWriteFile(@Mocked TFileBrokerService.Client client, @Mocked GlobalStateMgr globalStateMgr,
                               @Injectable BrokerMgr brokerMgr)
-            throws TException, UserException {
+            throws TException, StarRocksException {
         // open writer response
         TBrokerOpenWriterResponse openWriterResponse = new TBrokerOpenWriterResponse();
         TBrokerOperationStatus status = new TBrokerOperationStatus();

@@ -18,7 +18,7 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CancelDecommissionDiskClause;
 import com.starrocks.epack.sql.ast.DecommissionDiskClause;
@@ -37,7 +37,7 @@ public class SystemHandlerEPack extends SystemHandler {
     @Override
     // add synchronized to avoid process 2 or more stmts at same time
     public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database dummyDb,
-                                              OlapTable dummyTbl) throws UserException {
+                                              OlapTable dummyTbl) throws StarRocksException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
         alterClause.accept(SystemHandlerEPack.Visitor.getInstance(), null);

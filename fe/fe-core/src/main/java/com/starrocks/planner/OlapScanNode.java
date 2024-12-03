@@ -74,7 +74,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
@@ -346,13 +346,13 @@ public class OlapScanNode extends ScanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
         super.init(analyzer);
         computePartitionInfo();
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
         if (isFinalized) {
             return;
         }
@@ -361,7 +361,7 @@ public class OlapScanNode extends ScanNode {
         try {
             getScanRangeLocations();
         } catch (AnalysisException e) {
-            throw new UserException(e.getMessage());
+            throw new StarRocksException(e.getMessage());
         }
 
         computeStats(analyzer);
@@ -422,9 +422,9 @@ public class OlapScanNode extends ScanNode {
     // update TScanRangeLocations based on the latest olapTable tablet distributions,
     // this function will make sure the version of each TScanRangeLocations doesn't change.
     public List<TScanRangeLocations> updateScanRangeLocations(List<TScanRangeLocations> locations)
-            throws UserException {
+            throws StarRocksException {
         if (selectedPartitionIds.size() == 0) {
-            throw new UserException("Scan node's partition is empty");
+            throw new StarRocksException("Scan node's partition is empty");
         }
         List<TScanRangeLocations> newLocations = Lists.newArrayList();
         for (TScanRangeLocations location : locations) {
@@ -440,12 +440,12 @@ public class OlapScanNode extends ScanNode {
             final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
             final Tablet selectedTablet = selectedTable.getTablet(tabletId);
             if (selectedTablet == null) {
-                throw new UserException("Tablet " + tabletId + " doesn't exist in partition " + physicalPartitionId);
+                throw new StarRocksException("Tablet " + tabletId + " doesn't exist in partition " + physicalPartitionId);
             }
 
             int schemaHash = olapTable.getSchemaHashByIndexId(selectedTable.getId());
             if (schemaHash != expectedSchemaHash) {
-                throw new UserException("Tablet " + tabletId + " schema hash " + schemaHash +
+                throw new StarRocksException("Tablet " + tabletId + " schema hash " + schemaHash +
                         " has changed, doesn't equal to expected schema hash " + expectedSchemaHash);
             }
 
@@ -465,7 +465,7 @@ public class OlapScanNode extends ScanNode {
                                 "tablet=%s replica=%s schemaHash=%d version=%d",
                         tabletId, replicaInfos, schemaHash, expectedVersion);
                 LOG.error(message);
-                throw new UserException(message);
+                throw new StarRocksException(message);
             }
 
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
@@ -506,7 +506,7 @@ public class OlapScanNode extends ScanNode {
                 tabletIsNull = false;
             }
             if (tabletIsNull) {
-                throw new UserException(tabletId + "have no alive replicas");
+                throw new StarRocksException(tabletId + "have no alive replicas");
             }
             TScanRange scanRange = new TScanRange();
             scanRange.setInternal_scan_range(internalRange);
@@ -539,7 +539,7 @@ public class OlapScanNode extends ScanNode {
                                       PhysicalPartition physicalPartition,
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
-                                      long localBeId) throws UserException {
+                                      long localBeId) throws StarRocksException {
         boolean enableQueryTabletAffinity =
                 ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableQueryTabletAffinity();
         int logNum = 0;
@@ -608,7 +608,7 @@ public class OlapScanNode extends ScanNode {
                                 "tablet=%s replica=%s schema_hash=%d version=%d",
                         tabletId, replicaInfos, schemaHash, visibleVersion);
                 LOG.error(message);
-                throw new UserException(message);
+                throw new StarRocksException(message);
             }
 
             List<Replica> replicas = null;
@@ -659,7 +659,7 @@ public class OlapScanNode extends ScanNode {
                 scanBackendIds.add(node.getId());
             }
             if (tabletIsNull) {
-                throw new UserException(tabletId + "have no alive replicas");
+                throw new StarRocksException(tabletId + "have no alive replicas");
             }
             TScanRange scanRange = new TScanRange();
             scanRange.setInternal_scan_range(internalRange);
@@ -708,7 +708,7 @@ public class OlapScanNode extends ScanNode {
         selectedIndexId = olapTable.getBaseIndexId();
     }
 
-    private void getScanRangeLocations() throws UserException {
+    private void getScanRangeLocations() throws StarRocksException {
         if (selectedPartitionIds.size() == 0) {
             return;
         }
@@ -719,7 +719,7 @@ public class OlapScanNode extends ScanNode {
         LOG.debug("distribution prune cost: {} ms", (System.currentTimeMillis() - start));
     }
 
-    private void computeTabletInfo() throws UserException {
+    private void computeTabletInfo() throws StarRocksException {
         long localBeId = -1;
         if (Config.enable_local_replica_selection) {
             localBeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()

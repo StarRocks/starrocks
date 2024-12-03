@@ -43,8 +43,8 @@ import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.LoadException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.CommandResult;
 import com.starrocks.common.util.Util;
@@ -232,7 +232,7 @@ public class SparkEtlJobHandlerTest {
                                     @Mocked CommandResult commandResult,
                                     @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                     @Mocked SparkLoadAppHandle handle)
-            throws IOException, UserException {
+            throws IOException, StarRocksException {
 
         new Expectations() {
             {
@@ -301,7 +301,7 @@ public class SparkEtlJobHandlerTest {
     public void testGetEtlJobStatusTimeout(@Mocked BrokerUtil brokerUtil, @Mocked Util util,
                                            @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                            @Mocked SparkLoadAppHandle handle)
-            throws IOException, UserException {
+            throws IOException, StarRocksException {
 
         new Expectations() {
             {
@@ -336,7 +336,7 @@ public class SparkEtlJobHandlerTest {
     public void testGetEtlJobStatusFailed(@Mocked Util util, @Mocked CommandResult commandResult,
                                           @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                           @Mocked SparkLoadAppHandle handle)
-            throws IOException, UserException {
+            throws IOException, StarRocksException {
 
         new Expectations() {
             {
@@ -378,7 +378,8 @@ public class SparkEtlJobHandlerTest {
 
     @Test
     public void testKillEtlJob(@Mocked Util util, @Mocked CommandResult commandResult,
-                               @Mocked SparkYarnConfigFiles sparkYarnConfigFiles) throws IOException, UserException {
+                               @Mocked SparkYarnConfigFiles sparkYarnConfigFiles) throws IOException,
+            StarRocksException {
         new Expectations() {
             {
                 sparkYarnConfigFiles.prepare();
@@ -476,7 +477,7 @@ public class SparkEtlJobHandlerTest {
     }
 
     @Test
-    public void testDeleteEtlOutputPath(@Mocked BrokerUtil brokerUtil) throws UserException {
+    public void testDeleteEtlOutputPath(@Mocked BrokerUtil brokerUtil) throws StarRocksException {
         new Expectations() {
             {
                 BrokerUtil.deletePath(etlOutputPath, (BrokerDesc) any);

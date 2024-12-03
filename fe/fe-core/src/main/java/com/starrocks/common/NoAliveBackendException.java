@@ -15,7 +15,7 @@
 
 package com.starrocks.common;
 
-public class NoAliveBackendException extends UserException {
+public class NoAliveBackendException extends StarRocksException {
     public NoAliveBackendException(String msg, Throwable cause) {
         super(msg, cause);
     }

@@ -18,7 +18,7 @@ package com.starrocks.common;
 /**
  * Exception for timeout, like Util.executeCommand
  */
-public class TimeoutException extends UserException {
+public class TimeoutException extends StarRocksException {
     public TimeoutException(String msg) {
         super(msg);
     }

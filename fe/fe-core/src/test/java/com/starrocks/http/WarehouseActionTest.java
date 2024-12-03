@@ -23,7 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.http.rest.RestSuccessBaseResult;
 import com.starrocks.epack.http.rest.WarehouseAction;
 import com.starrocks.epack.http.rest.WarehouseInfosBuilder;
@@ -170,7 +170,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
     @Ignore
     @Test
-    public void testGetWarehouses() throws IOException, UserException, InterruptedException {
+    public void testGetWarehouses() throws IOException, StarRocksException, InterruptedException {
         List<Warehouse> whs = ImmutableList.of(
                 new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME, 1L, null,
                                    null),
@@ -443,7 +443,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     }
 
     private Map<Long, WarehouseInfo> prepareWarehouseJobExecutingInfo(Map<Warehouse, JobExecutingInfo> whToInfo)
-            throws UserException {
+            throws StarRocksException {
         Map<Long, WarehouseInfo> whToWhInfo = whToInfo.keySet().stream().collect(Collectors.toMap(
                 Warehouse::getId,
                 WarehouseInfo::fromWarehouse
@@ -465,7 +465,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
     private void prepareJobInfo(WarehouseInfo whInfo, WarehouseInfo defaultWhInfo, Warehouse wh, JobInfo jobInfo,
                                 boolean isFinished)
-            throws UserException {
+            throws StarRocksException {
         long deltaFactor = isFinished ? -1L : 1L;
 
         // Add job info to whInfo.
@@ -538,7 +538,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     }
 
     private void addInsertLoadJobs(long whId, long numJobs, boolean isFinished, boolean isStatisticsJob)
-            throws UserException {
+            throws StarRocksException {
 
         for (int i = 0; i < numJobs; i++) {
             InsertLoadJob job = loadMgr.registerInsertLoadJob(
@@ -563,7 +563,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     }
 
     private void addRoutineJobs(Long whId, long numJobs, boolean isFinished)
-            throws UserException {
+            throws StarRocksException {
         for (int i = 0; i < numJobs; i++) {
             RoutineLoadJob job = genRoutineLoadJob(whId);
             if (isFinished) {
@@ -574,7 +574,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     }
 
     private void addStreamJobs(long whId, long numJobs, boolean isFinished)
-            throws UserException {
+            throws StarRocksException {
         for (int i = 0; i < numJobs; i++) {
             StreamLoadTask job = genStreamLoadJob(whId);
             if (isFinished) {

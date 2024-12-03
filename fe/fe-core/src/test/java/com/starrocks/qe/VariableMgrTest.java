@@ -42,7 +42,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -96,7 +96,7 @@ public class VariableMgrTest {
     }
 
     @Test
-    public void testNormal() throws IllegalAccessException, NoSuchFieldException, UserException {
+    public void testNormal() throws IllegalAccessException, NoSuchFieldException, StarRocksException {
         VariableMgr variableMgr = new VariableMgr();
         SessionVariable var = variableMgr.newSessionVariable();
         Assert.assertEquals(2147483648L, var.getMaxExecMemByte());

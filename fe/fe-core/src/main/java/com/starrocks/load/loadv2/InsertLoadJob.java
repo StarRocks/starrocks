@@ -46,7 +46,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
@@ -275,7 +275,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         if (!txnOperated) {
             return;
         }

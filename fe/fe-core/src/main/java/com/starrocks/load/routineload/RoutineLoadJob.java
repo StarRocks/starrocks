@@ -54,7 +54,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
@@ -355,7 +355,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return getEndTimestamp();
     }
 
-    protected void setOptional(CreateRoutineLoadStmt stmt) throws UserException {
+    protected void setOptional(CreateRoutineLoadStmt stmt) throws StarRocksException {
         if (stmt.getRoutineLoadDesc() != null) {
             setRoutineLoadDesc(stmt.getRoutineLoadDesc());
         }
@@ -414,7 +414,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             }
             this.confluentSchemaRegistryUrl = stmt.getConfluentSchemaRegistryUrl();
         } else {
-            throw new UserException("Invalid format type.");
+            throw new StarRocksException("Invalid format type.");
         }
         taskConsumeSecond = stmt.getTaskConsumeSecond();
         taskTimeoutSecond = stmt.getTaskTimeoutSecond();
@@ -427,7 +427,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
             if (warehouse == null) {
-                throw new UserException("Warehouse " + warehouseName + " not exists.");
+                throw new StarRocksException("Warehouse " + warehouseName + " not exists.");
             }
 
             setWarehouseId(warehouse.getId());
@@ -741,7 +741,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
-    abstract void divideRoutineLoadJob(int currentConcurrentTaskNum) throws UserException;
+    abstract void divideRoutineLoadJob(int currentConcurrentTaskNum) throws StarRocksException;
 
     public int calculateCurrentConcurrentTaskNum() throws MetaNotFoundException {
         return 0;
@@ -758,7 +758,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     // All of private method could not be call without lock
-    private void checkStateTransform(RoutineLoadJob.JobState desireState) throws UserException {
+    private void checkStateTransform(RoutineLoadJob.JobState desireState) throws StarRocksException {
         switch (state) {
             case PAUSED:
                 if (desireState == JobState.PAUSED) {
@@ -774,14 +774,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     // if rate of error data is more than max_filter_ratio, pause job
-    protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
+    protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws StarRocksException {
         updateNumOfData(attachment.getTotalRows(), attachment.getFilteredRows(), attachment.getUnselectedRows(),
                 attachment.getReceivedBytes(), attachment.getTaskExecutionTimeMs(),
                 false /* not replay */);
     }
 
     private void updateNumOfData(long numOfTotalRows, long numOfErrorRows, long unselectedRows, long receivedBytes,
-                                 long taskExecutionTime, boolean isReplay) throws UserException {
+                                 long taskExecutionTime, boolean isReplay) throws StarRocksException {
         this.totalRows += numOfTotalRows;
         this.errorRows += numOfErrorRows;
         this.unselectedRows += unselectedRows;
@@ -855,7 +855,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         try {
             updateNumOfData(attachment.getTotalRows(), attachment.getFilteredRows(), attachment.getUnselectedRows(),
                     attachment.getReceivedBytes(), attachment.getTaskExecutionTimeMs(), true /* is replay */);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.error("should not happen", e);
         }
     }
@@ -864,14 +864,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     // call before first scheduling
     // derived class can override this.
-    public void prepare() throws UserException {
+    public void prepare() throws StarRocksException {
     }
 
     private Coordinator.Factory getCoordinatorFactory() {
         return new DefaultCoordinator.Factory();
     }
 
-    public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label) throws UserException {
+    public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label) throws StarRocksException {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
@@ -915,7 +915,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             TransactionState txnState =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
             if (txnState == null) {
-                throw new UserException("txn does not exist: " + txnId);
+                throw new StarRocksException("txn does not exist: " + txnId);
             }
             txnState.addTableIndexes(planner.getDestTable());
 
@@ -998,7 +998,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // paused job or renew task
     // *** Please do not call after individually. It must be combined use with before ***
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         long taskBeId = -1L;
         try {
             if (txnOperated) {
@@ -1104,7 +1104,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 try {
                     updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.IMPOSSIBLE_ERROR_ERR, msg),
                             false /* not replay */);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     // should not happen
                     LOG.warn("failed to pause the job {}. this should not happen", id, e);
                 }
@@ -1113,7 +1113,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
             try {
                 routineLoadTaskInfo.afterVisible(txnState, txnOperated);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("failed to execute 'routineLoadTaskInfo.afterVisible', txnId {}, label {}. " +
                         "this should not happen", txnState.getTransactionId(), routineLoadTaskInfo.getLabel());
             }
@@ -1146,7 +1146,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // *** Please do not call after individually. It must be combined use with before ***
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReasonString)
-            throws UserException {
+            throws StarRocksException {
         long taskBeId = -1L;
         try {
             if (txnOperated) {
@@ -1245,7 +1245,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // check task exists or not before call method
     private void executeTaskOnTxnStatusChanged(RoutineLoadTaskInfo routineLoadTaskInfo, TransactionState txnState,
                                                TransactionStatus txnStatus, String txnStatusChangeReasonStr)
-            throws UserException {
+            throws StarRocksException {
         // step0: get progress from transaction state
         RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment =
                 (RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment();
@@ -1302,7 +1302,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     protected static void unprotectedCheckMeta(Database db, String tblName, RoutineLoadDesc routineLoadDesc)
-            throws UserException {
+            throws StarRocksException {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
 
         if (table instanceof MaterializedView) {
@@ -1336,7 +1336,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         // columns will be checked when planing
     }
 
-    public void updateState(JobState jobState, ErrorReason reason, boolean isReplay) throws UserException {
+    public void updateState(JobState jobState, ErrorReason reason, boolean isReplay) throws StarRocksException {
         writeLock();
         try {
             unprotectUpdateState(jobState, reason, isReplay);
@@ -1345,7 +1345,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
-    protected void unprotectUpdateState(JobState jobState, ErrorReason reason, boolean isReplay) throws UserException {
+    protected void unprotectUpdateState(JobState jobState, ErrorReason reason, boolean isReplay) throws
+            StarRocksException {
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                 .add("current_job_state", getState())
                 .add("desire_job_state", jobState)
@@ -1435,7 +1436,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         routineLoadTaskInfoList.clear();
     }
 
-    public void update() throws UserException {
+    public void update() throws StarRocksException {
         // check if db and table exist
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
@@ -1491,7 +1492,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected void unprotectUpdateProgress() {
     }
 
-    protected boolean unprotectNeedReschedule() throws UserException {
+    protected boolean unprotectNeedReschedule() throws StarRocksException {
         return false;
     }
 
@@ -2064,7 +2065,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
-    protected void updateSubstate(JobSubstate substate, ErrorReason reason) throws UserException {
+    protected void updateSubstate(JobSubstate substate, ErrorReason reason) throws StarRocksException {
         writeLock();
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                 .add("current_job_substate", this.substate)
@@ -2079,11 +2080,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
-    public void updateSubstateStable() throws UserException {
+    public void updateSubstateStable() throws StarRocksException {
         updateSubstate(JobSubstate.STABLE, null);
     }
 
-    public void updateSubstate() throws UserException {
+    public void updateSubstate() throws StarRocksException {
     }
 
     @Override

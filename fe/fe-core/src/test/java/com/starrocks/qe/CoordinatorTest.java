@@ -23,7 +23,7 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
@@ -78,7 +78,7 @@ public class CoordinatorTest extends PlanTestBase {
             coordinator = new DefaultCoordinator.Factory().createQueryScheduler(ctx, Lists.newArrayList(), Lists.newArrayList(),
                     new TDescriptorTable());
             coordinatorPreprocessor = coordinator.getPrepareInfo();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             System.out.println(e.getMessage());
         }
     }

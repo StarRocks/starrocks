@@ -71,9 +71,9 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.QueryDumpLog;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
-import com.starrocks.common.UserException;
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -688,7 +688,7 @@ public class StmtExecutor {
                             if (parsedStmt.isExplain() &&
                                     StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                                 if (coord != null && coord.isShortCircuit()) {
-                                    throw new UserException(
+                                    throw new StarRocksException(
                                             "short circuit point query doesn't suppot explain analyze stmt, " +
                                                     "you can set it off by using  set enable_short_circuit=false");
                                 }
@@ -710,7 +710,8 @@ public class StmtExecutor {
 
                         if (isAsync) {
                             QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
-                                    System.currentTimeMillis() + context.getSessionVariable().getProfileTimeout() * 1000L);
+                                    System.currentTimeMillis() +
+                                            context.getSessionVariable().getProfileTimeout() * 1000L);
                         } else {
                             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                         }
@@ -784,7 +785,7 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
             LOG.info("execute Exception, sql: {}, error: {}", sql, e.getMessage());
@@ -1479,7 +1480,7 @@ public class StmtExecutor {
         }
     }
 
-    private void handleAnalyzeProfileStmt() throws IOException, UserException {
+    private void handleAnalyzeProfileStmt() throws IOException, StarRocksException {
         AnalyzeProfileStmt analyzeProfileStmt = (AnalyzeProfileStmt) parsedStmt;
         String queryId = analyzeProfileStmt.getQueryId();
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
@@ -1488,7 +1489,7 @@ public class StmtExecutor {
         // For short circuit query, 'ProfileElement#plan' is null
         if (profileElement.plan == null && profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
                 !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {
-            throw new UserException(
+            throw new StarRocksException(
                     "short circuit point query doesn't suppot analyze profile stmt, " +
                             "you can set it off by using  set enable_short_circuit=false");
         }
@@ -1685,13 +1686,13 @@ public class StmtExecutor {
         }
     }
 
-    private void handleAddBackendBlackListStmt() throws UserException {
+    private void handleAddBackendBlackListStmt() throws StarRocksException {
         AddBackendBlackListStmt addBackendBlackListStmt = (AddBackendBlackListStmt) parsedStmt;
         Authorizer.check(addBackendBlackListStmt, context);
         for (Long beId : addBackendBlackListStmt.getBackendIds()) {
             SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             if (sis.getBackend(beId) == null) {
-                throw new UserException("Not found backend: " + beId);
+                throw new StarRocksException("Not found backend: " + beId);
             }
             SimpleScheduler.getHostBlacklist().addByManual(beId);
         }
@@ -1705,11 +1706,11 @@ public class StmtExecutor {
         }
     }
 
-    private void handleExecAsStmt() throws UserException {
+    private void handleExecAsStmt() throws StarRocksException {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
-    private void handleExecScriptStmt() throws IOException, UserException {
+    private void handleExecScriptStmt() throws IOException, StarRocksException {
         ShowResultSet resultSet = ExecuteScriptExecutor.execute((ExecuteScriptStmt) parsedStmt, context);
         if (isProxy) {
             proxyResultSet = resultSet;
@@ -1719,11 +1720,11 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void handleSetRole() throws PrivilegeException, UserException {
+    private void handleSetRole() throws PrivilegeException, StarRocksException {
         SetRoleExecutor.execute((SetRoleStmt) parsedStmt, context);
     }
 
-    private void handleSetDefaultRole() throws PrivilegeException, UserException {
+    private void handleSetDefaultRole() throws PrivilegeException, StarRocksException {
         SetDefaultRoleExecutor.execute((SetDefaultRoleStmt) parsedStmt, context);
     }
 
@@ -2053,7 +2054,7 @@ public class StmtExecutor {
         DeallocateStmt deallocateStmt = (DeallocateStmt) parsedStmt;
         String stmtName = deallocateStmt.getStmtName();
         if (context.getPreparedStmt(stmtName) == null) {
-            throw new UserException("PrepareStatement `" + stmtName + "` not exist");
+            throw new StarRocksException("PrepareStatement `" + stmtName + "` not exist");
         }
         context.removePreparedStmt(stmtName);
         context.getState().setOk();
@@ -2664,7 +2665,7 @@ public class StmtExecutor {
             } catch (Exception abortTxnException) {
                 LOG.warn("errors when cancel insert load job {}", jobId);
             }
-            throw new UserException(t.getMessage(), t);
+            throw new StarRocksException(t.getMessage(), t);
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
             if (insertError) {

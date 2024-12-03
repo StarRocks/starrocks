@@ -83,7 +83,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -890,7 +890,7 @@ public class RestoreJob extends AbstractJob {
         for (Function fn : functions) {
             try {
                 db.addFunction(fn, true, false);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 status = new Status(ErrCode.COMMON_ERROR, "Add Function: " + fn.signatureString() +
                         " failed when restore");
             }
@@ -1357,7 +1357,7 @@ public class RestoreJob extends AbstractJob {
                         BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
                         try {
                             HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
-                        } catch (UserException e) {
+                        } catch (StarRocksException e) {
                             status = new Status(ErrCode.COMMON_ERROR,
                                     "Get properties from " + repo.getLocation() + " error.");
                             return;
