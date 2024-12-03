@@ -417,7 +417,4 @@ public class ConfigBase {
     public static void setIsPersisted(boolean isPersisted) {
         ConfigBase.isPersisted = isPersisted;
     }
-    public static boolean isIsPersisted() {
-        return isPersisted;
-    }
 }

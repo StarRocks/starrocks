@@ -1132,23 +1132,19 @@ public class NodeMgr {
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
-            if (ConfigBase.isIsPersisted()) {
-                setFrontendConfig(stmt.getConfig().getMap());
-                List<Frontend> allFrontends = getFrontends(null);
-                int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
-                        + Config.thrift_rpc_timeout_ms;
-                StringBuilder errMsg = new StringBuilder();
-                for (Frontend fe : allFrontends) {
-                    if (fe.getHost().equals(getSelfNode().first)) {
-                        continue;
-                    }
-                    errMsg.append(callFrontNodeSetConfig(stmt, fe, timeout, errMsg));
+            setFrontendConfig(stmt.getConfig().getMap());
+            List<Frontend> allFrontends = getFrontends(null);
+            int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
+                    + Config.thrift_rpc_timeout_ms;
+            StringBuilder errMsg = new StringBuilder();
+            for (Frontend fe : allFrontends) {
+                if (fe.getHost().equals(getSelfNode().first)) {
+                    continue;
                 }
-                if (errMsg.length() > 0) {
-                    ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
-                }
-            } else {
-                ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, "set config failed, config is not persisted");
+                errMsg.append(callFrontNodeSetConfig(stmt, fe, timeout, errMsg));
+            }
+            if (errMsg.length() > 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
             }
         } else {
             Pair<String, Integer> leaderIpAndRpcPort = getLeaderIpAndRpcPort();
