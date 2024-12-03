@@ -122,44 +122,8 @@ bool OlapScanOperator::has_shared_chunk_source() const {
     return _ctx->has_active_input();
 }
 
-size_t OlapScanOperator::num_buffered_chunks() const {
-    return _ctx->get_chunk_buffer().size(_driver_sequence);
-}
-
-ChunkPtr OlapScanOperator::get_chunk_from_buffer() {
-    ChunkPtr chunk = nullptr;
-    if (_ctx->get_chunk_buffer().try_get(_driver_sequence, &chunk)) {
-        return chunk;
-    }
-    return nullptr;
-}
-
-size_t OlapScanOperator::buffer_size() const {
-    return _ctx->get_chunk_buffer().limiter()->size();
-}
-
-size_t OlapScanOperator::buffer_capacity() const {
-    return _ctx->get_chunk_buffer().limiter()->capacity();
-}
-
-size_t OlapScanOperator::buffer_memory_usage() const {
-    return _ctx->get_chunk_buffer().memory_usage();
-}
-
-size_t OlapScanOperator::default_buffer_capacity() const {
-    return _ctx->get_chunk_buffer().limiter()->default_capacity();
-}
-
-ChunkBufferTokenPtr OlapScanOperator::pin_chunk(int num_chunks) {
-    return _ctx->get_chunk_buffer().limiter()->pin(num_chunks);
-}
-
-bool OlapScanOperator::is_buffer_full() const {
-    return _ctx->get_chunk_buffer().limiter()->is_full();
-}
-
-void OlapScanOperator::set_buffer_finished() {
-    _ctx->get_chunk_buffer().set_finished(_driver_sequence);
+BalancedChunkBuffer& OlapScanOperator::get_chunk_buffer() const {
+    return _ctx->get_chunk_buffer();
 }
 
 } // namespace starrocks::pipeline
