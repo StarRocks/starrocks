@@ -205,7 +205,7 @@ public class FragmentNormalizer {
     }
 
     public Integer remapSlotId(Integer slotId) {
-        return slotIdRemapping.computeIfAbsent(new SlotId(slotId), arg -> slotIdGen.getMaxId()).asInt();
+        return slotIdRemapping.computeIfAbsent(new SlotId(slotId), arg -> slotIdGen.getNextId()).asInt();
     }
 
     public List<Integer> remapSlotIds(List<SlotId> slotIds) {
