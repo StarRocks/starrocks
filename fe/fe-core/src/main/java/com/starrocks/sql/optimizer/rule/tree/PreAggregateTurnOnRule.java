@@ -62,7 +62,9 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         boolean hasAggregation = false;
-        for (PhysicalOlapScanOperator scan : taskContext.getAllPhysicalOlapScanOperators()) {
+        List<PhysicalOlapScanOperator> scans = Lists.newArrayList();
+        Utils.extractOperator(root, scans, o -> (o instanceof PhysicalOlapScanOperator));
+        for (PhysicalOlapScanOperator scan : scans) {
             // default false
             scan.setPreAggregation(false);
             long selectedIndex = scan.getSelectedIndexId();
@@ -70,7 +72,6 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
             if (!meta.getKeysType().isAggregationFamily()) {
                 scan.setPreAggregation(true);
                 scan.setTurnOffReason("");
-                break;
             } else {
                 hasAggregation = true;
             }
