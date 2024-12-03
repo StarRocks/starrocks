@@ -110,6 +110,7 @@ public class PlanTuningAdvisor {
             row.add(String.valueOf(entry.getValue().getOriginalTimeCost()));
             row.add(entry.getValue().getTuneGuidesInfo());
             row.add(String.valueOf(entry.getValue().getAvgTunedTimeCost()));
+            row.add(String.valueOf(entry.getValue().optimizedQueryCount()));
             row.add(String.valueOf(entry.getValue().isUseful()));
             row.add(nodeName);
             result.add(row);
