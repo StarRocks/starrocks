@@ -31,7 +31,7 @@ inline bool is_numeric_ascii(char c) {
     return (c >= '0' && c <= '9');
 }
 
-inline bool parse_ipv4(const char* pos, int64_t& dst, int64_t first_octet = -1) {
+inline bool parse_ipv4(const char* pos, size_t str_len, int64_t& dst, int64_t first_octet = -1) {
     if (pos == nullptr || first_octet > IPV4_MAX_OCTET_VALUE) {
         return false;
     }
@@ -42,6 +42,10 @@ inline bool parse_ipv4(const char* pos, int64_t& dst, int64_t first_octet = -1) 
     if (first_octet >= 0) {
         result |= first_octet << offset;
         offset -= IPV4_OCTET_BITS;
+    }
+
+    if (str_len < 7 || str_len > 15) {
+        return false;
     }
 
     for (; true; offset -= IPV4_OCTET_BITS, ++pos) {

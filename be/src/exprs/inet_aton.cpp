@@ -17,8 +17,8 @@
 
 namespace starrocks {
 
-static inline bool try_parse_ipv4(const char* pos, int64& result_value) {
-    return parse_ipv4(pos, result_value);
+static inline bool try_parse_ipv4(const char* pos, size_t str_len, int64& result_value) {
+    return parse_ipv4(pos, str_len, result_value);
 }
 
 StatusOr<ColumnPtr> StringFunctions::inet_aton(FunctionContext* context, const Columns& columns) {
@@ -36,7 +36,7 @@ StatusOr<ColumnPtr> StringFunctions::inet_aton(FunctionContext* context, const C
 
         auto str_value = str_viewer.value(row);
         int64_t parsed_result;
-        if (try_parse_ipv4(str_value.get_data(), parsed_result)) {
+        if (try_parse_ipv4(str_value.get_data(), str_value.get_size(), parsed_result)) {
             result.append(parsed_result);
         } else {
             result.append_null();
