@@ -18,6 +18,7 @@
 #include <chrono>
 #include <limits>
 #include <mutex>
+#include <stdexcept>
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
@@ -1202,9 +1203,14 @@ ChunkPtr MergePathCascadeMerger::_restore_according_to_ordinal(const int32_t par
     size_t prev_row = std::numeric_limits<size_t>::max();
     size_t range_start = std::numeric_limits<size_t>::max();
 
-    auto get_original_pair = [this](size_t chunk_id) -> std::pair<ChunkPtr, size_t>& {
+    auto get_original_pair = [this](size_t chunk_id) -> std::pair<ChunkPtr, size_t> {
         std::lock_guard<std::mutex> l(_late_materialization_m);
-        return _original_chunk_buffer[chunk_id];
+        auto iter = _original_chunk_buffer.find(chunk_id);
+        if (iter != _original_chunk_buffer.end()) {
+            return iter->second;
+        } else {
+            return {nullptr, 0};
+        }
     };
 
     std::vector<bool> skip_col_ids;
@@ -1224,7 +1230,10 @@ ChunkPtr MergePathCascadeMerger::_restore_according_to_ordinal(const int32_t par
 
     auto append_original = [this, &get_original_pair, &skip_col_ids, &init_skip_col_ids](
                                    ChunkPtr& output, size_t chunk_id, size_t offset, size_t count) {
-        auto& pair = get_original_pair(chunk_id);
+        auto pair = get_original_pair(chunk_id);
+        if (pair.first == nullptr) {
+            throw std::runtime_error(fmt::format("invalid chunk_id {} in restore_according_to_ordinal", chunk_id));
+        }
         init_skip_col_ids(pair.first);
         for (size_t col = 0; col < pair.first->num_columns(); col++) {
             if (skip_col_ids[col]) {
@@ -1242,13 +1251,17 @@ ChunkPtr MergePathCascadeMerger::_restore_according_to_ordinal(const int32_t par
         }
     };
 
+    // TODO: it might be the performance bottleneck due to random row access
     for (int64_t ordinal : ordinals) {
         // The first (64 - OFFSET_BITS) bits are used for chunk_id
         // The last OFFSET_BITS bits are used for offset in chunk
         const auto chunk_id = static_cast<size_t>(ordinal) >> OFFSET_BITS;
         const auto row = static_cast<size_t>(ordinal) & MAX_CHUNK_SIZE;
         if (prev_chunk_id == -1) {
-            auto& pair = get_original_pair(chunk_id);
+            auto pair = get_original_pair(chunk_id);
+            if (pair.first == nullptr) {
+                throw std::runtime_error(fmt::format("invalid chunk_id {} in restore_according_to_ordinal", chunk_id));
+            }
             output = pair.first->clone_empty(num_rows);
             prev_chunk_id = chunk_id;
             prev_row = row;
