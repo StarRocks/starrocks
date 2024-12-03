@@ -398,6 +398,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
 
+### enable_filter_unused_columns_in_scan_stage
+
+* 描述：是否在 SCAN 阶段过滤未使用的列。由于该优化可能会导致查询被迁移的数据时发生崩溃，因此您需要在使用 [跨集群数据迁移工具](../administration/data_migration_tool.md) 迁移数据前禁用此优化。
+*  默认值：true
+* 引入版本：v3.1
+
 ### enable_gin_filter
 
 * 描述：查询时是否使用[全文倒排索引](../table_design/indexes/inverted_index.md)。
