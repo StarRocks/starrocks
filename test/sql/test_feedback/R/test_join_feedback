@@ -1,4 +1,4 @@
--- name: test_feedback
+-- name: test_join_feedback
 CREATE TABLE `c1_skew` (
   `c0` int(11) NULL COMMENT "",
   `c1` char(50) NULL COMMENT "",
