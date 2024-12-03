@@ -5,17 +5,24 @@ Node.js code to:
 2. Convert each page to a PDF file with Gotenberg.
 3. Combine the individual PDF files using Ghostscript and `pdfcombine`.
 
-## Onetime setup
-
-### Clone this repo
+## Clone this repo
 
 Clone this repo to your machine.
 
-### The conversion environment
+## Choose the branch that you want a PDF for
+
+When you launch the PDF conversion environment, it will use the active branch. So, if you want a PDF for version 3.3:
+
+```bash
+git switch branch-3.3
+```
+
+## Launch the conversion environment
 
 The conversion process uses Docker Compose. Launch the environment by running the following command from the `starrocks/docs/docusaurus/PDF/` directory.
 
 ```bash
+cd starrocks/docs/docusaurus/PDF
 docker compose up --detach --wait --wait-timeout 120 --build
 ```
 
@@ -23,7 +30,7 @@ docker compose up --detach --wait --wait-timeout 120 --build
 >
 > All of the `docker compose` commands must be run from the `starrocks/docs/docusaurus/PDF/` directory.
 
-Check the status:
+## Check the status
 
 > Tip
 >
@@ -76,7 +83,7 @@ Copy the URL of the starting page of the documentation that you would like to ge
 
 Save the URL.
 
-### Open a shell in the PDF build environment
+## Open a shell in the PDF build environment
 
 Launch a shell from the `starrocks/docs/docusaurus/PDF` directory:
 
@@ -90,7 +97,7 @@ and `cd` into the `PDF` directory:
 cd /app/docusaurus/PDF
 ```
 
-### Crawl the docs and generate the PDFs
+## Crawl the docs and generate the PDFs
 
 Run the command:
 
@@ -106,7 +113,7 @@ node generatePdf.js http://0.0.0.0:3000/zh/docs/introduction/StarRocks_intro/
 
 > Note:
 >
-> There are 900+ PDF files and more than 4,000 pages in total. Combining takes hours, just let it run.
+> There are 900+ PDF files and more than 4,000 pages in total. Combining takes five hours on my laptop, just let it run. I am looking for a faster method to combine the files.
 
 ```bash
 source .venv/bin/activate
