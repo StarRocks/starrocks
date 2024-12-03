@@ -22,7 +22,6 @@
 namespace starrocks {
 
 void TableMetrics::install(MetricRegistry* registry, const std::string& table_id) {
-    // retister in table
 #define REGISTER_TABLE_METRIC(name) registry->register_metric(#name, MetricLabels().add("table_id", table_id), &name)
 
     REGISTER_TABLE_METRIC(scan_read_bytes);
@@ -31,22 +30,33 @@ void TableMetrics::install(MetricRegistry* registry, const std::string& table_id
     REGISTER_TABLE_METRIC(tablet_sink_load_rows);
 }
 
+void TableMetrics::uninstall(MetricRegistry* registry) {
+#define UNREGISTER_TABLE_METRIC(name) registry->deregister_metric(&name)
+
+    UNREGISTER_TABLE_METRIC(scan_read_bytes);
+    UNREGISTER_TABLE_METRIC(scan_read_rows);
+    UNREGISTER_TABLE_METRIC(tablet_sink_load_bytes);
+    UNREGISTER_TABLE_METRIC(tablet_sink_load_rows);
+}
+
 void TableMetricsManager::cleanup() {
     int64_t current_second = MonotonicSeconds();
-    if (current_second - _last_cleanup_ts <= 10) {
+    if (current_second - _last_cleanup_ts <= kCleanupIntervalSeconds) {
         return;
     }
+    std::vector<TableMetricsPtr> delete_metrics;
     std::unique_lock l(_mu);
-    // @TODO we can use std::erase_if after updating phmap
     for (auto iter = _metrics_map.begin(), last = _metrics_map.end(); iter != last;) {
         if (iter->second->ref_count == 0) {
-            LOG(INFO) << "remove table metrics: " << iter->first;
+            delete_metrics.emplace_back(iter->second);
             iter = _metrics_map.erase(iter);
         } else {
             ++iter;
         }
     }
-    LOG(INFO) << "cleanup done";
+    for (auto& metrics : delete_metrics) {
+        metrics->uninstall(_metrics);
+    }
     _last_cleanup_ts = MonotonicSeconds();
 }
 

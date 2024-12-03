@@ -199,37 +199,6 @@ using CoreLocalCounter = CoreLocalMetric<T, MetricType::COUNTER>;
 template <typename T>
 using CoreLocalGauge = CoreLocalMetric<T, MetricType::GAUGE>;
 
-// template <typename T>
-// class CoreLocalCounter : public Metric {
-// public:
-//     CoreLocalCounter(MetricUnit unit) : Metric(MetricType::COUNTER, unit), _value() {}
-
-//     ~CoreLocalCounter() override = default;
-
-//     std::string to_string() const override {
-//         std::stringstream ss;
-//         ss << value();
-//         return ss.str();
-//     }
-
-//     void write_value(rj::Value& metric_obj, rj::Document::AllocatorType& allocator) override {
-//         metric_obj.AddMember("value", rj::Value(value()), allocator);
-//     }
-
-//     T value() const {
-//         T sum = 0;
-//         for (int i = 0; i < _value.size(); ++i) {
-//             sum += *_value.access_at_core(i);
-//         }
-//         return sum;
-//     }
-
-//     void increment(const T& delta) { __sync_fetch_and_add(_value.access(), delta); }
-
-// protected:
-//     CoreLocalValue<T> _value;
-// };
-
 template <typename T>
 class AtomicCounter : public AtomicMetric<T> {
 public:

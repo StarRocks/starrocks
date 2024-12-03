@@ -40,7 +40,6 @@ public:
               _polling_thread(nullptr),
               _is_polling_thread_initialized(false),
               _is_shutdown(false),
-              _num_drivers(0),
               _metrics(metrics) {}
 
     ~PipelineDriverPoller() { shutdown(); }
@@ -58,9 +57,6 @@ public:
     void park_driver(const DriverRawPtr driver);
     size_t activate_parked_driver(const ConstDriverPredicator& predicate_func);
     size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const;
-
-    // only used for collect metrics
-    size_t num_drivers() const { return _num_drivers; }
 
     void for_each_driver(const ConstDriverConsumer& call) const;
 
@@ -91,8 +87,6 @@ private:
     mutable std::mutex _global_parked_mutex;
     DriverList _parked_drivers;
 
-    // @TODO remove
-    std::atomic<size_t> _num_drivers;
     PollerMetrics* _metrics;
 };
 } // namespace starrocks::pipeline

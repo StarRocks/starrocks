@@ -248,7 +248,6 @@ void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drive
     auto& driver = *driver_it;
     driver->_pending_timer->update(driver->_pending_timer_sw->elapsed_time());
     local_blocked_drivers.erase(driver_it++);
-    // _num_drivers--;
     _metrics->poller_block_queue_len.increment(-1);
 }
 

@@ -111,7 +111,6 @@ private:
     std::string _vector_distance_column_name;
     SlotId _vector_slot_id;
 
-    // TableMetricsPtr _table_metrics;
     std::shared_ptr<starrocks::TableMetrics> _table_metrics;
 
     // The following are profile meatures

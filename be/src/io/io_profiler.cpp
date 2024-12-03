@@ -252,6 +252,8 @@ const char* IOProfiler::tag_to_string(uint32_t tag) {
         return "MIGRATE";
     case TAG_SIZE:
         return "SIZE";
+    case TAG_SPILL:
+        return "SPILL";
     default:
         return "UNKNOWN";
     }

@@ -73,7 +73,7 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
 
 void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
-    driver->finalize(runtime_state, state, _schedule_count, _driver_execution_ns);
+    driver->finalize(runtime_state, state);
 }
 
 void GlobalDriverExecutor::_worker_thread() {
@@ -93,8 +93,6 @@ void GlobalDriverExecutor::_worker_thread() {
             current_thread->set_idle(true);
         }
 
-        // update running tasks
-        // update pending tasks??
         auto maybe_driver = _get_next_driver(local_driver_queue);
         if (maybe_driver.status().is_cancelled()) {
             return;
@@ -113,8 +111,6 @@ void GlobalDriverExecutor::_worker_thread() {
         auto* fragment_ctx = driver->fragment_ctx();
 
         driver->increment_schedule_times();
-        // _schedule_count++;
-        // _metrics->exec_pending_tasks.increment(-1);
         _metrics->driver_schedule_count.increment(1);
 
         SCOPED_SET_TRACE_INFO(driver->driver_id(), query_ctx->query_id(), fragment_ctx->fragment_instance_id());

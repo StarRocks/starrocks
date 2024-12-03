@@ -29,7 +29,6 @@ class DriverQueueMetrics;
 class DriverQueue {
 public:
     DriverQueue(DriverQueueMetrics* metrics) : _metrics(metrics) {}
-    // @TODO metrics
     virtual ~DriverQueue() = default;
     virtual void close() = 0;
 

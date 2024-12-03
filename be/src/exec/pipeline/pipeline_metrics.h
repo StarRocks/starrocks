@@ -19,9 +19,7 @@
 namespace starrocks {
 class MetricRegistry;
 namespace pipeline {
-// metrics about pipeline execution
-// poller
-// executor
+
 struct ScanExecutorMetrics {
     METRIC_DEFINE_INT_COUNTER(execution_time, MetricUnit::NANOSECONDS);
     METRIC_DEFINE_INT_COUNTER(finished_tasks, MetricUnit::NOUNIT);

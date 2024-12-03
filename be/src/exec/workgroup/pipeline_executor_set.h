@@ -42,7 +42,6 @@ struct PipelineExecutorSetConfig {
     const bool enable_bind_cpus;
     bool enable_cpu_borrowing;
 
-    // @TODO metrics
     pipeline::PipelineExecutorMetrics* metrics;
 };
 

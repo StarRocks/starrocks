@@ -23,16 +23,25 @@ namespace starrocks {
 
 struct TableMetrics {
     void install(MetricRegistry* registry, const std::string& table_id);
+    void uninstall(MetricRegistry* registry);
 
     METRIC_DEFINE_INT_COUNTER(scan_read_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(scan_read_rows, MetricUnit::ROWS);
     METRIC_DEFINE_INT_COUNTER(tablet_sink_load_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(tablet_sink_load_rows, MetricUnit::BYTES);
     int32_t ref_count = 0;
-    // std::atomic<int> ref_count = 0;
 };
 using TableMetricsPtr = std::shared_ptr<TableMetrics>;
 
+// TableMetricsManager is used to manage all TableMetrics on BE and maintain the mapping from table_id to TableMetrics.
+// The life cycle of TableMetrics is bound to Tablet.
+// When the first tablet under the table is created, the TableMetrics is registered.
+// When the last tablet under the table is released, the TableMetrics is unregistered.
+
+// Considering that the interface for obtaining metrics is usually called periodically,
+// in order to ensure data accuracy, we must ensure that the metrics can still be queried for a period of time
+// after the last Tablet is released,
+// so the real deletion will be done asynchronously by daemon thread.
 class TableMetricsManager {
 public:
     TableMetricsManager(MetricRegistry* metrics) : _metrics(metrics) {}
@@ -48,17 +57,14 @@ public:
             is_created = ret;
         }
         if (is_created) {
-            LOG(INFO) << "register table metrics: " << table_id;
             metrics_ptr->install(_metrics, std::to_string(table_id));
         }
-        // register metrics?
     }
     void unregister_table(uint64_t table_id) {
         std::unique_lock l(_mu);
         DCHECK(_metrics_map.contains(table_id));
         auto metrics_ptr = _metrics_map.at(table_id);
         metrics_ptr->ref_count--;
-        LOG(INFO) << "unregister table metrics: " << table_id << "ref: " << metrics_ptr->ref_count;
     }
 
     TableMetricsPtr get_table_metrics(uint64_t table_id) {
@@ -75,6 +81,8 @@ private:
     phmap::flat_hash_map<uint64_t, TableMetricsPtr> _metrics_map;
     // used for cleanup
     int64_t _last_cleanup_ts = 0;
+
+    static const int64_t kCleanupIntervalSeconds = 300;
 };
 
 } // namespace starrocks
