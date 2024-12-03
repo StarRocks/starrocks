@@ -35,7 +35,7 @@ FE 负责元数据管理、客户端连接管理、查询规划和查询调度�
 
 | **FE 角色** | **元数据管理** | **节点选主**                |
 | ----------- | ----------------------- | ---------------------------------- |
-| Leader 节点 | Leader FE 负责读写元数据。Follower 节点和 Observer 节点只能读取元数据，并将元数据写请求路由到 Leader FE。Leader FE 更新元数据，然后使用 BDE JE 将元数据更改同步到 Follower 节点和 Observer 节点。只有在元数据更改同步到超过一半的Follower 节点后，数据写入才被认为成功。 | Leader FE 技术上也是一个 Follower 节点，是从Follower 节点中选举出来的。要执行主节点选举，集群中必须有超过一半的Follower 节点处于活动状态。当 Leader FE 发生故障时，Follower 节点将开始另一轮主节点选举。 |
+| Leader 节点 | Leader FE 负责读写元数据。Follower 节点和 Observer 节点只能读取元数据，并将元数据写请求路由到 Leader FE。Leader FE 更新元数据，然后使用 BDB JE 将元数据更改同步到 Follower 节点和 Observer 节点。只有在元数据更改同步到超过一半的Follower 节点后，数据写入才被认为成功。 | Leader FE 技术上也是一个 Follower 节点，是从Follower 节点中选举出来的。要执行主节点选举，集群中必须有超过一半的Follower 节点处于活动状态。当 Leader FE 发生故障时，Follower 节点将开始另一轮主节点选举。 |
 | Follower 节点 | Follower 节点只能读取元数据。它们从 Leader FE 同步和重放日志以更新元数据。 | Follower 节点参与主节点选举，这需要集群中超过一半的 Follower 节点处于活动状态。 |
 | Observer 节点 | Observer 节点从 Leader FE 同步和重放日志以更新元数据。 | Observer 节点 主要用于增加集群的查询并发性。 Observer 节点不参与主节点选举，因此不会增加集群的主节点选举压力。|
 
