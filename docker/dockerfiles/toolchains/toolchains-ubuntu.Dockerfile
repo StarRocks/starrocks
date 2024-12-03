@@ -3,7 +3,7 @@
 
 FROM ubuntu:22.04
 
-Install common libraries and tools that are needed for dev environment
+# Install common libraries and tools that are needed for dev environment
 RUN apt-get update -y && \
     apt-get install --no-install-recommends -y \
     automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 make cmake gcc g++ openjdk-17-jdk git patch lld bzip2 \
@@ -12,6 +12,7 @@ RUN apt-get update -y && \
     locale-gen en_US.UTF-8 && \
     rm -rf /var/lib/apt/lists/*
 
+# Set the soft link to jvm
 RUN ARCH=`uname -m` && \
     cd /lib/jvm && \
     if [[ $ARCH == "aarch64" ]] ; then ln -s java-17-openjdk-arm64 java-17-openjdk ; else ln -s java-17-openjdk-amd64 java-17-openjdk  ; fi ;
