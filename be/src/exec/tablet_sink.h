@@ -42,6 +42,7 @@ class AddBatchCounter;
 class NodeChannel;
 class IndexChannel;
 class TabletSinkSender;
+class TableMetrics;
 
 // Write data to Olap Table.
 // When OlapTableSink::open() called, there will be a consumer thread running in the background.
@@ -255,6 +256,7 @@ private:
     int64_t _automatic_bucket_size = 0;
     std::set<int64_t> _immutable_partition_ids;
     RuntimeState* _state = nullptr;
+    std::shared_ptr<TableMetrics> _table_metrics;
 
     PLoadChannelProfileConfig _load_channel_profile_config;
 };

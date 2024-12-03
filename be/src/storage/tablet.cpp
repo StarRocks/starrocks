@@ -66,6 +66,7 @@
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/ratelimit.h"
+#include "util/starrocks_metrics.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -85,6 +86,8 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
     _max_version_schema = BaseTablet::tablet_schema();
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    // register metrics
+    StarRocksMetrics::instance()->table_metrics_mgr()->register_table(_tablet_meta->table_id());
 }
 
 Tablet::Tablet() {
@@ -93,6 +96,7 @@ Tablet::Tablet() {
 
 Tablet::~Tablet() {
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    StarRocksMetrics::instance()->table_metrics_mgr()->unregister_table(_tablet_meta->table_id());
 }
 
 Status Tablet::_init_once_action() {
@@ -106,6 +110,7 @@ Status Tablet::_init_once_action() {
     }
 
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
+    // StarRocksMetrics::instance()->table_metrics_mgr()->register_table(_tablet_meta->table_id());
     if (keys_type() == PRIMARY_KEYS) {
         _updates = std::make_unique<TabletUpdates>(*this);
         Status st = _updates->init();

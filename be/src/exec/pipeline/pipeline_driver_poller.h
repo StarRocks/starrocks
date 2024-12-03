@@ -28,17 +28,20 @@ namespace starrocks::pipeline {
 
 class PipelineDriverPoller;
 using PipelineDriverPollerPtr = std::unique_ptr<PipelineDriverPoller>;
+class PollerMetrics;
 
 class PipelineDriverPoller {
 public:
-    explicit PipelineDriverPoller(std::string name, DriverQueue* driver_queue, CpuUtil::CpuIds cpuids)
+    explicit PipelineDriverPoller(std::string name, DriverQueue* driver_queue, CpuUtil::CpuIds cpuids,
+                                  PollerMetrics* metrics)
             : _name(std::move(name)),
               _cpud_ids(std::move(cpuids)),
               _driver_queue(driver_queue),
               _polling_thread(nullptr),
               _is_polling_thread_initialized(false),
               _is_shutdown(false),
-              _num_drivers(0) {}
+              _num_drivers(0),
+              _metrics(metrics) {}
 
     ~PipelineDriverPoller() { shutdown(); }
 
@@ -88,6 +91,8 @@ private:
     mutable std::mutex _global_parked_mutex;
     DriverList _parked_drivers;
 
+    // @TODO remove
     std::atomic<size_t> _num_drivers;
+    PollerMetrics* _metrics;
 };
 } // namespace starrocks::pipeline

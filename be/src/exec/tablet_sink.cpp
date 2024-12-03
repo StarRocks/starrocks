@@ -65,6 +65,7 @@
 #include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
 #include "util/stack_util.h"
+#include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/uid_util.h"
@@ -163,7 +164,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _load_channel_profile_config.set_runtime_profile_report_interval_ns(
                 query_ctx->get_runtime_profile_report_interval_ns());
     }
-
+    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
     return Status::OK();
 }
 
@@ -741,6 +742,8 @@ Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblo
     state->update_num_bytes_load_sink(serialize_size);
     StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
     StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
+    _table_metrics->tablet_sink_load_rows.increment(num_rows);
+    _table_metrics->tablet_sink_load_bytes.increment(serialize_size);
 
     SCOPED_TIMER(_ts_profile->send_data_timer);
     return _tablet_sink_sender->send_chunk(_schema.get(), _partitions, _tablet_indexes, _validate_select_idx,
