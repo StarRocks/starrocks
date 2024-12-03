@@ -29,7 +29,8 @@ INNER JOIN (join-predicate [2: v2 = 5: v5 AND 1: v1 > 4: v4] post-join-predicate
 select v1 from t0 inner join t1 on v1 = v2
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2] predicate[1: v1 = 2: v2])
+    PREDICATE 1: v1 = 2: v2
+        SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
         SCAN (columns[4: v4] predicate[null])
 [end]
@@ -38,7 +39,8 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
 select v1 from t0 inner join t1 where v1 = v2 and v2 = 5
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2] predicate[1: v1 = 2: v2 AND 2: v2 = 5 AND 1: v1 = 5])
+    PREDICATE 1: v1 = 2: v2
+        SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 5 AND 1: v1 = 5])
     EXCHANGE BROADCAST
         SCAN (columns[4: v4] predicate[null])
 [end]
@@ -274,3 +276,4 @@ AGGREGATE ([GLOBAL] aggregate [{}] group by [[2: v2, 5: v5]] having [null]
                 EXCHANGE BROADCAST
                     SCAN (columns[4: v4, 5: v5] predicate[null])
 [end]
+

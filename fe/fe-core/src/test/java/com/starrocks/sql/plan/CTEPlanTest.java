@@ -839,10 +839,10 @@ public class CTEPlanTest extends PlanTestBase {
         defaultCTEReuse();
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setEnableLambdaPushdown(true);
-
-        assertContains(plan, "predicates: CAST(CAST(CAST(4: array_min AS SMALLINT) + 1 AS INT) + " +
-                "CAST(CAST(4: array_min AS SMALLINT) + 2 AS INT) AS BIGINT) + CAST(CAST(4: array_min AS SMALLINT) + " +
-                "3 AS BIGINT) < 10");
+        assertContains(plan, "  |  predicates: " +
+                "CAST(CAST(9: cast + 1 AS INT) + CAST(9: cast + 2 AS INT) AS BIGINT) + CAST(9: cast + 3 AS BIGINT) < 10\n" +
+                "  |    common sub expr:\n" +
+                "  |    <slot 9> : CAST(4: array_min AS SMALLINT)");
     }
 
     @Test
@@ -867,13 +867,13 @@ public class CTEPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableLambdaPushdown(true);
         defaultCTEReuse();
         String plan = getFragmentPlan(sql);
-
-        assertContains(plan,
-                "CAST(CAST(CAST(array_min(array_map(<slot 3> -> coalesce(<slot 3>, 0), [1,2,3])) " +
-                        "AS SMALLINT) + 1 AS INT) + CAST(CAST(array_min(array_map(<slot 3> -> " +
-                        "coalesce(<slot 3>, 0), [1,2,3])) AS SMALLINT) + 2 AS INT) AS BIGINT) + " +
-                        "CAST(CAST(array_min(array_map(<slot 3> -> coalesce(<slot 3>, 0), [1,2,3])) AS SMALLINT) + " +
-                        "3 AS BIGINT) < 10");
+        assertContains(plan, "  1:SELECT\n" +
+                "  |  predicates: " +
+                "CAST(CAST(14: cast + 1 AS INT) + CAST(14: cast + 2 AS INT) AS BIGINT) + CAST(14: cast + 3 AS BIGINT) < 10\n" +
+                "  |    common sub expr:\n" +
+                "  |    <slot 12> : array_map(<slot 3> -> coalesce(<slot 3>, 0), [1,2,3])\n" +
+                "  |    <slot 13> : array_min(12: array_map)\n" +
+                "  |    <slot 14> : CAST(13: array_min AS SMALLINT)");
     }
 
     @Test

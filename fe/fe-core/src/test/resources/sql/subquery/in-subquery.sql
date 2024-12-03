@@ -190,7 +190,8 @@ LEFT SEMI JOIN (join-predicate [3: v3 = 5: v4] post-join-predicate [null])
             AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[3: v3]] having [null]
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE SHUFFLE[5]
-        SCAN (columns[5: v4, 6: v5, 7: v6] predicate[5: v4 IS NOT NULL AND 6: v5 = 7: v6])
+        PREDICATE 6: v5 = 7: v6
+            SCAN (columns[5: v4, 6: v5, 7: v6] predicate[5: v4 IS NOT NULL])
 [end]
 
 [sql]
@@ -241,7 +242,8 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [3: v3 = 5: v4] post-join-predicate [n
             AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[3: v3]] having [null]
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v4, 6: v5, 7: v6] predicate[6: v5 = 7: v6])
+        PREDICATE 6: v5 = 7: v6
+            SCAN (columns[5: v4, 6: v5, 7: v6] predicate[null])
 [end]
 
 [sql]
@@ -703,7 +705,8 @@ select t0.v1 from t0 where (v1 + 10, v2 + v2) IN (select t1.v4 + t1.v5, t1.v5 fr
 LEFT SEMI JOIN (join-predicate [9: add = 7: expr AND 10: add = 5: v5] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4, 5: v5] predicate[add(4: v4, 5: v5) IS NOT NULL AND 5: v5 IS NOT NULL])
+        PREDICATE 7: expr IS NOT NULL
+            SCAN (columns[4: v4, 5: v5] predicate[5: v5 IS NOT NULL])
 [end]
 
 [sql]
@@ -724,3 +727,4 @@ LEFT SEMI JOIN (join-predicate [15: cast = 16: cast AND 17: cast = 18: cast] pos
         PREDICATE cast(aa as double) IS NOT NULL
             VALUES (null)
 [end]
+

@@ -1,88 +1,92 @@
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:6: O_ORDERPRIORITY | 29: count
-PARTITION: UNPARTITIONED
+ OUTPUT EXPRS:6: O_ORDERPRIORITY | 29: count
+  PARTITION: UNPARTITIONED
 
-RESULT SINK
+  RESULT SINK
 
-11:MERGING-EXCHANGE
+  12:MERGING-EXCHANGE
 
 PLAN FRAGMENT 1
-OUTPUT EXPRS:
-PARTITION: HASH_PARTITIONED: 6: O_ORDERPRIORITY
+ OUTPUT EXPRS:
+  PARTITION: HASH_PARTITIONED: 6: O_ORDERPRIORITY
 
-STREAM DATA SINK
-EXCHANGE ID: 11
-UNPARTITIONED
+  STREAM DATA SINK
+    EXCHANGE ID: 12
+    UNPARTITIONED
 
-10:SORT
-|  order by: <slot 6> 6: O_ORDERPRIORITY ASC
-|  offset: 0
-|
-9:AGGREGATE (merge finalize)
-|  output: count(29: count)
-|  group by: 6: O_ORDERPRIORITY
-|
-8:EXCHANGE
+  11:SORT
+  |  order by: <slot 6> 6: O_ORDERPRIORITY ASC
+  |  offset: 0
+  |  
+  10:AGGREGATE (merge finalize)
+  |  output: count(29: count)
+  |  group by: 6: O_ORDERPRIORITY
+  |  
+  9:EXCHANGE
 
 PLAN FRAGMENT 2
-OUTPUT EXPRS:
-PARTITION: RANDOM
+ OUTPUT EXPRS:
+  PARTITION: RANDOM
 
-STREAM DATA SINK
-EXCHANGE ID: 08
-HASH_PARTITIONED: 6: O_ORDERPRIORITY
+  STREAM DATA SINK
+    EXCHANGE ID: 09
+    HASH_PARTITIONED: 6: O_ORDERPRIORITY
 
-7:AGGREGATE (update serialize)
-|  STREAMING
-|  output: count(*)
-|  group by: 6: O_ORDERPRIORITY
-|
-6:Project
-|  <slot 6> : 6: O_ORDERPRIORITY
-|
-5:HASH JOIN
-|  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
-|  colocate: false, reason:
-|  equal join conjunct: 11: L_ORDERKEY = 1: O_ORDERKEY
-|
-|----4:EXCHANGE
-|
-1:Project
-|  <slot 11> : 11: L_ORDERKEY
-|
-0:OlapScanNode
-TABLE: lineitem
-PREAGGREGATION: ON
-PREDICATES: 23: L_RECEIPTDATE > 22: L_COMMITDATE
-partitions=1/1
-rollup: lineitem
-tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-cardinality=300000000
-avgRowSize=16.0
+  8:AGGREGATE (update serialize)
+  |  STREAMING
+  |  output: count(*)
+  |  group by: 6: O_ORDERPRIORITY
+  |  
+  7:Project
+  |  <slot 6> : 6: O_ORDERPRIORITY
+  |  
+  6:HASH JOIN
+  |  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
+  |  colocate: false, reason: 
+  |  equal join conjunct: 11: L_ORDERKEY = 1: O_ORDERKEY
+  |  
+  |----5:EXCHANGE
+  |    
+  2:SELECT
+  |  predicates: 23: L_RECEIPTDATE > 22: L_COMMITDATE
+  |  
+  1:Project
+  |  <slot 11> : 11: L_ORDERKEY
+  |  <slot 22> : 22: L_COMMITDATE
+  |  <slot 23> : 23: L_RECEIPTDATE
+  |  
+  0:OlapScanNode
+     TABLE: lineitem
+     PREAGGREGATION: ON
+     partitions=1/1
+     rollup: lineitem
+     tabletRatio=20/20
+     tabletList=10294,10296,10298,10300,10302,10304,10306,10308,10310,10312 ...
+     cardinality=600000000
+     avgRowSize=16.0
 
 PLAN FRAGMENT 3
-OUTPUT EXPRS:
-PARTITION: RANDOM
+ OUTPUT EXPRS:
+  PARTITION: RANDOM
 
-STREAM DATA SINK
-EXCHANGE ID: 04
-BUCKET_SHUFFLE_HASH_PARTITIONED: 1: O_ORDERKEY
+  STREAM DATA SINK
+    EXCHANGE ID: 05
+    BUCKET_SHUFFLE_HASH_PARTITIONED: 1: O_ORDERKEY
 
-3:Project
-|  <slot 1> : 1: O_ORDERKEY
-|  <slot 6> : 6: O_ORDERPRIORITY
-|
-2:OlapScanNode
-TABLE: orders
-PREAGGREGATION: ON
-PREDICATES: 5: O_ORDERDATE >= '1994-09-01', 5: O_ORDERDATE < '1994-12-01'
-partitions=1/1
-rollup: orders
-tabletRatio=10/10
-tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
-cardinality=5574948
-avgRowSize=27.0
+  4:Project
+  |  <slot 1> : 1: O_ORDERKEY
+  |  <slot 6> : 6: O_ORDERPRIORITY
+  |  
+  3:OlapScanNode
+     TABLE: orders
+     PREAGGREGATION: ON
+     PREDICATES: 5: O_ORDERDATE >= '1994-09-01', 5: O_ORDERDATE < '1994-12-01'
+     partitions=1/1
+     rollup: orders
+     tabletRatio=10/10
+     tabletList=10220,10222,10224,10226,10228,10230,10232,10234,10236,10238
+     cardinality=5574948
+     avgRowSize=27.0
 [end]
 

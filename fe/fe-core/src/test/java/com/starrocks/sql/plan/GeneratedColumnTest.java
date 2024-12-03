@@ -90,7 +90,7 @@ public class GeneratedColumnTest extends PlanTestBase {
         sql = "select v1 from tmc where v1+v2 = v2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "OUTPUT EXPRS:1: v1");
-        assertContains(plan, "PREDICATES: 4: v4 = 2: v2");
+        assertContains(plan, "predicates: 4: v4 = 2: v2");
 
         sql = "select v1+v2 from tmc where v1+v2 = 2";
         plan = getFragmentPlan(sql);

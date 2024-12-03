@@ -62,7 +62,6 @@ AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(29: sum)}] group by [[]] having [nul
                     SCAN (columns[18: P_PARTKEY, 21: P_BRAND, 23: P_SIZE, 24: P_CONTAINER] predicate[21: P_BRAND IN (Brand#45, Brand#11) AND 24: P_CONTAINER IN (SM CASE, SM BOX, SM PACK, SM PKG, MED BAG, MED BOX, MED PKG, MED PACK)])
 [end]
 
-
 /**
  * ScalarRangePredicateExtractor
 */
@@ -151,7 +150,8 @@ INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
 select v1 from t0 inner join t1 on v3 = v4 where (v1 = 1 AND v2 = 2) OR (v2 = 4 AND v1 = v3)
 [result]
 INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 1 AND 2: v2 = 2 OR 2: v2 = 4 AND 1: v1 = 3: v3 AND 2: v2 IN (2, 4)])
+    PREDICATE 1: v1 = 1 AND 2: v2 = 2 OR 2: v2 = 4 AND 1: v1 = 3: v3
+        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (2, 4)])
     EXCHANGE BROADCAST
         SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
 [end]
@@ -168,7 +168,8 @@ INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
 [sql]
 select v1 from t0 where (v1 = 1 or v1 = 2) and v2 = v3
 [result]
-SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 IN (1, 2) AND 2: v2 = 3: v3])
+PREDICATE 2: v2 = 3: v3
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 IN (1, 2)])
 [end]
 
 [sql]
@@ -180,7 +181,8 @@ SCAN (columns[1: v1, 2: v2] predicate[1: v1 = 1 AND 2: v2 = 2 OR 1: v1 = 3 AND 1
 [sql]
 select v1 from t0 where (v1 = 1 or v1 = 2) and v2 = v1
 [result]
-SCAN (columns[1: v1, 2: v2] predicate[1: v1 IN (1, 2) AND 2: v2 = 1: v1])
+PREDICATE 2: v2 = 1: v1
+    SCAN (columns[1: v1, 2: v2] predicate[1: v1 IN (1, 2)])
 [end]
 
 [sql]

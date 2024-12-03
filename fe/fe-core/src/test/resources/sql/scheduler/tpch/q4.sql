@@ -10,13 +10,13 @@ PLAN FRAGMENT 1(F03)
   INSTANCES
     INSTANCE(1-F03#0)
       DESTINATIONS: 0-F04#0
-      BE: 10003
+      BE: 10001
     INSTANCE(2-F03#1)
       DESTINATIONS: 0-F04#0
       BE: 10002
     INSTANCE(3-F03#2)
       DESTINATIONS: 0-F04#0
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 2(F00)
   DOP: 16
@@ -104,48 +104,48 @@ PLAN FRAGMENT 0
 
   RESULT SINK
 
-  11:MERGING-EXCHANGE
+  12:MERGING-EXCHANGE
 
 PLAN FRAGMENT 1
  OUTPUT EXPRS:
   PARTITION: HASH_PARTITIONED: 6: o_orderpriority
 
   STREAM DATA SINK
-    EXCHANGE ID: 11
+    EXCHANGE ID: 12
     UNPARTITIONED
 
-  10:SORT
+  11:SORT
   |  order by: <slot 6> 6: o_orderpriority ASC
   |  offset: 0
   |  
-  9:AGGREGATE (merge finalize)
+  10:AGGREGATE (merge finalize)
   |  output: count(28: count)
   |  group by: 6: o_orderpriority
   |  
-  8:EXCHANGE
+  9:EXCHANGE
 
 PLAN FRAGMENT 2
  OUTPUT EXPRS:
   PARTITION: RANDOM
 
   STREAM DATA SINK
-    EXCHANGE ID: 08
+    EXCHANGE ID: 09
     HASH_PARTITIONED: 6: o_orderpriority
 
-  7:AGGREGATE (update serialize)
+  8:AGGREGATE (update serialize)
   |  STREAMING
   |  output: count(*)
   |  group by: 6: o_orderpriority
   |  
-  6:Project
+  7:Project
   |  <slot 6> : 6: o_orderpriority
   |  
-  5:HASH JOIN
+  6:HASH JOIN
   |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)
   |  colocate: false, reason: 
   |  equal join conjunct: 1: o_orderkey = 10: L_ORDERKEY
   |  
-  |----4:EXCHANGE
+  |----5:EXCHANGE
   |    
   1:Project
   |  <slot 1> : 1: o_orderkey
@@ -167,16 +167,20 @@ PLAN FRAGMENT 3
   PARTITION: RANDOM
 
   STREAM DATA SINK
-    EXCHANGE ID: 04
+    EXCHANGE ID: 05
     BUCKET_SHUFFLE_HASH_PARTITIONED: 10: L_ORDERKEY
 
+  4:SELECT
+  |  predicates: 22: L_RECEIPTDATE > 21: L_COMMITDATE
+  |  
   3:Project
   |  <slot 10> : 10: L_ORDERKEY
+  |  <slot 21> : 21: L_COMMITDATE
+  |  <slot 22> : 22: L_RECEIPTDATE
   |  
   2:OlapScanNode
      TABLE: lineitem
      PREAGGREGATION: ON
-     PREDICATES: 22: L_RECEIPTDATE > 21: L_COMMITDATE
      partitions=1/1
      rollup: lineitem
      tabletRatio=20/20
