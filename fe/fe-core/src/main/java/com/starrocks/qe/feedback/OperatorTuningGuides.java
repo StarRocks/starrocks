@@ -53,6 +53,10 @@ public class OperatorTuningGuides {
         return tuningGuides.isEmpty();
     }
 
+    public long optimizedQueryCount() {
+        return optimizedRecords.estimatedSize();
+    }
+
     public void addOptimizedRecord(UUID queryId, long timeCost) {
         optimizedRecords.put(queryId, timeCost);
     }

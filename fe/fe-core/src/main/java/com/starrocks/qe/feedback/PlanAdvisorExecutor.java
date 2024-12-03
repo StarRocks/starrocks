@@ -44,6 +44,7 @@ public class PlanAdvisorExecutor {
                     .addColumn(new Column("query_time", Type.STRING))
                     .addColumn(new Column("tuning_guides", Type.STRING))
                     .addColumn(new Column("avg_tuned_query_time", Type.STRING))
+                    .addColumn(new Column("optimized_query_count", Type.STRING))
                     .addColumn(new Column("is_useful", Type.STRING))
                     .addColumn(new Column("fe_node", Type.STRING))
                     .build();
