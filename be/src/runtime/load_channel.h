@@ -126,6 +126,8 @@ private:
     void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
+    bool _should_enable_profile();
+    std::vector<std::shared_ptr<TabletsChannel>> _get_all_channels();
 
     LoadChannelMgr* _load_mgr;
     LakeTabletManager* _lake_tablet_mgr;
@@ -163,9 +165,15 @@ private:
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     std::atomic<int64_t> _last_report_time_ns{0};
     std::atomic<bool> _final_report{false};
+    std::atomic<bool> _is_reporting_profile{false};
 
     RuntimeProfile::Counter* _index_num = nullptr;
     RuntimeProfile::Counter* _peak_memory_usage = nullptr;
+    RuntimeProfile::Counter* _deserialize_chunk_count = nullptr;
+    RuntimeProfile::Counter* _deserialize_chunk_timer = nullptr;
+    RuntimeProfile::Counter* _profile_report_count = nullptr;
+    RuntimeProfile::Counter* _profile_report_timer = nullptr;
+    RuntimeProfile::Counter* _profile_serialized_size = nullptr;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {

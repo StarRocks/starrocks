@@ -61,7 +61,7 @@ public:
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                           PTabletWriterAddBatchResult* response) = 0;
+                           PTabletWriterAddBatchResult* response, bool* close_channel_ptr) = 0;
 
     virtual void cancel() = 0;
 
@@ -71,6 +71,8 @@ public:
 
     // timeout: in microseconds
     virtual bool drain_senders(int64_t timeout, const std::string& log_msg);
+
+    virtual void update_profile() = 0;
 
 protected:
     bool _is_immutable_partition_empty() const {
