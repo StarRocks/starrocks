@@ -345,15 +345,11 @@ public class TransactionState implements Writable {
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
     public void writeLock() {
-        if (Config.lock_manager_enable_using_fine_granularity_lock) {
-            txnLock.writeLock().lock();
-        }
+        txnLock.writeLock().lock();
     }
 
     public void writeUnlock() {
-        if (Config.lock_manager_enable_using_fine_granularity_lock) {
-            txnLock.writeLock().unlock();
-        }
+        txnLock.writeLock().unlock();
     }
 
     public TransactionState() {
@@ -885,7 +881,8 @@ public class TransactionState implements Writable {
         if (publishBackends.isEmpty()) {
             // note: tasks are sent to all backends including dead ones, or else
             // transaction manager will treat it as success
-            List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+            List<Long> allBackends =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
             if (!allBackends.isEmpty()) {
                 publishBackends = Sets.newHashSet();
                 publishBackends.addAll(allBackends);

@@ -781,7 +781,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         for (TransactionState transactionState : transactionStates) {
             try {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
-                dbTransactionMgr.unprotectUpsertTransactionState(transactionState, true);
+                dbTransactionMgr.unprotectUpsertTransactionState(transactionState);
             } catch (AnalysisException e) {
                 LOG.warn("failed to get db transaction manager for {}", transactionState, e);
                 throw new IOException(
