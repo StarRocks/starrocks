@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.io.Closer;
+import com.mysql.cj.jdbc.JdbcStatement;
 import io.airlift.json.JsonCodec;
 import io.airlift.log.Logger;
 import io.trino.plugin.base.aggregation.AggregateFunctionRewriter;
@@ -119,6 +120,8 @@ import static com.google.common.base.Throwables.throwIfInstanceOf;
 import static com.google.common.base.Verify.verify;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
+import static com.mysql.cj.exceptions.MysqlErrorNumbers.ER_UNKNOWN_TABLE;
+import static com.mysql.cj.exceptions.MysqlErrorNumbers.SQL_STATE_ER_TABLE_EXISTS_ERROR;
 import static com.starrocks.data.load.stream.StreamLoadConstants.TABLE_MODEL_PRIMARY_KEYS;
 import static io.airlift.json.JsonCodec.jsonCodec;
 import static io.airlift.slice.Slices.utf8Slice;
@@ -191,13 +194,24 @@ public class StarRocksClient
         extends BaseJdbcClient
 {
     private static final Logger log = Logger.get(StarRocksClient.class);
+
     private static final int MAX_SUPPORTED_DATE_TIME_PRECISION = 6;
+    // MySQL driver returns width of timestamp types instead of precision.
+    // 19 characters are used for zero-precision timestamps while others
+    // require 19 + precision + 1 characters with the additional character
+    // required for the decimal separator.
     private static final int ZERO_PRECISION_TIMESTAMP_COLUMN_SIZE = 19;
+    // MySQL driver returns width of time types instead of precision, same as the above timestamp type.
     private static final int ZERO_PRECISION_TIME_COLUMN_SIZE = 8;
+
+    // An empty character means that the table doesn't have a comment in MySQL
     private static final String NO_COMMENT = "";
-    public static final String SQL_STATE_ER_TABLE_EXISTS_ERROR = "42S01";
-    public static final Integer ER_UNKNOWN_TABLE = 1109;
+
     private static final JsonCodec<ColumnHistogram> HISTOGRAM_CODEC = jsonCodec(ColumnHistogram.class);
+
+    // We don't know null fraction, but having no null fraction will make CBO useless. Assume some arbitrary value.
+    private static final Estimate UNKNOWN_NULL_FRACTION_REPLACEMENT = Estimate.of(0.1);
+
     private final Type jsonType;
     private final boolean statisticsEnabled;
     private final ConnectorExpressionRewriter<ParameterizedExpression> connectorExpressionRewriter;
@@ -246,6 +260,7 @@ public class StarRocksClient
     @Override
     public Optional<JdbcExpression> implementAggregation(ConnectorSession session, AggregateFunction aggregate, Map<String, ColumnHandle> assignments)
     {
+        // TODO support complex ConnectorExpressions
         return aggregateFunctionRewriter.rewrite(session, aggregate, assignments);
     }
 
@@ -264,6 +279,7 @@ public class StarRocksClient
     @Override
     public Collection<String> listSchemas(Connection connection)
     {
+        // for MySQL, we need to list catalogs instead of schemas
         try (ResultSet resultSet = connection.getMetaData().getCatalogs()) {
             ImmutableSet.Builder<String> schemaNames = ImmutableSet.builder();
             while (resultSet.next()) {
@@ -283,7 +299,8 @@ public class StarRocksClient
     @Override
     protected boolean filterSchema(String schemaName)
     {
-        if (schemaName.equalsIgnoreCase("sys")) {
+        if (schemaName.equalsIgnoreCase("mysql")
+                || schemaName.equalsIgnoreCase("sys")) {
             return false;
         }
         return super.filterSchema(schemaName);
@@ -294,6 +311,8 @@ public class StarRocksClient
             throws SQLException
     {
         if (!resultSet.isAfterLast()) {
+            // Abort connection before closing. Without this, the MySQL driver
+            // attempts to drain the connection by reading all the results.
             connection.abort(directExecutor());
         }
     }
@@ -302,13 +321,18 @@ public class StarRocksClient
     public PreparedStatement getPreparedStatement(Connection connection, String sql, Optional<Integer> columnCount)
             throws SQLException
     {
-        return connection.prepareStatement(sql);
+        PreparedStatement statement = connection.prepareStatement(sql);
+        if (statement.isWrapperFor(JdbcStatement.class)) {
+            statement.unwrap(JdbcStatement.class).enableStreamingResults();
+        }
+        return statement;
     }
 
     @Override
     public ResultSet getTables(Connection connection, Optional<String> schemaName, Optional<String> tableName)
             throws SQLException
     {
+        // MySQL maps their "database" to SQL catalogs and does not have schemas
         DatabaseMetaData metadata = connection.getMetaData();
         return metadata.getTables(
                 schemaName.orElse(null),
@@ -321,6 +345,7 @@ public class StarRocksClient
     public Optional<String> getTableComment(ResultSet resultSet)
             throws SQLException
     {
+        // Empty remarks means that the table doesn't have a comment in MySQL
         return Optional.ofNullable(emptyToNull(resultSet.getString("REMARKS")));
     }
 
@@ -330,7 +355,7 @@ public class StarRocksClient
         String sql = format(
                 "ALTER TABLE %s COMMENT = %s",
                 quoted(handle.asPlainTable().getRemoteTableName()),
-                starRocksVarcharLiteral(comment.orElse(NO_COMMENT)));
+                mysqlVarcharLiteral(comment.orElse(NO_COMMENT))); // An empty character removes the existing comment in MySQL
         execute(session, sql);
     }
 
@@ -338,6 +363,7 @@ public class StarRocksClient
     protected String getTableSchemaName(ResultSet resultSet)
             throws SQLException
     {
+        // MySQL uses catalogs instead of schemas
         return resultSet.getString("TABLE_CAT");
     }
 
@@ -346,10 +372,10 @@ public class StarRocksClient
     {
         checkArgument(tableMetadata.getProperties().isEmpty(), "Unsupported table properties: %s", tableMetadata.getProperties());
         String columnName = columns.get(0).split(" ")[0];
-        return format("CREATE TABLE %s (%s) COMMENT %s DISTRIBUTED by hash(%s) PROPERTIES (\"replication_num\" = \"1\")", quoted(remoteTableName), join(", ", columns), starRocksVarcharLiteral(tableMetadata.getComment().orElse(NO_COMMENT)), columnName);
+        return format("CREATE TABLE %s (%s) COMMENT %s DISTRIBUTED by hash(%s) PROPERTIES (\"replication_num\" = \"1\")", quoted(remoteTableName), join(", ", columns), mysqlVarcharLiteral(tableMetadata.getComment().orElse(NO_COMMENT)), columnName);
     }
 
-    private static String starRocksVarcharLiteral(String value)
+    private static String mysqlVarcharLiteral(String value)
     {
         requireNonNull(value, "value is null");
         return "'" + value.replace("'", "''").replace("\\", "\\\\") + "'";
@@ -413,6 +439,7 @@ public class StarRocksClient
                     int scale = min(decimalDigits, getDecimalDefaultScale(session));
                     return Optional.of(decimalColumnMapping(createDecimalType(Decimals.MAX_PRECISION, scale), getDecimalRoundingMode(session)));
                 }
+                // TODO does mysql support negative scale?
                 precision = precision + max(-decimalDigits, 0); // Map decimal(p, -s) (negative scale) to decimal(p+s, 0).
                 if (precision > Decimals.MAX_PRECISION) {
                     break;
@@ -438,7 +465,7 @@ public class StarRocksClient
                 return Optional.of(ColumnMapping.longMapping(
                         DATE,
                         dateReadFunctionUsingLocalDate(),
-                        starRocksDateWriteFunctionUsingLocalDate()));
+                        mySqlDateWriteFunctionUsingLocalDate()));
 
             case Types.TIME:
                 TimeType timeType = createTimeType(getTimePrecision(typeHandle.getRequiredColumnSize()));
@@ -446,7 +473,7 @@ public class StarRocksClient
                 checkArgument(timeType.getPrecision() <= 9, "Unsupported type precision: %s", timeType);
                 return Optional.of(ColumnMapping.longMapping(
                         timeType,
-                        starRocksTimeReadFunction(timeType),
+                        mySqlTimeReadFunction(timeType),
                         timeWriteFunction(timeType.getPrecision())));
 
             case Types.TIMESTAMP:
@@ -454,7 +481,7 @@ public class StarRocksClient
                 checkArgument(timestampType.getPrecision() <= TimestampType.MAX_SHORT_PRECISION, "Precision is out of range: %s", timestampType.getPrecision());
                 return Optional.of(ColumnMapping.longMapping(
                         timestampType,
-                        starRocksTimestampReadFunction(timestampType),
+                        mySqlTimestampReadFunction(timestampType),
                         timestampWriteFunction(timestampType)));
         }
 
@@ -464,7 +491,7 @@ public class StarRocksClient
         return Optional.empty();
     }
 
-    private LongWriteFunction starRocksDateWriteFunctionUsingLocalDate()
+    private LongWriteFunction mySqlDateWriteFunctionUsingLocalDate()
     {
         return new LongWriteFunction() {
             @Override
@@ -482,7 +509,7 @@ public class StarRocksClient
         };
     }
 
-    private static LongReadFunction starRocksTimestampReadFunction(TimestampType timestampType)
+    private static LongReadFunction mySqlTimestampReadFunction(TimestampType timestampType)
     {
         return new LongReadFunction()
         {
@@ -504,7 +531,7 @@ public class StarRocksClient
         };
     }
 
-    private static LongReadFunction starRocksTimeReadFunction(TimeType timeType)
+    private static LongReadFunction mySqlTimeReadFunction(TimeType timeType)
     {
         return new LongReadFunction()
         {
@@ -580,7 +607,7 @@ public class StarRocksClient
         }
 
         if (type == DATE) {
-            return WriteMapping.longMapping("date", starRocksDateWriteFunctionUsingLocalDate());
+            return WriteMapping.longMapping("date", mySqlDateWriteFunctionUsingLocalDate());
         }
 
         if (type instanceof TimestampType timestampType) {
@@ -648,7 +675,7 @@ public class StarRocksClient
 
         verify(tableHandle.getAuthorization().isEmpty(), "Unexpected authorization is required for table: %s".formatted(tableHandle));
         try (Connection connection = connectionFactory.openConnection(session)) {
-            connection.setAutoCommit(true);
+            verify(connection.getAutoCommit());
             String remoteSchema = getIdentifierMapping().toRemoteSchemaName(identity, connection, schemaTableName.getSchemaName());
             String remoteTable = getIdentifierMapping().toRemoteTableName(identity, connection, remoteSchema, schemaTableName.getTableName());
             String catalog = connection.getCatalog();
@@ -719,7 +746,7 @@ public class StarRocksClient
         closer.register(() -> dropTable(session, temporaryTable, true));
 
         try (Connection connection = getConnection(session, handle)) {
-            connection.setAutoCommit(true);
+            verify(connection.getAutoCommit());
             String columns = handle.getColumnNames().stream()
                     .map(this::quoted)
                     .collect(joining(", "));
@@ -764,6 +791,8 @@ public class StarRocksClient
     @Override
     public void renameTable(ConnectorSession session, JdbcTableHandle handle, SchemaTableName newTableName)
     {
+        // MySQL doesn't support specifying the catalog name in a rename. By setting the
+        // catalogName parameter to null, it will be omitted in the ALTER TABLE statement.
         RemoteTableName remoteTableName = handle.asPlainTable().getRemoteTableName();
         verify(remoteTableName.getSchemaName().isEmpty());
         renameTable(session, null, remoteTableName.getCatalogName().orElse(null), remoteTableName.getTableName(), newTableName);
@@ -805,7 +834,9 @@ public class StarRocksClient
 
                         switch (sortItem.getSortOrder()) {
                             case ASC_NULLS_FIRST:
+                                // In MySQL ASC implies NULLS FIRST
                             case DESC_NULLS_LAST:
+                                // In MySQL DESC implies NULLS LAST
                                 return Stream.of(columnSorting);
 
                             case ASC_NULLS_LAST:
@@ -842,6 +873,7 @@ public class StarRocksClient
             JoinStatistics statistics)
     {
         if (joinType == JoinType.FULL_OUTER) {
+            // Not supported in MySQL
             return Optional.empty();
         }
         return implementJoinCostAware(
@@ -857,6 +889,7 @@ public class StarRocksClient
     protected boolean isSupportedJoinCondition(ConnectorSession session, JdbcJoinCondition joinCondition)
     {
         if (joinCondition.getOperator() == JoinCondition.Operator.IS_DISTINCT_FROM) {
+            // Not supported in MySQL
             return false;
         }
 
@@ -1057,6 +1090,7 @@ public class StarRocksClient
             }
             catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLSyntaxErrorException && ((SQLSyntaxErrorException) e.getCause()).getErrorCode() == ER_UNKNOWN_TABLE) {
+                    // The table is available since MySQL 8
                     log.debug("INFORMATION_SCHEMA.COLUMN_STATISTICS table is not available: %s", e);
                     return ImmutableMap.of();
                 }
@@ -1099,6 +1133,7 @@ public class StarRocksClient
         }
     }
 
+    // See https://dev.mysql.com/doc/refman/8.0/en/optimizer-statistics.html
     public static class ColumnHistogram
     {
         private final Optional<Double> nullFraction;

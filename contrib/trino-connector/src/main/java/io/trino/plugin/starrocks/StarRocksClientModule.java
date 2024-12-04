@@ -19,6 +19,7 @@ import com.google.inject.Provides;
 import com.google.inject.Scopes;
 import com.google.inject.Singleton;
 import com.google.inject.multibindings.Multibinder;
+import com.mysql.jdbc.Driver;
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
@@ -41,12 +42,9 @@ import io.trino.spi.ptf.ConnectorTableFunction;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.mariadb.jdbc.Driver;
-
 import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static com.google.inject.multibindings.OptionalBinder.newOptionalBinder;
 import static io.airlift.configuration.ConfigBinder.configBinder;
-import static io.trino.plugin.starrocks.StarRocksJdbcConfig.transConnectionUrl;
 
 public class StarRocksClientModule
         extends AbstractConfigurationAwareModule
@@ -86,7 +84,7 @@ public class StarRocksClientModule
     {
         return new DriverConnectionFactory(
                 new Driver(),
-                transConnectionUrl(config.getConnectionUrl()),
+                config.getConnectionUrl(),
                 getConnectionProperties(starRocksJdbcConfig),
                 credentialProvider);
     }
@@ -126,7 +124,7 @@ public class StarRocksClientModule
                 .build();
         return StreamLoadProperties.builder()
                 .loadUrls(starRocksConfig.getLoadUrls().toArray(new String[0]))
-                .jdbcUrl(transConnectionUrl(baseJdbcConfig.getConnectionUrl()))
+                .jdbcUrl(baseJdbcConfig.getConnectionUrl())
                 .tableProperties(streamLoadTableProperties)
                 .cacheMaxBytes(starRocksConfig.getMaxCacheBytes())
                 .connectTimeout(starRocksConfig.getConnectTimeout())
