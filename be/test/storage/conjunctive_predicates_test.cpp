@@ -401,6 +401,23 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     }
 }
 
+TEST_F(ConjunctiveTestFixture, test_connector_parse_conjuncts) {
+    std::vector<SlotDescriptor*> slot_descriptors;
+    SlotDescriptor slot{1, "name", TypeDescriptor::from_logical_type(TYPE_INT)};
+    slot_descriptors.emplace_back(&slot);
+
+    ConnectorPredicateParser parser{&slot_descriptors};
+    ColumnPredicate* predicate = nullptr;
+    ASSERT_FALSE(parser.can_pushdown(predicate));
+    SlotDescriptor* slot_desc = nullptr;
+    ASSERT_FALSE(parser.can_pushdown(slot_desc));
+
+    PredicateAndNode and_node{};
+    ConstPredicateNodePtr node{&and_node};
+    ASSERT_FALSE(parser.can_pushdown(node));
+    ASSERT_EQ(parser.column_id(slot), 1);
+}
+
 INSTANTIATE_TEST_SUITE_P(ConjunctiveTest, ConjunctiveTestFixture,
                          testing::Combine(testing::Values(TExprOpcode::LT, TExprOpcode::LE, TExprOpcode::GT,
                                                           TExprOpcode::GE, TExprOpcode::EQ, TExprOpcode::NE),
