@@ -333,6 +333,14 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
     LOG(INFO) << MemInfo::debug_string();
     LOG(INFO) << base::CPU::instance()->debug_string();
     LOG(INFO) << "openssl aesni support: " << openssl_supports_aesni();
+    auto unsupported_flags = CpuInfo::unsupported_cpu_flags_from_current_env();
+    if (!unsupported_flags.empty()) {
+        LOG(FATAL) << fmt::format(
+                "CPU flags check failed! The following instruction sets are enabled during compiling but not supported "
+                "in current running env: {}!",
+                fmt::join(unsupported_flags, ","));
+        std::abort();
+    }
 
     CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
 
