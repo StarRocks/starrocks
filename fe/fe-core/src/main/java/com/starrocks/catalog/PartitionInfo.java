@@ -52,6 +52,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.validation.constraints.NotNull;
 
 /*
@@ -251,6 +252,14 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
      * 3. EXPR: sorted by the expression value
      */
     public List<Long> getSortedPartitions(boolean asc) {
+        throw new NotImplementedException("not reachable");
+    }
+
+    /**
+     * Return the partitions that contains NULL partition values
+     * e.g. PARTITION p_null VALUES IN (NULL)
+     */
+    public Set<Long> getNullValuePartitions() {
         throw new NotImplementedException("not reachable");
     }
 
