@@ -774,7 +774,7 @@ Status DeltaWriter::commit() {
             _state = kCommitted;
         } else {
             return Status::InternalError(fmt::format("Delta writer has been aborted. tablet_id: {}, state: {}",
-                                                     _opt.tablet_id, _state_name(state)));
+                                                     _opt.tablet_id, _state_name(_state)));
         }
     }
     VLOG(2) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
