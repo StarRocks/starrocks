@@ -205,33 +205,18 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
     );
     ```
 
-#### 删除分区 (DROP PARTITION(S))
+#### 删除分区 (DROP PARTITION)
 
-删除单个分区：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
-```
-
-批量删除分区（自 v3.3.1 起支持）：
+语法：
 
 ```sql
+-- 2.0之前版本
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP [ TEMPORARY ] PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ] 
-
-partion_name_list ::= ( <partition_name> [, ... ] )
-
-multi_range_partitions ::=
-    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
-    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- 即使 START、END 所指定的分区列值为整数，也需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
+DROP PARTITION [IF EXISTS | FORCE] <partition_name>
+-- 2.0及之后版本
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
 ```
-
-关于 `multi_range_partitions` 的说明：
-
-- `multi_range_partitions` 仅适用于 Range 分区。
-- 其中涉及的参数与 [增加分区 ADD PARTITION(S)](#增加分区-add-partitions) 中的相同。
-- 仅支持基于单个分区键的分区。
 
 :::note
 
