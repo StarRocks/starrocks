@@ -3288,6 +3288,26 @@ public class PlanFragmentBuilder {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
             PhysicalFilterOperator filter = (PhysicalFilterOperator) optExpr.getOp();
 
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+
+            Map<SlotId, Expr> commonSubOperatorMap = Maps.newHashMap();
+            if (filter.getPredicateCommonOperators() != null) {
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : filter.getPredicateCommonOperators().entrySet()) {
+                    Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
+                                    filter.getPredicateCommonOperators()));
+
+                    commonSubOperatorMap.put(new SlotId(entry.getKey().getId()), expr);
+
+                    SlotDescriptor slotDescriptor =
+                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                    slotDescriptor.setIsNullable(expr.isNullable());
+                    slotDescriptor.setIsMaterialized(false);
+                    slotDescriptor.setType(expr.getType());
+                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+                }
+            }
+
             List<Expr> predicates = Utils.extractConjuncts(filter.getPredicate()).stream()
                     .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
@@ -3297,6 +3317,7 @@ public class PlanFragmentBuilder {
                     new SelectNode(context.getNextNodeId(), inputFragment.getPlanRoot(), predicates);
             selectNode.setLimit(filter.getLimit());
             selectNode.computeStatistics(optExpr.getStatistics());
+            selectNode.setCommonSlotMap(commonSubOperatorMap);
             currentExecGroup.add(selectNode);
             inputFragment.setPlanRoot(selectNode);
             return inputFragment;
