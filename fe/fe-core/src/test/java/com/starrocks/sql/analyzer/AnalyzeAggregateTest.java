@@ -324,13 +324,19 @@ public class AnalyzeAggregateTest {
     public void testDsQuantile() {
         analyzeSuccess("select ds_quantile(v1) from t0");
         analyzeSuccess("select ds_quantile(v1, 0.5) from t0");
+        analyzeFail("select ds_quantile(v1, 2) from t0");
         analyzeSuccess("select ds_quantile(v1, 0.5, 21) from t0");
+        analyzeFail("select ds_quantile(v1, 0.5, 32769) from t0");
+        analyzeFail("select ds_quantile(v1, 0.5, 21, 21) from t0");
     }
     @Test
     public void testDsFrequent() {
         analyzeSuccess("select ds_frequent(v1) from t0");
         analyzeSuccess("select ds_frequent(v1, 10) from t0");
         analyzeSuccess("select ds_frequent(v1, 10, 20) from t0");
+        analyzeFail("select ds_frequent(v1, 10, 200) from t0");
         analyzeSuccess("select ds_frequent(v1, 10, 20, 16) from t0");
+        analyzeFail("select ds_frequent(v1, 10, 20, 16, 16) from t0");
+
     }
 }
