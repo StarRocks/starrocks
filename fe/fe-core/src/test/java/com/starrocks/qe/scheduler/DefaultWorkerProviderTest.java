@@ -344,6 +344,21 @@ public class DefaultWorkerProviderTest {
         Assert.assertThrows(SchedulerException.class, workerProvider::reportDataNodeNotFoundException);
     }
 
+    @Test
+    public void testNextWorkerOverflow() throws NonRecoverableException {
+        DefaultWorkerProvider workerProvider =
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true);
+        for (int i = 0; i < 100; i++) {
+            Long workerId = workerProvider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
+        }
+        DefaultWorkerProvider.getNextComputeNodeIndexer().set(Integer.MAX_VALUE);
+        for (int i = 0; i < 100; i++) {
+            Long workerId = workerProvider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
+        }
+    }
+
     public static void testUsingWorkerHelper(DefaultWorkerProvider workerProvider, Long workerId) {
         Assert.assertTrue(workerProvider.isWorkerSelected(workerId));
         assertThat(workerProvider.getSelectedWorkerIds()).contains(workerId);
