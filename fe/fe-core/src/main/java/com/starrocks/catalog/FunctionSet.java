@@ -801,9 +801,6 @@ public class FunctionSet {
                     .add(INTERSECT_COUNT)
                     .add(LC_PERCENTILE_DISC)
                     .add(MAP_AGG)
-                    .add(DS_QUANTILE)
-                    .add(DS_FREQUENT)
-                    .add(DS_THETA)
                     .build();
 
     public static final Set<String> RANK_RALATED_FUNCTIONS =
@@ -1131,23 +1128,6 @@ public class FunctionSet {
             // APPROX_COUNT_DISTINCT
             // alias of ndv, compute approx count distinct use HyperLogLog
             addBuiltin(AggregateFunction.createBuiltin(APPROX_COUNT_DISTINCT,
-                    Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
-                    true, false, true));
-
-            // ds_hll_count_distinct(col)
-            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
-                    Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
-                    true, false, true));
-            // ds_hll_count_distinct(col, log_k)
-            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
-                    Lists.newArrayList(t, Type.INT), Type.BIGINT, Type.VARBINARY,
-                    true, false, true));
-            // ds_hll_count_distinct(col, log_k, tgt_type)
-            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
-                    Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.BIGINT, Type.VARBINARY,
-                    true, false, true));
-            // ds_theta(col)
-            addBuiltin(AggregateFunction.createBuiltin(DS_THETA,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
 
@@ -1616,6 +1596,39 @@ public class FunctionSet {
     }
 
     private void registerBuiltinDsFunction() {
+        for (Type t : Type.getSupportedTypes()) {
+            if (t.isFunctionType()) {
+                continue;
+            }
+            if (t.isNull()) {
+                continue; // NULL is handled through type promotion.
+            }
+            if (t.isChar()) {
+                continue; // promoted to STRING
+            }
+
+            if (t.isPseudoType()) {
+                continue; // promoted to pseudo
+            }
+
+            // ds_hll_count_distinct(col)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+            // ds_hll_count_distinct(col, log_k)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t, Type.INT), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+            // ds_hll_count_distinct(col, log_k, tgt_type)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+            // ds_theta(col)
+            addBuiltin(AggregateFunction.createBuiltin(DS_THETA,
+                    Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+        }
+        
         addBuiltin(AggregateFunction.createBuiltin(DS_QUANTILE,
                 Lists.newArrayList(Type.DOUBLE), Type.ARRAY_DOUBLE, Type.VARBINARY,
                 false, false, true));

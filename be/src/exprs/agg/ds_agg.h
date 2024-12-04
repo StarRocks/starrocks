@@ -113,7 +113,7 @@ struct DSSketchState<LT, HLL> {
         if (LIKELY(ds_sketch_wrapper != nullptr)) {
             result = ds_sketch_wrapper->estimate_cardinality();
         }
-        for (size_t i = start; i < end; ++i) {Starting compaction
+        for (size_t i = start; i < end; ++i) {
             column->append(result);
         }
     }
