@@ -37,6 +37,7 @@ Status HashPartitionContext::prepare(RuntimeState* state, RuntimeProfile* profil
         _has_nullable_key = _has_nullable_key || _partition_types[i].is_nullable;
     }
 
+    _acc.set_max_size(state->chunk_size());
     _chunks_partitioner = std::make_unique<ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types);
     return _chunks_partitioner->prepare(state, profile);
 }
