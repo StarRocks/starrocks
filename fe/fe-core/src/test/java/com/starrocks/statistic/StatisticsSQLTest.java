@@ -231,7 +231,7 @@ public class StatisticsSQLTest extends PlanTestBase {
             sql = sql.substring(sql.indexOf("SELECT"));
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
-            assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
+            assertCContains(plan, "AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");
         }
     }

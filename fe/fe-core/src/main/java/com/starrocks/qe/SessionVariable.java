@@ -784,6 +784,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
 
+    public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1551,6 +1553,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_DISTINCT_REWRITE_BY_HLL_BITMAP)
     private boolean enableCountDistinctRewriteByHllBitmap = true;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = DISABLE_GENERATED_COLUMN_REWRITE, flag = VariableMgr.INVISIBLE)
+    private boolean disableGeneratedColumnRewrite = false;
+
+    @VarAttr(name = ENABLE_SCAN_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
+    private boolean enableScanPredicateExprReuse = true;
+
+>>>>>>> e66fcdb8ad ([Enhancement] support common expr reuse strategy on scan predicates (#52889))
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
     }
@@ -4124,6 +4135,49 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableCountDistinctRewriteByHllBitmap = enableCountDistinctRewriteByHllBitmap;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isDisableGeneratedColumnRewrite() {
+        return disableGeneratedColumnRewrite;
+    }
+
+    public boolean isEnableScanPredicateExprReuse() {
+        return enableScanPredicateExprReuse;
+    }
+
+    public int getConnectorIncrementalScanRangeNumber() {
+        return connectorIncrementalScanRangeSize;
+    }
+
+    public void setConnectorIncrementalScanRangeNumber(int v) {
+        connectorIncrementalScanRangeSize = v;
+    }
+
+    public boolean isEnableConnectorIncrementalScanRanges() {
+        return enableConnectorIncrementalScanRanges;
+    }
+
+    public boolean isEnableConnectorAsyncListPartitions() {
+        return enableConnectorAsyncListPartitions;
+    }
+
+    public void setEnableConnectorAsyncListPartitions(boolean v) {
+        enableConnectorAsyncListPartitions = v;
+    }
+
+    public void setEnableConnectorIncrementalScanRanges(boolean v) {
+        enableConnectorIncrementalScanRanges = v;
+    }
+
+    public boolean getEnablePushDownPreAggWithRank() {
+        return enablePushDownPreAggWithRank;
+    }
+
+    public boolean isInsertLocalShuffleForWindowPreAgg() {
+        return insertLocalShuffleForWindowPreAgg;
+    }
+
+>>>>>>> e66fcdb8ad ([Enhancement] support common expr reuse strategy on scan predicates (#52889))
     public boolean isEnableRewriteUnnestBitmapToArray() {
         return enableRewriteUnnestBitmapToArray;
     }

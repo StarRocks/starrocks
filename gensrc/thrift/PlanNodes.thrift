@@ -1115,6 +1115,11 @@ struct TProjectNode {
     2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
 }
 
+struct TSelectNode {
+     // used for common expressions compute result reuse
+    1: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+}
+
 struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
@@ -1277,6 +1282,8 @@ struct TPlanNode {
   70: optional TStreamScanNode stream_scan_node;
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
+
+  81: optional TSelectNode select_node; 
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

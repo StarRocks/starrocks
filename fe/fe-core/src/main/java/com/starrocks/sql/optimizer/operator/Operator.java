@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
@@ -34,6 +35,8 @@ public abstract class Operator {
     protected final OperatorType opType;
     protected long limit = DEFAULT_LIMIT;
     protected ScalarOperator predicate = null;
+    // common sub operators in predicate
+    protected Map<ColumnRefOperator, ScalarOperator> predicateCommonOperators = null;
 
     private static long saltGenerator = 0;
     /**
@@ -121,6 +124,14 @@ public abstract class Operator {
     @Deprecated
     public void setPredicate(ScalarOperator predicate) {
         this.predicate = predicate;
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getPredicateCommonOperators() {
+        return predicateCommonOperators;
+    }
+
+    public void setPredicateCommonOperators(Map<ColumnRefOperator, ScalarOperator> predicateCommonOperators) {
+        this.predicateCommonOperators = predicateCommonOperators;
     }
 
     public Projection getProjection() {
