@@ -24,12 +24,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
-<<<<<<< HEAD
-import com.starrocks.common.UserException;
-=======
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.StarRocksException;
->>>>>>> fabde4fc53 ([BugFix] Fix delete fail on multi level partition primary key table (#53508))
+import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
