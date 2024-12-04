@@ -24,7 +24,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.StarRocksException;
+>>>>>>> fabde4fc53 ([BugFix] Fix delete fail on multi level partition primary key table (#53508))
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
@@ -86,7 +91,7 @@ public class DeletePlanner {
 
             OlapTable table = (OlapTable) deleteStatement.getTable();
             for (Column column : table.getBaseSchema()) {
-                if (column.isKey()) {
+                if (column.isKey() || column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                     SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
                     slotDescriptor.setIsMaterialized(true);
                     slotDescriptor.setType(column.getType());
