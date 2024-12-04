@@ -216,17 +216,12 @@ public class Log4jConfig extends XmlConfiguration {
     private static String[] dumpModules;
     private static String[] bigQueryModules;
     private static String[] internalModules;
-<<<<<<< HEAD
-=======
-    private static boolean compressSysLog;
-    private static boolean compressAuditLog;
     private static String[] warnModules;
     private static String[] builtinWarnModules = {
             "org.apache.kafka",
             "org.apache.hudi",
             "org.apache.hadoop.io.compress",
     };
->>>>>>> a40c00f130 ([Enhancement] support sys_log_warn_modules in fe conf (#52709))
 
     private static void reconfig() throws IOException {
         Map<String, String> properties = Maps.newHashMap();
@@ -369,12 +364,7 @@ public class Log4jConfig extends XmlConfiguration {
         dumpModules = Config.dump_log_modules;
         bigQueryModules = Config.big_query_log_modules;
         internalModules = Config.internal_log_modules;
-<<<<<<< HEAD
-=======
-        compressSysLog = Config.sys_log_enable_compress;
-        compressAuditLog = Config.audit_log_enable_compress;
         warnModules = Config.sys_log_warn_modules;
->>>>>>> a40c00f130 ([Enhancement] support sys_log_warn_modules in fe conf (#52709))
         reconfig();
     }
 
