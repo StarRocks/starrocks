@@ -275,7 +275,8 @@ public:
         }
 
         _new_tablet_schema_with_generated_column = TabletSchema::create(*new_schema_with_generated_column);
-        _new_schema_with_generated_column = std::make_shared<VSchema>(ChunkHelper::convert_schema(_new_tablet_schema_with_generated_column));
+        _new_schema_with_generated_column =
+                std::make_shared<VSchema>(ChunkHelper::convert_schema(_new_tablet_schema_with_generated_column));
 
     }
 
