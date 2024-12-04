@@ -34,6 +34,9 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
     private static MTable m1;
     private static MTable m2;
     private static MTable m3;
+    private static String t1;
+    private static String t2;
+    private static String t3;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -85,6 +88,49 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         "PARTITION `p3` VALUES LESS THAN ('9')"
                 )
         );
+
+        // table whose partitions have multiple values
+        t1 = "CREATE TABLE t1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY RANDOM\n";
+
+        // table whose partitions have only single values
+        t2 = "CREATE TABLE t2 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY RANDOM\n";
+        // table whose partitions have multi columns
+        t3 = "CREATE TABLE t3 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10) not null,\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province, dt) (\n" +
+                "     PARTITION p1 VALUES IN ((\"beijing\", \"2024-01-01\")),\n" +
+                "     PARTITION p2 VALUES IN ((\"guangdong\", \"2024-01-01\")), \n" +
+                "     PARTITION p3 VALUES IN ((\"beijing\", \"2024-01-02\")),\n" +
+                "     PARTITION p4 VALUES IN ((\"guangdong\", \"2024-01-02\")) \n" +
+                ")\n" +
+                "DISTRIBUTED BY RANDOM\n";
     }
 
     @Before
@@ -870,73 +916,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                     });
         });
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testTransparentMVWithListPartitions1() {
-        starRocksAssert.withTable(t1, () -> {
-            String insertSql = "insert into t1 values(1, 1, '2021-12-01', 'beijing'), (1, 1, '2021-12-01', 'guangdong');";
-            cluster.runSql("test", insertSql);
-            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
-                            " PARTITION BY (province) " +
-                            " DISTRIBUTED BY HASH(province) " +
-                            " REFRESH DEFERRED MANUAL " +
-                            " PROPERTIES (\n" +
-                            " 'transparent_mv_rewrite_mode' = 'true'" +
-                            " ) " +
-                            " AS select * from t1;",
-                    () -> {
-                        {
-                            String plan = getFragmentPlan("select * from mv0");
-                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t1");
-                        }
-                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION ('%s') with sync mode",
-                                "beijing"));
-                        MaterializedView mv1 = getMv("test", "mv0");
-                        Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p2]", mvNames.toString());
-                        // transparent mv
-                        {
-                            String plan = getFragmentPlan("select * from mv0");
-                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t1");
-                        }
-                    });
-        });
-    }
-
-    @Test
-    public void testTransparentMVWithListPartitions2() {
-        starRocksAssert.withTable(t3, () -> {
-            String insertSql = "insert into t3 values(1, 1, '2024-01-01', 'beijing')," +
-                    "(1, 1, '2022-01-01', 'hangzhou');";
-            cluster.runSql("test", insertSql);
-            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
-                            " PARTITION BY (province, dt) " +
-                            " DISTRIBUTED BY HASH(province) " +
-                            " REFRESH DEFERRED MANUAL " +
-                            " PROPERTIES (\n" +
-                            " 'transparent_mv_rewrite_mode' = 'true'" +
-                            " ) " +
-                            " AS select * from t3;",
-                    () -> {
-                        {
-                            String plan = getFragmentPlan("select * from mv0");
-                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t3");
-                        }
-                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION (('%s', '%s')) " +
-                                        "with sync mode", "beijing", "2024-01-01"));
-                        MaterializedView mv1 = getMv("test", "mv0");
-                        Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
-                        // transparent mv
-                        {
-                            String plan = getFragmentPlan("select * from mv0");
-                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t3");
-                        }
-                    });
-        });
-    }
 
     @Test
     public void testTransparentMVWithListPartitionsPartialColumns1() {
@@ -945,16 +924,16 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                     "(1, 1, '2022-01-01', 'hangzhou');";
             cluster.runSql("test", insertSql);
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
-                            " PARTITION BY (province, dt) " +
+                            " PARTITION BY (dt) " +
                             " DISTRIBUTED BY HASH(province) " +
                             " REFRESH DEFERRED MANUAL " +
                             " AS select * from t3;",
                     () -> {
-                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION (('%s', '%s')) " +
-                                "with sync mode", "beijing", "2024-01-01"));
+                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION (('%s')) " +
+                                "with sync mode", "2024-01-01"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
+                        Assert.assertEquals("[p1, p3]", mvNames.toString());
                         // transparent mv
                         {
                             String plan = getFragmentPlan("select dt from t3", TExplainLevel.COSTS, "");
@@ -977,15 +956,15 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                     "(1, 1, '2022-01-01', 'hangzhou');";
             cluster.runSql("test", insertSql);
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
-                            " PARTITION BY (province, dt) " +
+                            " PARTITION BY (dt) " +
                             " REFRESH DEFERRED MANUAL " +
                             " AS select province, dt, min(age) from t3 group by province, dt;",
                     () -> {
-                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION (('%s', '%s')) " +
-                                "with sync mode", "beijing", "2024-01-01"));
+                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION (('%s')) " +
+                                "with sync mode", "2024-01-01"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
+                        Assert.assertEquals("[p1, p3]", mvNames.toString());
                         // transparent mv
                         {
                             String plan = getFragmentPlan("select min(age) from t3 group by province;", TExplainLevel.COSTS, "");
@@ -999,5 +978,4 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                     });
         });
     }
->>>>>>> f7f35c7b1f ([BugFix] Fix column pruning for mv transparent union rewrite (#53473))
 }
