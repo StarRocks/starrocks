@@ -602,7 +602,7 @@ public class HiveMetastoreApiConverter {
         if (fieldDelim.isEmpty()) {
             // Support for hive org.apache.hadoop.hive.serde2.OpenCSVSerde
             // https://cwiki.apache.org/confluence/display/hive/csv+serde
-            fieldDelim = parameters.getOrDefault(OpenCSVSerde.SEPARATORCHAR, "");
+            fieldDelim = parameters.getOrDefault(OpenCSVSerde.SEPARATORCHAR, ",");
         }
         String lineDelim = parameters.getOrDefault(serdeConstants.LINE_DELIM, "");
         String mapkeyDelim = parameters.getOrDefault(serdeConstants.MAPKEY_DELIM, "");
