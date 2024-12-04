@@ -2742,6 +2742,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
 
+    @ConfField(mutable = true)
+    public static int lake_warehouse_max_compute_replica = 3;
+
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
