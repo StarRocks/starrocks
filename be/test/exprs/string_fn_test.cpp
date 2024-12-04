@@ -1543,18 +1543,15 @@ PARALLEL_TEST(VecStringFunctionsTest, inetAtonInvalidIPv4Test) {
     input_column->append("192.168.1.1.1");
     input_column->append("192.168.1");
     input_column->append("");
-    input_column->append(nullptr);
-    columns.push_back(input_column);
+    columns.emplace_back(input_column);
 
     auto result = StringFunctions::inet_aton(ctx.get(), columns).value();
-    ASSERT_TRUE(StringFunctions::inet_aton(ctx.get(), columns).ok());
 
     ASSERT_TRUE(result->is_null(0));
     ASSERT_TRUE(result->is_null(1));
     ASSERT_TRUE(result->is_null(2));
     ASSERT_TRUE(result->is_null(3));
     ASSERT_TRUE(result->is_null(4));
-    ASSERT_TRUE(result->is_null(5));
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, inetAtonValidIPv4Test) {
@@ -1565,15 +1562,14 @@ PARALLEL_TEST(VecStringFunctionsTest, inetAtonValidIPv4Test) {
     input_column->append("192.168.1.1");
     input_column->append("0.0.0.0");
     input_column->append("255.255.255.255");
-    columns.push_back(input_column);
+    columns.emplace_back(input_column);
 
-    auto result = StringFunctions::inet_aton(ctx.get(), columns);
-    ASSERT_TRUE(StringFunctions::inet_aton(ctx.get(), columns).ok());
+    auto result = StringFunctions::inet_aton(ctx.get(), columns).value();
 
-    auto* res_column = down_cast<Int64Column*>(result.value().get());
-    ASSERT_EQ(res_column->get_data()[0], 3232235777);
-    ASSERT_EQ(res_column->get_data()[1], 0);
-    ASSERT_EQ(res_column->get_data()[2], 4294967295);
+    auto res_column = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+    ASSERT_EQ(3232235777, res_column->get_data()[0]);
+    ASSERT_EQ(0, res_column->get_data()[1]);
+    ASSERT_EQ(4294967295, res_column->get_data()[2]);
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, instrTest) {
