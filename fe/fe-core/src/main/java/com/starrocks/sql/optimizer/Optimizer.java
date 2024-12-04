@@ -661,14 +661,10 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
 
-<<<<<<< HEAD
-=======
-        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.VECTOR_REWRITE);
         // this rule should be after mv
         // @TODO: it can also be applied to other table scan operator
         ruleRewriteOnlyOnce(tree, rootTaskContext, PullUpScanPredicateRule.OLAP_SCAN);
 
->>>>>>> e66fcdb8ad ([Enhancement] support common expr reuse strategy on scan predicates (#52889))
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
         return tree.getInputs().get(0);
