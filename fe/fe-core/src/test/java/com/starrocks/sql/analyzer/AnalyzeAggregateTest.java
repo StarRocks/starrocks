@@ -307,4 +307,30 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("SELECT window_funnel(1, ta, 0, [ta='a', ta='b']) FROM tall");
         analyzeSuccess("SELECT window_funnel(1, ta, 0, [true, true, false]) FROM tall");
     }
+    
+    @Test
+    public void testDsHll() {
+        analyzeSuccess("select ds_hll(v1) from t0");
+        analyzeSuccess("select ds_hll(v1, 4) from t0");
+        analyzeSuccess("select ds_hll(v1, 10, 'HLL_6') from t0");
+    }
+
+    @Test
+    public void testDsTheta() {
+        analyzeSuccess("select ds_theta(v1) from t0");
+    }
+
+    @Test
+    public void testDsQuantile() {
+        analyzeSuccess("select ds_quantile(v1) from t0");
+        analyzeSuccess("select ds_quantile(v1, 0.5) from t0");
+        analyzeSuccess("select ds_quantile(v1, 0.5, 21) from t0");
+    }
+    @Test
+    public void testDsFrequent() {
+        analyzeSuccess("select ds_frequent(v1) from t0");
+        analyzeSuccess("select ds_frequent(v1, 10) from t0");
+        analyzeSuccess("select ds_frequent(v1, 10, 20) from t0");
+        analyzeSuccess("select ds_frequent(v1, 10, 20, 16) from t0");
+    }
 }
