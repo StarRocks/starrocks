@@ -201,7 +201,8 @@ public class PrometheusMetricVisitor extends MetricVisitor {
 
         Snapshot snapshot = histogram.getSnapshot();
         String tagName = histogram.getTagName();
-        String delimiter = Strings.isNullOrEmpty(tagName) ? "" : ", ";
+        boolean isTagNameEmpty = Strings.isNullOrEmpty(tagName);
+        String delimiter = isTagNameEmpty ? "" : ", ";
         sb.append(fullName).append("{quantile=\"0.75\"").append(delimiter).append(tagName).append("} ")
                 .append(snapshot.get75thPercentile()).append("\n");
         sb.append(fullName).append("{quantile=\"0.95\"").append(delimiter).append(tagName).append("} ")
@@ -212,12 +213,24 @@ public class PrometheusMetricVisitor extends MetricVisitor {
                 .append(snapshot.get99thPercentile()).append("\n");
         sb.append(fullName).append("{quantile=\"0.999\"").append(delimiter).append(tagName).append("} ")
                 .append(snapshot.get999thPercentile()).append("\n");
-        sb.append(fullName).append("_sum ").append(histogram.getCount() * snapshot.getMean()).append("\n");
-        sb.append(fullName).append("_count ").append(histogram.getCount()).append("\n");
+        if (isTagNameEmpty) {
+            sb.append(fullName).append("_sum ").append(histogram.getCount() * snapshot.getMean()).append("\n");
+            sb.append(fullName).append("_count ").append(histogram.getCount()).append("\n");
+        } else {
+            sb.append(fullName).append("_sum").append("{").append(tagName).append("} ")
+                    .append(histogram.getCount() * snapshot.getMean()).append("\n");
+            sb.append(fullName).append("_count").append("{").append(tagName).append("} ")
+                    .append(histogram.getCount()).append("\n");
+        }
     }
 
     @Override
     public void visitHistogram(String name, Histogram histogram) {
+        // use histogram metric directly if metrics is instance of HistogramMetric
+        if (histogram instanceof HistogramMetric) {
+            visitHistogram((HistogramMetric) histogram);
+            return;
+        }
         final String fullName = prefix + "_" + name.replaceAll("\\.", "_");
 
         if (!metricNames.contains(fullName)) {
