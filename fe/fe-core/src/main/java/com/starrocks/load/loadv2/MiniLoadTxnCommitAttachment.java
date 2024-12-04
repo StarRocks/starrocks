@@ -23,7 +23,6 @@ import com.starrocks.thrift.TMiniLoadTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -73,14 +72,5 @@ public class MiniLoadTxnCommitAttachment extends TxnCommitAttachment {
             Text.writeString(out, errorLogUrl);
         }
 
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        filteredRows = in.readLong();
-        loadedRows = in.readLong();
-        if (in.readBoolean()) {
-            errorLogUrl = Text.readString(in);
-        }
     }
 }

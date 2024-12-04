@@ -14,14 +14,14 @@
 
 package com.starrocks.lake.compaction;
 
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInput;
 import java.io.DataInputStream;
-import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
@@ -36,10 +36,9 @@ public class CompactionTxnCommitAttachmentTest {
 
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(bout);
-        attachment2.write((DataOutput) out);
-
+        Text.writeString(out, GsonUtils.GSON.toJson(attachment2));
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(bout.toByteArray()));
-        attachment.readFields((DataInput) in);
+        attachment = GsonUtils.GSON.fromJson(Text.readString(in), CompactionTxnCommitAttachment.class);
         Assert.assertTrue(attachment.getForceCommit());
     }
 }
