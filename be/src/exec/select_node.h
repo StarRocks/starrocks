@@ -47,6 +47,7 @@ public:
     SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~SelectNode() override;
 
+    Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
@@ -55,6 +56,8 @@ public:
             pipeline::PipelineBuilderContext* context) override;
 
 private:
+    std::map<SlotId, ExprContext*> _common_expr_ctxs;
+
     RuntimeProfile::Counter* _conjunct_evaluate_timer = nullptr;
 };
 

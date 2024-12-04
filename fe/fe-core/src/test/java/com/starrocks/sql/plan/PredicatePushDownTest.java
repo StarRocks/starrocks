@@ -67,7 +67,7 @@ public class PredicatePushDownTest extends PlanTestBase {
         {
             String sql = "select * from t0 where coalesce(v1 < 2, null, v2 > 1)";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "PREDICATES: coalesce(1: v1 < 2, NULL, 2: v2 > 1)");
+            assertContains(plan, "predicates: coalesce(1: v1 < 2, NULL, 2: v2 > 1)");
         }
         {
             String sql = "WITH cte0 AS (\n" +

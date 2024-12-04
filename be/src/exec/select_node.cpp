@@ -51,6 +51,18 @@ SelectNode::~SelectNode() {
     }
 }
 
+Status SelectNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    if (tnode.__isset.select_node && tnode.select_node.__isset.common_slot_map) {
+        for (const auto& [key, val] : tnode.select_node.common_slot_map) {
+            ExprContext* context;
+            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+            _common_expr_ctxs.insert({key, context});
+        }
+    }
+    return Status::OK();
+}
+
 Status SelectNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     _conjunct_evaluate_timer = ADD_TIMER(_runtime_profile, "ConjunctEvaluateTime");
@@ -108,8 +120,8 @@ pipeline::OpFactories SelectNode::decompose_to_pipeline(pipeline::PipelineBuilde
 
     OpFactories operators = _children[0]->decompose_to_pipeline(context);
 
-    operators.emplace_back(
-            std::make_shared<SelectOperatorFactory>(context->next_operator_id(), id(), std::move(_conjunct_ctxs)));
+    operators.emplace_back(std::make_shared<SelectOperatorFactory>(
+            context->next_operator_id(), id(), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs)));
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));

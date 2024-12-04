@@ -51,6 +51,7 @@ public class MaterializedViewOptimizer {
         optimizerConfig.disableRule(RuleType.TF_MV_TEXT_MATCH_REWRITE_RULE);
         optimizerConfig.disableRule(RuleType.TF_MV_TRANSPARENT_REWRITE_RULE);
         optimizerConfig.disableRule(RuleType.TF_ELIMINATE_AGG);
+        optimizerConfig.disableRule(RuleType.TF_PULL_UP_PREDICATE_SCAN);
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
         if (mv.getRefreshScheme().isSync()) {
             optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);

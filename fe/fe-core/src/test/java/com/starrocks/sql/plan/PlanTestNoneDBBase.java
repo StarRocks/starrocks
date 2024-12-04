@@ -115,6 +115,16 @@ public class PlanTestNoneDBBase {
         }
     }
 
+    public static void assertContainsAny(String text, String... pattern) {
+        boolean contains = false;
+        for (String s : pattern) {
+            contains |= text.contains(s);
+        }
+        if (!contains) {
+            Assert.fail(text);
+        }
+    }
+
     private static final String NORMAL_PLAN_PREDICATE_PREFIX = "PREDICATES:";
     private static final String LOWER_NORMAL_PLAN_PREDICATE_PREFIX = "predicates:";
     private static final String LOGICAL_PLAN_SCAN_PREFIX = "SCAN ";
