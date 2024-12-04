@@ -102,7 +102,7 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
 - `CREATE INDEX` can be used to create a bitmap index after table creation. For detailed parameter descriptions and examples, refer to [CREATE INDEX](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md).
 
     ```SQL
-    CREATE INDEX lo_quantity_index (lo_quantity) USING BITMAP;
+    CREATE INDEX lo_quantity_index ON lineorder_partial (lo_quantity) USING BITMAP;
     ```
 
 ### Progress of creating an index
