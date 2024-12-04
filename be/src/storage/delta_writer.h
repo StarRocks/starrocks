@@ -82,6 +82,58 @@ enum State {
     kCommitted, // committed state can transfer to kAborted state
 };
 
+// Statistics for DeltaWriter
+struct DeltaWriterStat {
+    int32_t task_count = 0;
+    int64_t pending_time_ns = 0;
+
+    // ====== statistics for write()
+
+    // The number of write()
+    int32_t write_count = 0;
+    // The number of rows to write
+    int32_t row_count = 0;
+    // Accumulated time for write()
+    int64_t write_time_ns = 0;
+    // The number that memtable is full
+    int32_t memtable_full_count = 0;
+    // The number that reach memory limit, and each will
+    // trigger memtable flush, and wait for it to finish
+    int32_t memory_exceed_count = 0;
+    // Accumulated time to wait for flush because of reaching memory limit
+    int64_t write_wait_flush_tims_ns = 0;
+
+    // ====== statistics for add_segment()
+
+    // The number of add_segment()
+    int32_t add_segment_count = 0;
+    // Accumulated time for add_segment()
+    int32_t add_segment_time_ns = 0;
+    // Accumulated io time for add_segment()
+    int64_t add_segment_io_time_ns = 0;
+    int64_t add_segment_data_size = 0;
+
+    // ====== statistics for close()
+
+    // Time for close()
+    int64_t close_time_ns = 0;
+
+    // ====== statistics for commit()
+
+    // Time for commit()
+    int64_t commit_time_ns = 0;
+    // Time to wait for memtable flush in commit()
+    int64_t commit_wait_flush_time_ns = 0;
+    // Time to build rowset in commit()
+    int64_t commit_rowset_build_time_ns = 0;
+    // Time to deal with primary key in commit() which may load data from disk
+    int64_t commit_finish_pk_time_ns = 0;
+    // Time to wait for replica sync in commit()
+    int64_t commit_wait_replica_time_ns = 0;
+    // Time to commit txn in commit()
+    int64_t commit_txn_commit_time_ns = 0;
+};
+
 // Writer for a particular (load, index, tablet).
 class DeltaWriter {
 public:
@@ -170,6 +222,12 @@ public:
 
     int64_t write_buffer_size() const { return _write_buffer_size; }
 
+    void update_task_stat(int32_t num_tasks, int64_t pending_time_ns) {
+        _stats.task_count += num_tasks;
+        _stats.pending_time_ns += pending_time_ns;
+    }
+    const DeltaWriterStat& get_writer_stat() const { return _stats; }
+
     static bool is_partial_update_with_sort_key_conflict(const PartialUpdateMode& partial_update_mode,
                                                          const std::vector<int32_t>& referenced_column_ids,
                                                          const std::vector<ColumnId>& sort_key_idxes,
@@ -227,6 +285,8 @@ private:
     int64_t _last_write_ts = 0;
     // for concurrency issue, we can't get write_buffer_size from memtable directly
     int64_t _write_buffer_size = 0;
+
+    DeltaWriterStat _stats;
 };
 
 } // namespace starrocks
