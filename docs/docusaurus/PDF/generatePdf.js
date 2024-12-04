@@ -80,7 +80,7 @@ async function processLineByLine() {
     input: fileStream,
     crlfDelay: Infinity
   });
-
+  console.log("Generating PDFs");
   for await (const line of rl) {
     // Each line in input.txt will be successively available here as `line`.
     //console.log(`URL: ${line}`);
@@ -90,6 +90,7 @@ async function processLineByLine() {
     console.log(err);
   });
   }
+  console.log(" done");
 }
 
 async function requestPage(url) {
@@ -111,20 +112,20 @@ async function requestPage(url) {
     }
   });
 
-  await callGotenberg(url, fileName);
-  i++;
+    await callGotenberg(url, fileName);
+    process.stdout.write(".");
+    i++;
 
 }
 
 
 
 
-function main(ms) {
+function main() {
     // startingUrl is the URL for the first page of the docs
     // Get all of the URLs and write to URLs.txt
+    console.log("Crawling from %s", startingUrl);
     getUrls(startingUrl);
-
-    console.log(startingUrl);
 
     const yamlHeader = 'files:\n';
 
