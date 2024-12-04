@@ -2138,6 +2138,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
 
+    @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample")
+    public static boolean histogram_enable_table_sample = true;
+
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
 
@@ -2739,6 +2742,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
 
+    @ConfField(mutable = true)
+    public static int lake_warehouse_max_compute_replica = 3;
+
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
@@ -3206,12 +3212,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean lock_manager_enable_resolve_deadlock = false;
-
-    /**
-     * Whether to use table level lock
-     */
-    @ConfField
-    public static boolean lock_manager_enable_using_fine_granularity_lock = true;
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;

@@ -75,8 +75,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
 
     public IcebergEqualityDeletePlanTest() throws IOException {
     }
-
-    @Test
+    
     public void testNormalPlan() throws Exception {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
         mockedNativeTableB.refresh();

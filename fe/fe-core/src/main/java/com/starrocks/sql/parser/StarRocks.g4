@@ -1133,6 +1133,7 @@ addPartitionClause
 dropPartitionClause
     : DROP TEMPORARY? (PARTITION (IF EXISTS)? identifier | PARTITIONS (IF EXISTS)? identifierList) FORCE?
     | DROP TEMPORARY? PARTITIONS (IF EXISTS)? multiRangePartition FORCE?
+    | DROP TEMPORARY? PARTITIONS (IF EXISTS)? WHERE where=expression FORCE?
     ;
 
 truncatePartitionClause
@@ -1264,7 +1265,7 @@ showStreamLoadStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName  (',' qualifiedName)* ')')?
+    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName  (',' qualifiedName)* ')')? partitionNames?
         (WITH (SYNC | ASYNC) MODE)?
         properties?
     ;

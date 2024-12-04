@@ -58,6 +58,9 @@ public class PlanTuningAdvisor {
     }
 
     public OperatorTuningGuides.OptimizedRecord getOptimizedRecord(UUID queryId) {
+        if (queryId == null) {
+            return null;
+        }
         return optimizedQueryRecords.get(queryId);
     }
 
@@ -107,6 +110,7 @@ public class PlanTuningAdvisor {
             row.add(String.valueOf(entry.getValue().getOriginalTimeCost()));
             row.add(entry.getValue().getTuneGuidesInfo());
             row.add(String.valueOf(entry.getValue().getAvgTunedTimeCost()));
+            row.add(String.valueOf(entry.getValue().optimizedQueryCount()));
             row.add(String.valueOf(entry.getValue().isUseful()));
             row.add(nodeName);
             result.add(row);

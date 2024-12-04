@@ -218,7 +218,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                 Maps.newHashMap());
         for (String col : columnNames) {
             String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
-                    db, t0, 3L, col);
+                    db, t0, 3L, col, 0.1);
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, "0:OlapScanNode\n" +
@@ -231,7 +231,7 @@ public class StatisticsSQLTest extends PlanTestBase {
             sql = sql.substring(sql.indexOf("SELECT"));
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
-            assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
+            assertCContains(plan, "AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");
         }
     }

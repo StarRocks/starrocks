@@ -25,6 +25,8 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.feedback.OperatorTuningGuides;
+import com.starrocks.qe.feedback.PlanTuningAdvisor;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -63,6 +65,7 @@ import com.starrocks.sql.optimizer.rule.transformation.OnPredicateMoveAroundRule
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnMinMaxRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
+import com.starrocks.sql.optimizer.rule.transformation.PullUpScanPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindowRule;
@@ -425,7 +428,8 @@ public class Optimizer {
     }
 
     private void ruleBasedMaterializedViewRewrite(OptExpression tree,
-                                                  TaskContext rootTaskContext) {
+                                                  TaskContext rootTaskContext,
+                                                  ColumnRefSet requiredColumns) {
         if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null ||
                 context.getQueryMaterializationContext().hasRewrittenSuccess()) {
             return;
@@ -436,6 +440,7 @@ public class Optimizer {
 
         // NOTE: Since union rewrite will generate Filter -> Union -> OlapScan -> OlapScan, need to push filter below Union
         // and do partition predicate again.
+        // TODO: move this into doRuleBasedMaterializedViewRewrite
         // TODO: Do it in CBO if needed later.
         boolean isNeedFurtherPartitionPrune = Utils.isOptHasAppliedRule(tree, op -> op.isOpRuleBitSet(OP_MV_UNION_REWRITE));
         if (isNeedFurtherPartitionPrune && context.getQueryMaterializationContext().hasRewrittenSuccess()) {
@@ -446,6 +451,9 @@ public class Optimizer {
             // Do predicate push down if union rewrite successes.
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
             deriveLogicalProperty(tree);
+            // Do partition prune again to avoid unnecessary scan.
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
             // It's necessary for external table since its predicate is not used directly after push down.
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
@@ -675,7 +683,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
         // rule based materialized view rewrite
-        ruleBasedMaterializedViewRewrite(tree, rootTaskContext);
+        ruleBasedMaterializedViewRewrite(tree, rootTaskContext, requiredColumns);
 
         // this rewrite rule should be after mv.
         ruleRewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.HIVE_SCAN_NO_PROJECT);
@@ -692,6 +700,9 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.VECTOR_REWRITE);
+        // this rule should be after mv
+        // @TODO: it can also be applied to other table scan operator
+        ruleRewriteOnlyOnce(tree, rootTaskContext, PullUpScanPredicateRule.OLAP_SCAN);
 
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
@@ -966,6 +977,12 @@ public class Optimizer {
         // if we can change the distribution to adjust the plan because of skew data, bad statistics or something else.
         result = new MarkParentRequiredDistributionRule().rewrite(result, rootTaskContext);
         result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
+
+        OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()
+                .getOptimizedRecord(context.getQueryId());
+        if (optimizedRecord != null) {
+            Tracers.record(Tracers.Module.BASE, "DynamicTuningGuides", optimizedRecord.getExplainString());
+        }
         return result;
     }
 

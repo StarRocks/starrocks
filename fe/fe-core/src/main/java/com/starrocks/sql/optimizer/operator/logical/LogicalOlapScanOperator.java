@@ -185,6 +185,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.sample = sample;
     }
 
+    public boolean isSample() {
+        return sample != null && sample.isUseSampling();
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalOlapScan(this, context);

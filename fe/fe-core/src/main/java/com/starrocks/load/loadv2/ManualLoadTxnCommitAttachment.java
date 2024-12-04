@@ -21,7 +21,6 @@ import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -110,19 +109,5 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
         // TODO: Persist `receivedBytes` && `loadedBytes`
         // out.writeLong(receivedBytes);
         // out.writeLong(loadedBytes);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        filteredRows = in.readLong();
-        loadedRows = in.readLong();
-        if (in.readBoolean()) {
-            errorLogUrl = Text.readString(in);
-        }
-        // TODO: Persist `receivedBytes` && `loadedBytes`
-        // if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_93) {
-        //     receivedBytes = in.readLong();
-        //     loadedBytes = in.readLong();
-        // }
     }
 }
