@@ -21,9 +21,11 @@ git switch branch-3.3
 
 The conversion process uses Docker Compose. Launch the environment by running the following command from the `starrocks/docs/docusaurus/PDF/` directory.
 
+The `--wait-timeout 400` will give the services 400 seconds to get to a healthy state. This is to allow both Docusaurus and Gotenberg to become ready to handle requests. On my machine it takes about 200 seconds for Docusaurus to build the docs and start serving them.
+
 ```bash
 cd starrocks/docs/docusaurus/PDF
-docker compose up --detach --wait --wait-timeout 120 --build
+docker compose up --detach --wait --wait-timeout 400 --build
 ```
 
 > Tip
