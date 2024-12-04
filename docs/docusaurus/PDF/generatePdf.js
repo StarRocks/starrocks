@@ -41,24 +41,13 @@ function getUrls(url) {
 
 async function callGotenberg(docusaurusUrl, fileName) {
 
-    const fs = require("fs");
     const path = require("path");
-    const axios = require("axios");
     const FormData = require("form-data");
-
-
 
     try { 
         // Convert URL content to PDF using Gotenberg
         const form = new FormData();
-        //form.append("files", fs.createReadStream(inputFilePath));
         form.append('url', `${docusaurusUrl}`)
-        //form.append('preferCssPageSize', 'true')
-        // form.append('emulatedMediaType', 'screen')
-        //form.append('marginTop', '0')
-        //form.append('marginBottom', '0')
-        //form.append('marginLeft', '0')
-        //form.append('marginRight', '0')
 
         const response = await axios.post(
           "http://gotenberg:3000/forms/chromium/convert/url",
@@ -77,38 +66,12 @@ async function callGotenberg(docusaurusUrl, fileName) {
 
         // Save the converted file
         fs.writeFileSync(fileName, buffer);
-        console.log('wrote URL content from %s to PDF file %s', docusaurusUrl, fileName);
-        // Return the converted file
-        //ctx.type = "application/pdf";
-        //ctx.body = fs.createReadStream(outputFilePath);
+        //console.log('wrote URL content from %s to PDF file %s', docusaurusUrl, fileName);
       
     } catch (err) {
       console.error(err.message || err);
     }
 };
-
-
-
-
-/*
-    //var util = require('util');
-    var execSync = require('child_process').execSync;
-
-    var command = `curl --request POST http://gotenberg:3000/forms/chromium/convert/url --form url=${docusaurusUrl} -o ${fileName}`
-
-    child = execSync(command, function(error, stdout, stderr){
-
-    //console.log('stdout: ' + stdout);
-    console.log('stderr: ' + stderr);
-
-    if(error !== null)
-    {
-        console.log('exec error: ' + error);
-    }
-
-    });
-}
-*/
 
 async function processLineByLine() {
   const fileStream = fs.createReadStream('URLs.txt');
