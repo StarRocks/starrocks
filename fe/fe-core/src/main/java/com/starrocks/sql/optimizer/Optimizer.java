@@ -428,7 +428,8 @@ public class Optimizer {
     }
 
     private void ruleBasedMaterializedViewRewrite(OptExpression tree,
-                                                  TaskContext rootTaskContext) {
+                                                  TaskContext rootTaskContext,
+                                                  ColumnRefSet requiredColumns) {
         if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null ||
                 context.getQueryMaterializationContext().hasRewrittenSuccess()) {
             return;
@@ -439,6 +440,7 @@ public class Optimizer {
 
         // NOTE: Since union rewrite will generate Filter -> Union -> OlapScan -> OlapScan, need to push filter below Union
         // and do partition predicate again.
+        // TODO: move this into doRuleBasedMaterializedViewRewrite
         // TODO: Do it in CBO if needed later.
         boolean isNeedFurtherPartitionPrune = Utils.isOptHasAppliedRule(tree, op -> op.isOpRuleBitSet(OP_MV_UNION_REWRITE));
         if (isNeedFurtherPartitionPrune && context.getQueryMaterializationContext().hasRewrittenSuccess()) {
@@ -449,6 +451,9 @@ public class Optimizer {
             // Do predicate push down if union rewrite successes.
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
             deriveLogicalProperty(tree);
+            // Do partition prune again to avoid unnecessary scan.
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
             // It's necessary for external table since its predicate is not used directly after push down.
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
@@ -678,7 +683,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
         // rule based materialized view rewrite
-        ruleBasedMaterializedViewRewrite(tree, rootTaskContext);
+        ruleBasedMaterializedViewRewrite(tree, rootTaskContext, requiredColumns);
 
         // this rewrite rule should be after mv.
         ruleRewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.HIVE_SCAN_NO_PROJECT);
