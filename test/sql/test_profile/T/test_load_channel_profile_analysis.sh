@@ -39,5 +39,5 @@ EOF
 )
 
 output=$(${mysql_cmd} -e "$sql")
-check_keywords "$output" "LoadChannel" "1"
+check_keywords "$output" "LoadChannel:" "1"
 check_keywords "$output" "Index (id=" "3"

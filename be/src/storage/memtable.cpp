@@ -162,6 +162,8 @@ bool MemTable::check_supported_column_partial_update(const Chunk& chunk) {
 }
 
 StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    SCOPED_RAW_TIMER(&_stats.insert_time_ns);
+    _stats.insert_count += 1;
     if (_chunk == nullptr) {
         _chunk = ChunkHelper::new_chunk(*_vectorized_schema, 0);
     }
@@ -316,6 +318,7 @@ Status MemTable::finalize() {
         }
     }
 
+    _stats.finalize_time_ns = duration_ns;
     StarRocksMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
@@ -339,16 +342,19 @@ Status MemTable::flush(SegmentPB* seg_info) {
         }
     }
     auto io_stat = scope.current_scoped_tls_io();
+    _stats.flush_time_ns = duration_ns;
+    _stats.io_time_ns = io_stat.write_time_ns + io_stat.sync_time_ns;
+    _stats.flush_memory_size = memory_usage();
+    _stats.flush_disk_size = io_stat.write_bytes;
+
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
-    StarRocksMetrics::instance()->memtable_flush_duration_us.increment(duration_ns / 1000);
-    auto io_time_us = (io_stat.write_time_ns + io_stat.sync_time_ns) / 1000;
-    StarRocksMetrics::instance()->memtable_flush_io_time_us.increment(io_time_us);
-    auto flush_bytes = memory_usage();
-    StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.increment(flush_bytes);
-    StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.increment(io_stat.write_bytes);
-    VLOG(2) << "memtable of tablet " << _tablet_id << " flush duration: " << duration_ns / 1000 << "us, "
-            << "io time: " << io_time_us << "us, memory bytes: " << flush_bytes
-            << ", disk bytes: " << io_stat.write_bytes;
+    StarRocksMetrics::instance()->memtable_flush_duration_us.increment(_stats.flush_time_ns / 1000);
+    StarRocksMetrics::instance()->memtable_flush_io_time_us.increment(_stats.io_time_ns / 1000);
+    StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.increment(_stats.flush_memory_size);
+    StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.increment(_stats.flush_disk_size);
+    VLOG(2) << "memtable of tablet " << _tablet_id << " flush duration: " << _stats.flush_time_ns / 1000 << "us, "
+            << "io time: " << _stats.io_time_ns / 1000 << "us, memory bytes: " << _stats.flush_memory_size
+            << ", disk bytes: " << _stats.flush_disk_size;
     return Status::OK();
 }
 
@@ -371,7 +377,8 @@ void MemTable::_aggregate(bool is_final) {
     if (_result_chunk == nullptr || _result_chunk->num_rows() <= 0) {
         return;
     }
-
+    SCOPED_RAW_TIMER(&_stats.agg_time_ns);
+    _stats.agg_count += 1;
     DCHECK(_result_chunk->num_rows() < INT_MAX);
     DCHECK(_aggregator->source_exhausted());
 
@@ -396,6 +403,8 @@ void MemTable::_aggregate(bool is_final) {
 }
 
 Status MemTable::_sort(bool is_final, bool by_sort_key) {
+    SCOPED_RAW_TIMER(&_stats.sort_time_ns);
+    _stats.sort_count += 1;
     SmallPermutation perm = create_small_permutation(static_cast<uint32_t>(_chunk->num_rows()));
     std::swap(perm, _permutations);
 

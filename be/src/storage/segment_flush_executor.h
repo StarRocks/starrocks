@@ -41,6 +41,14 @@ class ThreadPoolToken;
 
 class DeltaWriter;
 
+struct SegmentFlushStat {
+    std::atomic_int32_t num_pending_tasks = 0;
+    std::atomic_int32_t num_running_tasks = 0;
+    std::atomic_int32_t num_finished_tasks = 0;
+    std::atomic_int64_t pending_time_ns = 0;
+    std::atomic_int64_t execute_time_ns = 0;
+};
+
 class SegmentFlushToken {
 public:
     SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token);
@@ -65,12 +73,17 @@ public:
 
     Status wait();
 
+    const SegmentFlushStat& get_stat() const { return _stat; }
+
 private:
+    friend class SegmentFlushTask;
+
     std::unique_ptr<ThreadPoolToken> _flush_token;
 
     mutable SpinLock _status_lock;
     // Records the current flush status of the tablet.
     Status _status;
+    SegmentFlushStat _stat;
 };
 
 class SegmentFlushExecutor {

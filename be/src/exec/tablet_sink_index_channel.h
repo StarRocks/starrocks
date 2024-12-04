@@ -97,6 +97,7 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* server_rpc_timer = nullptr;
     RuntimeProfile::Counter* alloc_auto_increment_timer = nullptr;
     RuntimeProfile::Counter* server_wait_flush_timer = nullptr;
+    RuntimeProfile::Counter* update_load_channel_profile_timer = nullptr;
 };
 
 // map index_id to TabletBEMap(map tablet_id to backend id)
