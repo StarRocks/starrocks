@@ -60,6 +60,7 @@ public class DefaultWarehouse extends Warehouse {
                 "",
                 "",
                 "",
+                "",
                 comment);
     }
 
