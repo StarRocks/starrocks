@@ -344,7 +344,7 @@ struct HdfsScannerContext {
     void merge_split_tasks();
 
     // used for parquet zone map filter only
-    std::unique_ptr<OlapScanConjunctsManager> conjuncts_manager = nullptr;
+    std::unique_ptr<ScanConjunctsManager> conjuncts_manager = nullptr;
     std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
     PredicateTree predicate_tree;
 };

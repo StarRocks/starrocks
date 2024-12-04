@@ -359,7 +359,7 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     ASSERT_OK(Expr::open(conjunct_ctxs, &_runtime_state));
     auto tablet_schema = TabletSchema::create(create_tablet_schema(ltype));
 
-    OlapScanConjunctsManagerOptions opts;
+    ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &conjunct_ctxs;
     opts.tuple_desc = tuple_desc;
     opts.obj_pool = &_pool;
@@ -370,7 +370,7 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     opts.max_scan_key_num = 1;
     opts.enable_column_expr_predicate = false;
 
-    OlapScanConjunctsManager cm(std::move(opts));
+    ScanConjunctsManager cm(std::move(opts));
     ASSERT_OK(cm.parse_conjuncts());
 
     OlapPredicateParser parser(tablet_schema);

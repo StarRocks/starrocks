@@ -101,7 +101,7 @@ public:
                            RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence);
 
     OlapScanNode* scan_node() const { return _scan_node; }
-    OlapScanConjunctsManager& conjuncts_manager() { return *_conjuncts_manager; }
+    ScanConjunctsManager& conjuncts_manager() { return *_conjuncts_manager; }
     const std::vector<ExprContext*>& not_push_down_conjuncts() const { return _not_push_down_conjuncts; }
     const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges() const { return _key_ranges; }
     BalancedChunkBuffer& get_chunk_buffer() { return _chunk_buffer; }
@@ -129,7 +129,7 @@ private:
     int64_t _scan_table_id;
 
     std::vector<ExprContext*> _conjunct_ctxs;
-    std::unique_ptr<OlapScanConjunctsManager> _conjuncts_manager = nullptr;
+    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;

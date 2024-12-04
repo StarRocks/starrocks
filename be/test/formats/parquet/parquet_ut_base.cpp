@@ -274,7 +274,7 @@ void ParquetUTBase::create_in_predicate_date_conjunct_ctxs(TExprOpcode::type opc
 
 void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, TupleDescriptor* tuple_desc,
                                             RuntimeState* runtime_state, HdfsScannerContext* params) {
-    OlapScanConjunctsManagerOptions opts;
+    ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &conjuncts;
     opts.tuple_desc = tuple_desc;
     opts.obj_pool = runtime_state->obj_pool();
@@ -283,7 +283,7 @@ void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
     opts.pred_tree_params = {true, true};
-    params->conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
+    params->conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
     ASSERT_TRUE(params->conjuncts_manager->parse_conjuncts().ok());
     ConnectorPredicateParser predicate_parser{&params->slot_descs};
     auto st = params->conjuncts_manager->get_predicate_tree(&predicate_parser, params->predicate_free_pool);

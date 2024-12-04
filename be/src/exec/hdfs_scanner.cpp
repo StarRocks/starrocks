@@ -172,7 +172,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
 
     if (config::parquet_advance_zonemap_filter) {
-        OlapScanConjunctsManagerOptions opts;
+        ScanConjunctsManagerOptions opts;
         opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
         opts.tuple_desc = _scanner_params.tuple_desc;
         opts.obj_pool = _runtime_state->obj_pool();
@@ -181,7 +181,7 @@ Status HdfsScanner::_build_scanner_context() {
         opts.enable_column_expr_predicate = true;
         opts.is_olap_scan = false;
         opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
-        ctx.conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
+        ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
         RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
         ConnectorPredicateParser predicate_parser{&ctx.slot_descs};
         ASSIGN_OR_RETURN(ctx.predicate_tree,
