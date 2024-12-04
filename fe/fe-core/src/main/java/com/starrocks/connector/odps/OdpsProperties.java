@@ -43,6 +43,8 @@ public class OdpsProperties {
 
     public static final String ROW_OFFSET = "row_offset";
     public static final String SIZE = "size";
+
+    private static final String DEFAULT_TUNNEL_QUOTA_NAME = "pay-as-you-go";
     private static final long DEFAULT_SPLIT_ROW_COUNT = 4 * 1024 * 1024L;
     private final Map<String, String> properties;
     private static final Map<String, String> DEFAULT_VALUES = new HashMap<>();
@@ -56,7 +58,7 @@ public class OdpsProperties {
         newProperty(SPLIT_POLICY).withDefaultValue(SIZE);
         newProperty(SPLIT_ROW_COUNT).withDefaultValue(String.valueOf(DEFAULT_SPLIT_ROW_COUNT));
         newProperty(TUNNEL_ENDPOINT).noDefaultValue();
-        newProperty(TUNNEL_QUOTA).noDefaultValue();
+        newProperty(TUNNEL_QUOTA).withDefaultValue(DEFAULT_TUNNEL_QUOTA_NAME);
 
         newProperty(ENABLE_TABLE_CACHE).withDefaultValue(true);
         newProperty(TABLE_CACHE_EXPIRE_TIME).withDefaultValue(86400);

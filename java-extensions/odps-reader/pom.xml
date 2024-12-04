@@ -13,13 +13,57 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <odps.version>0.48.3-public</odps.version>
+        <odps.version>0.48.7-public</odps.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>1.7.36</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>2.15.2</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-vector</artifactId>
+                <version>18.1.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-memory-netty</artifactId>
+                <version>18.1.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-compression</artifactId>
+                <version>18.1.0</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>jni-connector</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-1.2-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <version>${log4j2.version}</version>
         </dependency>
 
         <dependency>
@@ -34,9 +78,13 @@
 
         <dependency>
             <groupId>com.aliyun.odps</groupId>
-            <artifactId>odps-sdk-core</artifactId>
+            <artifactId>odps-sdk-table-api</artifactId>
             <version>${odps.version}</version>
             <exclusions>
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
                 <exclusion>
                     <groupId>org.xerial.snappy</groupId>
                     <artifactId>snappy-java</artifactId>
@@ -57,25 +105,34 @@
                     <groupId>commons-io</groupId>
                     <artifactId>commons-io</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.apache.arrow</groupId>
+                    <artifactId>arrow-vector</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
         <dependency>
-            <groupId>com.aliyun.odps</groupId>
-            <artifactId>odps-sdk-table-api</artifactId>
-            <version>${odps.version}</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-vector</artifactId>
+            <version>18.1.0</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-memory-netty</artifactId>
-            <version>4.0.0</version>
+            <version>18.1.0</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-compression</artifactId>
-            <version>4.0.0</version>
+            <version>18.1.0</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.apache.commons</groupId>
