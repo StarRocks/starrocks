@@ -39,6 +39,7 @@ public class WarehouseProcDir implements ProcDirInterface {
             .add("CreatedOn")
             .add("ResumedOn")
             .add("UpdatedOn")
+            .add("Property")
             .add("Comment")
             .build();
 
