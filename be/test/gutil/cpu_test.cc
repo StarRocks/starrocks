@@ -20,7 +20,7 @@
 
 namespace starrocks {
 
-TEST(CpuInfoTest, hardware_support) {
+TEST(CpuTest, hardware_support) {
     const base::CPU* cpu = base::CPU::instance();
     EXPECT_NE(nullptr, cpu);
     EXPECT_TRUE(cpu->has_avx());
@@ -46,7 +46,7 @@ TEST(CpuInfoTest, hardware_support) {
 #endif
 }
 
-TEST(CpuInfoTest, parse_cpus) {
+TEST(CpuTest, parse_cpus) {
     auto assert_cpu_equals = [](std::vector<size_t>& cpus, std::vector<size_t>& expected_cpus) {
         ASSERT_EQ(expected_cpus.size(), cpus.size());
         std::ranges::sort(cpus);

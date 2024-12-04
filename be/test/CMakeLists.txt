@@ -425,6 +425,7 @@ set(EXEC_FILES
         ./util/core_local_test.cpp
         ./util/core_local_counter_test.cpp
         ./util/countdown_latch_test.cpp
+        ./util/cpu_info_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp

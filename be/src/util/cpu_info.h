@@ -39,6 +39,8 @@ public:
     static const int64_t POPCNT = (1 << 4);
     static const int64_t AVX = (1 << 5);
     static const int64_t AVX2 = (1 << 6);
+    static const int64_t AVX512F = (1 << 7);
+    static const int64_t AVX512BW = (1 << 8);
 
     /// Cache enums for L1 (data), L2 and L3
     enum CacheLevel {
@@ -102,6 +104,14 @@ public:
 
     /// Parse a string-formatted cpus in the format "0-3,5,7-9" and return the parsed core IDs.
     static std::vector<size_t> parse_cpus(const std::string& cpus_str);
+
+    // Check cpu flags in runtime, whether the running CPU matches the compiled binary with necessary
+    // CPU instruction set such as SSE4/AVX/AVX2/AVX512/...
+    // Return value: the cpu instruction sets that are not supported in the current running env.
+    static std::vector<std::string> unsupported_cpu_flags_from_current_env();
+
+    // For TEST only
+    static int64_t* TEST_mutable_hardware_flags() { return &hardware_flags_; }
 
 private:
     /// Initialize NUMA-related state - called from Init();
