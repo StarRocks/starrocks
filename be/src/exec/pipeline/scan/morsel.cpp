@@ -150,6 +150,15 @@ void IndividualMorselQueueFactory::set_has_more(bool v) {
     }
 }
 
+bool IndividualMorselQueueFactory::reach_limit() const {
+    for (const auto& p : _queue_per_driver_seq) {
+        if (p->reach_limit()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
                                                                    bool could_local_shuffle)
         : _could_local_shuffle(could_local_shuffle) {
@@ -180,6 +189,15 @@ void BucketSequenceMorselQueueFactory::set_has_more(bool v) {
     for (auto& q : _queue_per_driver_seq) {
         q->set_has_more(v);
     }
+}
+
+bool BucketSequenceMorselQueueFactory::reach_limit() const {
+    for (const auto& p : _queue_per_driver_seq) {
+        if (p->reach_limit()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 size_t BucketSequenceMorselQueueFactory::num_original_morsels() const {
