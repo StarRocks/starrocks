@@ -1339,11 +1339,14 @@ public class StmtExecutor {
                 context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");
             }
 
+            if (null != statisticsForAuditLog) {
+                analyzePlanWithExecStats(execPlan);
+            }
+
             if (null == statisticsForAuditLog || null == statisticsForAuditLog.statsItems ||
                     statisticsForAuditLog.statsItems.isEmpty()) {
                 return;
             }
-            analyzePlanWithExecStats(execPlan);
 
             // collect table-level metrics
             Set<Long> tableIds = Sets.newHashSet();
