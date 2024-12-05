@@ -43,9 +43,9 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
+#include "types/large_int_value.h"
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"
@@ -2101,10 +2101,10 @@ static inline const char* skip_leading_spaces(const char* begin, const char* end
 #endif
     if constexpr (trim_single) {
         if (remove[0] == ' ') {
-            for (; p < end && *p == ' '; ++p) {
+            for (; p < end && * p == ' '; ++p) {
             }
         } else {
-            for (; p < end && *p == remove[0]; ++p) {
+            for (; p < end && * p == remove[0]; ++p) {
             }
         }
     } else if constexpr (!trim_utf8) {
@@ -4263,7 +4263,7 @@ static bool seek_param_key_in_query_params(const StringValue& query_params, cons
     // case 2: suffix found, seek "k1" in "abck1=2", prev char must be '&' if it exists
     // case 3: prefix found, seek "k1" in "k1abc=2", next char must be '=' or '&' if it exists
     if (pos < 0 || (p_prev_char >= begin && *p_prev_char != '&') ||
-        (p_next_char < end && *p_next_char != '=' && *p_next_char != '&')) {
+        (p_next_char < end && * p_next_char != '=' && *p_next_char != '&')) {
         return false;
     }
     // no value; return empty string
@@ -4275,7 +4275,7 @@ static bool seek_param_key_in_query_params(const StringValue& query_params, cons
     ++p_next_char;
     auto* p = p_next_char;
     // seek '&', the value is string between '=' and '&' if '&' exists, otherwise is remaining string following '='
-    while (p < end && *p != '&') ++p;
+    while (p < end && * p != '&') ++p;
     auto status = url_decode_slice(p_next_char, p - p_next_char, param_value);
     return status.ok();
 }
