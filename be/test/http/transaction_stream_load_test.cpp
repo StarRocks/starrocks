@@ -14,6 +14,7 @@
 
 #include "http/action/transaction_stream_load.h"
 
+#include <event2/buffer.h>
 #include <event2/http.h>
 #include <event2/http_struct.h>
 #include <gtest/gtest.h>
@@ -31,6 +32,7 @@
 #include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
+#include "util/defer_op.h"
 
 class mg_connection;
 
