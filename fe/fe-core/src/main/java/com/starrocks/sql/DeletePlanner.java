@@ -24,6 +24,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
@@ -86,7 +87,7 @@ public class DeletePlanner {
 
             OlapTable table = (OlapTable) deleteStatement.getTable();
             for (Column column : table.getBaseSchema()) {
-                if (column.isKey()) {
+                if (column.isKey() || column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                     SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
                     slotDescriptor.setIsMaterialized(true);
                     slotDescriptor.setType(column.getType());
