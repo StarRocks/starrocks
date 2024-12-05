@@ -22,12 +22,19 @@ namespace starrocks {
 
 const size_t MAX_RAW_JSON_LEN = 64;
 
+JsonDocumentStreamParser::JsonDocumentStreamParser(simdjson::ondemand::parser* parser) : JsonParser(parser) {
+    _batch_size = (config::json_parse_many_batch_size > simdjson::dom::MINIMAL_BATCH_SIZE)
+                          ? config::json_parse_many_batch_size
+                          : simdjson::dom::DEFAULT_BATCH_SIZE;
+}
+
 Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated) noexcept {
     try {
         _data = data;
         _len = len;
 
-        _doc_stream = _parser->iterate_many(data, len, len);
+        _doc_stream = _parser->iterate_many(
+                data, len, config::enable_dynamic_batch_size_for_json_parse_many ? std::min(_batch_size, _len) : _len);
 
         _doc_stream_itr = _doc_stream.begin();
 
@@ -40,6 +47,75 @@ Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated)
     return Status::OK();
 }
 
+bool JsonDocumentStreamParser::_check_and_new_doc_stream_iterator() {
+    size_t cur_left_len = _first_object_parsed ? _len - _last_begin_offset : _len;
+    if (_batch_size >= cur_left_len) {
+        // nothing can do for the batch_size
+        return false;
+    }
+
+    // The following code should be no-exception by designed.
+    _curr_ready = false;
+    do {
+        _batch_size = std::min(_batch_size * 8, cur_left_len);
+        _doc_stream = _parser->iterate_many(_data + _last_begin_offset, cur_left_len, _batch_size);
+        _doc_stream_itr = _doc_stream.begin();
+
+        // skip the last parsed object
+        if (_first_object_parsed) {
+            ++_doc_stream_itr;
+        }
+    } while (_batch_size < cur_left_len &&
+             _doc_stream_itr.error() != simdjson::SUCCESS); /* make sure get a valid iterator after ++ */
+
+    if (_doc_stream_itr.error() != simdjson::SUCCESS) {
+        return false;
+    }
+
+    return true;
+}
+
+Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* row) {
+    while (true) {
+        try {
+            if (_doc_stream_itr != _doc_stream.end()) {
+                simdjson::ondemand::document_reference doc = *_doc_stream_itr;
+                // simdjson version 3.9.4 and JsonFunctions::to_json_string may crash when json is invalid.
+                // TODO: add value in error message
+                if (doc.type() == simdjson::ondemand::json_type::array) {
+                    return Status::DataQualityError(
+                            "The value is array type in json document stream, you can set strip_outer_array=true to "
+                            "parse "
+                            "each element of the array as individual rows");
+                } else if (doc.type() != simdjson::ondemand::json_type::object) {
+                    return Status::DataQualityError("The value should be object type in json document stream");
+                }
+
+                _curr = doc.get_object();
+                *row = _curr;
+                _curr_ready = true;
+
+                _last_begin_offset = _doc_stream_itr.current_index();
+
+                if (!_first_object_parsed) {
+                    _first_object_parsed = true;
+                }
+
+                return Status::OK();
+            }
+            return Status::EndOfFile("all documents of the stream are iterated");
+        } catch (simdjson::simdjson_error& e) {
+            /*
+             * The worst-case here is the exception is not cause by the size of batch_size
+             * and the following function will try to reset the batch_size until _len - _last_begin_offset.
+            */
+            if (!_check_and_new_doc_stream_iterator()) {
+                throw;
+            }
+        }
+    }
+}
+
 Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) noexcept {
     if (UNLIKELY(_curr_ready)) {
         _curr.reset();
@@ -48,25 +124,7 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
     }
 
     try {
-        if (_doc_stream_itr != _doc_stream.end()) {
-            simdjson::ondemand::document_reference doc = *_doc_stream_itr;
-            // simdjson version 3.9.4 and JsonFunctions::to_json_string may crash when json is invalid.
-            // https://github.com/StarRocks/StarRocksTest/issues/8327
-            // TODO: add value in error message
-            if (doc.type() == simdjson::ondemand::json_type::array) {
-                return Status::DataQualityError(
-                        "The value is array type in json document stream, you can set strip_outer_array=true to parse "
-                        "each element of the array as individual rows");
-            } else if (doc.type() != simdjson::ondemand::json_type::object) {
-                return Status::DataQualityError("The value should be object type in json document stream");
-            }
-
-            _curr = doc.get_object();
-            *row = _curr;
-            _curr_ready = true;
-            return Status::OK();
-        }
-        return Status::EndOfFile("all documents of the stream are iterated");
+        return _get_current_impl(row);
     } catch (simdjson::simdjson_error& e) {
         std::string err_msg;
         if (e.error() == simdjson::CAPACITY) {
@@ -85,7 +143,17 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
 
 Status JsonDocumentStreamParser::advance() noexcept {
     _curr_ready = false;
-    if (++_doc_stream_itr != _doc_stream.end()) {
+    if (++_doc_stream_itr != _doc_stream.end() ||
+        /*
+         * When the iterator reach the end, we should always to reset the
+         * batch_size until _len - _last_begin_offset to check if the
+         * iterator failure because of the batch_size.
+         * 
+         * If the iterator reach the end without any exception, this function
+         * will reset the batch_size to _len - _last_begin_offset = length of last record + 64,
+         * This cost is very small compared to allocating large memory before.
+        */
+        _check_and_new_doc_stream_iterator()) {
         return Status::OK();
     }
     return Status::EndOfFile("all documents of the stream are iterated");
