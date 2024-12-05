@@ -103,14 +103,14 @@ void ScanOperator::close(RuntimeState* state) {
 
     _default_buffer_capacity_counter = ADD_COUNTER_SKIP_MERGE(_unique_metrics, "DefaultChunkBufferCapacity",
                                                               TUnit::UNIT, TCounterMergeType::SKIP_ALL);
-    COUNTER_UPDATE(_default_buffer_capacity_counter, static_cast<int64_t>(default_buffer_capacity()));
+    COUNTER_SET(_default_buffer_capacity_counter, static_cast<int64_t>(default_buffer_capacity()));
     _buffer_capacity_counter =
             ADD_COUNTER_SKIP_MERGE(_unique_metrics, "ChunkBufferCapacity", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
-    COUNTER_UPDATE(_buffer_capacity_counter, static_cast<int64_t>(buffer_capacity()));
+    COUNTER_SET(_buffer_capacity_counter, static_cast<int64_t>(buffer_capacity()));
 
     _tablets_counter =
             ADD_COUNTER_SKIP_MERGE(_unique_metrics, "TabletCount", TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE);
-    COUNTER_UPDATE(_tablets_counter, static_cast<int64_t>(_source_factory()->num_total_original_morsels()));
+    COUNTER_SET(_tablets_counter, static_cast<int64_t>(_source_factory()->num_total_original_morsels()));
 
     _merge_chunk_source_profiles(state);
 
@@ -431,8 +431,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 #endif
 
             DeferOp timer_defer([chunk_source]() {
-                COUNTER_UPDATE(chunk_source->scan_timer(), chunk_source->io_task_wait_timer()->value() +
-                                                                   chunk_source->io_task_exec_timer()->value());
+                COUNTER_SET(chunk_source->scan_timer(),
+                            chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
             });
             COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
             SCOPED_TIMER(chunk_source->io_task_exec_timer());
@@ -593,8 +593,14 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     if (!query_ctx->enable_profile()) {
         return;
     }
+    std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
+    for (auto i = 0; i < _chunk_source_profiles.size(); i++) {
+        profiles[i] = _chunk_source_profiles[i].get();
+    }
 
-    RuntimeProfile* merged_profile = _chunk_source_profiles[0].get();
+    ObjectPool obj_pool;
+    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, profiles, false);
+
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);
 
