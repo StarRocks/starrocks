@@ -115,7 +115,7 @@ node generatePdf.js http://0.0.0.0:3000/zh/docs/introduction/StarRocks_intro/
 
 > Note:
 >
-> There are 900+ PDF files and more than 4,000 pages in total. Combining takes five hours on my laptop, just let it run. I am looking for a faster method to combine the files.
+> There are 900+ PDF files and more than 4,000 pages in total. Combining takes three hours on my laptop, just let it run. I am looking for a faster method to combine the files.
 
 ```bash
 source .venv/bin/activate
