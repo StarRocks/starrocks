@@ -118,8 +118,9 @@ Status StreamScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_
 ChunkSourcePtr StreamScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<StreamScanOperatorFactory*>(_factory);
-    return std::make_shared<StreamChunkSource>(this, _chunk_source_profiles[0].get(), std::move(morsel), scan_node,
-                                               factory->get_chunk_buffer(), enable_adaptive_io_tasks());
+    return std::make_shared<StreamChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
+                                               std::move(morsel), scan_node, factory->get_chunk_buffer(),
+                                               enable_adaptive_io_tasks());
 }
 
 bool StreamScanOperator::is_finished() const {
