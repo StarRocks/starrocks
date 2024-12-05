@@ -631,11 +631,11 @@ bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
     // There are several scenarios where _committed_rs_map might be modified:
     //   1. Adding to _committed_rs_map when committing a transaction.
     //   2. Removing from _committed_rs_map when publishing a transaction.
-    //   3. Removing from _committed_rs_map during a schema update.
-    // To avoid concurrency issues, the _schema_lock is used. While the meta_lock might involve I/O operations, _schema_lock
-    // only involves I/O during schema updates, which occur after an alter operation and are relatively infrequent.
-    // Therefore, _schema_lock is used instead of meta_lock.
-    std::lock_guard l1(_schema_lock);
+    //   3. Clear _committed_rs_map during a schema update.
+    // Add and Delete from _committed_rs_map is thread safe but there are concurrent issue between
+    // add(delete) and clear operation. 
+    // So we use schema_lock to prevent the concurrent issue.
+    std::shared_lock l(_schema_lock);
     if (_committed_rs_map.size() >= config::max_committed_without_schema_rowset) {
         VLOG(2) << "tablet: " << tablet_id()
                 << " too many committed without schema rowset : " << _committed_rs_map.size();
@@ -650,7 +650,7 @@ bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
 }
 
 void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
-    std::lock_guard l1(_schema_lock);
+    std::shared_lock l(_schema_lock);
     if (rowset != nullptr) {
         _committed_rs_map.erase(rowset->rowset_id());
     }
