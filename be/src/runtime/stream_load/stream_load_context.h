@@ -172,6 +172,8 @@ public:
     // If unref() returns true, this object should be delete
     bool unref() { return _refs.fetch_sub(1) == 1; }
 
+    int num_refs() { return _refs.load(); }
+
     bool check_and_set_http_limiter(ConcurrentLimiter* limiter);
 
 public:
