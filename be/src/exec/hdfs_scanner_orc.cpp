@@ -490,8 +490,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         }
         DataCacheHandle cache_handle;
         std::string metacache_key;
-        if (_cache) {
-            // read serialized footer from cache
+        if (_cache && options.getSerializedFileTail().length() == 0) {
+            // try to read serialized footer from cache
             metacache_key = _build_metacache_key(_file->filename(), _file->get_size().value(),
                                                  _scanner_params.datacache_options.modification_time);
             SCOPED_RAW_TIMER(&_app_stats.orc_footer_cache_read_ns);
@@ -504,7 +504,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         }
         reader = orc::createReader(std::move(_input_stream), options);
         if (_cache && options.getSerializedFileTail().length() == 0) {
-            // write serialized footer to cache
+            // cache miss, try to write serialized footer to cache
             string serialized_footer = reader->getSerializedFileTail();
             string* capture = new string(serialized_footer);
             auto deleter = [capture]() { delete capture; };
