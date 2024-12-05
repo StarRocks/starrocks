@@ -64,6 +64,7 @@ public class IcebergScanNode extends ScanNode {
     private CloudConfiguration cloudConfiguration = null;
     protected Optional<Long> snapshotId;
     private IcebergConnectorScanRangeSource scanRangeSource = null;
+    private volatile boolean reachLimit = false;
     private final List<IcebergMORParams> tableFullMORParams;
     private final IcebergMORParams morParams;
     private int selectedPartitionCount = -1;
@@ -83,7 +84,12 @@ public class IcebergScanNode extends ScanNode {
             return false;
         }
 
-        return scanRangeSource.hasMoreOutput();
+        return !reachLimit && scanRangeSource.hasMoreOutput();
+    }
+
+    @Override
+    public void setReachLimit() {
+        reachLimit = true;
     }
 
     @Override
