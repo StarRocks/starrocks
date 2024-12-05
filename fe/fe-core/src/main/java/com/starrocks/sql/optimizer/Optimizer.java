@@ -981,7 +981,7 @@ public class Optimizer {
         OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()
                 .getOptimizedRecord(context.getQueryId());
         if (optimizedRecord != null) {
-            Tracers.record(Tracers.Module.BASE, "DynamicTuningGuides", optimizedRecord.getExplainString());
+            Tracers.record(Tracers.Module.BASE, "DynamicApplyTuningGuides", optimizedRecord.getExplainString());
         }
         return result;
     }
