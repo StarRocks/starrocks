@@ -1976,9 +1976,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String statistic_auto_analyze_end_time = "23:59:59";
 
-    @ConfField(mutable = true, comment = "The interval of auto analyze regular columns")
-    public static String statistic_auto_analyze_regular_column_interval_hours = "12";
-
     /**
      * a period of create statistics table automatically by the StatisticsMetaManager
      */
@@ -2021,10 +2018,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The TTL of predicate columns, it would not be considered as predicate " +
             "columns after this period")
     public static long statistic_predicate_columns_ttl_hours = 24;
-
-    @ConfField(mutable = true, comment = "If > 0 it will be the threshold of predicate columns. Otherwise the " +
-            "it will be used to turn off this function")
-    public static long statistic_predicate_columns_threshold = 32;
 
     /**
      * Num of thread to handle statistic collect(analyze command)

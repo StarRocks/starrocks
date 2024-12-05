@@ -159,6 +159,11 @@ public class AnalyzeStmtAnalyzer {
 
             // ANALYZE TABLE xxx PREDICATE COLUMNS
             if (statement.isUsePredicateColumns()) {
+                // check if the table type is supported
+                if (!analyzeTable.isNativeTableOrMaterializedView()) {
+                    throw new SemanticException("Only OLAP table can support ANALYZE PREDICATE COLUMNS");
+                }
+
                 List<String> targetColumns = Lists.newArrayList();
 
                 List<ColumnUsage> predicateColumns =
