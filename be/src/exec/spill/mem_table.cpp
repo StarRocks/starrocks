@@ -116,6 +116,8 @@ Status OrderedMemTable::flush(FlushCallBack callback) {
     _tracker->release(consumption);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -consumption);
     _chunk.reset();
+    _permutation.clear();
+    _permutation.shrink_to_fit();
     return Status::OK();
 }
 
