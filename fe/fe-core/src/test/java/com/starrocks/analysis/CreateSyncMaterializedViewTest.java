@@ -525,7 +525,6 @@ public class CreateSyncMaterializedViewTest {
         List<Column> columns = mvIndexMeta.getSchema();
         Set<String> keyColumns = ImmutableSet.of("mv_month");
         for (Column column : columns) {
-            System.out.println(column.getAggregationType());
             if (keyColumns.contains(column.getName())) {
                 Assert.assertTrue(column.isKey());
                 Assert.assertFalse(column.isAggregated());
@@ -579,7 +578,6 @@ public class CreateSyncMaterializedViewTest {
         List<Column> columns = mvIndexMeta.getSchema();
         Set<String> keyColumns = ImmutableSet.of("k3", "mv_month");
         for (Column column : columns) {
-            System.out.println(column.getAggregationType());
             if (keyColumns.contains(column.getName())) {
                 Assert.assertTrue(column.isKey());
                 Assert.assertFalse(column.isAggregated());

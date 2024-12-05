@@ -108,7 +108,6 @@ public class TaskRunFIFOQueueTest {
         List<TaskRun> pendingTaskRuns = queue.getCopiedPendingTaskRuns();
         for (int i = 0; i < N; i++) {
             TaskRun taskRun = queue.poll(Predicates.alwaysTrue());
-            System.out.println(taskRun);
             Assert.assertTrue(taskRun.equals(pendingTaskRuns.get(i)));
             Assert.assertTrue(taskRun.equals(taskRuns.get(i)));
         }
@@ -132,7 +131,6 @@ public class TaskRunFIFOQueueTest {
         List<TaskRun> pendingTaskRuns = queue.getCopiedPendingTaskRuns();
         for (int i = 0; i < N; i++) {
             TaskRun taskRun = queue.poll(Predicates.alwaysTrue());
-            System.out.println(taskRun);
             Assert.assertTrue(taskRun.equals(pendingTaskRuns.get(i)));
             Assert.assertTrue(taskRun.equals(taskRuns.get(N - 1 - i)));
         }
