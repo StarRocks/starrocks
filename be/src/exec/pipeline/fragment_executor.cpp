@@ -942,7 +942,8 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     }
 }
 
-Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+                                                        TExecPlanFragmentResult* response) {
     DCHECK(!request.__isset.fragment);
     DCHECK(request.__isset.params);
     const TPlanFragmentExecParams& params = request.params;
@@ -955,6 +956,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     if (fragment_ctx == nullptr) return Status::OK();
     RuntimeState* runtime_state = fragment_ctx->runtime_state();
 
+    std::vector<int32_t> closed_scan_nodes;
     for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
         if (scan_ranges.size() == 0) continue;
         auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
@@ -972,6 +974,10 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
         morsel_queue_factory->set_has_more(has_more_morsel);
+
+        if (morsel_queue_factory->reach_limit()) {
+            closed_scan_nodes.push_back(node_id);
+        }
     }
 
     if (params.__isset.node_to_per_driver_seq_scan_ranges) {
@@ -996,6 +1002,13 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
                 RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(morsels)));
             }
             morsel_queue_factory->set_has_more(has_more_morsel);
+
+            if (morsel_queue_factory->reach_limit()) {
+                closed_scan_nodes.push_back(node_id);
+            }
+        }
+        if (closed_scan_nodes.size() > 0) {
+            response->__set_closed_scan_nodes(closed_scan_nodes);
         }
     }
 
