@@ -372,6 +372,8 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
 
     int num_children = tnodes[*node_idx].num_children;
     ExecNode* node = nullptr;
+    // check tuple ids is in descs before create node
+    RETURN_IF_ERROR(checkTupleIdsInDescs(descs, tnodes[*node_idx]));
     RETURN_IF_ERROR(create_vectorized_node(state, pool, tnodes[*node_idx], descs, &node));
 
     DCHECK((parent != nullptr) || (root != nullptr));
@@ -571,6 +573,28 @@ std::string ExecNode::debug_string() const {
     std::stringstream out;
     this->debug_string(0, &out);
     return out.str();
+}
+
+Status ExecNode::checkTupleIdsInDescs(const DescriptorTbl& descs, const TPlanNode& planNode) {
+    for (auto id : planNode.row_tuples) {
+        if (descs.get_tuple_descriptor(id) == nullptr) {
+            std::stringstream ss;
+            ss << "Plan node id: " << planNode.node_id << ", Tuple ids: ";
+            for (auto id : planNode.row_tuples) {
+                ss << id << ", ";
+            }
+            LOG(ERROR) << ss.str();
+            ss.str("");
+            ss << "DescriptorTbl: " << descs.debug_string();
+            LOG(ERROR) << ss.str();
+            ss.str("");
+            ss << "TPlanNode: " << apache::thrift::ThriftDebugString(planNode);
+            LOG(ERROR) << ss.str();
+            return Status::InternalError("Tuple ids are not in descs");
+        }
+    }
+
+    return Status::OK();
 }
 
 void ExecNode::debug_string(int indentation_level, std::stringstream* out) const {
