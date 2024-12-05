@@ -52,9 +52,9 @@
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
 #include "gutil/casts.h"
-#include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
+#include "types/large_int_value.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
 

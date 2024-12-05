@@ -41,8 +41,8 @@ DIAGNOSTIC_POP
 #include <exec/arrow_type_traits.h>
 
 #include "column/column_helper.h"
-#include "runtime/large_int_value.h"
 #include "storage/tablet_schema_helper.h"
+#include "types/large_int_value.h"
 
 namespace starrocks {
 struct StarRocksColumnToArrowTest : public testing::Test {};

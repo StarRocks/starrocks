@@ -21,7 +21,12 @@
 #include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
 #include "exprs/expr.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
+=======
+#include "runtime/types.h"
+#include "types/large_int_value.h"
+>>>>>>> d755257d18 ([Refactor] Move LargeIntValue from runtime to types (#53598))
 #include "util/raw_container.h"
 
 namespace starrocks {

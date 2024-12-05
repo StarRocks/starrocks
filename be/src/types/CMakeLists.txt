@@ -19,6 +19,11 @@ add_library(Types STATIC
     bitmap_value.cpp
     date_value.cpp
     hll.cpp
+<<<<<<< HEAD
+=======
+    hll_sketch.cpp
+    large_int_value.cpp
+>>>>>>> d755257d18 ([Refactor] Move LargeIntValue from runtime to types (#53598))
     logical_type.cpp
     map_type_info.cpp
     struct_type_info.cpp
