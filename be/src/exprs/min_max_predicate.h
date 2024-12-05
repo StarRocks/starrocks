@@ -86,7 +86,8 @@ public:
                 }
             }
         } else {
-            const CppType* __restrict__ data = ColumnHelper::get_data_column_by_type<Type>(col.get())->get_data().data();
+            const CppType* __restrict__ data =
+                    ColumnHelper::get_data_column_by_type<Type>(col.get())->get_data().data();
             for (int i = 0; i < size; i++) {
                 res[i] = (data[i] >= _min_value && data[i] <= _max_value);
             }
