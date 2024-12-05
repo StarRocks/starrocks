@@ -55,6 +55,8 @@ public:
 
     void on_chunk_data(HttpRequest* req) override;
 
+    void free_handler_ctx(void* ctx) override;
+
 private:
     Status _on_header(HttpRequest* http_req, StreamLoadContext* ctx);
     Status _channel_on_header(HttpRequest* http_req, StreamLoadContext* ctx);
