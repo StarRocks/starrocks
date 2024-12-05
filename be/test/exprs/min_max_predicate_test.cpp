@@ -210,4 +210,24 @@ TEST_F(MinMaxPredicateTest, debug_string) {
               "node-type=RUNTIME_FILTER_MIN_MAX_EXPR codegen=false))");
 }
 
+TEST_F(MinMaxPredicateTest, clone) {
+    Expr* expr = MinMaxPredicateBuilder(&_pool, _slot_id, &_rf).operator()<TYPE_INT>();
+    Expr* clone_expr = expr->clone(&_pool);
+    ASSERT_EQ(clone_expr->debug_string(),
+              "MinMaxPredicate (type=5, slot_id=1, has_null=0, min=10, max=20, expr( type=INT "
+              "node-type=RUNTIME_FILTER_MIN_MAX_EXPR codegen=false))");
+}
+
+TEST_F(MinMaxPredicateTest, other) {
+    auto* expr1 = reinterpret_cast<MinMaxPredicate<TYPE_INT>*>(
+            MinMaxPredicateBuilder(&_pool, _slot_id, &_rf).operator()<TYPE_INT>());
+    ASSERT_FALSE(expr1->is_constant());
+    ASSERT_FALSE(expr1->is_bound({}));
+    ASSERT_FALSE(expr1->has_null());
+
+    auto* expr2 = reinterpret_cast<MinMaxPredicate<TYPE_INT>*>(
+            MinMaxPredicateBuilder(&_pool, _slot_id, &_nullable_rf).operator()<TYPE_INT>());
+    ASSERT_TRUE(expr2->has_null());
+}
+
 } // namespace starrocks
