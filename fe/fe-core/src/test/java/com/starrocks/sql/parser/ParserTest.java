@@ -59,7 +59,7 @@ class ParserTest {
 
     @Test
     void test() {
-        String sql = "add into plan advisor  " +
+        String sql = "alter plan advisor add " +
                 "select count(*) from customer join " +
                 "(select * from skew_tbl where c_custkey_skew = 100) t on abs(c_custkey) = c_custkey_skew;";
         SqlParser.parse(sql, new SessionVariable());

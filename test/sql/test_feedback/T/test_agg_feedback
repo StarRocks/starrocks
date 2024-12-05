@@ -53,6 +53,6 @@ set enable_plan_advisor=true;
 set enable_plan_analyzer=true;
 set enable_global_runtime_filter = false;
 function: assert_explain_not_contains("select count(*) from pre_agg_case group by c3", "StreamingAggTuningGuide")
-add into plan advisor select count(*) from pre_agg_case group by c3;
+alter plan advisor add select count(*) from pre_agg_case group by c3;
 function: assert_explain_contains("select count(*) from pre_agg_case group by c3", "StreamingAggTuningGuide")
-clear plan advisor;
+truncate plan advisor;
