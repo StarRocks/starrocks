@@ -1455,4 +1455,7 @@ CONF_mBool(avro_ignore_union_type_tag, "false");
 
 CONF_mInt32(apply_version_slow_log_sec, "30");
 
+// default batch size for simdjson lib
+CONF_mInt32(json_parse_many_batch_size, "1000000");
+CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 } // namespace starrocks::config
