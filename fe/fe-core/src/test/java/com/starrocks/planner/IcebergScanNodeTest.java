@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -27,11 +28,11 @@ import org.junit.Test;
 
 import java.util.HashMap;
 
-public class HdfsScanNodeTest {
+public class IcebergScanNodeTest {
     @Test
     public void testInit(@Mocked GlobalStateMgr globalStateMgr,
                          @Mocked CatalogConnector connector,
-                         @Mocked HiveTable table) {
+                         @Mocked IcebergTable table) {
         String catalog = "XXX";
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
         new Expectations() {
@@ -46,7 +47,7 @@ public class HdfsScanNodeTest {
         };
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
-        HdfsScanNode scanNode = new HdfsScanNode(new PlanNodeId(0), desc, "XXX");
+        IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), desc, "XXX", null, null);
         scanNode.setReachLimit();
     }
 }
