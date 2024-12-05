@@ -348,7 +348,6 @@ static StatusOr<std::unique_ptr<Aws::KMS::KMSClient>> create_kms_client() {
 }
 
 static std::unique_ptr<Aws::KMS::KMSClient> g_kms_client;
-static std::mutex g_decrypt_kms_data_key_lock;
 static StatusOr<std::string> decrypt_kms_data_key(const std::string& keyId, const std::string& encryptedKeyBase64) {
     std::string encryptedKey;
     if (!base64_decode(encryptedKeyBase64, &encryptedKey)) {
