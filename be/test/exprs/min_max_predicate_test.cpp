@@ -228,6 +228,11 @@ TEST_F(MinMaxPredicateTest, other) {
     auto* expr2 = reinterpret_cast<MinMaxPredicate<TYPE_INT>*>(
             MinMaxPredicateBuilder(&_pool, _slot_id, &_nullable_rf).operator()<TYPE_INT>());
     ASSERT_TRUE(expr2->has_null());
+
+    std::vector<SlotId> slot_ids;
+    auto ret = expr2->get_slot_ids(&slot_ids);
+    ASSERT_EQ(ret, 1);
+    ASSERT_EQ(slot_ids, std::vector<SlotId>{1});
 }
 
 } // namespace starrocks
