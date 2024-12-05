@@ -65,7 +65,6 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     std::vector<uint64_t> rssid_rowids;
     rssid_rowids.reserve(chunk_size);
 
-    int64_t reader_time_ns = 0;
     const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
@@ -78,7 +77,6 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif
         {
-            SCOPED_RAW_TIMER(&reader_time_ns);
             auto st = Status::OK();
             if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
                 st = reader.get_next(chunk.get(), &rssid_rowids);
@@ -102,21 +100,16 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         rssid_rowids.clear();
 
         _context->progress.update(100 * reader.stats().raw_rows_read / total_num_rows);
-        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context->progress.value();
+        _context->stats->collect(reader.stats());
     }
+
+    RETURN_IF_ERROR(writer->finish());
 
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"
     // 2. If the "total_num_rows" is 0, the progress will not be updated above
     _context->progress.update(100);
-    RETURN_IF_ERROR(writer->finish());
-
-    // add reader stats
-    _context->stats->reader_time_ns += reader_time_ns;
-    _context->stats->accumulate(reader.stats());
-
-    // update writer stats
-    _context->stats->segment_write_ns += writer->stats().segment_write_ns;
+    _context->stats->collect(reader.stats());
 
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();
@@ -152,9 +145,9 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
-        auto fill_meta_cache = false;
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
+                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .fill_metadata_cache = false};
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             for (size_t i = 0; i < segment->num_columns(); ++i) {
                 auto uid = _tablet_schema->column(i).unique_id();

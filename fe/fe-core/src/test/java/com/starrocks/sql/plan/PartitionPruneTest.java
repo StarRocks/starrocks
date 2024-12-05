@@ -258,55 +258,55 @@ public class PartitionPruneTest extends PlanTestBase {
     public void testGeneratedColumnPrune() throws Exception {
         // c2
         starRocksAssert.query("select count(*) from t_gen_col where c2 = 1 ")
-                .explainContains("partitions=3/7");
+                .explainContains("partitions=3/6");
 
         // c1
         starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-01-01' ")
-                .explainContains("partitions=2/7");
+                .explainContains("partitions=2/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-02-01' ")
-                .explainContains("partitions=2/7");
+                .explainContains("partitions=2/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 < '2024-02-01' ")
-                .explainContains("partitions=4/7");
+                .explainContains("partitions=4/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 <= '2024-02-01' ")
-                .explainContains("partitions=4/7");
+                .explainContains("partitions=4/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 > '2024-02-01' ")
-                .explainContains("partitions=4/7");
+                .explainContains("partitions=4/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 >= '2024-02-01' ")
-                .explainContains("partitions=4/7");
+                .explainContains("partitions=4/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 in ('2024-02-01') ")
-                .explainContains("partitions=2/7");
+                .explainContains("partitions=2/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 in ('2024-02-01', '2024-01-01') ")
-                .explainContains("partitions=4/7");
+                .explainContains("partitions=4/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 in ('2027-01-01') ")
-                .explainContains("partitions=0/7");
+                .explainContains("partitions=0/6");
 
         // c1 not supported
         starRocksAssert.query("select count(*) from t_gen_col where c1 != '2024-02-01' ")
-                .explainContains("partitions=7/7");
+                .explainContains("partitions=6/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 = c2 ")
-                .explainContains("partitions=7/7");
+                .explainContains("partitions=6/6");
         starRocksAssert.query("select count(*) from t_gen_col where date_trunc('year', c1) = '2024-02-01' ")
-                .explainContains("partitions=7/7");
+                .explainContains("partitions=6/6");
         starRocksAssert.query("select count(*) from t_gen_col where date_trunc('year', c1) = '2024-02-01' ")
-                .explainContains("partitions=7/7");
+                .explainContains("partitions=6/6");
 
         // compound
         starRocksAssert.query("select count(*) from t_gen_col where c1 >= '2024-02-01' and c1 <= '2024-03-01' ")
-                .explainContains("partitions=4/7");
+                .explainContains("partitions=4/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 >= '2024-02-01' and c1 = '2027-03-01' ")
-                .explainContains("partitions=0/7");
+                .explainContains("partitions=0/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-02-01' or c1 = '2024-03-01' ")
-                .explainContains("partitions=4/7");
+                .explainContains("partitions=4/6");
         starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-02-01' or c1 = '2027-03-01' ")
-                .explainContains("partitions=2/7");
+                .explainContains("partitions=2/6");
 
         // c1 && c2
         starRocksAssert.query("select * from t_gen_col where c1 = '2024-01-01' and c2 = 1 ")
-                .explainContains("partitions=1/7");
+                .explainContains("partitions=1/6");
 
         // non-monotonic function
         starRocksAssert.query("select count(*) from t_gen_col_1 where c1 = '2024-01-01' ")
-                .explainContains("partitions=2/2");
+                .explainContains("partitions=1/1");
     }
 
     @Test

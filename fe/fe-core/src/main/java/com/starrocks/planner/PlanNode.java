@@ -138,6 +138,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected Set<Integer> localRfWaitingSet = Sets.newHashSet();
     protected ExprSubstitutionMap outputSmap;
 
+    // set if you want to collect execution statistics for this plan node
+    protected boolean needCollectExecStats = false;
+
     protected PlanNode(PlanNodeId id, ArrayList<TupleId> tupleIds, String planNodeName) {
         this.id = id;
         this.limit = -1;
@@ -1004,5 +1007,13 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // disable optimize depends on physical order
     // eg: sortedStreamingAGG/ PerBucketCompute
     public void disablePhysicalPropertyOptimize() {
+    }
+
+    public void forceCollectExecStats() {
+        this.needCollectExecStats = true;
+    }
+
+    public boolean needCollectExecStats() {
+        return needCollectExecStats;
     }
 }

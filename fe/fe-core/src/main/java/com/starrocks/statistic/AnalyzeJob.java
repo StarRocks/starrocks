@@ -61,5 +61,13 @@ public interface AnalyzeJob {
 
     boolean isAnalyzeAllTable();
 
-    void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor);
+    List<StatisticsCollectJob> instantiateJobs();
+
+    default void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor) {
+        run(statsConnectContext, statisticExecutor, instantiateJobs());
+    }
+
+    void run(ConnectContext statsConnectContext,
+             StatisticExecutor statisticExecutor,
+             List<StatisticsCollectJob> jobs);
 }

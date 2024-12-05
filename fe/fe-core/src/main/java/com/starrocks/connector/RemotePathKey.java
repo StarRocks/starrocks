@@ -20,6 +20,7 @@ public class RemotePathKey {
     private final String path;
     private final boolean isRecursive;
     private RemoteFileScanContext scanContext;
+    private String tableLocation;
 
     public static RemotePathKey of(String path, boolean isRecursive) {
         return new RemotePathKey(path, isRecursive);
@@ -28,6 +29,8 @@ public class RemotePathKey {
     public RemotePathKey(String path, boolean isRecursive) {
         this.path = path;
         this.isRecursive = isRecursive;
+        this.scanContext = null;
+        this.tableLocation = null;
     }
 
     public boolean approximateMatchPath(String basePath, boolean isRecursive) {
@@ -38,6 +41,10 @@ public class RemotePathKey {
 
     public String getPath() {
         return path;
+    }
+
+    public String getTableLocation() {
+        return tableLocation;
     }
 
     public boolean isRecursive() {
@@ -79,6 +86,7 @@ public class RemotePathKey {
 
     public void setScanContext(RemoteFileScanContext ctx) {
         scanContext = ctx;
+        tableLocation = ctx.tableLocation;
     }
 
     public RemoteFileScanContext getScanContext() {

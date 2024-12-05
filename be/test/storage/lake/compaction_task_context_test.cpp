@@ -57,56 +57,78 @@ TEST_F(CompactionTaskContextTest, test_constructor) {
     EXPECT_EQ(false, context.is_checker);
 }
 
-TEST_F(CompactionTaskContextTest, test_accumulate) {
+TEST_F(CompactionTaskContextTest, test_calculation) {
     CompactionTaskStats stats;
 
     OlapReaderStatistics reader_stats;
-    reader_stats.io_ns = 100;
     reader_stats.io_ns_remote = 200;
     reader_stats.io_ns_read_local_disk = 300;
     reader_stats.segment_init_ns = 400;
     reader_stats.column_iterator_init_ns = 500;
     reader_stats.io_count_local_disk = 600;
     reader_stats.io_count_remote = 700;
-    reader_stats.compressed_bytes_read = 800;
+    reader_stats.compressed_bytes_read_remote = 1024;
+    reader_stats.compressed_bytes_read_local_disk = 1024;
 
-    stats.accumulate(reader_stats);
+    stats.collect(reader_stats);
 
-    EXPECT_EQ(stats.io_ns, 100);
     EXPECT_EQ(stats.io_ns_remote, 200);
     EXPECT_EQ(stats.io_ns_local_disk, 300);
     EXPECT_EQ(stats.segment_init_ns, 400);
     EXPECT_EQ(stats.column_iterator_init_ns, 500);
     EXPECT_EQ(stats.io_count_local_disk, 600);
     EXPECT_EQ(stats.io_count_remote, 700);
-    EXPECT_EQ(stats.compressed_bytes_read, 800);
+    EXPECT_EQ(stats.io_bytes_read_remote, 1024);
+    EXPECT_EQ(stats.io_bytes_read_local_disk, 1024);
+
+    CompactionTaskStats after_add = stats + stats;
+
+    EXPECT_EQ(after_add.io_ns_remote, 400);
+    EXPECT_EQ(after_add.io_ns_local_disk, 600);
+    EXPECT_EQ(after_add.segment_init_ns, 800);
+    EXPECT_EQ(after_add.column_iterator_init_ns, 1000);
+    EXPECT_EQ(after_add.io_count_local_disk, 1200);
+    EXPECT_EQ(after_add.io_count_remote, 1400);
+    EXPECT_EQ(after_add.io_bytes_read_remote, 2048);
+    EXPECT_EQ(after_add.io_bytes_read_local_disk, 2048);
+
+    CompactionTaskStats after_minus = stats - stats;
+
+    EXPECT_EQ(after_minus.io_ns_remote, 0);
+    EXPECT_EQ(after_minus.io_ns_local_disk, 0);
+    EXPECT_EQ(after_minus.segment_init_ns, 0);
+    EXPECT_EQ(after_minus.column_iterator_init_ns, 0);
+    EXPECT_EQ(after_minus.io_count_local_disk, 0);
+    EXPECT_EQ(after_minus.io_count_remote, 0);
+    EXPECT_EQ(after_minus.io_bytes_read_remote, 0);
+    EXPECT_EQ(after_minus.io_bytes_read_local_disk, 0);
 }
 
 TEST_F(CompactionTaskContextTest, test_to_json_stats) {
     static constexpr long TIME_UNIT_NS_PER_SECOND = 1000000000;
 
     // Set up some stats to test the JSON output
-    context.stats->reader_time_ns = 30 * TIME_UNIT_NS_PER_SECOND;
-    context.stats->io_ns = 12 * TIME_UNIT_NS_PER_SECOND;
+    context.stats->io_bytes_read_remote = 1 * 1048576;
+    context.stats->io_bytes_read_local_disk = 1 * 1048576;
     context.stats->io_ns_remote = 1 * TIME_UNIT_NS_PER_SECOND;
     context.stats->io_ns_local_disk = 9 * TIME_UNIT_NS_PER_SECOND;
     context.stats->segment_init_ns = 2 * TIME_UNIT_NS_PER_SECOND;
     context.stats->io_count_remote = 3;
     context.stats->io_count_local_disk = 2;
-    context.stats->compressed_bytes_read = 1024;
     context.stats->segment_init_ns = 3 * TIME_UNIT_NS_PER_SECOND;
     context.stats->column_iterator_init_ns = 4 * TIME_UNIT_NS_PER_SECOND;
-    context.stats->segment_write_ns = 5 * TIME_UNIT_NS_PER_SECOND;
+    context.stats->in_queue_time_sec = 5;
 
     // Call the method under test
     std::string json_stats = context.stats->to_json_stats();
 
     // Verify the JSON output
-    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_total_time_second":30)"));
-    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_io_second":12)"));
-    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_io_second_remote":1)"));
-    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_io_second_local_disk":9)"));
-    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_io_count_remote":3)"));
-    EXPECT_THAT(json_stats, testing::HasSubstr(R"("segment_write_second":5)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_remote_mb":1)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_local_mb":1)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_remote_sec":1)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_local_sec":9)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_remote_count":3)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_local_count":2)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("in_queue_sec":5)"));
 }
 } // namespace starrocks::lake

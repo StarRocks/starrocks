@@ -30,6 +30,10 @@
 #include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "storage/del_vector.h"
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_metadata.h"
 #include "storage/primary_key_dump.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -37,6 +41,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/stack_util.h"
+#include "util/url_coding.h"
 #include "wrenbind17/wrenbind17.hpp"
 
 using namespace wrenbind17;
@@ -222,7 +227,6 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, metadata_mem_tracker);
         REG_METHOD(GlobalEnv, compaction_mem_tracker);
         REG_METHOD(GlobalEnv, schema_change_mem_tracker);
-        REG_METHOD(GlobalEnv, column_pool_mem_tracker);
         REG_METHOD(GlobalEnv, page_cache_mem_tracker);
         REG_METHOD(GlobalEnv, jit_cache_mem_tracker);
         REG_METHOD(GlobalEnv, update_mem_tracker);
@@ -287,6 +291,22 @@ public:
             return nullptr;
         }
         return ptr;
+    }
+
+    static std::string get_lake_tablet_metadata_json(int64_t tablet_id, int64_t version) {
+        auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        RETURN_IF(nullptr == tablet_manager, "");
+        auto meta_st = tablet_manager->get_tablet_metadata(tablet_id, version, false);
+        RETURN_IF(!meta_st.ok(), meta_st.status().to_string());
+        return proto_to_json(*meta_st.value());
+    }
+
+    static std::string decode_encryption_meta(const std::string& meta_base64) {
+        EncryptionMetaPB pb;
+        std::string meta_bytes;
+        RETURN_IF(!base64_decode(meta_base64, &meta_bytes), "bad base64 string");
+        RETURN_IF(!pb.ParseFromString(meta_bytes), "parse encryption meta failed");
+        return proto_to_json(pb);
     }
 
     static std::shared_ptr<TabletBasicInfo> get_tablet_info(int64_t tablet_id) {
@@ -354,6 +374,16 @@ public:
         } else {
             return ret;
         }
+    }
+
+    // this method is specifically used to recover "no delete vector found" error caused by corrupt pk tablet metadata
+    static std::string reset_delvec(int64_t tablet_id, int64_t segment_id, int64_t version) {
+        auto tablet = get_tablet(tablet_id);
+        RETURN_IF_UNLIKELY_NULL(tablet, "tablet not found");
+        DelVector dv;
+        dv.init(version, nullptr, 0);
+        auto st = TabletMetaManager::set_del_vector(tablet->data_dir()->get_meta(), tablet_id, segment_id, dv);
+        return st.to_string();
     }
 
     static size_t submit_manual_compaction_task_for_table(int64_t table_id, int64_t rowset_size_threshold) {
@@ -553,6 +583,9 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_info);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_infos);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_meta_json);
+            REG_STATIC_METHOD(StorageEngineRef, get_lake_tablet_metadata_json);
+            REG_STATIC_METHOD(StorageEngineRef, decode_encryption_meta);
+            REG_STATIC_METHOD(StorageEngineRef, reset_delvec);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet);
             REG_STATIC_METHOD(StorageEngineRef, drop_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_data_dirs);

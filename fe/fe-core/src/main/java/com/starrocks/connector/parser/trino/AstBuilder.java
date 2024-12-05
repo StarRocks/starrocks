@@ -55,6 +55,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.VarBinaryLiteral;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -186,6 +187,7 @@ import io.trino.sql.tree.WithQuery;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -200,6 +202,8 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+import static com.starrocks.common.util.TimeUtils.parseDateTimeFromString;
+import static com.starrocks.common.util.TimeUtils.parseTimeZoneFromString;
 import static com.starrocks.connector.parser.trino.TrinoParserUtils.alignWithInputDatetimeType;
 import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -290,7 +294,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } else if (type == ExplainType.Type.DISTRIBUTED) {
                 queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE);
             } else if (type == ExplainType.Type.IO) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COST);
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COSTS);
             } else {
                 queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
             }
@@ -730,7 +734,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }  else if (FunctionSet.INFORMATION_FUNCTIONS.contains(node.getName().toString())) {
             callExpr = new InformationFunction(node.getName().toString().toUpperCase());
         } else {
-            callExpr = new FunctionCallExpr(node.getName().toString(), arguments);
+            List<OrderByElement> orderByElements = new ArrayList<>();
+            if (node.getOrderBy().isPresent()) {
+                orderByElements = visit(node.getOrderBy().get(), context, OrderByElement.class);
+                orderByElements.forEach(e -> arguments.add(e.getExpr()));
+            }
+            callExpr = new FunctionCallExpr(node.getName().toString(),
+                    new FunctionParams(node.isDistinct(),  arguments, orderByElements));
         }
         if (node.getWindow().isPresent()) {
             return visitWindow((FunctionCallExpr) callExpr, node.getWindow().get(), context);
@@ -979,10 +989,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitTimestampLiteral(TimestampLiteral node, ParseTreeContext context) {
         try {
             String value = node.getValue();
-            if (value.length() <= 10) {
-                value += " 00:00:00";
+            String formattedValue = value.length() <= 10 ? value + " 00:00:00" : value;
+            ZoneId zoneId = parseTimeZoneFromString(formattedValue);
+            if (zoneId == null) {
+                return new DateLiteral(formattedValue, Type.DATETIME);
+            } else {
+                return new FunctionCallExpr("convert_tz", List.of(
+                        new DateLiteral(parseDateTimeFromString(formattedValue), Type.DATETIME),
+                        new VariableExpr("time_zone"),
+                        new com.starrocks.analysis.StringLiteral(zoneId.toString())
+                ));
             }
-            return new DateLiteral(value, Type.DATETIME);
         } catch (AnalysisException e) {
             throw unsupportedException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }

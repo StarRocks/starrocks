@@ -35,6 +35,26 @@ namespace starrocks::pipeline {
 
 const std::vector<BaseRowsetSharedPtr> ScanMorselX::kEmptyRowsets;
 
+void ScanMorsel::build_scan_morsels(int node_id, const std::vector<TScanRangeParams>& scan_ranges,
+                                    bool accept_empty_scan_ranges, pipeline::Morsels* ptr_morsels,
+                                    bool* has_more_morsel) {
+    pipeline::Morsels& morsels = *ptr_morsels;
+    *has_more_morsel = false;
+    for (const auto& scan_range : scan_ranges) {
+        if (scan_range.__isset.empty && scan_range.empty) {
+            if (scan_range.__isset.has_more) {
+                *has_more_morsel = scan_range.has_more;
+            }
+            continue;
+        }
+        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
+    }
+
+    if (morsels.empty() && !accept_empty_scan_ranges) {
+        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, TScanRangeParams()));
+    }
+}
+
 void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
     params->rowid_range_option = _rowid_range_option;
 }
@@ -48,12 +68,22 @@ size_t SharedMorselQueueFactory::num_original_morsels() const {
     return _queue->num_original_morsels();
 }
 
+Status SharedMorselQueueFactory::append_morsels(Morsels&& morsels, bool has_more) {
+    RETURN_IF_ERROR(_queue->append_morsels(std::move(morsels)));
+    _queue->set_has_more(has_more);
+    return Status::OK();
+}
+
 size_t IndividualMorselQueueFactory::num_original_morsels() const {
     size_t total = 0;
     for (const auto& queue : _queue_per_driver_seq) {
         total += queue->num_original_morsels();
     }
     return total;
+}
+
+Status MorselQueueFactory::append_morsels(Morsels&& morsels, bool has_more) {
+    return Status::NotSupported("append_morsels not supported");
 }
 
 IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
@@ -122,6 +152,10 @@ std::vector<TInternalScanRange*> MorselQueue::prepare_olap_scan_ranges() const {
 
 void MorselQueue::unget(MorselPtr&& morsel) {
     _unget_morsel = std::move(morsel);
+}
+
+Status MorselQueue::append_morsels(Morsels&& morsels) {
+    return Status::NotSupported("append_morsels not supported");
 }
 
 StatusOr<MorselPtr> FixedMorselQueue::try_get() {
@@ -857,12 +891,13 @@ void DynamicMorselQueue::unget(MorselPtr&& morsel) {
     _queue.emplace_front(std::move(morsel));
 }
 
-void DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
+Status DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
     std::lock_guard<std::mutex> _l(_mutex);
     _size += morsels.size();
     // add split morsels to front of this queue.
     // so this new morsels share same owner_id with recently processed morsel.
     _queue.insert(_queue.begin(), std::make_move_iterator(morsels.begin()), std::make_move_iterator(morsels.end()));
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

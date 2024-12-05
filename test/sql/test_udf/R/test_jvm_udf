@@ -73,7 +73,7 @@ select count(udtfstring) from t0, udtfstring(c1);
 -- !result
 select count(udtfstring_wrong_match) from t0, udtfstring_wrong_match(c1);
 -- result:
-E: (1064, 'Type not matched, expect class java.lang.Integer, but got class java.lang.String')
+[REGEX].*Type not matched, expect class java.lang.Integer, but got class java.lang.String.*
 -- !result
 select count(udtfint) from t0, udtfint(c1);
 -- result:
@@ -90,6 +90,34 @@ select count(udtffloat) from t0, udtffloat(c1);
 select count(udtfdouble) from t0, udtfdouble(c1);
 -- result:
 81920
+-- !result
+select * from TABLE(udtfstring(""));
+-- result:
+-- !result
+select * from TABLE(udtfstring("▁▂▃▄▅▆▇█"));
+-- result:
+▁▂▃▄▅▆▇█
+▁▂▃▄▅▆▇█
+-- !result
+select * from TABLE(udtfstring("中文测试"));
+-- result:
+中文测试
+中文测试
+-- !result
+select * from TABLE(udtfstring("∀∂∈ℝ∧∪≡∞ ↑↗↨↻⇣ ┐┼╔╘░►☺♀ ﬁ�⑀₂ἠḂӥẄɐː⍎אԱა"));
+-- result:
+∀∂∈ℝ∧∪≡∞ ↑↗↨↻⇣ ┐┼╔╘░►☺♀ ﬁ�⑀₂ἠḂӥẄɐː⍎אԱა
+∀∂∈ℝ∧∪≡∞ ↑↗↨↻⇣ ┐┼╔╘░►☺♀ ﬁ�⑀₂ἠḂӥẄɐː⍎אԱა
+-- !result
+select * from TABLE(udtfstring("2H₂ + O₂ ⇌ 2H₂O"));
+-- result:
+2H₂ + O₂ ⇌ 2H₂O
+2H₂ + O₂ ⇌ 2H₂O
+-- !result
+select * from TABLE(udtfstring("ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ"));
+-- result:
+ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ
+ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ
 -- !result
 set streaming_preaggregation_mode="force_streaming";
 -- result:

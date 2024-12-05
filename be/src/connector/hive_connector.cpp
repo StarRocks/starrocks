@@ -177,6 +177,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     _init_tuples_and_slots(state);
     _init_counter(state);
     RETURN_IF_ERROR(_init_partition_values());
+    RETURN_IF_ERROR(_init_extended_values());
     if (_filter_by_eval_partition_conjuncts) {
         _no_data = true;
         return Status::OK();
@@ -274,6 +275,25 @@ Status HiveDataSource::_init_partition_values() {
     return Status::OK();
 }
 
+Status HiveDataSource::_init_extended_values() {
+    if (!(_hive_table != nullptr && _has_extended_columns)) return Status::OK();
+
+    DCHECK(_scan_range.__isset.extended_columns);
+    auto& id_to_column = _scan_range.extended_columns;
+    DCHECK(!id_to_column.empty());
+    std::vector<TExpr> extended_column_values;
+    for (const auto& id : _provider->_hdfs_scan_node.extended_slot_ids) {
+        DCHECK(id_to_column.contains(id));
+        extended_column_values.emplace_back(id_to_column[id]);
+    }
+
+    RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, extended_column_values, &_extended_column_values, _runtime_state));
+    RETURN_IF_ERROR(Expr::prepare(_extended_column_values, _runtime_state));
+    RETURN_IF_ERROR(Expr::open(_extended_column_values, _runtime_state));
+
+    return Status::OK();
+}
+
 int32_t HiveDataSource::scan_range_indicate_const_column_index(SlotId id) const {
     if (!_scan_range.__isset.identity_partition_slot_ids) {
         return -1;
@@ -285,6 +305,19 @@ int32_t HiveDataSource::scan_range_indicate_const_column_index(SlotId id) const 
     } else {
         return it - _scan_range.identity_partition_slot_ids.begin();
     }
+}
+
+int32_t HiveDataSource::extended_column_index(SlotId id) const {
+    if (!_provider->_hdfs_scan_node.__isset.extended_slot_ids) {
+        return -1;
+    }
+    auto extended_column_ids = _provider->_hdfs_scan_node.extended_slot_ids;
+    auto it = std::find(extended_column_ids.begin(), extended_column_ids.end(), id);
+
+    if (it == extended_column_ids.end()) {
+        return -1;
+    }
+    return it - extended_column_ids.begin();
 }
 
 void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
@@ -307,27 +340,14 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             _partition_index_in_hdfs_partition_columns.push_back(index);
             _has_partition_columns = true;
             _has_scan_range_indicate_const_column = true;
+        } else if (int32_t extended_col_index = extended_column_index(slots[i]->id()); extended_col_index >= 0) {
+            _extended_slots.push_back(slots[i]);
+            _extended_index_in_chunk.push_back(i);
+            _index_in_extended_column.push_back(extended_col_index);
+            _has_extended_columns = true;
         } else {
             _materialize_slots.push_back(slots[i]);
             _materialize_index_in_chunk.push_back(i);
-        }
-    }
-
-    if (_scan_range.__isset.delete_column_slot_ids && !_scan_range.delete_column_slot_ids.empty()) {
-        std::map<SlotId, SlotDescriptor*> id_to_slots;
-        for (const auto& slot : _materialize_slots) {
-            id_to_slots.emplace(slot->id(), slot);
-        }
-
-        int32_t delete_column_index = slots.size();
-        _delete_column_tuple_desc = state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
-
-        for (SlotDescriptor* d_slot_desc : _delete_column_tuple_desc->slots()) {
-            _equality_delete_slots.emplace_back(d_slot_desc);
-            if (!id_to_slots.contains(d_slot_desc->id())) {
-                _materialize_slots.push_back(d_slot_desc);
-                _materialize_index_in_chunk.push_back(delete_column_index++);
-            }
         }
     }
 
@@ -366,7 +386,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         if (_materialize_slots.size() != 1) {
             return false;
         }
-        if (!_scan_range.delete_column_slot_ids.empty()) {
+        if (!_scan_range.delete_files.empty() || !_scan_range.extended_columns.empty()) {
             return false;
         }
         return true;
@@ -488,6 +508,10 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteFailCounter", TUnit::UNIT, prefix);
         _profile.datacache_write_fail_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteFailBytes", TUnit::BYTES, prefix);
+        _profile.datacache_skip_write_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipWriteCounter", TUnit::UNIT, prefix);
+        _profile.datacache_skip_write_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipWriteBytes", TUnit::BYTES, prefix);
         _profile.datacache_read_block_buffer_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
         _profile.datacache_read_block_buffer_bytes =
@@ -578,6 +602,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params._partition_index_in_hdfs_partition_columns = _partition_index_in_hdfs_partition_columns;
     scanner_params.partition_values = _partition_values;
     scanner_params.scanner_conjunct_ctxs = _scanner_conjunct_ctxs;
+
+    scanner_params.extended_col_slots = _extended_slots;
+    scanner_params.extended_col_index_in_chunk = _extended_index_in_chunk;
+    scanner_params.index_in_extended_columns = _index_in_extended_column;
+    scanner_params.extended_col_values = _extended_column_values;
+
     scanner_params.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
     scanner_params.slots_in_conjunct = _slots_in_conjunct;
     scanner_params.slots_of_mutli_slot_conjunct = _slots_of_mutli_slot_conjunct;
@@ -593,24 +623,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner_params.connector_max_split_size = state->query_options().connector_max_split_size;
     }
 
-    if (!_equality_delete_slots.empty()) {
-        MORParams& mor_params = scanner_params.mor_params;
-        mor_params.tuple_desc = _tuple_desc;
-        mor_params.equality_slots = _equality_delete_slots;
-        mor_params.delete_column_tuple_desc = _delete_column_tuple_desc;
-        mor_params.mor_tuple_id = _provider->_hdfs_scan_node.mor_tuple_id;
-        mor_params.runtime_profile = _runtime_profile;
-    }
-
     for (const auto& delete_file : scan_range.delete_files) {
         scanner_params.deletes.emplace_back(&delete_file);
     }
 
-    if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
-        auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
-        scanner_params.iceberg_schema = tbl->get_iceberg_schema();
-        scanner_params.iceberg_equal_delete_schema = tbl->get_iceberg_equal_delete_schema();
-    }
     if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {
         scanner_params.paimon_deletion_file = std::make_shared<TPaimonDeletionFile>(scan_range.paimon_deletion_file);
     }
@@ -738,20 +754,6 @@ Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
     }
 
     *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
-
-    if (!_equality_delete_slots.empty()) {
-        std::map<SlotId, SlotDescriptor*> id_to_slots;
-        for (const auto& slot : _tuple_desc->slots()) {
-            id_to_slots.emplace(slot->id(), slot);
-        }
-
-        for (const auto& slot : _equality_delete_slots) {
-            if (!id_to_slots.contains(slot->id())) {
-                const auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
-                (*chunk)->append_column(column, slot->id());
-            }
-        }
-    }
     return Status::OK();
 }
 

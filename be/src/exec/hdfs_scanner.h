@@ -17,7 +17,6 @@
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 
-#include "exec/mor_processor.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -122,6 +121,8 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* datacache_read_mem_bytes = nullptr;
     RuntimeProfile::Counter* datacache_read_disk_bytes = nullptr;
     RuntimeProfile::Counter* datacache_read_timer = nullptr;
+    RuntimeProfile::Counter* datacache_skip_write_counter = nullptr;
+    RuntimeProfile::Counter* datacache_skip_write_bytes = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_counter = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_bytes = nullptr;
     RuntimeProfile::Counter* datacache_write_counter = nullptr;
@@ -189,6 +190,11 @@ struct HdfsScannerParams {
     // partition conjunct, used to generate partition columns
     std::vector<ExprContext*> partition_values;
 
+    std::vector<SlotDescriptor*> extended_col_slots;
+    std::vector<int> extended_col_index_in_chunk;
+    std::vector<int> index_in_extended_columns;
+    std::vector<ExprContext*> extended_col_values;
+
     // min max conjunct for filter row group or page
     // should clone in scanner
     std::vector<ExprContext*> min_max_conjunct_ctxs;
@@ -205,8 +211,6 @@ struct HdfsScannerParams {
 
     const TIcebergSchema* iceberg_schema = nullptr;
 
-    const TIcebergSchema* iceberg_equal_delete_schema = nullptr;
-
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file = nullptr;
@@ -218,7 +222,6 @@ struct HdfsScannerParams {
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool orc_use_column_names = false;
-    MORParams mor_params;
 
     int64_t connector_max_split_size = 0;
 };
@@ -233,6 +236,8 @@ struct HdfsScannerContext {
             return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
         }
         const std::string& name() const { return slot_desc->col_name(); }
+        int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
+        const std::string& col_physical_name() const { return slot_desc->col_physical_name(); }
         const SlotId slot_id() const { return slot_desc->id(); }
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
@@ -241,7 +246,7 @@ struct HdfsScannerContext {
         return case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
 
-    const TupleDescriptor* tuple_desc = nullptr;
+    std::vector<SlotDescriptor*> slot_descs;
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
     // materialized column read from parquet file
@@ -252,6 +257,11 @@ struct HdfsScannerContext {
 
     // partition column value which read from hdfs file path
     std::vector<ColumnPtr> partition_values;
+
+    // extended column
+    std::vector<ColumnInfo> extended_columns;
+
+    std::vector<ColumnPtr> extended_values;
 
     // scan range
     const THdfsScanRange* scan_range = nullptr;
@@ -314,6 +324,10 @@ struct HdfsScannerContext {
     void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
 
+    void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,
+                                          const std::vector<ColumnPtr>& values);
+
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
@@ -369,10 +383,11 @@ public:
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
-protected:
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
             std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
+
+protected:
     Status open_random_access_file();
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
@@ -383,7 +398,6 @@ private:
     std::atomic<bool> _closed = false;
     Status _build_scanner_context();
     void update_hdfs_counter(HdfsScanProfile* profile);
-    Status _init_mor_processor(RuntimeState* runtime_state, const MORParams& params);
 
 protected:
     HdfsScannerContext _scanner_ctx;
@@ -397,8 +411,6 @@ protected:
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
-
-    std::shared_ptr<DefaultMORProcessor> _mor_processor;
 };
 
 } // namespace starrocks

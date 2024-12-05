@@ -40,10 +40,10 @@
 #include <cstdio>
 #include <memory>
 
-#include "column/column_pool.h"
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "jemalloc/jemalloc.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/metrics.h"
 
@@ -276,7 +276,6 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("short_key_index_mem_bytes", &_memory_metrics->short_key_index_mem_bytes);
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
     registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
-    registry->register_metric("column_pool_mem_bytes", &_memory_metrics->column_pool_mem_bytes);
     registry->register_metric("storage_page_cache_mem_bytes", &_memory_metrics->storage_page_cache_mem_bytes);
     registry->register_metric("jit_cache_mem_bytes", &_memory_metrics->jit_cache_mem_bytes);
     registry->register_metric("update_mem_bytes", &_memory_metrics->update_mem_bytes);
@@ -284,22 +283,6 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
     registry->register_metric("consistency_mem_bytes", &_memory_metrics->consistency_mem_bytes);
     registry->register_metric("datacache_mem_bytes", &_memory_metrics->datacache_mem_bytes);
-
-    registry->register_metric("total_column_pool_bytes", &_memory_metrics->column_pool_total_bytes);
-    registry->register_metric("local_column_pool_bytes", &_memory_metrics->column_pool_local_bytes);
-    registry->register_metric("central_column_pool_bytes", &_memory_metrics->column_pool_central_bytes);
-    registry->register_metric("binary_column_pool_bytes", &_memory_metrics->column_pool_binary_bytes);
-    registry->register_metric("uint8_column_pool_bytes", &_memory_metrics->column_pool_uint8_bytes);
-    registry->register_metric("int8_column_pool_bytes", &_memory_metrics->column_pool_int8_bytes);
-    registry->register_metric("int16_column_pool_bytes", &_memory_metrics->column_pool_int16_bytes);
-    registry->register_metric("int32_column_pool_bytes", &_memory_metrics->column_pool_int32_bytes);
-    registry->register_metric("int64_column_pool_bytes", &_memory_metrics->column_pool_int64_bytes);
-    registry->register_metric("int128_column_pool_bytes", &_memory_metrics->column_pool_int128_bytes);
-    registry->register_metric("float_column_pool_bytes", &_memory_metrics->column_pool_float_bytes);
-    registry->register_metric("double_column_pool_bytes", &_memory_metrics->column_pool_double_bytes);
-    registry->register_metric("decimal_column_pool_bytes", &_memory_metrics->column_pool_decimal_bytes);
-    registry->register_metric("date_column_pool_bytes", &_memory_metrics->column_pool_date_bytes);
-    registry->register_metric("datetime_column_pool_bytes", &_memory_metrics->column_pool_datetime_bytes);
 }
 
 void SystemMetrics::_update_memory_metrics() {
@@ -362,29 +345,9 @@ void SystemMetrics::_update_memory_metrics() {
     SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
     SET_MEM_METRIC_VALUE(chunk_allocator_mem_tracker, chunk_allocator_mem_bytes)
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
-    SET_MEM_METRIC_VALUE(column_pool_mem_tracker, column_pool_mem_bytes)
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
     SET_MEM_METRIC_VALUE(datacache_mem_tracker, datacache_mem_bytes)
 #undef SET_MEM_METRIC_VALUE
-
-#define UPDATE_COLUMN_POOL_METRIC(var, type)                 \
-    value = describe_column_pool<type>().central_free_bytes; \
-    var.set_value(value);
-
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_binary_bytes, BinaryColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_uint8_bytes, UInt8Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int8_bytes, Int8Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int16_bytes, Int16Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int32_bytes, Int32Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int64_bytes, Int64Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int128_bytes, Int128Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_float_bytes, FloatColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_double_bytes, DoubleColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_decimal_bytes, DecimalColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_date_bytes, DateColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_datetime_bytes, TimestampColumn)
-
-#undef UPDATE_COLUMN_POOL_METRIC
 }
 
 void SystemMetrics::_install_disk_metrics(MetricRegistry* registry, const std::set<std::string>& devices) {

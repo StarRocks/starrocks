@@ -400,9 +400,6 @@ public:
 
     bool is_streaming_all_states() const { return _streaming_all_states; }
 
-    Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
-                                      const AggregateFunction** ret);
-
     HashTableKeyAllocator _state_allocator;
 
 protected:
@@ -510,6 +507,9 @@ protected:
     bool _is_prepared = false;
     int64_t _agg_state_mem_usage = 0;
 
+    // aggregate combinator functions since they are not persisted in agg hash map
+    std::vector<AggregateFunctionPtr> _combinator_function;
+
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown, bool agg_group_by_with_limit);
@@ -574,6 +574,11 @@ protected:
     void _init_agg_hash_variant(HashVariantType& hash_variant);
 
     void _release_agg_memory();
+
+    bool _is_agg_result_nullable(const TExpr& desc, const AggFunctionTypes& agg_func_type);
+
+    Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
+                                      const AggregateFunction** ret);
 
     template <class HashMapWithKey>
     friend struct AllocateState;

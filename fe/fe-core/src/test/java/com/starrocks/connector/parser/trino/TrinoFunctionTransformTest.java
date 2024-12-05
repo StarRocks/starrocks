@@ -60,12 +60,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "array_concat([1,2,3], [4,5,6])");
 
         sql = "select concat(c1, c2) from test_array";
-        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR(65533)>))");
+        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>))");
 
         sql = "select concat(c1, c2, array[1,2], array[3,4]) from test_array";
-        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR(65533)>), " +
-                "CAST([1,2] AS ARRAY<VARCHAR(65533)>), " +
-                "CAST([3,4] AS ARRAY<VARCHAR(65533)>)");
+        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>), " +
+                "CAST([1,2] AS ARRAY<VARCHAR>), " +
+                "CAST([3,4] AS ARRAY<VARCHAR>)");
 
         sql = "select concat(c2, 2) from test_array";
         assertPlanContains(sql, "array_concat(3: c2, CAST([2] AS ARRAY<INT>))");
@@ -88,6 +88,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select concat_ws('.', 5,6,'s',8,9,10)";
         assertPlanContains(sql, "'5.6.s.8.9.10'");
+
+        sql = "select array_agg(v1) from t0";
+        assertPlanContains(sql, "array_agg(1: v1)");
+
+        sql = "select array_agg(distinct v1) from t0";
+        assertPlanContains(sql, "array_agg_distinct(1: v1)");
+
+        sql = "select array_agg(distinct v1 order by v2) from t0";
+        assertPlanContains(sql, "array_agg(1: v1, 2: v2)");
     }
 
     @Test

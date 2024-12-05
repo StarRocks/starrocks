@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 30
 ---
 
 # Duplicate Key table
@@ -44,15 +45,15 @@ ORDER BY (event_time, event_type);
 
   - **Bucketing method**:
 
-  Since v3.1.0, StarRocks supports random bucketing for Duplicate Key tables (the default bucketing method). When creating tables or adding partitions, you do not need to set the hash bucketing key (that is the `DISTRIBUTED BY HASH` clause). Before v3.1.0, StarRocks only supports hash bucketing. You need to set the hash bucketing key (that is the `DISTRIBUTED BY HASH` clause) when creating tables or adding partitions, otherwise the table fails to be created. For more information on hash bucketing keys, see [Hash Bucketing](../Data_distribution.md#hash-bucketing).
+  Since v3.1.0, StarRocks supports random bucketing for Duplicate Key tables (the default bucketing method). When creating tables or adding partitions, you do not need to set the hash bucketing key (that is the `DISTRIBUTED BY HASH` clause). Before v3.1.0, StarRocks only supports hash bucketing. You need to set the hash bucketing key (that is the `DISTRIBUTED BY HASH` clause) when creating tables or adding partitions, otherwise the table fails to be created. For more information on hash bucketing keys, see [Hash Bucketing](../data_distribution/Data_distribution.md#hash-bucketing).
 
-  - **Bucket number**: Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../Data_distribution.md#set-the-number-of-buckets).
+  - **Bucket number**: Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 - When you create a table, you can create Bitmap indexes or Bloom Filter indexes on the all columns of the table.
 
 ## What to do next
 
-After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Loading options](../../loading/loading_introduction/Loading_intro.md).
+After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Loading options](../../loading/Loading_intro.md).
 
 :::note
 

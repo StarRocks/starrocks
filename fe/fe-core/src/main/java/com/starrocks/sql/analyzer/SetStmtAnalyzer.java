@@ -41,7 +41,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -96,7 +95,8 @@ public class SetStmtAnalyzer {
 
         if (unResolvedExpression == null) {
             // SET var = DEFAULT
-            resolvedExpression = new StringLiteral(VariableMgr.getDefaultValue(var.getVariable()));
+            resolvedExpression = new StringLiteral(GlobalStateMgr.getCurrentState().getVariableMgr().
+                    getDefaultValue(var.getVariable()));
         } else if (unResolvedExpression instanceof SlotRef) {
             resolvedExpression = new StringLiteral(((SlotRef) unResolvedExpression).getColumnName());
         } else {

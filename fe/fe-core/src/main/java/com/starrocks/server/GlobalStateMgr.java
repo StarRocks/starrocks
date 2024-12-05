@@ -64,7 +64,6 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
-import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
@@ -131,6 +130,7 @@ import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.Checkpoint;
@@ -156,7 +156,6 @@ import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.memory.ProcProfileCollector;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
@@ -167,6 +166,7 @@ import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.gson.SubtypeNotFoundException;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -272,7 +272,6 @@ public class GlobalStateMgr {
      * Meta and Image context
      */
     private String imageDir;
-    private final MetaContext metaContext;
     private long epoch = 0;
 
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
@@ -453,6 +452,9 @@ public class GlobalStateMgr {
     // For LakeTable
     private final CompactionMgr compactionMgr;
 
+    // For compaction forbidden policy
+    private final CompactionControlScheduler compactionControlScheduler;
+
     private final WarehouseManager warehouseMgr;
 
     private final ConfigRefreshDaemon configRefreshDaemon;
@@ -493,6 +495,8 @@ public class GlobalStateMgr {
 
     private final GtidGenerator gtidGenerator;
     private final GlobalConstraintManager globalConstraintManager;
+
+    private final VariableMgr variableMgr;
 
     private final SqlParser sqlParser;
     private final Analyzer analyzer;
@@ -570,6 +574,10 @@ public class GlobalStateMgr {
 
     public CompactionMgr getCompactionMgr() {
         return compactionMgr;
+    }
+
+    public CompactionControlScheduler getCompactionControlScheduler() {
+        return compactionControlScheduler;
     }
 
     public ConfigRefreshDaemon getConfigRefreshDaemon() {
@@ -665,9 +673,6 @@ public class GlobalStateMgr {
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
-        this.metaContext = new MetaContext();
-        this.metaContext.setThreadLocalInfo();
-
         this.stat = new TabletSchedulerStat();
 
         this.globalFunctionMgr = new GlobalFunctionMgr();
@@ -717,6 +722,7 @@ public class GlobalStateMgr {
         this.insertOverwriteJobMgr = new InsertOverwriteJobMgr();
         this.shardManager = new ShardManager();
         this.compactionMgr = new CompactionMgr();
+        this.compactionControlScheduler = new CompactionControlScheduler();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.starMgrMetaSyncer = new StarMgrMetaSyncer();
         this.refreshDictionaryCacheTaskDaemon = new RefreshDictionaryCacheTaskDaemon();
@@ -774,6 +780,8 @@ public class GlobalStateMgr {
 
         this.keyMgr = new KeyMgr();
         this.keyRotationDaemon = new KeyRotationDaemon(keyMgr);
+
+        this.variableMgr = new VariableMgr();
 
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
@@ -883,16 +891,16 @@ public class GlobalStateMgr {
         return auditEventProcessor;
     }
 
-    public static int getCurrentStateStarRocksMetaVersion() {
-        return MetaContext.get().getStarRocksMetaVersion();
-    }
-
     public static boolean isCheckpointThread() {
         return Thread.currentThread().getId() == checkpointThreadId;
     }
 
     public StatisticStorage getStatisticStorage() {
         return statisticStorage;
+    }
+
+    public StatisticAutoCollector getStatisticAutoCollector() {
+        return statisticAutoCollector;
     }
 
     public TabletStatMgr getTabletStatMgr() {
@@ -1236,13 +1244,6 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
-            // Log meta_version
-            int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
-            if (starrocksMetaVersion < FeConstants.STARROCKS_META_VERSION) {
-                editLog.logMetaVersion(new MetaVersion(FeConstants.STARROCKS_META_VERSION));
-                MetaContext.get().setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
-            }
-
             // Log the first frontend
             if (nodeMgr.isFirstTimeStartUp()) {
                 // if isFirstTimeStartUp is true, frontends must contain this Node.
@@ -1250,6 +1251,10 @@ public class GlobalStateMgr {
                 Preconditions.checkNotNull(self);
                 // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
                 editLog.logAddFirstFrontend(self);
+            }
+
+            if (Config.bdbje_reset_election_group) {
+                nodeMgr.resetFrontends();
             }
 
             // MUST set leader ip before starting checkpoint thread.
@@ -1283,7 +1288,7 @@ public class GlobalStateMgr {
                 // configuration. If it is upgraded from an old version, the original
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
-                VariableMgr.setSystemVariable(VariableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
+                variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
                                         SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
                                         LiteralExpr.create("true", Type.BOOLEAN)),
                             false);
@@ -1317,7 +1322,6 @@ public class GlobalStateMgr {
 
         // start checkpoint thread
         checkpointer = new Checkpoint(journal);
-        checkpointer.setMetaContext(metaContext);
         // set "checkpointThreadId" before the checkpoint thread start, because the thread
         // need to check the "checkpointThreadId" when running.
         checkpointThreadId = checkpointer.getId();
@@ -1488,7 +1492,7 @@ public class GlobalStateMgr {
                     .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
                     .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
                     .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
-                    .put(SRMetaBlockID.VARIABLE_MGR, VariableMgr::load)
+                    .put(SRMetaBlockID.VARIABLE_MGR, variableMgr::load)
                     .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
                     .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
                     .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
@@ -1626,7 +1630,6 @@ public class GlobalStateMgr {
             System.exit(-1);
         }
 
-        MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
         idGenerator.setId(header.getBatchEndId());
         LOG.info("finished to replay header from image");
@@ -1687,7 +1690,7 @@ public class GlobalStateMgr {
                 localMetastore.save(imageWriter);
                 alterJobMgr.save(imageWriter);
                 recycleBin.save(imageWriter);
-                VariableMgr.save(imageWriter);
+                variableMgr.save(imageWriter);
                 resourceMgr.saveResourcesV2(imageWriter);
                 exportMgr.saveExportJobV2(imageWriter);
                 backupHandler.saveBackupHandlerV2(imageWriter);
@@ -1866,8 +1869,6 @@ public class GlobalStateMgr {
                 }
             }
         };
-
-        replayer.setMetaContext(metaContext);
     }
 
     /**
@@ -2003,11 +2004,13 @@ public class GlobalStateMgr {
     }
 
     protected boolean canSkipBadReplayedJournal(Throwable t) {
+        // 1. metadata_enable_recovery_mode = true will skip all kind of failure
         if (Config.metadata_enable_recovery_mode) {
             LOG.warn("skip journal load failure because cluster is in recovery mode");
             return true;
         }
 
+        // 2. metadata_journal_skip_bad_journal_ids will skip the failure of specified journal ids
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.parseLong(idStr) == replayedJournalId.get() + 1) {
@@ -2021,6 +2024,13 @@ public class GlobalStateMgr {
                         Config.metadata_journal_skip_bad_journal_ids, e);
         }
 
+        // 3. ignore_unknown_subtype = true will skip the subtype not found failure which happens on downgrading
+        if (t.getCause() != null && t.getCause() instanceof SubtypeNotFoundException) {
+            LOG.warn("ignore unknown subtype: {}", (((SubtypeNotFoundException) t.getCause()).getSubtype()));
+            return true;
+        }
+
+        // 4. metadata_journal_ignore_replay_failure = true will skip the failure of ignorable operations.
         short opCode = OperationType.OP_INVALID;
         if (t instanceof JournalException) {
             opCode = ((JournalException) t).getOpCode();
@@ -2548,10 +2558,6 @@ public class GlobalStateMgr {
         return execution;
     }
 
-    public MetaContext getMetaContext() {
-        return metaContext;
-    }
-
     public void createBuiltinStorageVolume() {
         try {
             String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
@@ -2602,5 +2608,9 @@ public class GlobalStateMgr {
 
     public MetaRecoveryDaemon getMetaRecoveryDaemon() {
         return metaRecoveryDaemon;
+    }
+
+    public VariableMgr getVariableMgr() {
+        return variableMgr;
     }
 }

@@ -104,7 +104,7 @@ struct IOTaskExecutor {
             auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(task_ctx.task_context_data);
             use_local_io_executor = io_ctx->use_local_io_executor;
         }
-        auto* pool = get_executor(task.workgroup, use_local_io_executor);
+        auto* pool = get_executor(task.workgroup.get(), use_local_io_executor);
         if (pool->submit(std::move(task))) {
             return Status::OK();
         } else {
@@ -114,7 +114,7 @@ struct IOTaskExecutor {
     static void force_submit(workgroup::ScanTask task) {
         const auto& task_ctx = task.get_work_context();
         auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(task_ctx.task_context_data);
-        auto* pool = get_executor(task.workgroup, io_ctx->use_local_io_executor);
+        auto* pool = get_executor(task.workgroup.get(), io_ctx->use_local_io_executor);
         pool->force_submit(std::move(task));
     }
 

@@ -58,6 +58,15 @@ import static org.junit.Assert.fail;
 class ParserTest {
 
     @Test
+    void test() {
+        String sql = "add into plan advisor  " +
+                "select count(*) from customer join " +
+                "(select * from skew_tbl where c_custkey_skew = 100) t on abs(c_custkey) = c_custkey_skew;";
+        SqlParser.parse(sql, new SessionVariable());
+        System.out.println();
+    }
+
+    @Test
     void tokensExceedLimitTest() {
         String sql = "select 1";
         SessionVariable sessionVariable = new SessionVariable();
@@ -68,15 +77,6 @@ class ParserTest {
             assertContains(e.getMessage(), "Getting syntax error. Detail message: " +
                     "Statement exceeds maximum length limit");
         }
-    }
-
-    @Test
-    void test() {
-        String sql = "@`a` = 1";
-        SessionVariable sessionVariable = new SessionVariable();
-        List<Expr> exprs = SqlParser.parseSqlToExprs(sql, sessionVariable);
-        System.out.println();
-
     }
 
     @Test
@@ -396,16 +396,17 @@ class ParserTest {
 
     @Test
     void testWrongVariableName() {
-        String res = VariableMgr.findSimilarVarNames("disable_coloce_join");
+        VariableMgr variableMgr = new VariableMgr();
+        String res = variableMgr.findSimilarVarNames("disable_coloce_join");
         assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
 
-        res = VariableMgr.findSimilarVarNames("SQL_AUTO_NULL");
+        res = variableMgr.findSimilarVarNames("SQL_AUTO_NULL");
         assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'spill_storage_volume'}");
 
-        res = VariableMgr.findSimilarVarNames("pipeline");
+        res = variableMgr.findSimilarVarNames("pipeline");
         assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");
 
-        res = VariableMgr.findSimilarVarNames("disable_joinreorder");
+        res = variableMgr.findSimilarVarNames("disable_joinreorder");
         assertContains(res, "{'disable_join_reorder', 'disable_colocate_join'");
     }
 

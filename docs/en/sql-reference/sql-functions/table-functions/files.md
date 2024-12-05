@@ -10,7 +10,7 @@ Defines data files in remote storage.
 
 From v3.1.0 onwards, StarRocks supports defining read-only files in remote storage using the table function FILES(). It can access remote storage with the path-related properties of the files, infers the table schema of the data in the files, and returns the data rows. You can directly query the data rows using [SELECT](../../sql-statements/table_bucket_part_index/SELECT.md), load the data rows into an existing table using [INSERT](../../sql-statements/loading_unloading/INSERT.md), or create a new table and load the data rows into it using [CREATE TABLE AS SELECT](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md).
 
-From v3.2.0 onwards, FILES() supports writing data into files in remote storage. You can [use INSERT INTO FILES() to unload data from StarRocks to remote storage](../../../unloading/unload_using_insert_into_files.md).
+From v3.2.0 onwards, FILES() supports writing data into files in remote storage. You can use INSERT INTO FILES() to unload data from StarRocks to remote storage.
 
 Currently, the FILES() function supports the following data sources and file formats:
 
@@ -246,7 +246,7 @@ Suppose the data file **file1** is stored under a path in the format of `/geo/co
 
 ### unload_data_param
 
-From v3.2 onwards, FILES() supports defining writable files in remote storage for data unloading. For detailed instructions, see [Unload data using INSERT INTO FILES](../../../unloading/unload_using_insert_into_files.md).
+From v3.2 onwards, FILES() supports defining writable files in remote storage for data unloading.
 
 ```sql
 -- Supported from v3.2 onwards.
@@ -376,7 +376,7 @@ From v3.2 onwards, FILES() further supports complex data types including ARRAY, 
 Query the data from the Parquet file **parquet/par-dup.parquet** within the AWS S3 bucket `inserttest`:
 
 ```Plain
-MySQL > SELECT * FROM FILES(
+SELECT * FROM FILES(
      "path" = "s3://inserttest/parquet/par-dup.parquet",
      "format" = "parquet",
      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
@@ -397,7 +397,7 @@ MySQL > SELECT * FROM FILES(
 Insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
 
 ```Plain
-MySQL > INSERT INTO insert_wiki_edit
+INSERT INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
@@ -414,7 +414,7 @@ Query OK, 2 rows affected (23.03 sec)
 Create a table named `ctas_wiki_edit` and insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table:
 
 ```Plain
-MySQL > CREATE TABLE ctas_wiki_edit AS
+CREATE TABLE ctas_wiki_edit AS
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
@@ -546,21 +546,21 @@ The result shows that the `c2` column, which contains both FLOAT and INT data, i
 The above result stays the same when the Parquet files are changed to CSV files that contain the same data:
 
 ```Plain
-mysql> CREATE TABLE test_ctas_csv AS
-    -> SELECT * FROM FILES(
-    ->     "path" = "s3://inserttest/csv/*",
-    ->     "format" = "csv",
-    ->     "csv.column_separator"=",",
-    ->     "csv.row_delimiter"="\n",
-    ->     "csv.enclose"='"',
-    ->     "csv.skip_header"="1",
-    ->     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-    ->     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-    ->     "aws.s3.region" = "us-west-2"
-    -> );
+CREATE TABLE test_ctas_csv AS
+  SELECT * FROM FILES(
+    "path" = "s3://inserttest/csv/*",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
 Query OK, 0 rows affected (30.90 sec)
 
-mysql> SHOW CREATE TABLE test_ctas_csv\G
+SHOW CREATE TABLE test_ctas_csv\G
 *************************** 1. row ***************************
        Table: test_ctas_csv
 Create Table: CREATE TABLE `test_ctas_csv` (
@@ -577,4 +577,41 @@ PROPERTIES (
 "replication_num" = "3"
 );
 1 row in set (0.27 sec)
+```
+
+#### Example 7
+
+View the schema of parquet file `lineorder` stored in AWS S3 using DESC.
+
+```Plain
+DESC FILES(
+    "path" = "s3://inserttest/lineorder.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
+
++------------------+------------------+------+
+| Field            | Type             | Null |
++------------------+------------------+------+
+| lo_orderkey      | int              | YES  |
+| lo_linenumber    | int              | YES  |
+| lo_custkey       | int              | YES  |
+| lo_partkey       | int              | YES  |
+| lo_suppkey       | int              | YES  |
+| lo_orderdate     | int              | YES  |
+| lo_orderpriority | varchar(1048576) | YES  |
+| lo_shippriority  | int              | YES  |
+| lo_quantity      | int              | YES  |
+| lo_extendedprice | int              | YES  |
+| lo_ordtotalprice | int              | YES  |
+| lo_discount      | int              | YES  |
+| lo_revenue       | int              | YES  |
+| lo_supplycost    | int              | YES  |
+| lo_tax           | int              | YES  |
+| lo_commitdate    | int              | YES  |
+| lo_shipmode      | varchar(1048576) | YES  |
++------------------+------------------+------+
+17 rows in set (0.05 sec)
 ```

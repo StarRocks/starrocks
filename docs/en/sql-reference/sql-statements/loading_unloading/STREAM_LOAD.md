@@ -2,12 +2,11 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
+import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
 
 # STREAM LOAD
 
-:::tip
-The [StarRocks in Docker](../../../quick_start/shared-nothing.md) quick start features Stream Load. Give it a try for hands-on experience and a detailed explanation of a realistic ETL flow.
-:::
+<Tip />
 
 ## Description
 
@@ -101,7 +100,7 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 | file_path  | Yes      | The save path of the data file. You can optionally include the extension of the file name. |
 | format     | No       | The format of the data file. Valid values: `CSV` and `JSON`. Default value: `CSV`. |
 | partitions | No       | The partitions into which you want to load the data file. By default, if you do not specify this parameter, StarRocks loads the data file into all partitions of the StarRocks table. |
-| temporary_partitions|  No       | The name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data file. You can specify multiple temporary partitions, which must be separated by commas (,).|
+| temporary_partitions|  No       | The name of the [temporary partition](../../../table_design/data_distribution/Temporary_partition.md) into which you want to load data file. You can specify multiple temporary partitions, which must be separated by commas (,).|
 | columns    | No       | The column mapping between the data file and the StarRocks table.<br/>If the fields in the data file can be mapped in sequence onto the columns in the StarRocks table, you do not need to specify this parameter. Instead, you can use this parameter to implement data conversions. For example, if you load a CSV data file and the file consists of two columns that can be mapped in sequence onto the two columns, `id` and `city`, of the StarRocks table, you can specify `"columns: city,tmp_id, id = tmp_id * 100"`. For more information, see the "[Column mapping](#column-mapping)" section in this topic. |
 
 #### CSV parameters
@@ -164,7 +163,7 @@ The following table describes the optional parameters.
 | load_mem_limit   | No       | The maximum amount of memory that can be provisioned to the load job. Unit: bytes. By default, the maximum memory size for a load job is 2 GB. The value of this parameter cannot exceed the maximum amount of memory that can be provisioned to each BE or CN. |
 | partial_update | No | Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature. |
 | partial_update_mode | No | Specifies the mode for partial updates. Valid values: `row` and `column`. <ul><li> The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.</li><li>The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.</li></ul> |
-| merge_condition  | No       | Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column. StarRocks supports conditional updates since v2.5. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md). <br/>**NOTE**<br/>The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates. |
+| merge_condition  | No       | Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column. StarRocks supports conditional updates since v2.5. <br/>**NOTE**<br/>The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates. |
 
 ## Column mapping
 

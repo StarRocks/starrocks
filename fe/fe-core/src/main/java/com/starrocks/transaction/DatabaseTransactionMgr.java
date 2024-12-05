@@ -363,8 +363,9 @@ public class DatabaseTransactionMgr {
                 // after state transform
                 transactionState.afterStateTransform(TransactionStatus.PREPARED, txnOperated, callback, null);
             }
-
-            persistTxnStateInTxnLevelLock(transactionState);
+            if (writeEditLog) {
+                persistTxnStateInTxnLevelLock(transactionState);
+            }
 
             LOG.info("transaction:[{}] successfully prepare", transactionState);
         } finally {
@@ -633,8 +634,7 @@ public class DatabaseTransactionMgr {
         return labelToTxnIds.get(label);
     }
 
-    @VisibleForTesting
-    protected int getRunningTxnNums() {
+    public int getRunningTxnNums() {
         return runningTxnNums;
     }
 

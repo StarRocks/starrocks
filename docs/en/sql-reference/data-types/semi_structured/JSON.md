@@ -69,7 +69,7 @@ StarRocks supports the following data type conversions at Parquet file loading.
 | LIST                                                         | ARRAY          |
 | Other data types such as UNION and TIMESTAMP                 | Not supported  |
 
-- Method 4: Use [Routine](../../../loading/RoutineLoad.md) load to continuously load JSON data from Kafka into StarRocks.
+- Method 4: Use [Routine](../../../loading/Loading_intro.md) load to continuously load JSON data from Kafka into StarRocks.
 
 ### Query and process JSON data
 

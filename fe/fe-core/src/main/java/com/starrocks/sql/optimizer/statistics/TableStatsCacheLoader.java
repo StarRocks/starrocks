@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.StatisticExecutor;
@@ -37,25 +37,9 @@ public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKe
     @Override
     public @NonNull CompletableFuture<Optional<Long>> asyncLoad(@NonNull TableStatsCacheKey cacheKey, @
             NonNull Executor executor) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
-                connectContext.setThreadLocalInfo();
-                List<TStatisticData> statisticData =
-                        statisticExecutor.queryTableStats(connectContext, cacheKey.tableId, cacheKey.partitionId);
-                if (statisticData.isEmpty()) {
-                    return Optional.empty();
-                } else {
-                    return Optional.of(statisticData.get(0).rowCount);
-                }
-            } catch (RuntimeException e) {
-                throw e;
-            } catch (Exception e) {
-                throw new CompletionException(e);
-            } finally {
-                ConnectContext.remove();
-            }
-        }, executor);
+
+        return asyncLoadAll(Lists.newArrayList(cacheKey), executor)
+                .thenApply(x -> x.get(cacheKey));
     }
 
     @Override

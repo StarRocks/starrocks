@@ -63,6 +63,9 @@ public class ResourceGroup {
     public static final Set<String> BUILTIN_WG_NAMES =
             ImmutableSet.of(DEFAULT_RESOURCE_GROUP_NAME, DEFAULT_MV_RESOURCE_GROUP_NAME);
 
+    // BE actually stores nanoseconds, so the maximum value needs to be limited to prevent overflow.
+    public static final long MAX_BIG_QUERY_CPU_SECOND_LIMIT = Long.MAX_VALUE / 1_000_000_000L;
+
     private static class ColumnMeta {
         public ColumnMeta(Column column, BiFunction<ResourceGroup, ResourceGroupClassifier, String> valueSupplier) {
             this(column, valueSupplier, true);
@@ -89,7 +92,7 @@ public class ResourceGroup {
                     (rg, classifier) -> "" + rg.getId()),
             new ColumnMeta(
                     new Column(CPU_WEIGHT, ScalarType.createVarchar(200)),
-                    (rg, classifier) -> "" + rg.getCpuWeight()),
+                    (rg, classifier) -> "" + rg.geNormalizedCpuWeight()),
             new ColumnMeta(
                     new Column(EXCLUSIVE_CPU_CORES, ScalarType.createVarchar(200)),
                     (rg, classifier) -> "" + rg.getNormalizedExclusiveCpuCores()),
@@ -264,7 +267,7 @@ public class ResourceGroup {
         return twg;
     }
 
-    public Integer getCpuWeight() {
+    public Integer getRawCpuWeight() {
         return cpuWeight;
     }
 
@@ -272,10 +275,27 @@ public class ResourceGroup {
         this.cpuWeight = cpuWeight;
     }
 
+    public int geNormalizedCpuWeight() {
+        if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
+            return 0;
+        }
+        return cpuWeight;
+    }
+
+    /**
+     * The old version considers cpu_weight as a positive integer, but now it can be non-positive.
+     * To be compatible with the old version, if cpu_weight is non-positive, it is stored as 1.
+     * And use geNormalizedCpuWeight() to get the normalized value when using cpu_weight.
+     */
+    public void normalizeCpuWeight() {
+        if (cpuWeight == null || cpuWeight <= 0) {
+            cpuWeight = 1;
+        }
+    }
+
     public Integer getExclusiveCpuCores() {
         return exclusiveCpuCores;
     }
-
     public int getNormalizedExclusiveCpuCores() {
         if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
             return exclusiveCpuCores;

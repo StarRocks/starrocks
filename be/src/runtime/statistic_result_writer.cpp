@@ -29,6 +29,7 @@ const int STATISTIC_HISTOGRAM_VERSION = 2;
 const int DICT_STATISTIC_DATA_VERSION = 101;
 const int STATISTIC_TABLE_VERSION = 3;
 const int STATISTIC_BATCH_VERSION = 4;
+const int STATISTIC_PARTITION_VERSION = 11;
 const int STATISTIC_EXTERNAL_VERSION = 5;
 const int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
 const int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
@@ -149,6 +150,9 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     } else if (version == STATISTIC_TABLE_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_table_statistic_data(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
+    } else if (version == STATISTIC_PARTITION_VERSION) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_partition_statistic_data(version, result_columns, chunk, result.get()),
+                                  "Fill partition statistic data failed");
     } else if (version == STATISTIC_BATCH_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_data_v4(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
@@ -372,6 +376,45 @@ Status StatisticResultWriter::_fill_full_statistic_data_v4(int version, const Co
         data_list[i].__set_nullCount(nullCounts.value(i));
         data_list[i].__set_max(max.value(i).to_string());
         data_list[i].__set_min(min.value(i).to_string());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+Status StatisticResultWriter::_fill_partition_statistic_data(int version, const Columns& columns, const Chunk* chunk,
+                                                             TFetchDataResult* result) {
+    /*
+    SQL:
+    SELECT cast(" + STATISTIC_PARTITION_VERSION + " as INT), +
+     `partition_id`, 
+    `column_name`, 
+    hll_cardinality(hll_union(`ndv`)) as distinct_count
+    */
+
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 4);
+
+    // skip read version
+    auto partition_id = ColumnViewer<TYPE_BIGINT>(columns[1]);
+    auto column_name = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+    auto distinct_count = ColumnViewer<TYPE_BIGINT>(columns[3]);
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_partitionId(partition_id.value(i));
+        data_list[i].__set_columnName(column_name.value(i).to_string());
+        data_list[i].__set_countDistinct(distinct_count.value(i));
     }
 
     result->result_batch.rows.resize(num_rows);

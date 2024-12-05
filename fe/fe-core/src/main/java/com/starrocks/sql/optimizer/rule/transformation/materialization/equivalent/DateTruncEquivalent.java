@@ -25,6 +25,8 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
 import java.util.Set;
 
+import static com.starrocks.sql.common.TimeUnitUtils.DATE_TRUNC_SUPPORTED_TIME_MAP;
+
 public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
     public static final DateTruncEquivalent INSTANCE = new DateTruncEquivalent();
 
@@ -34,7 +36,7 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
      * TODO: we can support this later.
      * Change date_trunc('month', col) to col = '2023-12-01' will get a wrong result.
      * MV       : select date_trunc('day', col) as dt from t
-     * Query    : select date_trunc('day, col) from t where date_trunc('month', col) = '2023-11-01'
+     * Query    : select date_trunc('month, col) from t where date_trunc('month', col) = '2023-11-01'
      */
     private static Set<BinaryType> SUPPORTED_BINARY_TYPES = ImmutableSet.of(
             BinaryType.GE,
@@ -93,20 +95,49 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
                                   EquivalentShuttleContext shuttleContext,
                                   ColumnRefOperator replace,
                                   ScalarOperator newInput) {
-        if (!(newInput instanceof BinaryPredicateOperator)) {
-            return null;
-        }
-        ScalarOperator left = newInput.getChild(0);
-        ScalarOperator right = newInput.getChild(1);
+        if (newInput instanceof BinaryPredicateOperator) {
+            ScalarOperator left = newInput.getChild(0);
+            ScalarOperator right = newInput.getChild(1);
 
-        if (!right.isConstantRef() || !left.equals(eqContext.getEquivalent())) {
-            return null;
+            if (!right.isConstantRef() || !left.equals(eqContext.getEquivalent())) {
+                return null;
+            }
+            if (!isEquivalent(eqContext.getInput(), (ConstantOperator) right)) {
+                return null;
+            }
+            BinaryPredicateOperator predicate = (BinaryPredicateOperator) newInput.clone();
+            predicate.setChild(0, replace);
+            return predicate;
+        } else if (newInput instanceof CallOperator) {
+            // only in rollup aggregate, `date_trunc('day', dt) as dt` can be rewritten to `date_trunc('month', dt)`
+            if (!shuttleContext.isRollup()) {
+                return null;
+            }
+            CallOperator newCall = (CallOperator) newInput;
+            if (!checkDateTrucFunc(newCall)) {
+                return null;
+            }
+            CallOperator oldCall = (CallOperator) eqContext.getInput();
+            ConstantOperator oldChild0 = (ConstantOperator) oldCall.getChild(0);
+            // ensure col ref is the same in date_trunc
+            if (!newCall.getChild(1).equals(oldCall.getChild(1))) {
+                return null;
+            }
+            ConstantOperator newChild0 = (ConstantOperator) newCall.getChild(0);
+            if (!DATE_TRUNC_SUPPORTED_TIME_MAP.containsKey(oldChild0.getVarchar()) ||
+                    !DATE_TRUNC_SUPPORTED_TIME_MAP.containsKey(newChild0.getVarchar())) {
+                // only can rewrite date_trunc('day', col) to date_trunc('month', col)
+                return null;
+            }
+            int oldTimeUnit = DATE_TRUNC_SUPPORTED_TIME_MAP.get(oldChild0.getVarchar());
+            int newTimeUnit = DATE_TRUNC_SUPPORTED_TIME_MAP.get(newChild0.getVarchar());
+            if (oldTimeUnit > newTimeUnit) {
+                return null;
+            }
+            CallOperator rewritten = (CallOperator) newCall.clone();
+            rewritten.setChild(1, replace);
+            return rewritten;
         }
-        if (!isEquivalent(eqContext.getInput(), (ConstantOperator) right)) {
-            return null;
-        }
-        BinaryPredicateOperator predicate = (BinaryPredicateOperator) newInput.clone();
-        predicate.setChild(0, replace);
-        return predicate;
+        return null;
     }
 }

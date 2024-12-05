@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 30
 ---
 
 # 明细表
@@ -40,15 +41,15 @@ ORDER BY (event_time, event_type);
 
 - **分桶**：
 
-  - **分桶方式**：自 v3.1.0 起，StarRocks 支持明细表进行随机分桶（默认分桶方式）。您在建表和新增分区时可以不设置哈希分桶键（即 `DISTRIBUTED BY HASH` 子句）。在 v3.1.0 之前，StarRocks 仅支持哈希分桶。您在建表和新增分区时必须设置哈希分桶键（即 `DISTRIBUTED BY HASH` 子句），否则建表失败。哈希分桶键的更多说明，请参见[哈希分桶](../Data_distribution.md#哈希分桶)。
+  - **分桶方式**：自 v3.1.0 起，StarRocks 支持明细表进行随机分桶（默认分桶方式）。您在建表和新增分区时可以不设置哈希分桶键（即 `DISTRIBUTED BY HASH` 子句）。在 v3.1.0 之前，StarRocks 仅支持哈希分桶。您在建表和新增分区时必须设置哈希分桶键（即 `DISTRIBUTED BY HASH` 子句），否则建表失败。哈希分桶键的更多说明，请参见[哈希分桶](../data_distribution/Data_distribution.md#哈希分桶)。
 
-  - **分桶数量**：自 v2.5.7 起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见[设置分桶数量](../Data_distribution.md#设置分桶数量)。  
+  - **分桶数量**：自 v2.5.7 起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见[设置分桶数量](../data_distribution/Data_distribution.md#设置分桶数量)。  
 
 - 建表时，支持为所有列创建 Bitmap 索引、Bloom Filter 索引。
 
 ## 下一步
 
-建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/loading_introduction/Loading_intro.md)。
+建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/Loading_intro.md)。
 
 > - 导入时，支持追加新数据，不支持修改历史数据。
 > - 如果导入两行完全相同的数据，则明细表会将这两行数据视为两行，而不是一行。

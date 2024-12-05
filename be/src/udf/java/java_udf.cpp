@@ -406,14 +406,11 @@ jobject JVMFunctionHelper::newString(const char* data, size_t size) {
     return nstr;
 }
 
-size_t JVMFunctionHelper::string_length(jstring jstr) {
-    return _env->GetStringUTFLength(jstr);
-}
-
 Slice JVMFunctionHelper::sliceVal(jstring jstr, std::string* buffer) {
-    size_t length = this->string_length(jstr);
-    buffer->resize(length);
-    _env->GetStringUTFRegion(jstr, 0, length, buffer->data());
+    const size_t utf_length = _env->GetStringUTFLength(jstr);
+    buffer->resize(utf_length);
+    const size_t string_length = _env->GetStringLength(jstr);
+    _env->GetStringUTFRegion(jstr, 0, string_length, buffer->data());
     return {buffer->data(), buffer->length()};
 }
 

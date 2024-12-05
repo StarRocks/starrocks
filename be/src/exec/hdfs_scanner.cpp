@@ -86,7 +86,6 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     _runtime_state = runtime_state;
     _scanner_params = scanner_params;
 
-    RETURN_IF_ERROR(_init_mor_processor(runtime_state, scanner_params.mor_params));
     RETURN_IF_ERROR(do_init(runtime_state, scanner_params));
 
     return Status::OK();
@@ -103,6 +102,16 @@ Status HdfsScanner::_build_scanner_context() {
                          _scanner_params.partition_values[part_col_idx]->evaluate(nullptr));
         DCHECK(partition_value_column->is_constant());
         partition_values.emplace_back(std::move(partition_value_column));
+    }
+
+    // evaluate extended column values
+    std::vector<ColumnPtr>& extended_values = ctx.extended_values;
+    for (size_t i = 0; i < _scanner_params.extended_col_slots.size(); i++) {
+        int extended_col_idx = _scanner_params.index_in_extended_columns[i];
+        ASSIGN_OR_RETURN(auto extended_value_column,
+                         _scanner_params.extended_col_values[extended_col_idx]->evaluate(nullptr));
+        DCHECK(extended_value_column->is_constant());
+        extended_values.emplace_back(std::move(extended_value_column));
     }
 
     ctx.conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
@@ -133,7 +142,15 @@ Status HdfsScanner::_build_scanner_context() {
         ctx.partition_columns.emplace_back(std::move(column));
     }
 
-    ctx.tuple_desc = _scanner_params.tuple_desc;
+    for (size_t i = 0; i < _scanner_params.extended_col_slots.size(); i++) {
+        auto* slot = _scanner_params.extended_col_slots[i];
+        HdfsScannerContext::ColumnInfo column;
+        column.slot_desc = slot;
+        column.idx_in_chunk = _scanner_params.extended_col_index_in_chunk[i];
+        ctx.extended_columns.emplace_back(std::move(column));
+    }
+
+    ctx.slot_descs = _scanner_params.tuple_desc->slots();
     ctx.scan_range = _scanner_params.scan_range;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
@@ -154,17 +171,6 @@ Status HdfsScanner::_build_scanner_context() {
     return Status::OK();
 }
 
-Status HdfsScanner::_init_mor_processor(RuntimeState* runtime_state, const MORParams& params) {
-    if (params.equality_slots.empty()) {
-        _mor_processor = std::make_shared<DefaultMORProcessor>();
-        return Status::OK();
-    }
-
-    _mor_processor = std::make_shared<IcebergMORProcessor>(params.runtime_profile);
-    RETURN_IF_ERROR(_mor_processor->init(runtime_state, params));
-    return Status::OK();
-}
-
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
@@ -175,7 +181,6 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.scanner_conjunct_ctxs, (*chunk).get()));
         }
-        RETURN_IF_ERROR(_mor_processor->get_next(runtime_state, chunk));
     } else if (status.is_end_of_file()) {
         // do nothing.
     } else {
@@ -192,7 +197,6 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     }
     RETURN_IF_ERROR(_build_scanner_context());
     RETURN_IF_ERROR(do_open(runtime_state));
-    RETURN_IF_ERROR(_mor_processor->build_hash_table(runtime_state));
     _opened = true;
     VLOG_FILE << "open file success: " << _scanner_params.path << ", scan range = ["
               << _scanner_params.scan_range->offset << ","
@@ -214,7 +218,6 @@ void HdfsScanner::close() noexcept {
     update_counter();
     do_close(_runtime_state);
     _file.reset(nullptr);
-    _mor_processor->close(_runtime_state);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_file(
@@ -392,6 +395,8 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_write_timer, stats.write_cache_ns);
         COUNTER_UPDATE(profile->datacache_write_fail_counter, stats.write_cache_fail_count);
         COUNTER_UPDATE(profile->datacache_write_fail_bytes, stats.write_cache_fail_bytes);
+        COUNTER_UPDATE(profile->datacache_skip_write_counter, stats.skip_write_cache_count);
+        COUNTER_UPDATE(profile->datacache_skip_write_bytes, stats.skip_write_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_counter, stats.read_block_buffer_count);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
 
@@ -556,24 +561,35 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 }
 
 void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.size() == 0) return;
+    append_or_update_column_to_chunk(chunk, row_count, partition_columns, partition_values);
+}
+
+void HdfsScannerContext::append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    append_or_update_column_to_chunk(chunk, row_count, extended_columns, extended_values);
+}
+
+void HdfsScannerContext::append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count,
+                                                          const std::vector<ColumnInfo>& columns,
+                                                          const std::vector<ColumnPtr>& values) {
+    if (columns.size() == 0) return;
+
     ChunkPtr& ck = (*chunk);
-    for (size_t i = 0; i < partition_columns.size(); i++) {
-        SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
-        DCHECK(partition_values[i]->is_constant());
-        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
+    for (size_t i = 0; i < columns.size(); i++) {
+        SlotDescriptor* slot_desc = columns[i].slot_desc;
+        DCHECK(values[i]->is_constant());
+        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(values[i]);
         ColumnPtr data_column = const_column->data_column();
-        auto chunk_part_column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        auto chunk_column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
 
         if (row_count > 0) {
             if (data_column->is_nullable()) {
-                chunk_part_column->append_nulls(1);
+                chunk_column->append_nulls(1);
             } else {
-                chunk_part_column->append(*data_column, 0, 1);
+                chunk_column->append(*data_column, 0, 1);
             }
-            chunk_part_column->assign(row_count, 0);
+            chunk_column->assign(row_count, 0);
         }
-        ck->append_or_update_column(std::move(chunk_part_column), slot_desc->id());
+        ck->append_or_update_column(std::move(chunk_column), slot_desc->id());
     }
     ck->set_num_rows(row_count);
 }

@@ -128,7 +128,6 @@ public:
     DECLARE_NEW_BOX(double, double, Double)
 
     jobject newString(const char* data, size_t size);
-    size_t string_length(jstring jstr);
 
     Slice sliceVal(jstring jstr, std::string* buffer);
     jclass string_clazz() { return _string_class; }

@@ -201,7 +201,7 @@ INSERT INTO t0 VALUES(1, [1,2,3]);
 
 ### Use Stream Load or Routine Load to load CSV-formatted arrays
 
-  Arrays in CSV files are separated with comma by default. You can use [Stream Load](../../../loading/StreamLoad.md#load-csv-data) or [Routine Load](../../../loading/RoutineLoad.md#load-csv-format-data) to load CSV text files or CSV data in Kafka.
+  Arrays in CSV files are separated with comma by default. You can use [Stream Load or Routine Load](../../../loading/Loading_intro.md) to load CSV text files or CSV data in Kafka.
 
 ## Query ARRAY data
 

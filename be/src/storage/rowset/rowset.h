@@ -50,6 +50,7 @@
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_options.h"
 
 namespace starrocks {
 
@@ -389,6 +390,9 @@ protected:
 
     // release resources in this api
     void do_close();
+
+    // Move this item to newest item in lru cache.
+    void warmup_lrucache();
 
     // allow subclass to add custom logic when rowset is being published
     virtual void make_visible_extra(Version version) {}

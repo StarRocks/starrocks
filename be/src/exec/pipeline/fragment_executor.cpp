@@ -142,6 +142,10 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     }
     _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, enable_query_trace));
 
+    if (request.common().__isset.exec_stats_node_ids) {
+        _query_ctx->init_node_exec_stats(request.common().exec_stats_node_ids);
+    }
+
     return Status::OK();
 }
 
@@ -365,6 +369,36 @@ static std::unordered_set<int32_t> collect_broadcast_join_right_offsprings(
     return offsprings;
 }
 
+// there will be partition values used by this batch of scan ranges and maybe following scan ranges
+// so before process this batch of scan ranges, we have to put partition values into the table associated with.
+static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
+                                               const std::vector<TScanRangeParams>& scan_ranges) {
+    auto* obj_pool = runtime_state->obj_pool();
+    const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
+    TTableId cache_table_id = -1;
+    TableDescriptor* table = nullptr;
+
+    for (const auto& scan_range_params : scan_ranges) {
+        const TScanRange& scan_range = scan_range_params.scan_range;
+        if (!scan_range.__isset.hdfs_scan_range) continue;
+        const THdfsScanRange& hdfs_scan_range = scan_range.hdfs_scan_range;
+        if (!hdfs_scan_range.__isset.partition_value) continue;
+        DCHECK(hdfs_scan_range.__isset.table_id);
+        DCHECK(hdfs_scan_range.__isset.partition_id);
+        TTableId table_id = hdfs_scan_range.table_id;
+        if (table_id != cache_table_id) {
+            table = desc_tbl.get_table_descriptor(table_id);
+            cache_table_id = table_id;
+        }
+        if (table == nullptr) continue;
+        // only HiveTableDescriptor(includes hive,iceberg,hudi,deltalake etc) supports this feature.
+        HiveTableDescriptor* hive_table = down_cast<HiveTableDescriptor*>(table);
+        RETURN_IF_ERROR(hive_table->add_partition_value(runtime_state, obj_pool, hdfs_scan_range.partition_id,
+                                                        hdfs_scan_range.partition_value));
+    }
+    return Status::OK();
+}
+
 Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     auto* runtime_state = _fragment_ctx->runtime_state();
     auto* obj_pool = runtime_state->obj_pool();
@@ -490,6 +524,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             enable_shared_scan = false;
         }
 
+        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
         ASSIGN_OR_RETURN(auto morsel_queue_factory,
                          scan_node->convert_scan_range_to_morsel_queue_factory(
                                  scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), group_execution_scan_dop,
@@ -851,6 +886,38 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
         }
         _query_ctx->count_down_fragments();
     }
+}
+
+Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+    DCHECK(!request.__isset.fragment);
+    DCHECK(request.__isset.params);
+    const TPlanFragmentExecParams& params = request.params;
+    const TUniqueId& query_id = params.query_id;
+    const TUniqueId& instance_id = params.fragment_instance_id;
+
+    QueryContextPtr query_ctx = exec_env->query_context_mgr()->get(query_id);
+    if (query_ctx == nullptr) return Status::OK();
+    FragmentContextPtr fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
+    if (fragment_ctx == nullptr) return Status::OK();
+    RuntimeState* runtime_state = fragment_ctx->runtime_state();
+
+    for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
+        auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
+        if (iter == fragment_ctx->morsel_queue_factories().end()) {
+            continue;
+        }
+        MorselQueueFactory* morsel_queue_factory = iter->second.get();
+        if (morsel_queue_factory == nullptr) {
+            continue;
+        }
+
+        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+        pipeline::Morsels morsels;
+        bool has_more_morsel = false;
+        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
+        RETURN_IF_ERROR(morsel_queue_factory->append_morsels(std::move(morsels), has_more_morsel));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

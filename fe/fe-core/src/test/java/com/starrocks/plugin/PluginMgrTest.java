@@ -35,7 +35,6 @@
 package com.starrocks.plugin;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.server.GlobalStateMgr;
@@ -84,7 +83,7 @@ public class PluginMgrTest {
             info.properties.put("md5sum", "cf0c536b8f2a0a0690b44d783d019e90");
             pluginMgr.replayLoadDynamicPlugin(info);
 
-        } catch (IOException | UserException e) {
+        } catch (IOException e) {
             e.printStackTrace();
             assert false;
         }

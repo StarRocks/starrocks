@@ -261,7 +261,7 @@ public abstract class BulkLoadJob extends LoadJob {
                 return;
             }
 
-            if (!failMsg.getMsg().contains("timeout")) {
+            if (!failMsg.getMsg().contains("timeout") || failMsg.getCancelType() == FailMsg.CancelType.USER_CANCEL) {
                 unprotectedExecuteCancel(failMsg, true);
                 logFinalOperation();
             }

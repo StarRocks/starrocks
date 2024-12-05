@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # Gather statistics for CBO
@@ -81,7 +82,7 @@ update_time: 2023-12-01 15:17:10.274000
 
 Data size and data distribution constantly change in a table. Statistics must be updated regularly to represent that data change. Before creating a statistics collection task, you must choose a collection type and method that best suit your business requirements.
 
-StarRocks supports full and sampled collection, both can be performed automatically and manually. By default, StarRocks automatically collects full statistics of a table. It checks for any data updates every 5 minutes. If data change is detected, data collection will be automatically triggered. If you do not want to use automatic full collection, you can set the FE configuration item `enable_collect_full_statistic` to `false` and customize a collection task.
+StarRocks supports full and sampled collection, both can be performed automatically and manually. By default, StarRocks automatically collects full statistics of a table. It checks for any data updates every 5 minutes. If data change is detected, data collection will be automatically triggered. If you do not want to use automatic full collection, you can customize a collection task.
 
 | **Collection type** | **Collection method** | **Description**                                              | **Advantage and disadvantage**                               |
 | ------------------- | --------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
@@ -264,7 +265,6 @@ PROPERTIES(
 
 You can use the CREATE ANALYZE statement to customize an automatic collection task. You must have the INSERT and SELECT privileges on the coreesponding table to perform the ANALYZE TABLE operation.
 
-Before creating a custom automatic collection task, you must disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
 
 ```SQL
 -- Automatically collect stats of all databases.

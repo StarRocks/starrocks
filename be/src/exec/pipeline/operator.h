@@ -267,6 +267,8 @@ public:
     // apply operation for each child operator
     virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
+    virtual void update_exec_stats(RuntimeState* state);
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;

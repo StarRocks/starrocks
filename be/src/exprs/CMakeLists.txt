@@ -29,10 +29,6 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_utility.cpp
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
-  jit/ir_helper.cpp
-  jit/jit_engine.cpp
-  jit/jit_expr.cpp
-  anyval_util.cpp
   base64.cpp
   binary_functions.cpp
   expr_context.cpp
@@ -105,5 +101,13 @@ set(EXPR_FILES
   ngram.cpp
   match_expr.cpp
 )
+
+if(STARROCKS_JIT_ENABLE)
+  set(EXPR_FILES ${EXPR_FILES} 
+      jit/ir_helper.cpp 
+      jit/jit_engine.cpp
+      jit/jit_expr.cpp)
+
+endif()
 
 add_library(Exprs ${EXPR_FILES})

@@ -189,6 +189,10 @@ public abstract class StarRocksHttpTestCase {
     }
 
     public static OlapTable newTable(String name) {
+        return newTable(name, 1024000L);
+    }
+
+    public static OlapTable newTable(String name, long replicaDataSize) {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
         Column k1 = new Column("k1", Type.BIGINT);
         Column k2 = new Column("k2", Type.DOUBLE);
@@ -198,15 +202,15 @@ public abstract class StarRocksHttpTestCase {
 
         Replica replica1 =
                 new Replica(testReplicaId1, testBackendId1, testStartVersion, testSchemaHash,
-                        1024000L, 2000L,
+                        replicaDataSize, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
         Replica replica2 =
                 new Replica(testReplicaId2, testBackendId2, testStartVersion, testSchemaHash,
-                        1024000L, 2000L,
+                        replicaDataSize, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
         Replica replica3 =
                 new Replica(testReplicaId3, testBackendId3, testStartVersion, testSchemaHash,
-                        1024000L, 2000L,
+                        replicaDataSize, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
 
         // tablet

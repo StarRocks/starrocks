@@ -16,6 +16,8 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.api.client.util.Lists;
+import com.google.common.base.Predicate;
+import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -28,11 +30,17 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewPushDownRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.IMaterializedViewRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 /**
  * Support to push down aggregate functions below join operator and rewrite the query by mv transparently.
@@ -51,11 +59,12 @@ import java.util.List;
  * Rewrite it by:
  * select a.dt, a.col, cardinality(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
  * from
- *  (select id, dt, col, array_agg_unique(count_distinct_im_uv) from mv0 group by id,dt,col) as a join b on a.id = b.id
+ *  ( select id, dt, col, array_agg_unique(count_distinct_im_uv) as count_distinct_im_uv from mv0 group by id, dt, col
+ *  ) as a join b on a.id = b.id
  * group by a.dt, a.cal;
  *
  * Rewrite result:
- * select a.dt, a.col, cardinility(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
+ * select a.dt, a.col, cardinality(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
  * from mv0 as a join b on a.id = b.id group by a.dt, a.cal;
  */
 public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
@@ -121,18 +130,45 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     public List<MaterializationContext> doPrune(OptExpression queryExpression,
                                                 OptimizerContext context,
                                                 List<MaterializationContext> mvCandidateContexts) {
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
         List<MaterializationContext> validCandidateContexts = Lists.newArrayList();
         for (MaterializationContext mvContext : mvCandidateContexts) {
-            if (isLogicalSPG(mvContext.getMvExpression())) {
+            if (isLogicalSPG(mvContext.getMvExpression()) && validMv(mvContext, scanOperators)) {
                 validCandidateContexts.add(mvContext);
+            } else {
+                logMVRewrite(mvContext, "mv pruned");
             }
         }
         return validCandidateContexts;
     }
 
+    private boolean validMv(MaterializationContext mvContext, List<LogicalScanOperator> scanOperators) {
+        // mv is SPG, so there is only one baseTable
+        long baseTableId = mvContext.getBaseTables().get(0).getId();
+        Set<ColumnRefOperator> mvUsedColRefs = MvUtils.collectScanColumn(mvContext.getMvExpression());
+        Set<String> mvUsedColNames = mvUsedColRefs.stream()
+                .map(ColumnRefOperator::getName)
+                .collect(Collectors.toSet());
+        for (LogicalScanOperator scanOperator : scanOperators) {
+            if (scanOperator.getTable().getId() != baseTableId) {
+                continue;
+            }
+            // mv should contain all columns that used in at least one query
+            if (mvContainsAllColumnsUsedInScan(mvUsedColNames, scanOperator)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean mvContainsAllColumnsUsedInScan(Set<String> mvUsedColNames, LogicalScanOperator scanOperator) {
+        return scanOperator.getColRefToColumnMetaMap().values().stream().allMatch(
+                (Predicate<Column>) c -> mvUsedColNames.contains(c.getName()));
+    }
+
     @Override
     public IMaterializedViewRewriter createRewriter(OptimizerContext optimizerContext,
                                                     MvRewriteContext mvContext) {
-        return new AggregatedMaterializedViewPushDownRewriter(mvContext, optimizerContext, this);
+        return new AggregatedMaterializedViewPushDownRewriter(mvContext, this);
     }
 }

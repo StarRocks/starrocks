@@ -11,6 +11,14 @@ select * from files("path" = "hdfs://hdfs://test/x", "format" = "parquet");
 -- result:
 E: (1064, 'Access storage error. Error message: java.net.UnknownHostException: hdfs')
 -- !result
+select * from files("path" = "s3://${oss_bucket}/x", "format" = "parquet");
+-- result:
+E: (1064, 'Access storage error. Error message: Unable to load credentials from system settings. Access key must be specified either via environment variable (AWS_ACCESS_KEY_ID) or system property (aws.accessKeyId).')
+-- !result
+select * from files("path" = "s3://${oss_bucket}/x", "format" = "parquet", "aws.s3.access_key" = "xxx", "aws.s3.secret_key" = "yyy", "aws.s3.region" = "us-west-2");
+-- result:
+[REGEX].*Status Code: 403.*
+-- !result
 
 
 shell: ossutil64 mkdir oss://${oss_bucket}/test_files/orc_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null

@@ -102,7 +102,8 @@ public:
         COMPACTION,
         SCHEMA_CHANGE_TASK,
         RESOURCE_GROUP,
-        RESOURCE_GROUP_BIG_QUERY
+        RESOURCE_GROUP_BIG_QUERY,
+        JEMALLOC,
     };
 
     /// 'byte_limit' < 0 means no limit

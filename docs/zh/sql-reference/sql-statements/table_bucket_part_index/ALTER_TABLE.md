@@ -243,7 +243,7 @@ multi_range_partitions ::=
 
 #### 增加临时分区 (ADD TEMPORARY PARTITION)
 
-详细使用信息，请查阅[临时分区](../../../table_design/Temporary_partition.md)。
+详细使用信息，请查阅[临时分区](../../../table_design/data_distribution/Temporary_partition.md)。
 
 语法：
 
@@ -715,7 +715,7 @@ SET ("key" = "value",...)
   - `default.replication_num`
   - `storage_cooldown_ttl`
   - `storage_cooldown_time`
-  - [动态分区相关属性 properties](../../../table_design/dynamic_partitioning.md)，比如 `dynamic_partition.enable`
+  - [动态分区相关属性 properties](../../../table_design/data_distribution/dynamic_partitioning.md)，比如 `dynamic_partition.enable`
   - `enable_persistent_index`
   - `bloom_filter_columns`
   - `colocate_with`

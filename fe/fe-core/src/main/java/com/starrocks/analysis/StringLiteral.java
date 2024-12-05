@@ -283,7 +283,7 @@ public class StringLiteral extends LiteralExpr {
         }
         byte[] bytes = new byte[strLen];
         data.get(bytes);
-        value = new String(bytes);
+        value = new String(bytes, StandardCharsets.UTF_8);
     }
 
     public static StringLiteral create(String value) {

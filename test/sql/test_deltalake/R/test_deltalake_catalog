@@ -33,6 +33,10 @@ select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type whe
 {"name":"Fiona","sex":"female","age":33}
 {"name":null,"sex":null,"age":null}
 -- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_null_subfield where col_struct is not null;
+-- result:
+1	{"name":null,"sex":"male","age":30}
+-- !result
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_boolean where col_boolean = true;
 -- result:
 1	1	1
@@ -193,10 +197,6 @@ select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timesta
 2	2024-01-03 04:05:06
 4	2024-01-04 01:02:03
 -- !result
-select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
--- result:
-E: (1064, "Unknown table 'Delta table feature [column mapping] is not supported'")
--- !result
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp order by col_smallint;
 -- result:
 1	1	2024-01-01 01:01:01
@@ -261,6 +261,21 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null where col_tim
 1	1	2024-01-01 01:01:01
 2	2	2023-01-01 01:01:01
 3	3	2022-01-01 01:01:01
+-- !result
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct.age=30 order by col_tinyint;
+-- result:
+{"name":"Alice","sex":"female","age":30}
+-- !result
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct.sex='male' order by col_tinyint;
+-- result:
+{"name":"Bob","sex":"male","age":25}
+{"name":"Charlie","sex":"male","age":35}
+{"name":"Edward","sex":"male","age":40}
+-- !result
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct.age<30 order by col_tinyint;
+-- result:
+{"name":"Bob","sex":"male","age":25}
+{"name":"Diana","sex":"female","age":28}
 -- !result
 drop catalog delta_test_${uuid0}
 -- result:

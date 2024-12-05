@@ -88,6 +88,7 @@ public class ResourceGroupMgr implements Writable {
     private final Map<Long, Long> minVersionPerBe = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private int sumExclusiveCpuCores = 0;
+    private volatile boolean hasCreatedDefaultResourceGroups = false;
 
     private void readLock() {
         lock.readLock().lock();
@@ -148,9 +149,7 @@ public class ResourceGroupMgr implements Writable {
                 dropResourceGroupUnlocked(wg.getName());
             }
 
-            if (wg.getCpuWeight() == null) {
-                wg.setCpuWeight(0);
-            }
+            wg.normalizeCpuWeight();
 
             if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
                 wg.setId(ResourceGroup.DEFAULT_WG_ID);
@@ -350,9 +349,9 @@ public class ResourceGroupMgr implements Writable {
             } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
                 ResourceGroup changedProperties = stmt.getChangedProperties();
 
-                Integer cpuWeight = changedProperties.getCpuWeight();
+                Integer cpuWeight = changedProperties.getRawCpuWeight();
                 if (cpuWeight == null) {
-                    cpuWeight = wg.getCpuWeight();
+                    cpuWeight = wg.geNormalizedCpuWeight();
                 }
                 Integer exclusiveCpuCores = changedProperties.getExclusiveCpuCores();
                 if (exclusiveCpuCores == null) {
@@ -377,6 +376,7 @@ public class ResourceGroupMgr implements Writable {
                 if (cpuWeight != null) {
                     wg.setCpuWeight(cpuWeight);
                 }
+                wg.normalizeCpuWeight();
 
                 if (exclusiveCpuCores != null) {
                     sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
@@ -515,6 +515,9 @@ public class ResourceGroupMgr implements Writable {
             shortQueryResourceGroup = wg;
         }
         sumExclusiveCpuCores += wg.getNormalizedExclusiveCpuCores();
+        if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
+            hasCreatedDefaultResourceGroups = true;
+        }
     }
 
     public List<TWorkGroupOp> getResourceGroupsNeedToDeliver(Long beId) {
@@ -632,6 +635,16 @@ public class ResourceGroupMgr implements Writable {
 
     public void createBuiltinResourceGroupsIfNotExist() {
         try {
+            if (hasCreatedDefaultResourceGroups) {
+                return;
+            }
+
+            // Create default resource groups only when there are BEs.
+            // Otherwise, we cannot get the number of cores of BE as `cpu_weight`.
+            if (BackendResourceStat.getInstance().getNumBes() <= 0) {
+                return;
+            }
+
             ResourceGroup defaultWg = getResourceGroup(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
             if (defaultWg != null) {
                 return;
@@ -679,12 +692,8 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int numJson = reader.readInt();
         List<ResourceGroup> resourceGroups = new ArrayList<>();
-        for (int i = 0; i < numJson; ++i) {
-            ResourceGroup resourceGroup = reader.readJson(ResourceGroup.class);
-            resourceGroups.add(resourceGroup);
-        }
+        reader.readCollection(ResourceGroup.class, resourceGroups::add);
         resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
         resourceGroups.forEach(this::replayAddResourceGroup);
     }

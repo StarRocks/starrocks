@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['quanxian', 'yonghu']
 ---
 
 # 权限系统总览

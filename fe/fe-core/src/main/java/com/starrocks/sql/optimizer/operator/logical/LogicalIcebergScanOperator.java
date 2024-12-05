@@ -33,6 +33,9 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
 
     private boolean hasUnknownColumn = true;
 
+    // record if this scan is derived from IcebergEqualityDeleteRewriteRule.
+    private boolean fromEqDeleteRewriteRule;
+
     public LogicalIcebergScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
@@ -73,6 +76,14 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
+    public boolean isFromEqDeleteRewriteRule() {
+        return fromEqDeleteRewriteRule;
+    }
+
+    public void setFromEqDeleteRewriteRule(boolean fromEqDeleteRewriteRule) {
+        this.fromEqDeleteRewriteRule = fromEqDeleteRewriteRule;
+    }
+
     @Override
     public boolean isEmptyOutputRows() {
         return !table.isUnPartitioned() &&
@@ -104,7 +115,6 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         @Override
         public LogicalIcebergScanOperator.Builder withOperator(LogicalIcebergScanOperator scanOperator) {
             super.withOperator(scanOperator);
-
             builder.predicates = scanOperator.predicates.clone();
             return this;
         }

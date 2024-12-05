@@ -64,7 +64,7 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Console name=\"ConsoleErr\" target=\"SYSTEM_ERR\" follow=\"true\">\n" +
             "      ${syslog_default_layout}\n" +
             "    </Console>\n" +
-            "    <RollingFile name=\"Sys\" fileName=\"${sys_log_dir}/fe.log\" filePattern=\"${sys_log_dir}/fe.log.${sys_file_pattern}-%i\">\n" +
+            "    <RollingFile name=\"Sys\" fileName=\"${sys_log_dir}/fe.log\" filePattern=\"${sys_log_dir}/fe.log.${sys_file_pattern}-%i${sys_file_postfix}\">\n" +
             "      ${syslog_default_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
@@ -77,7 +77,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
-            "    <RollingFile name=\"SysWF\" fileName=\"${sys_log_dir}/fe.warn.log\" filePattern=\"${sys_log_dir}/fe.warn.log.${sys_file_pattern}-%i\">\n" +
+            "    <RollingFile name=\"SysWF\" fileName=\"${sys_log_dir}/fe.warn.log\" filePattern=\"${sys_log_dir}/fe.warn.log.${sys_file_pattern}-%i${sys_file_postfix}\">\n" +
             "      ${syslog_warning_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
@@ -90,13 +90,13 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
-            "    <RollingFile name=\"Auditfile\" fileName=\"${audit_log_dir}/fe.audit.log\" filePattern=\"${audit_log_dir}/fe.audit.log.${audit_file_pattern}-%i\">\n" +
+            "    <RollingFile name=\"Auditfile\" fileName=\"${audit_log_dir}/fe.audit.log\" filePattern=\"${audit_log_dir}/fe.audit.log.${audit_file_pattern}-%i${audit_file_postfix}\">\n" +
             "      ${syslog_audit_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${audit_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${audit_roll_num}\" fileIndex=\"min\">\n" +
             "        <Delete basePath=\"${audit_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.audit.log.*\" />\n" +
             "          <IfLastModified age=\"${audit_log_delete_age}\" />\n" +
@@ -197,6 +197,8 @@ public class Log4jConfig extends XmlConfiguration {
     private static String[] dumpModules;
     private static String[] bigQueryModules;
     private static String[] internalModules;
+    private static boolean compressSysLog;
+    private static boolean compressAuditLog;
 
     @VisibleForTesting
     static String generateActiveLog4jXmlConfig() throws IOException {
@@ -212,6 +214,8 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("sys_log_delete_age", String.valueOf(Config.sys_log_delete_age));
         properties.put("sys_log_level", sysLogLevel);
         properties.put("sys_file_pattern", getIntervalPattern("sys_log_roll_interval", Config.sys_log_roll_interval));
+        properties.put("sys_file_postfix", compressSysLog ? ".gz" : "");
+        properties.put("audit_file_postfix", compressAuditLog ? ".gz" : "");
 
         // audit log config
         properties.put("audit_log_dir", Config.audit_log_dir);
@@ -378,6 +382,8 @@ public class Log4jConfig extends XmlConfiguration {
         dumpModules = Config.dump_log_modules;
         bigQueryModules = Config.big_query_log_modules;
         internalModules = Config.internal_log_modules;
+        compressSysLog = Config.sys_log_enable_compress;
+        compressAuditLog = Config.audit_log_enable_compress;
         reconfig();
     }
 

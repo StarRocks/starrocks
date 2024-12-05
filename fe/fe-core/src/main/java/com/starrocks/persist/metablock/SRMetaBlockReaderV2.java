@@ -14,10 +14,14 @@
 
 package com.starrocks.persist.metablock;
 
+import com.google.common.reflect.TypeToken;
 import com.google.gson.JsonSyntaxException;
+import com.google.gson.internal.Primitives;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
+import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.gson.SubtypeNotFoundException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -66,10 +70,64 @@ public class SRMetaBlockReaderV2 implements SRMetaBlockReader {
     }
 
     @Override
-    public <T> T readJson(Class<T> returnClass) throws IOException, SRMetaBlockEOFException {
+    public int readInt() throws IOException, SRMetaBlockEOFException {
+        PrimitiveObject<Integer> object = readJson(new TypeToken<PrimitiveObject<Integer>>() {}.getType());
+        return object.getValue();
+    }
+
+    @Override
+    public long readLong() throws IOException, SRMetaBlockEOFException {
+        PrimitiveObject<Long> object = readJson(new TypeToken<PrimitiveObject<Long>>() {}.getType());
+        return object.getValue();
+    }
+
+    @Override
+    public byte readByte() throws IOException, SRMetaBlockEOFException {
+        PrimitiveObject<Byte> object = readJson(new TypeToken<PrimitiveObject<Byte>>() {}.getType());
+        return object.getValue();
+    }
+
+    @Override
+    public short readShort() throws IOException, SRMetaBlockEOFException {
+        PrimitiveObject<Short> object = readJson(new TypeToken<PrimitiveObject<Short>>() {}.getType());
+        return object.getValue();
+    }
+
+    @Override
+    public double readDouble() throws IOException, SRMetaBlockEOFException {
+        PrimitiveObject<Double> object = readJson(new TypeToken<PrimitiveObject<Double>>() {}.getType());
+        return object.getValue();
+    }
+
+    @Override
+    public float readFloat() throws IOException, SRMetaBlockEOFException {
+        PrimitiveObject<Float> object = readJson(new TypeToken<PrimitiveObject<Float>>() {}.getType());
+        return object.getValue();
+    }
+
+    @Override
+    public char readChar() throws IOException, SRMetaBlockEOFException {
+        PrimitiveObject<Character> object = readJson(new TypeToken<PrimitiveObject<Character>>() {}.getType());
+        return object.getValue();
+    }
+
+    @Override
+    public boolean readBoolean() throws IOException, SRMetaBlockEOFException {
+        PrimitiveObject<Boolean> object = readJson(new TypeToken<PrimitiveObject<Boolean>>() {}.getType());
+        return object.getValue();
+    }
+
+    @Override
+    public String readString() throws IOException, SRMetaBlockEOFException {
+        PrimitiveObject<String> object = readJson(new TypeToken<PrimitiveObject<String>>() {}.getType());
+        return object.getValue();
+    }
+
+    @Override
+    public <T> T readJson(Type returnType) throws IOException, SRMetaBlockEOFException {
         checkEOF();
         try {
-            T t = GsonUtils.GSON.fromJson(jsonReader, returnClass);
+            T t = GsonUtils.GSON.fromJson(jsonReader, returnType);
             numJsonRead++;
             return t;
         } catch (JsonSyntaxException e) {
@@ -79,26 +137,9 @@ public class SRMetaBlockReaderV2 implements SRMetaBlockReader {
     }
 
     @Override
-    public int readInt() throws IOException, SRMetaBlockEOFException {
-        return readJson(IntObject.class).getValue();
-    }
-
-    @Override
-    public long readLong() throws IOException, SRMetaBlockEOFException {
-        return readJson(LongObject.class).getValue();
-    }
-
-    @Override
-    public Object readJson(Type returnType) throws IOException, SRMetaBlockEOFException {
-        checkEOF();
-        try {
-            Object obj = GsonUtils.GSON.fromJson(jsonReader, returnType);
-            numJsonRead++;
-            return obj;
-        } catch (JsonSyntaxException e) {
-            handleJsonSyntaxException(e);
-        }
-        return null;
+    public <T> T readJson(Class<T> classOfT) throws IOException, SRMetaBlockEOFException {
+        Object object = readJson((Type) classOfT);
+        return Primitives.wrap(classOfT).cast(object);
     }
 
     private void checkEOF() throws SRMetaBlockEOFException {
@@ -108,6 +149,116 @@ public class SRMetaBlockReaderV2 implements SRMetaBlockReader {
         }
     }
 
+    @Override
+    public <T> void readCollection(Class<T> classType, CollectionConsumer<? super T> action)
+            throws IOException, SRMetaBlockEOFException {
+        int size = readInt();
+        while (size-- > 0) {
+            T t = null;
+            try {
+                t = GsonUtils.GSON.fromJson(jsonReader, classType);
+                numJsonRead++;
+                action.accept(t);
+            } catch (SubtypeNotFoundException e) {
+                LOG.info("ignore_unknown_subtype is {}", Config.metadata_ignore_unknown_subtype);
+                if (Config.metadata_ignore_unknown_subtype) {
+                    LOG.warn("ignore unknown sub type: {}", e.getSubtype(), e);
+                    numJsonRead++;
+                } else {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    @Override
+    public <K, V> void readMap(Type keyType, Type valueType,
+                               MapEntryConsumer<? super K, ? super V> action)
+            throws IOException, SRMetaBlockEOFException {
+        int size = readInt();
+        while (size-- > 0) {
+            K k = null;
+            boolean ignoreUnknownType = false;
+            try {
+                k = readMapElement(keyType);
+                numJsonRead++;
+            } catch (SubtypeNotFoundException e) {
+                if (Config.metadata_ignore_unknown_subtype) {
+                    LOG.warn("ignore unknown sub type: {}", e.getSubtype(), e);
+                    numJsonRead++;
+                    ignoreUnknownType = true;
+                } else {
+                    throw e;
+                }
+            }
+            V v = null;
+            try {
+                v = readMapElement(valueType);
+                numJsonRead++;
+            } catch (SubtypeNotFoundException e) {
+                if (Config.metadata_ignore_unknown_subtype) {
+                    LOG.warn("ignore unknown sub type: {}", e.getSubtype(), e);
+                    numJsonRead++;
+                    ignoreUnknownType = true;
+                } else {
+                    throw e;
+                }
+            }
+
+            if (!ignoreUnknownType) {
+                action.accept(k, v);
+            }
+        }
+    }
+
+    private <T> T readMapElement(Type typeOfT) {
+        if (typeOfT == byte.class || typeOfT == Byte.class) {
+            PrimitiveObject<Byte> object = GsonUtils.GSON.fromJson(jsonReader,
+                    new TypeToken<PrimitiveObject<Byte>>() {}.getType());
+            return (T) object.getValue();
+        }
+        if (typeOfT == short.class || typeOfT == Short.class) {
+            PrimitiveObject<Short> object = GsonUtils.GSON.fromJson(jsonReader,
+                    new TypeToken<PrimitiveObject<Short>>() {}.getType());
+            return (T) object.getValue();
+        }
+        if (typeOfT == int.class || typeOfT == Integer.class) {
+            PrimitiveObject<Integer> object = GsonUtils.GSON.fromJson(jsonReader,
+                    new TypeToken<PrimitiveObject<Integer>>() {}.getType());
+            return (T) object.getValue();
+        }
+        if (typeOfT == Long.class || typeOfT == long.class) {
+            PrimitiveObject<Long> object = GsonUtils.GSON.fromJson(jsonReader,
+                    new TypeToken<PrimitiveObject<Long>>() {}.getType());
+            return (T) object.getValue();
+        }
+        if (typeOfT == Double.class || typeOfT == double.class) {
+            PrimitiveObject<Double> object = GsonUtils.GSON.fromJson(jsonReader,
+                    new TypeToken<PrimitiveObject<Double>>() {}.getType());
+            return (T) object.getValue();
+        }
+        if (typeOfT == Float.class || typeOfT == float.class) {
+            PrimitiveObject<Float> object = GsonUtils.GSON.fromJson(jsonReader,
+                    new TypeToken<PrimitiveObject<Float>>() {}.getType());
+            return (T) object.getValue();
+        }
+        if (typeOfT == Character.class || typeOfT == char.class) {
+            PrimitiveObject<Character> object = GsonUtils.GSON.fromJson(jsonReader,
+                    new TypeToken<PrimitiveObject<Character>>() {}.getType());
+            return (T) object.getValue();
+        }
+        if (typeOfT == Boolean.class || typeOfT == boolean.class) {
+            PrimitiveObject<Boolean> object = GsonUtils.GSON.fromJson(jsonReader,
+                    new TypeToken<PrimitiveObject<Boolean>>() {}.getType());
+            return (T) object.getValue();
+        }
+        if (typeOfT == String.class) {
+            PrimitiveObject<String> object = GsonUtils.GSON.fromJson(jsonReader,
+                    new TypeToken<PrimitiveObject<String>>() {}.getType());
+            return (T) object.getValue();
+        }
+        return GsonUtils.GSON.fromJson(jsonReader, typeOfT);
+    }
 
     @Override
     public void close() throws IOException {

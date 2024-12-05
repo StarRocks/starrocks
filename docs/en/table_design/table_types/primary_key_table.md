@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 20
 ---
 # Primary Key table
 
@@ -16,7 +17,7 @@ The primary key of a Primary Key table has a UNIQUE constraint and NOT NULL cons
 - Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key, and the sort key can be specified separately. As such, table creation flexibility is improved.
 - Since v3.1, StarRocks shared-data clusters support creating Primary Key tables. 
   - Since v3.1.4, persistent indexes can be created and stored in **local disks**.
-  - Since v3.3.0, persistent indexes can be created and stored in **object storages**.
+  - Since v3.3.2, persistent indexes can be created and stored in **object storages**.
 
 :::
 
@@ -103,7 +104,7 @@ For example, the `order_id` field in the order table can uniquely identify data 
 
 Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key. Therefore, you can choose columns frequently used as query filter conditions to form the sort key. For example, if you frequently query product sales performance based on the combination of two dimensions, order date and merchant, you can specify the sort key as `dt` and `merchant_id` using the `ORDER BY (dt,merchant_id)` clause.
 
-Note that if you use [data distribution strategies](../Data_distribution.md), the Primary Key table currently requires the primary key to include partitioning and bucketing columns. For example, the data distribution strategy uses `dt` as the partitioning column and `merchant_id` as the hash bucketing column. The primary key also needs to include `dt` and `merchant_id`.
+Note that if you use [data distribution strategies](../data_distribution/Data_distribution.md), the Primary Key table currently requires the primary key to include partitioning and bucketing columns. For example, the data distribution strategy uses `dt` as the partitioning column and `merchant_id` as the hash bucketing column. The primary key also needs to include `dt` and `merchant_id`.
 
 In summary, the CREATE TABLE statement for the above order table can be as follows:
 
@@ -154,11 +155,7 @@ When `enable_persistent_index` is set to `true` (default), the primary key index
 
 If the disk is an SSD, it is recommended to set it to `true`. If the disk is an HDD and the load frequency is not high, you can also set it to `true`.
 
-:::info
-
-Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
-
-:::
+Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters support index persistence onto local disks. And from v3.3.2 onwards, StarRocks shared-data clusters further support index persistence onto object storage. You can enable this feature by setting the table property `persistent_index_type` to `CLOUD_NATIVE`.
 
 </TabItem>
 
@@ -208,7 +205,7 @@ During data loading, the data is stored after being sorted according to the sort
 
 ## What's more
 
-- To load data into the table created, you can refer to [Loading overview](../../loading/loading_introduction/Loading_intro.md) to choose an appropriate load options.
+- To load data into the table created, you can refer to [Loading overview](../../loading/Loading_intro.md) to choose an appropriate load options.
 - If you need to change data in the Primary Key table, you can refer to [change data through loading](../../loading/Load_to_Primary_Key_tables.md) or use DML ([INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md), [UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md), and [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)).
 - If you want to further accelerate queries, you can refer to [Query Acceleration](../../cover_pages/query_acceleration.mdx).
 - If you need to modify the table schema, you can refer to [ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).

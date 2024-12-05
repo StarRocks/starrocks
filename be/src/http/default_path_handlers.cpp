@@ -140,9 +140,6 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
         } else if (iter->second == "clone") {
             start_mem_tracker = GlobalEnv::GetInstance()->clone_mem_tracker();
             cur_level = 2;
-        } else if (iter->second == "column_pool") {
-            start_mem_tracker = GlobalEnv::GetInstance()->column_pool_mem_tracker();
-            cur_level = 2;
         } else if (iter->second == "page_cache") {
             start_mem_tracker = GlobalEnv::GetInstance()->page_cache_mem_tracker();
             cur_level = 2;

@@ -22,7 +22,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -95,7 +94,7 @@ public class OptimizerContext {
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
-        this.sessionVariable = VariableMgr.newSessionVariable();
+        this.sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
         this.queryId = UUID.randomUUID();
         this.allLogicalOlapScanOperators = Collections.emptyList();

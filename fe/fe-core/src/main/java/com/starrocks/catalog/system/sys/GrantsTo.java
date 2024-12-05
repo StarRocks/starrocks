@@ -66,8 +66,11 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class GrantsTo {
+    private static final String GRANTS_TO_ROLES = "grants_to_roles";
+    private static final String GRANTS_TO_USERS = "grants_to_users";
+
     public static SystemTable createGrantsToRoles() {
-        return new SystemTable(SystemId.GRANTS_TO_ROLES_ID, "grants_to_roles", Table.TableType.SCHEMA,
+        return new SystemTable(SystemId.GRANTS_TO_ROLES_ID, GRANTS_TO_ROLES, Table.TableType.SCHEMA,
                 builder()
                         .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("OBJECT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
@@ -81,7 +84,7 @@ public class GrantsTo {
     }
 
     public static SystemTable createGrantsToUsers() {
-        return new SystemTable(SystemId.GRANTS_TO_USERS_ID, "grants_to_users", Table.TableType.SCHEMA,
+        return new SystemTable(SystemId.GRANTS_TO_USERS_ID, GRANTS_TO_USERS, Table.TableType.SCHEMA,
                 builder()
                         .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("OBJECT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))

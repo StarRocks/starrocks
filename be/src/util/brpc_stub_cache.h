@@ -163,7 +163,7 @@ public:
         }
         // create
         auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint);
-        if (!stub->reset_channel().ok()) {
+        if (!stub->reset_channel("http").ok()) {
             return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
                                         std::to_string(taddr.port));
         }

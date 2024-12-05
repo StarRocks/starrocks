@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['suoyin']
+sidebar_position: 20
 ---
 
 # Bitmap 索引

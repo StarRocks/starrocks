@@ -183,7 +183,8 @@ const AggregateFunction* get_aggregate_function(const std::string& agg_func_name
 
         // Because max_by and min_by function have two input types,
         // so we use its second arguments type as input.
-        if (agg_func_name == "max_by" || agg_func_name == "min_by") {
+        if (agg_func_name == "max_by" || agg_func_name == "min_by" || agg_func_name == "max_by_v2" ||
+            agg_func_name == "min_by_v2") {
             arg_type = arg_types[1];
         }
 

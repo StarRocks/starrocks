@@ -350,6 +350,11 @@ public class RuntimeFilterDescription {
         this.execGroupId = buildExecGroupId;
     }
 
+    public void clearExecGroupInfo() {
+        this.isBuildFromColocateGroup = false;
+        this.execGroupId = -1;
+    }
+
     public boolean canPushAcrossExchangeNode() {
         if (onlyLocal) {
             return false;

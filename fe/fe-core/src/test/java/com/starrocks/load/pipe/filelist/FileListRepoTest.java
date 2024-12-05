@@ -46,6 +46,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class FileListRepoTest {
 
@@ -228,28 +229,29 @@ public class FileListRepoTest {
         creator.run();
         Assert.assertTrue(creator.isDatabaseExists());
         Assert.assertFalse(creator.isTableExists());
-        Assert.assertFalse(creator.isTableCorrected());
 
         // create with 1 replica
         new MockUp<SystemInfoService>() {
             @Mock
-            public int getTotalBackendNumber() {
+            public int getSystemTableExpectedReplicationNum() {
                 return 1;
             }
         };
+        AtomicInteger changed = new AtomicInteger(0);
         new MockUp<RepoExecutor>() {
             @Mock
             public void executeDDL(String sql) {
+                changed.addAndGet(1);
             }
         };
         creator.run();
         Assert.assertTrue(creator.isTableExists());
-        Assert.assertFalse(creator.isTableCorrected());
+        Assert.assertEquals(1, changed.get());
 
         // be corrected to 3 replicas
         new MockUp<SystemInfoService>() {
             @Mock
-            public int getTotalBackendNumber() {
+            public int getSystemTableExpectedReplicationNum() {
                 return 3;
             }
         };
@@ -257,7 +259,7 @@ public class FileListRepoTest {
         creator.run();
         Assert.assertTrue(creator.isDatabaseExists());
         Assert.assertTrue(creator.isTableExists());
-        Assert.assertTrue(creator.isTableCorrected());
+        Assert.assertEquals(2, changed.get());
     }
 
     @Test

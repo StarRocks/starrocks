@@ -564,8 +564,20 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
     _workgroup_versions[wg->id()] = wg->version();
 
     _executors_manager.assign_cpuids_to_workgroup(wg.get());
-    _executors_manager.create_and_assign_executors(wg.get());
     _executors_manager.update_shared_executors();
+
+    std::unique_ptr<PipelineExecutorSet> exclusive_executors = nullptr;
+    {
+        const auto& cpuids = _executors_manager.get_cpuids_of_workgroup(wg.get());
+        unique_lock.unlock();
+        DeferOp unlock_guard([&unique_lock] { unique_lock.lock(); });
+        exclusive_executors = _executors_manager.maybe_create_exclusive_executors_unlocked(wg.get(), cpuids);
+    }
+    if (exclusive_executors != nullptr) {
+        wg->set_exclusive_executors(std::move(exclusive_executors));
+    } else {
+        wg->set_shared_executors(_executors_manager.shared_executors());
+    }
 
     // Update metrics
     add_metrics_unlocked(wg, unique_lock);
@@ -623,8 +635,7 @@ void WorkGroupManager::for_each_workgroup(const WorkGroupConsumer& consumer) con
 }
 
 Status WorkGroupManager::start() {
-    std::unique_lock write_lock(_mutex);
-    return _executors_manager.start_shared_executors();
+    return _executors_manager.start_shared_executors_unlocked();
 }
 
 void WorkGroupManager::close() {

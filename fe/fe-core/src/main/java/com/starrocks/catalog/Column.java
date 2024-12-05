@@ -136,6 +136,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private Expr defineExpr; // use to define column in materialize view
     @SerializedName(value = "uniqueId")
     private int uniqueId;
+    // physicalName is used to store the physical name of the column in the storage layer.
+    // for example, the physical name of a column in a parquet file.
+    // used in delta lake column mapping name mode
+    @SerializedName(value = "physicalName")
+    private String physicalName;
 
     @SerializedName(value = "materializedColumnExpr")
     private ExpressionSerializedObject generatedColumnExprSerialized;
@@ -188,6 +193,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
                   boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
+        this(name, type, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef, comment, columnUniqId, "");
+    }
+
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
+                  boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId,
+                  String physicalName) {
         this.name = name;
         if (this.name == null) {
             this.name = "";
@@ -206,6 +217,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                     "aggregation type is AGG_STATE_UNION");
         }
         this.aggStateDesc = aggStateDesc;
+        this.type.setAggStateDesc(aggStateDesc);
+
         this.isAggregationTypeImplicit = false;
         this.isKey = isKey;
         this.isAllowNull = isAllowNull;
@@ -224,12 +237,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.stats = new ColumnStats();
         this.generatedColumnExpr = null;
         this.uniqueId = columnUniqId;
+        this.physicalName = physicalName;
     }
 
     public Column(Column column) {
         this.name = column.getName();
         this.columnId = column.getColumnId();
         this.type = column.type;
+        this.type.setAggStateDesc(this.aggStateDesc);
         this.aggregationType = column.getAggregationType();
         this.isAggregationTypeImplicit = column.isAggregationTypeImplicit();
         this.isKey = column.isKey();
@@ -463,7 +478,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.aggregationType != other.aggregationType) {
             throw new DdlException("Can not change aggregation type");
         }
-        if (this.aggStateDesc != null && this.aggStateDesc.equals(other.aggStateDesc)) {
+        if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
             throw new DdlException("Can not change aggregation state desc type");
         }
 
@@ -784,6 +799,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.aggregationType != other.getAggregationType()) {
             return false;
         }
+        if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
+            return false;
+        }
         if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
             return false;
         }
@@ -816,6 +834,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
         if (!(aggregationType == other.aggregationType || (AggregateType.isNullOrNone(aggregationType) &&
                 AggregateType.isNullOrNone(other.getAggregationType())))) {
+            return false;
+        }
+        if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
             return false;
         }
         if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
@@ -857,6 +878,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (columnId == null || Strings.isNullOrEmpty(columnId.getId())) {
             columnId = ColumnId.create(name);
         }
+        if (this.aggStateDesc != null) {
+            this.type.setAggStateDesc(this.aggStateDesc);
+        }
     }
 
     @Override
@@ -876,6 +900,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public int getUniqueId() {
         return this.uniqueId;
+    }
+
+    public String getPhysicalName() {
+        return physicalName;
     }
 
     // return max unique id of all fields

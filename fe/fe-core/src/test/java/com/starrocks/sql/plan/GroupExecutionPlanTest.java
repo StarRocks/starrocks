@@ -62,7 +62,6 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             querys.add("select * from colocate1 l join [colocate] colocate2 r on l.k1=r.k1 and l.k2=r.k2 " +
                     "left join [bucket] colocate2 z on l.k1=z.k1 and l.k2=z.k2;");
 
-
             for (String sql : querys) {
                 String plan = getFragmentPlan(sql);
                 assertContains(plan, "colocate exec groups:");
@@ -139,9 +138,47 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             querys.add("select * from colocate1 l right semi join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2;");
             querys.add("select * from colocate1 l join [colocate] colocate2 r on l.k1=r.k1 and l.k2=r.k2 " +
                     "right join [bucket] colocate2 z on l.k1=z.k1 and l.k2=z.k2;");
+            //                             Colocate Join
+            //                             /          \
+            //     Bucket Shuffle Join (right join)    One-Phase Agg
+            querys.add("with prober as (\n" +
+                    "    select t1.* from colocate1 t1 right join [bucket] colocate1 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2\n" +
+                    "), builder as (\n" +
+                    "    select k1, k2, count(*) as cnt from colocate1 group by k1, k2\n" +
+                    ")\n" +
+                    "select count(prober.k1), count(builder.k1)\n" +
+                    "from prober left join [colocate] builder on prober.k1 = builder.k1 and prober.k2 = builder.k2;");
+            //                             Colocate Join
+            //                             /          \
+            //     Bucket Shuffle Join (right join)    Colocate Join
+            querys.add("with prober as (\n" +
+                    "    select t1.* from colocate1 t1 right join [bucket] colocate1 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2\n" +
+                    "), builder as (\n" +
+                    "    select t1.* from colocate1 t1 inner join [colocate] colocate1 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2\n" +
+                    ")\n" +
+                    "select count(prober.k1), count(builder.k1)\n" +
+                    "from prober left join [colocate] builder on prober.k1 = builder.k1 and prober.k2 = builder.k2;");
+            //                                      Colocate Join
+            //                                      /          \
+            //                             Colocate Join    One-Phase Agg
+            //                             /          \
+            //     Bucket Shuffle Join (right join)    One-Phase Agg
+            querys.add("with prober as (\n" +
+                    "    select t1.* from colocate1 t1 right join [bucket] colocate1 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2\n" +
+                    "), builder as (\n" +
+                    "    select k1, k2, count(*) as cnt from colocate1 group by k1, k2\n" +
+                    "), w1 as (\n" +
+                    "    select prober.* \n" +
+                    "    from prober left join [colocate] builder on prober.k1 = builder.k1 and prober.k2 = builder.k2\n" +
+                    ")\n" +
+                    "select count(w1.k1), count(builder.k1)\n" +
+                    "from w1 left join [colocate] builder on w1.k1 = builder.k1 and w1.k2 = builder.k2;");
             for (String sql : querys) {
                 String plan = getFragmentPlan(sql);
                 assertNotContains(plan, "colocate exec groups:");
+
+                String thriftPlan = getThriftPlan(sql);
+                assertNotContains(thriftPlan, "build_from_group_execution:true");
             }
 
         } finally {

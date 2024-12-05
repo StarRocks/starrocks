@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 50
 ---
 
 # 更新表
@@ -54,8 +55,8 @@ DISTRIBUTED BY HASH(order_id);
 
 > **注意**
 >
-> - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](../Data_distribution.md#分桶)。
-> - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../Data_distribution.md#设置分桶数量)。
+> - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](../data_distribution/Data_distribution.md#分桶)。
+> - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../data_distribution/Data_distribution.md#设置分桶数量)。
 
 ## 使用说明
 
@@ -72,7 +73,7 @@ DISTRIBUTED BY HASH(order_id);
 
 ## 下一步
 
-建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/loading_introduction/Loading_intro.md)。
+建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/Loading_intro.md)。
 
 :::note
 

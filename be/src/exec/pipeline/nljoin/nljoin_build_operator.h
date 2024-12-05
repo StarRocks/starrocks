@@ -49,6 +49,7 @@ public:
 
     OutputAmplificationType intra_pipeline_amplification_type() const override;
     size_t output_amplification_factor() const override;
+    void update_exec_stats(RuntimeState* state) override {}
 
 private:
     std::atomic<bool> _is_finished = false;

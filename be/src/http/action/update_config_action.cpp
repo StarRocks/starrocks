@@ -45,7 +45,6 @@
 #include "agent/agent_server.h"
 #include "block_cache/block_cache.h"
 #include "common/configbase.h"
-#include "common/logging.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
 #include "gutil/strings/substitute.h"
@@ -103,13 +102,18 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
                 mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
             }
-            size_t mem_size = parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit);
+            size_t mem_size = 0;
+            Status st = DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit, &mem_size);
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to update datacache mem size";
+                return;
+            }
             (void)BlockCache::instance()->update_mem_quota(mem_size, true);
         });
         _config_callback.emplace("datacache_disk_size", [&]() {
             std::vector<DirSpace> spaces;
-            Status st = parse_conf_datacache_disk_spaces(config::datacache_disk_path, config::datacache_disk_size,
-                                                         config::ignore_broken_disk, &spaces);
+            Status st = DataCacheUtils::parse_conf_datacache_disk_spaces(
+                    config::datacache_disk_path, config::datacache_disk_size, config::ignore_broken_disk, &spaces);
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to update datacache disk spaces";
                 return;
@@ -175,6 +179,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                                                                  config::parallel_clone_task_per_path);
         });
         _config_callback.emplace("replication_threads", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::REMOTE_SNAPSHOT,
+                                                                 config::replication_threads);
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::REPLICATE_SNAPSHOT,
                                                                  config::replication_threads);
         });
@@ -253,82 +259,29 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
 
 #ifdef USE_STAROS
-        _config_callback.emplace("starlet_cache_thread_num", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_threadpool_size", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_threadpool_size";
-            }
-        });
-        _config_callback.emplace("starlet_cache_evict_low_water", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_low_water", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_evict_low_water";
-            }
-        });
-        _config_callback.emplace("starlet_cache_evict_percent", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_percent", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_evict_percent";
-            }
-        });
-        _config_callback.emplace("starlet_cache_evict_throughput_mb", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_throughput_mb", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_evict_throughput_mb";
-            }
-        });
-        _config_callback.emplace("starlet_cache_evict_high_water", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_high_water", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_evict_high_water";
-            }
-        });
-        _config_callback.emplace("starlet_fs_stream_buffer_size_bytes", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_stream_buffer_size_bytes", value).empty()) {
-                LOG(WARNING) << "Failed to update fs_stream_buffer_size_bytes";
-            }
-        });
-        _config_callback.emplace("starlet_fs_read_prefetch_enable", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", value).empty()) {
-                LOG(WARNING) << "Failed to update fs_enable_buffer_prefetch";
-            }
-        });
-        _config_callback.emplace("starlet_fs_read_prefetch_threadpool_size", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_buffer_prefetch_threadpool_size", value)
-                        .empty()) {
-                LOG(WARNING) << "Failed to update fs_buffer_prefetch_threadpool_size";
-            }
-        });
-        _config_callback.emplace("starlet_cache_evict_interval", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_interval", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_evict_interval";
-            }
-        });
-        _config_callback.emplace("starlet_fslib_s3client_nonread_max_retries", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_max_retries", value)
-                        .empty()) {
-                LOG(WARNING) << "Failed to update fslib_s3client_nonread_max_retries";
-            }
-        });
-        _config_callback.emplace("starlet_fslib_s3client_nonread_retry_scale_factor", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_retry_scale_factor",
-                                                                      value)
-                        .empty()) {
-                LOG(WARNING) << "Failed to update fslib_s3client_nonread_retry_scale_factor";
-            }
-        });
-        _config_callback.emplace("starlet_fslib_s3client_connect_timeout_ms", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_connect_timeout_ms", value)
-                        .empty()) {
-                LOG(WARNING) << "Failed to update fslib_s3client_connect_timeout_ms";
-            }
-        });
-        _config_callback.emplace("s3_use_list_objects_v1", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_use_list_objects_v1", value)
-                        .empty()) {
-                LOG(WARNING) << "Failed to update fslib_s3client_use_list_objects_v1";
-            }
-        });
-        _config_callback.emplace("starlet_delete_files_max_key_in_batch", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("delete_files_max_key_in_batch", value).empty()) {
-                LOG(WARNING) << "Failed to update delete_files_max_key_in_batch";
-            }
-        });
+#define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                             \
+    _config_callback.emplace(#BE_CONFIG, [value]() {                                                 \
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, value).empty()) { \
+            LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                  \
+        }                                                                                            \
+    });
+
+        UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);
+        UPDATE_STARLET_CONFIG(starlet_cache_evict_low_water, cachemgr_evict_low_water);
+        UPDATE_STARLET_CONFIG(starlet_cache_evict_high_water, cachemgr_evict_high_water);
+        UPDATE_STARLET_CONFIG(starlet_cache_evict_percent, cachemgr_evict_percent);
+        UPDATE_STARLET_CONFIG(starlet_cache_evict_throughput_mb, cachemgr_evict_throughput_mb);
+        UPDATE_STARLET_CONFIG(starlet_fs_stream_buffer_size_bytes, fs_stream_buffer_size_bytes);
+        UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_enable, fs_enable_buffer_prefetch);
+        UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_threadpool_size, fs_buffer_prefetch_threadpool_size);
+        UPDATE_STARLET_CONFIG(starlet_cache_evict_interval, cachemgr_evict_interval);
+        UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_max_retries, fslib_s3client_nonread_max_retries);
+        UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor,
+                              fslib_s3client_nonread_retry_scale_factor);
+        UPDATE_STARLET_CONFIG(starlet_fslib_s3client_connect_timeout_ms, fslib_s3client_connect_timeout_ms);
+        UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
+        UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
+#undef UPDATE_STARLET_CONFIG
 #endif // USE_STAROS
     });
 

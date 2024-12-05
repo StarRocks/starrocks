@@ -21,6 +21,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
@@ -43,34 +44,42 @@ import java.util.List;
 public class AggStateDesc {
     // aggregate function's name
     @SerializedName(value = "functionName")
-    private String functionName;
+    private final String functionName;
     // aggregate function's argument types
     @SerializedName(value = "argTypes")
-    private List<Type> argTypes;
+    private final List<Type> argTypes;
     // aggregate function's return type
     @SerializedName(value = "returnType")
-    private Type returnType;
+    private final Type returnType;
     // aggregate function's result nullable
     @SerializedName(value = "resultNullable")
-    private Boolean resultNullable;
+    private final Boolean resultNullable;
 
     public AggStateDesc(AggregateFunction aggFunc) {
-        this(aggFunc.functionName(), aggFunc.getReturnType(), Arrays.asList(aggFunc.getArgs()),
-                aggFunc.isNullable());
+        this(aggFunc.functionName(), aggFunc.getReturnType(), Arrays.asList(aggFunc.getArgs()));
     }
 
     public AggStateDesc(String functionName,
                         Type returnType,
-                        List<Type> argTypes,
-                        Boolean resultNullable) {
+                        List<Type> argTypes) {
         Preconditions.checkNotNull(functionName, "functionName should not be null");
         Preconditions.checkNotNull(returnType, "returnType should not be null");
         Preconditions.checkNotNull(argTypes, "argTypes should not be null");
-        Preconditions.checkNotNull(resultNullable, "resultNullable should not be null");
         this.functionName = functionName;
         this.returnType = returnType;
         this.argTypes = argTypes;
-        this.resultNullable = resultNullable;
+        this.resultNullable = isAggFuncResultNullable(functionName);
+    }
+
+    private boolean isAggFuncResultNullable(String functionName) {
+        // To be more compatible, always set result nullable to true here. This may decrease the performance of runtime
+        // but can be more compatible with different aggregate functions and inputs.
+        // this.resultNullable = !FunctionSet.alwaysReturnNonNullableFunctions.contains(functionName);
+        if (FunctionSet.COUNT.equalsIgnoreCase(functionName)) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
     public List<Type> getArgTypes() {
@@ -91,7 +100,7 @@ public class AggStateDesc {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(argTypes, resultNullable, functionName);
+        return Objects.hashCode(functionName, argTypes, returnType, resultNullable);
     }
 
     @Override
@@ -128,7 +137,7 @@ public class AggStateDesc {
     public TAggStateDesc toThrift() {
         // wrapper extra data type
         TAggStateDesc tAggStateDesc = new TAggStateDesc();
-        tAggStateDesc.setAgg_func_name(functionName);
+        tAggStateDesc.setAgg_func_name(Function.rectifyFunctionName(functionName));
         for (Type argType : argTypes) {
             TTypeDesc tTypeDesc = new TTypeDesc();
             tTypeDesc.setTypes(new ArrayList<TTypeNode>());
@@ -149,7 +158,7 @@ public class AggStateDesc {
     }
 
     public AggStateDesc clone() {
-        return new AggStateDesc(functionName, returnType.clone(), Lists.newArrayList(argTypes), resultNullable);
+        return new AggStateDesc(functionName, returnType, Lists.newArrayList(argTypes));
     }
 
     /**
@@ -159,7 +168,7 @@ public class AggStateDesc {
     public AggregateFunction getAggregateFunction() throws AnalysisException {
         FunctionParams params = new FunctionParams(false, Lists.newArrayList());
         Type[] argumentTypes = argTypes.toArray(Type[]::new);
-        Boolean[] isArgumentConstants = argTypes.stream().map(x -> new Boolean(false)).toArray(Boolean[]::new);
+        Boolean[] isArgumentConstants = argTypes.stream().map(x -> false).toArray(Boolean[]::new);
         Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
                 this.functionName, params, argumentTypes, isArgumentConstants, NodePosition.ZERO);
         if (result == null) {

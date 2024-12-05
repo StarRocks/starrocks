@@ -67,6 +67,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.BaseCompensation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensationBuilder;
@@ -78,6 +79,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -350,6 +353,7 @@ public class MvPartitionCompensator {
      *      however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
      */
     public static ScalarOperator compensateQueryPartitionPredicate(MaterializationContext mvContext,
+                                                                   Rule rule,
                                                                    ColumnRefFactory columnRefFactory,
                                                                    OptExpression queryExpression) {
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
@@ -367,6 +371,7 @@ public class MvPartitionCompensator {
         Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> scanOperatorScalarOperatorMap =
                 mvContext.getScanOpToPartitionCompensatePredicates();
         MaterializedView mv = mvContext.getMv();
+        final Set<Table> baseTables = new HashSet<>(mvContext.getBaseTables());
         for (LogicalScanOperator scanOperator : scanOperators) {
             if (!SUPPORTED_PARTITION_COMPENSATE_SCAN_TYPES.contains(scanOperator.getOpType())) {
                 // If the scan operator is not supported, then return null when compensate type is not NO_COMPENSATE
@@ -379,6 +384,9 @@ public class MvPartitionCompensator {
             }
             List<ScalarOperator> partitionPredicate = scanOperatorScalarOperatorMap
                     .computeIfAbsent(Pair.create(scanOperator, isCompensatePartition), x -> {
+                        if (!baseTables.contains(scanOperator.getTable())) {
+                            return Collections.emptyList();
+                        }
                         return isCompensatePartition ? getCompensatePartitionPredicates(mvContext, columnRefFactory,
                                 scanOperator) : getScanOpPrunedPartitionPredicates(mv, scanOperator);
                     });
@@ -391,7 +399,7 @@ public class MvPartitionCompensator {
         }
         ScalarOperator compensatePredicate = partitionPredicates.isEmpty() ? ConstantOperator.createBoolean(true) :
                 Utils.compoundAnd(partitionPredicates);
-        logMVRewrite(mvContext.getMv().getName(), "Query Compensate partition predicate:{}", compensatePredicate);
+        logMVRewrite(mvContext.getOptimizerContext(), rule, "Query Compensate partition predicate:{}", compensatePredicate);
         return compensatePredicate;
     }
 
@@ -503,19 +511,18 @@ public class MvPartitionCompensator {
      */
     private static List<ScalarOperator> compensatePartitionPredicateForOlapScan(LogicalOlapScanOperator olapScanOperator,
                                                                                 ColumnRefFactory columnRefFactory) {
-        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
         Preconditions.checkState(olapScanOperator.getTable().isNativeTableOrMaterializedView());
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
 
         // compensate nothing for single partition table
         if (olapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
-            return partitionPredicates;
+            return Collections.emptyList();
         }
 
         // compensate nothing if selected partitions are the same with the total partitions.
         if (olapScanOperator.getSelectedPartitionId() != null
                 && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
-            return partitionPredicates;
+            return Collections.emptyList();
         }
 
         // if no partitions are selected, return pruned partition predicates directly.
@@ -523,6 +530,7 @@ public class MvPartitionCompensator {
             return olapScanOperator.getPrunedPartitionPredicates();
         }
 
+        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
         if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
             Expr partitionExpr = partitionInfo.getPartitionExprs(olapTable.getIdToColumn()).get(0);

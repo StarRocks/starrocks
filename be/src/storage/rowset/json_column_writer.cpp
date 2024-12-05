@@ -135,6 +135,10 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
     _json_meta->mutable_json_meta()->set_has_remain(_has_remain);
     _json_meta->mutable_json_meta()->set_is_flat(true);
 
+    if (_remain_filter != nullptr) {
+        _json_meta->mutable_json_meta()->set_remain_filter(_remain_filter->data(), _remain_filter->size());
+    }
+
     // recode null column in 1st
     if (_json_meta->is_nullable()) {
         _flat_paths.insert(_flat_paths.begin(), "nulls");
