@@ -22,10 +22,10 @@
 #include "exprs/function_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
-#include "runtime/large_int_value.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
+#include "types/large_int_value.h"
 
 namespace starrocks {
 

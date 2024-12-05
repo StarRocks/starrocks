@@ -44,8 +44,8 @@
 #include "exec/scan_node.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/large_int_value.h"
 #include "storage/tuple.h"
+#include "types/large_int_value.h"
 
 namespace starrocks {
 
