@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -104,7 +105,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         String ttlRetentionCondition = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
-            ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(properties, true);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(materializedView.getDbId());
+            ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db,
+                    materializedView, properties, true);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {

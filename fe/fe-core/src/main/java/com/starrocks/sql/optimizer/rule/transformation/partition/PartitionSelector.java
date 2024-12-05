@@ -216,11 +216,16 @@ public class PartitionSelector {
         ConnectContext context = ConnectContext.get() != null ? ConnectContext.get() : new ConnectContext();
         // needs to parse the expr each schedule because it can be changed dynamically
         // TODO: cache the parsed expr to avoid parsing it every time later.
-        Expr whereExpr = SqlParser.parseSqlToExpr(ttlCondition, SqlModeHelper.MODE_DEFAULT);
-        if (whereExpr == null) {
-            LOG.warn("database={}, table={} failed to parse retention condition: {}",
-                    db.getFullName(), olapTable.getName(), ttlCondition);
-            return Lists.newArrayList();
+        Expr whereExpr;
+        try {
+            whereExpr = SqlParser.parseSqlToExpr(ttlCondition, SqlModeHelper.MODE_DEFAULT);
+            if (whereExpr == null) {
+                LOG.warn("database={}, table={} failed to parse retention condition: {}",
+                        db.getFullName(), olapTable.getName(), ttlCondition);
+                return Lists.newArrayList();
+            }
+        } catch (Exception e) {
+            throw new SemanticException("Failed to parse retention condition: " + ttlCondition);
         }
         List<Long> retentionPartitionIds = PartitionSelector.getPartitionIdsByExpr(context, tableName, olapTable,
                 whereExpr, false);

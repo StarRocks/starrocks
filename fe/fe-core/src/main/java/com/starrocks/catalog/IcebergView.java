@@ -14,8 +14,8 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Strings;
 import com.starrocks.sql.ast.TableRelation;
-import org.apache.parquet.Strings;
 
 import java.util.List;
 

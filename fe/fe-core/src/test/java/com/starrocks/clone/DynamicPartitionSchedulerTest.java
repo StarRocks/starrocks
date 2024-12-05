@@ -204,26 +204,26 @@ public class DynamicPartitionSchedulerTest {
     @Test
     public void testPartitionTTLProperties() throws Exception {
         starRocksAssert.withDatabase("test").useDatabase("test")
-                    .withTable("CREATE TABLE test.tbl1\n" +
-                                "(\n" +
-                                "    k1 date,\n" +
-                                "    v1 int \n" +
-                                ")\n" +
-                                "PARTITION BY RANGE(k1)\n" +
-                                "(\n" +
-                                "    PARTITION p1 values less than('2020-02-01'),\n" +
-                                "    PARTITION p2 values less than('2020-03-01'),\n" +
-                                "    PARTITION p3 values less than('2020-04-01'),\n" +
-                                "    PARTITION p4 values less than('2020-05-01')\n" +
-                                ")\n" +
-                                "DISTRIBUTED BY HASH (k1) BUCKETS 3\n" +
-                                "PROPERTIES" +
-                                "(" +
-                                "    'replication_num' = '1'\n" +
-                                ");");
+                .withTable("CREATE TABLE test.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    v1 int \n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01'),\n" +
+                        "    PARTITION p3 values less than('2020-04-01'),\n" +
+                        "    PARTITION p4 values less than('2020-05-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH (k1) BUCKETS 3\n" +
+                        "PROPERTIES" +
+                        "(" +
+                        "    'replication_num' = '1'\n" +
+                        ");");
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
-                    .getDynamicPartitionScheduler();
+                .getDynamicPartitionScheduler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         // Now the table does not actually support partition ttl,
@@ -240,30 +240,30 @@ public class DynamicPartitionSchedulerTest {
     @Test
     public void testPartitionTTLPropertiesZero() throws Exception {
         starRocksAssert.withDatabase("test").useDatabase("test")
-                    .withTable("CREATE TABLE test.base\n" +
-                                "(\n" +
-                                "    k1 date,\n" +
-                                "    k2 int,\n" +
-                                "    v1 int sum\n" +
-                                ")\n" +
-                                "PARTITION BY RANGE(k1)\n" +
-                                "(\n" +
-                                "    PARTITION p1 values less than('2020-02-01'),\n" +
-                                "    PARTITION p2 values less than('2020-03-01')\n" +
-                                ")\n" +
-                                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                                "PROPERTIES('replication_num' = '1');");
+                .withTable("CREATE TABLE test.base\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
         String sql = "create materialized view mv1 " +
-                    "partition by k1 " +
-                    "distributed by hash(k2) " +
-                    "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\",\n" +
-                    "\"partition_ttl_number\" = \"0\"\n" +
-                    ") " +
-                    "as select k1, k2 from test.base;";
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"partition_ttl_number\" = \"0\"\n" +
+                ") " +
+                "as select k1, k2 from test.base;";
         CreateMaterializedViewStatement createMaterializedViewStatement =
-                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             fail();
@@ -282,29 +282,29 @@ public class DynamicPartitionSchedulerTest {
         };
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                    .withTable("CREATE TABLE site_access(\n" +
-                                "    event_day datetime,\n" +
-                                "    site_id INT DEFAULT '10',\n" +
-                                "    city_code VARCHAR(100),\n" +
-                                "    user_name VARCHAR(32) DEFAULT '',\n" +
-                                "    pv BIGINT DEFAULT '0'\n" +
-                                ")\n" +
-                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
-                                "PARTITION BY date_trunc('day', event_day)(\n" +
-                                " START (\"2023-03-27\") END (\"2023-03-31\") EVERY (INTERVAL 1 day),\n" +
-                                " START (\"9999-12-30\") END (\"9999-12-31\") EVERY (INTERVAL 1 day)\n" +
-                                ")\n" +
-                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
-                                "PROPERTIES(\n" +
-                                "    \"partition_live_number\" = \"3\",\n" +
-                                "    \"replication_num\" = \"1\"\n" +
-                                ");");
+                .withTable("CREATE TABLE site_access(\n" +
+                        "    event_day datetime,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('day', event_day)(\n" +
+                        " START (\"2023-03-27\") END (\"2023-03-31\") EVERY (INTERVAL 1 day),\n" +
+                        " START (\"9999-12-30\") END (\"9999-12-31\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
-                    .getDynamicPartitionScheduler();
+                .getDynamicPartitionScheduler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable tbl =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access");
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access");
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
         dynamicPartitionScheduler.runOnceForTest();
 
@@ -327,29 +327,29 @@ public class DynamicPartitionSchedulerTest {
         };
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                    .withTable("CREATE TABLE site_access(\n" +
-                                "    event_day datetime,\n" +
-                                "    site_id INT DEFAULT '10',\n" +
-                                "    city_code VARCHAR(100),\n" +
-                                "    user_name VARCHAR(32) DEFAULT '',\n" +
-                                "    pv BIGINT DEFAULT '0'\n" +
-                                ")\n" +
-                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
-                                "PARTITION BY date_trunc('day', event_day)(\n" +
-                                " START (\"2023-03-27\") END (\"2023-03-31\") EVERY (INTERVAL 1 day),\n" +
-                                " START (\"9999-12-30\") END (\"9999-12-31\") EVERY (INTERVAL 1 day)\n" +
-                                ")\n" +
-                                "DISTRIBUTED BY RANDOM BUCKETS 32\n" +
-                                "PROPERTIES(\n" +
-                                "    \"partition_live_number\" = \"3\",\n" +
-                                "    \"replication_num\" = \"1\"\n" +
-                                ");");
+                .withTable("CREATE TABLE site_access(\n" +
+                        "    event_day datetime,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('day', event_day)(\n" +
+                        " START (\"2023-03-27\") END (\"2023-03-31\") EVERY (INTERVAL 1 day),\n" +
+                        " START (\"9999-12-30\") END (\"9999-12-31\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY RANDOM BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
-                    .getDynamicPartitionScheduler();
+                .getDynamicPartitionScheduler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable tbl =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access");
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access");
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
         dynamicPartitionScheduler.runOnceForTest();
 
@@ -372,30 +372,30 @@ public class DynamicPartitionSchedulerTest {
         };
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                    .withTable("CREATE TABLE test_random_bucket (\n" +
-                                "    uid String,\n" +
-                                "    tdbank_imp_date Date\n" +
-                                ") ENGINE=OLAP \n" +
-                                "DUPLICATE KEY(`uid`) \n" +
-                                "PARTITION BY RANGE(`tdbank_imp_date`) ()\n" +
-                                "DISTRIBUTED BY RANDOM BUCKETS 1\n" +
-                                "PROPERTIES (\n" +
-                                "     \"replication_num\" = \"1\", \n" +
-                                "     \"dynamic_partition.enable\" = \"true\", \n" +
-                                "     \"dynamic_partition.time_unit\" = \"DAY\", \n" +
-                                "     \"dynamic_partition.time_zone\" = \"Asia/Shanghai\", \n" +
-                                "     \"dynamic_partition.start\" = \"-180\", \n" +
-                                "     \"dynamic_partition.end\" = \"3\", \n" +
-                                "     \"dynamic_partition.prefix\" = \"p\", \n" +
-                                "     \"dynamic_partition.buckets\" = \"4\", \n" +
-                                "     \"dynamic_partition.history_partition_num\" = \"0\",\n" +
-                                "     \"compression\" = \"LZ4\" );");
+                .withTable("CREATE TABLE test_random_bucket (\n" +
+                        "    uid String,\n" +
+                        "    tdbank_imp_date Date\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`uid`) \n" +
+                        "PARTITION BY RANGE(`tdbank_imp_date`) ()\n" +
+                        "DISTRIBUTED BY RANDOM BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        "     \"replication_num\" = \"1\", \n" +
+                        "     \"dynamic_partition.enable\" = \"true\", \n" +
+                        "     \"dynamic_partition.time_unit\" = \"DAY\", \n" +
+                        "     \"dynamic_partition.time_zone\" = \"Asia/Shanghai\", \n" +
+                        "     \"dynamic_partition.start\" = \"-180\", \n" +
+                        "     \"dynamic_partition.end\" = \"3\", \n" +
+                        "     \"dynamic_partition.prefix\" = \"p\", \n" +
+                        "     \"dynamic_partition.buckets\" = \"4\", \n" +
+                        "     \"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                        "     \"compression\" = \"LZ4\" );");
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
-                    .getDynamicPartitionScheduler();
+                .getDynamicPartitionScheduler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_random_bucket");
+                .getTable(db.getFullName(), "test_random_bucket");
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
         dynamicPartitionScheduler.runOnceForTest();
 
@@ -416,38 +416,38 @@ public class DynamicPartitionSchedulerTest {
         };
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                    .withTable("CREATE TABLE `test_hour_partition2` (\n" +
-                                "  `event_day` date NULL COMMENT \"\",\n" +
-                                "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
-                                "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
-                                "  `user_name` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
-                                "  `pv` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
-                                ") ENGINE=OLAP \n" +
-                                "DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)\n" +
-                                "PARTITION BY RANGE(`event_day`)\n" +
-                                "()\n" +
-                                "DISTRIBUTED BY HASH(`event_day`, `site_id`) BUCKETS 32 \n" +
-                                "PROPERTIES (\n" +
-                                "\"replication_num\" = \"1\",\n" +
-                                "\"dynamic_partition.enable\" = \"true\",\n" +
-                                "\"dynamic_partition.time_unit\" = \"DAY\",\n" +
-                                "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
-                                "\"dynamic_partition.start\" = \"-1\",\n" +
-                                "\"dynamic_partition.end\" = \"10\",\n" +
-                                "\"dynamic_partition.prefix\" = \"p\",\n" +
-                                "\"dynamic_partition.buckets\" = \"3\",\n" +
-                                "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
-                                "\"in_memory\" = \"false\",\n" +
-                                "\"storage_format\" = \"DEFAULT\",\n" +
-                                "\"enable_persistent_index\" = \"false\",\n" +
-                                "\"compression\" = \"LZ4\"\n" +
-                                ");");
+                .withTable("CREATE TABLE `test_hour_partition2` (\n" +
+                        "  `event_day` date NULL COMMENT \"\",\n" +
+                        "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
+                        "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
+                        "  `user_name` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                        "  `pv` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)\n" +
+                        "PARTITION BY RANGE(`event_day`)\n" +
+                        "()\n" +
+                        "DISTRIBUTED BY HASH(`event_day`, `site_id`) BUCKETS 32 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"dynamic_partition.enable\" = \"true\",\n" +
+                        "\"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                        "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
+                        "\"dynamic_partition.start\" = \"-1\",\n" +
+                        "\"dynamic_partition.end\" = \"10\",\n" +
+                        "\"dynamic_partition.prefix\" = \"p\",\n" +
+                        "\"dynamic_partition.buckets\" = \"3\",\n" +
+                        "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ");");
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
-                    .getDynamicPartitionScheduler();
+                .getDynamicPartitionScheduler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_hour_partition2");
+                .getTable(db.getFullName(), "test_hour_partition2");
         DynamicPartitionProperty dynamicPartitionProperty = tbl.getTableProperty().getDynamicPartitionProperty();
         dynamicPartitionProperty.setTimeUnit("HOUR");
         boolean result = dynamicPartitionScheduler.executeDynamicPartitionForTable(db.getId(), tbl.getId());
@@ -514,22 +514,18 @@ public class DynamicPartitionSchedulerTest {
                         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getFullName(), tableName);
-                        try {
-                            scheduler.runOnceForTest();
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 0);
-                            // add a new partition and an expired partition
-                            LocalDateTime now = LocalDateTime.now();
-                            addListPartition(tableName, "p5", "guangdong",
-                                    now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                            addListPartition(tableName, "p6", "guangdong",
-                                    now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 2);
+                        scheduler.runOnceForTest();
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 0);
+                        // add a new partition and an expired partition
+                        LocalDateTime now = LocalDateTime.now();
+                        addListPartition(tableName, "p5", "guangdong",
+                                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+                        addListPartition(tableName, "p6", "guangdong",
+                                now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 2);
 
-                            scheduler.runOnceForTest();
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 2);
-                        } catch (Exception e) {
-                            fail("Should not throw exception: " + e.getMessage());
-                        }
+                        scheduler.runOnceForTest();
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 2);
                     });
         }
     }
@@ -556,22 +552,18 @@ public class DynamicPartitionSchedulerTest {
                     Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                     OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(db.getFullName(), tableName);
-                    try {
-                        scheduler.runOnceForTest();
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 0);
-                        // add a new partition and an expired partition
-                        LocalDateTime now = LocalDateTime.now();
-                        addListPartition(tableName, "p5", "guangdong",
-                                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                        addListPartition(tableName, "p6", "guangdong",
-                                now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 2);
+                    scheduler.runOnceForTest();
+                    Assert.assertTrue(tbl.getVisiblePartitions().size() == 0);
+                    // add a new partition and an expired partition
+                    LocalDateTime now = LocalDateTime.now();
+                    addListPartition(tableName, "p5", "guangdong",
+                            now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+                    addListPartition(tableName, "p6", "guangdong",
+                            now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+                    Assert.assertTrue(tbl.getVisiblePartitions().size() == 2);
 
-                        scheduler.runOnceForTest();
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
-                    } catch (Exception e) {
-                        fail("Should not throw exception: " + e.getMessage());
-                    }
+                    scheduler.runOnceForTest();
+                    Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
                 });
     }
 
@@ -586,9 +578,9 @@ public class DynamicPartitionSchedulerTest {
                         Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
 
                         String dropPartitionSql = String.format("alter table %s set ('partition_retention_condition' = " +
-                                        "'date_trunc(\"day\", dt) >= date_sub(current_date(), 2) or " +
-                                        "date_trunc(\"day\", dt) = (date_trunc(\"month\", dt) " +
-                                        "+ interval 1 month - interval 1 day)');", tableName);
+                                "'date_trunc(\"day\", dt) >= date_sub(current_date(), 2) or " +
+                                "date_trunc(\"day\", dt) = (date_trunc(\"month\", dt) " +
+                                "+ interval 1 month - interval 1 day)');", tableName);
                         starRocksAssert.alterTable(dropPartitionSql);
 
                         DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
@@ -596,22 +588,18 @@ public class DynamicPartitionSchedulerTest {
                         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getFullName(), tableName);
-                        try {
-                            scheduler.runOnceForTest();
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 2);
-                            // add a new partition and an expired partition
-                            LocalDateTime now = LocalDateTime.now();
-                            addListPartition(tableName, "p5", "guangdong",
-                                    now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                            addListPartition(tableName, "p6", "guangdong",
-                                    now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 4);
+                        scheduler.runOnceForTest();
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 2);
+                        // add a new partition and an expired partition
+                        LocalDateTime now = LocalDateTime.now();
+                        addListPartition(tableName, "p5", "guangdong",
+                                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+                        addListPartition(tableName, "p6", "guangdong",
+                                now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 4);
 
-                            scheduler.runOnceForTest();
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 3);
-                        } catch (Exception e) {
-                            fail("Should not throw exception: " + e.getMessage());
-                        }
+                        scheduler.runOnceForTest();
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 3);
                     });
         }
     }
@@ -636,21 +624,17 @@ public class DynamicPartitionSchedulerTest {
                         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getFullName(), tableName);
-                        try {
-                            scheduler.runOnceForTest();
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 0);
-                            // add a new partition and an expired partition
-                            LocalDateTime now = LocalDateTime.now();
-                            String currentDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-                            String nextDate = now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-                            addRangePartition(tableName, "p5", currentDate, nextDate);
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
+                        scheduler.runOnceForTest();
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 0);
+                        // add a new partition and an expired partition
+                        LocalDateTime now = LocalDateTime.now();
+                        String currentDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                        String nextDate = now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                        addRangePartition(tableName, "p5", currentDate, nextDate);
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
 
-                            scheduler.runOnceForTest();
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
-                        } catch (Exception e) {
-                            fail("Should not throw exception: " + e.getMessage());
-                        }
+                        scheduler.runOnceForTest();
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
                     });
         }
     }
@@ -683,22 +667,18 @@ public class DynamicPartitionSchedulerTest {
                     Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                     OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(db.getFullName(), tableName);
-                    try {
-                        scheduler.runOnceForTest();
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 0);
+                    scheduler.runOnceForTest();
+                    Assert.assertTrue(tbl.getVisiblePartitions().size() == 0);
 
-                        // add a new partition and an expired partition
-                        LocalDateTime now = LocalDateTime.now();
-                        String currentDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-                        String nextDate = now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-                        addRangePartition(tableName, "p5", currentDate, nextDate);
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
+                    // add a new partition and an expired partition
+                    LocalDateTime now = LocalDateTime.now();
+                    String currentDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                    String nextDate = now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                    addRangePartition(tableName, "p5", currentDate, nextDate);
+                    Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
 
-                        scheduler.runOnceForTest();
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
-                    } catch (Exception e) {
-                        fail("Should not throw exception: " + e.getMessage());
-                    }
+                    scheduler.runOnceForTest();
+                    Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
                 });
     }
 
@@ -723,22 +703,18 @@ public class DynamicPartitionSchedulerTest {
                         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getFullName(), tableName);
-                        try {
-                            scheduler.runOnceForTest();
-                            // cannot beego
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 4);
-                            // add a new partition and an expired partition
-                            LocalDateTime now = LocalDateTime.now();
-                            String currentDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-                            String nextDate = now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-                            addRangePartition(tableName, "p5", currentDate, nextDate);
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 5);
+                        scheduler.runOnceForTest();
+                        // cannot beego
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 4);
+                        // add a new partition and an expired partition
+                        LocalDateTime now = LocalDateTime.now();
+                        String currentDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                        String nextDate = now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                        addRangePartition(tableName, "p5", currentDate, nextDate);
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 5);
 
-                            scheduler.runOnceForTest();
-                            Assert.assertTrue(tbl.getVisiblePartitions().size() == 5);
-                        } catch (Exception e) {
-                            fail("Should not throw exception: " + e.getMessage());
-                        }
+                        scheduler.runOnceForTest();
+                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 5);
                     });
         }
     }

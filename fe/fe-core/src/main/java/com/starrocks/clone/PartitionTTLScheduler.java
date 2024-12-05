@@ -15,6 +15,7 @@ package com.starrocks.clone;
 
 import com.google.api.client.util.Preconditions;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -43,7 +44,6 @@ import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelect
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 import org.threeten.extra.PeriodDuration;
 
 import java.time.LocalDate;

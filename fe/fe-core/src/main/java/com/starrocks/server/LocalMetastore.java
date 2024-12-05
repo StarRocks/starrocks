@@ -37,6 +37,7 @@ package com.starrocks.server;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -244,7 +245,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.IOException;
@@ -3554,7 +3554,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
-        Map<String, Object> results = validateToBeModifiedProps(properties, table);
+        Map<String, Object> results = validateToBeModifiedProps(properties, db, table);
 
         TableProperty tableProperty = table.getTableProperty();
         for (String key : results.keySet()) {
@@ -3645,7 +3645,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
-    private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties, OlapTable table) throws DdlException {
+    private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties,
+                                                          Database db, OlapTable table) throws DdlException {
         Map<String, Object> results = Maps.newHashMap();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
             if (!table.getPartitionInfo().isRangePartition()) {
@@ -3672,7 +3673,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 throw new DdlException("Table[" + table.getName() + "] is not partitioned. "
                         + "no need to set partition retention condition.");
             }
-            String partitionRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(properties, true);
+            String partitionRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(
+                    db, table, properties, true);
             if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
                 throw new DdlException("Invalid partition retention condition");
             }
