@@ -1081,6 +1081,7 @@ public class DatabaseTransactionMgr {
                 transactionState.clearErrorMsg();
                 transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
                 unprotectUpsertTransactionState(transactionState, false);
+                resetTransactionStateTabletCommitInfos(transactionState);
                 transactionState.notifyVisible();
                 txnOperated = true;
                 // TODO(cmy): We found a very strange problem. When delete-related transactions are processed here,
@@ -1103,11 +1104,6 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
-<<<<<<< HEAD
-=======
-        resetTransactionStateTabletCommitInfos(transactionState);
-        transactionState.notifyVisible();
->>>>>>> 86476df98d ([BugFix] With a high streamload frequency and too many tablets involved, TabletCommitInfos will take up too much memory. (#53329))
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
