@@ -685,7 +685,8 @@ public class StmtExecutor {
                                                     "you can set it off by using  set enable_short_circuit=false");
                                 }
                                 handleExplainStmt(ExplainAnalyzer.analyze(
-                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
+                                        ProfilingExecPlan.buildFrom(execPlan), profile, null,
+                                        context.getSessionVariable().getColorExplainOutput()));
                             }
                         }
 
@@ -1474,7 +1475,7 @@ public class StmtExecutor {
         }
         handleExplainStmt(ExplainAnalyzer.analyze(profileElement.plan,
                 RuntimeProfileParser.parseFrom(CompressionUtils.gzipDecompressString(profileElement.profileContent)),
-                planNodeIds));
+                planNodeIds, context.getSessionVariable().getColorExplainOutput()));
     }
 
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
@@ -2183,7 +2184,8 @@ public class StmtExecutor {
                 isAsync = tryProcessProfileAsync(execPlan, 0);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
+                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
+                            profile, null, context.getSessionVariable().getColorExplainOutput()));
                 }
             }
             if (isAsync) {
