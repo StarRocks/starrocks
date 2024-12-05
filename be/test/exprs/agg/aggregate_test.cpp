@@ -2723,14 +2723,8 @@ TEST_F(AggregateTest, test_get_aggregate_function_by_type) {
 }
 
 TEST_F(AggregateTest, test_ds_hll) {
-<<<<<<< HEAD
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
-=======
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT));
->>>>>>> 139ac86b57f3af3856e2d87dc8e744c4f4faa095
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("ds_hll_count_distinct", TYPE_DOUBLE, TYPE_BIGINT, false);
@@ -2781,14 +2775,8 @@ TEST_F(AggregateTest, test_ds_hll) {
 }
 
 TEST_F(AggregateTest, test_ds_theta) {
-<<<<<<< HEAD
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
-=======
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT));
->>>>>>> 139ac86b57f3af3856e2d87dc8e744c4f4faa095
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("ds_theta", TYPE_DOUBLE, TYPE_BIGINT, false);
@@ -2829,14 +2817,8 @@ TEST_F(AggregateTest, test_ds_theta) {
 }
 
 TEST_F(AggregateTest, test_ds_quantile) {
-<<<<<<< HEAD
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
-=======
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY));
->>>>>>> 139ac86b57f3af3856e2d87dc8e744c4f4faa095
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("ds_quantile", TYPE_DOUBLE, TYPE_ARRAY, false);
@@ -2880,14 +2862,8 @@ TEST_F(AggregateTest, test_ds_quantile) {
 }
 
 TEST_F(AggregateTest, test_ds_frequent) {
-<<<<<<< HEAD
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
-=======
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY));
->>>>>>> 139ac86b57f3af3856e2d87dc8e744c4f4faa095
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("ds_frequent", TYPE_DOUBLE, TYPE_ARRAY, false);
