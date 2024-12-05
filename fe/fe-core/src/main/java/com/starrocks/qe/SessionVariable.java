@@ -1554,7 +1554,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableCountDistinctRewriteByHllBitmap = true;
 
     @VarAttr(name = ENABLE_SCAN_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
-    private boolean enableScanPredicateExprReuse = true;
+    private boolean enableScanPredicateExprReuse = false;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -4127,6 +4127,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCountDistinctRewriteByHllBitmap(boolean enableCountDistinctRewriteByHllBitmap) {
         this.enableCountDistinctRewriteByHllBitmap = enableCountDistinctRewriteByHllBitmap;
+    }
+
+    public void setEnableScanPredicateExprReuse(boolean enableScanPredicateExprReuse) {
+        this.enableScanPredicateExprReuse = enableScanPredicateExprReuse;
     }
 
     public boolean isEnableScanPredicateExprReuse() {

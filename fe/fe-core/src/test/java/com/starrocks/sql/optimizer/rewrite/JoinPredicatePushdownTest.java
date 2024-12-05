@@ -22,6 +22,7 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+        connectContext.getSessionVariable().setEnableScanPredicateExprReuse(true);
     }
 
     @Test

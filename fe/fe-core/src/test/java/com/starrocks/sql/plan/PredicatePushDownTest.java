@@ -13,9 +13,14 @@
 // limitations under the License.
 package com.starrocks.sql.plan;
 
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class PredicatePushDownTest extends PlanTestBase {
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        connectContext.getSessionVariable().setEnableScanPredicateExprReuse(true);
+    }
 
     @Test
     public void testCoalescePushDown() throws Exception {

@@ -20,6 +20,7 @@ import org.junit.Test;
 public class ScanPredicateExprReuseTest extends PlanTestBase {
     @Test
     public void test() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableScanPredicateExprReuse(true);
         // 1. all predicates can be pushed down to scan node, no need to reuse common expressions
         {
             String sql = "select * from t0 where v1 = 10 and v2 = 5";

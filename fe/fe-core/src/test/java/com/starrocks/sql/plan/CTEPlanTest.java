@@ -39,6 +39,7 @@ public class CTEPlanTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
+        connectContext.getSessionVariable().setEnableScanPredicateExprReuse(true);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         globalStateMgr.setStatisticStorage(new TestStorage());
 

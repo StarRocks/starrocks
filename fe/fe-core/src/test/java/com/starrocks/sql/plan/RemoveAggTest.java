@@ -32,6 +32,7 @@ public class RemoveAggTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
+        connectContext.getSessionVariable().setEnableScanPredicateExprReuse(true);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")

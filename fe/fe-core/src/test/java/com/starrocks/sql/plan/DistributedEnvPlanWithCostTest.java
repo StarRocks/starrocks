@@ -45,6 +45,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         Config.tablet_sched_disable_colocate_overall_balance = true;
+        connectContext.getSessionVariable().setEnableScanPredicateExprReuse(true);
     }
 
     @After

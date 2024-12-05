@@ -166,6 +166,7 @@ public class LowCardinalityTest extends PlanTestBase {
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setCboCteReuse(false);
+        connectContext.getSessionVariable().setEnableScanPredicateExprReuse(true);
     }
 
     @AfterClass

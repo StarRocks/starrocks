@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -45,6 +46,11 @@ import java.util.List;
 
 public class ExpressionTest extends PlanTestBase {
 
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        connectContext.getSessionVariable().setEnableScanPredicateExprReuse(true);
+    }
     @Test
     public void testExpression() throws Exception {
         String sql = "select v1 + v2, v1 + v2 + v3, v1 + v2 + v3 + 1 from t0";

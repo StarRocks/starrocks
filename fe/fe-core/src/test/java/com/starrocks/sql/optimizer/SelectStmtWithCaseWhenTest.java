@@ -63,6 +63,7 @@ class SelectStmtWithCaseWhenTest {
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("test").useDatabase("test");
         starRocksAssert.withTable(createTblStmtStr);
+        starRocksAssert.getCtx().getSessionVariable().setEnableScanPredicateExprReuse(true);
         FeConstants.enablePruneEmptyOutputScan = false;
     }
 
