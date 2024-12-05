@@ -20,7 +20,6 @@
 #include "types/large_int_value.h"
 
 namespace starrocks {
-// ========================================================
 template <LogicalType Type>
 class MinMaxPredicate : public Expr {
 public:
