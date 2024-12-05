@@ -1568,29 +1568,40 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_ms_64(FunctionContext* 
 }
 
 std::string TimeFunctions::convert_format(const Slice& format) {
-    switch (format.get_size()) {
-    case 8:
-        if (strncmp((const char*)format.get_data(), "yyyyMMdd", 8) == 0) {
-            std::string tmp("%Y%m%d");
-            return tmp;
+    static const std::unordered_map<std::string, std::string> format_map = {
+                {"yyyy", "%Y"},
+                {"MM", "%m"},
+                {"dd", "%d"},
+                {"HH", "%H"},
+                {"mm", "%i"},
+                {"ss", "%s"}
+        };
+
+    std::string input_format(format.get_data(), format.get_size());
+    std::string result;
+    size_t pos = 0;
+
+    while (pos < input_format.size()) {
+        bool matched = false;
+
+        // Try to match the longest keyword
+        for (const auto& [key, value] : format_map) {
+            if (input_format.compare(pos, key.size(), key) == 0) {
+                result += value;
+                pos += key.size();
+                matched = true;
+                break;
+            }
         }
-        break;
-    case 10:
-        if (strncmp((const char*)format.get_data(), "yyyy-MM-dd", 10) == 0) {
-            std::string tmp("%Y-%m-%d");
-            return tmp;
+
+        // If no keyword is matched, keep the original character
+        if (!matched) {
+            result += input_format[pos];
+            ++pos;
         }
-        break;
-    case 19:
-        if (strncmp((const char*)format.get_data(), "yyyy-MM-dd HH:mm:ss", 19) == 0) {
-            std::string tmp("%Y-%m-%d %H:%i:%s");
-            return tmp;
-        }
-        break;
-    default:
-        break;
     }
-    return format.to_string();
+
+    return result;
 }
 
 // regex method
