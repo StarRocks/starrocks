@@ -162,7 +162,7 @@ public class BackupJobTest {
 
     @Before
     public void setUp() {
-
+        globalStateMgr = GlobalStateMgr.getCurrentState();
         repoMgr = new MockRepositoryMgr();
         backupHandler = new MockBackupHandler(globalStateMgr);
 
@@ -177,10 +177,6 @@ public class BackupJobTest {
 
         new Expectations(globalStateMgr) {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
                 globalStateMgr.getLockManager();
                 minTimes = 0;
                 result = lockManager;
