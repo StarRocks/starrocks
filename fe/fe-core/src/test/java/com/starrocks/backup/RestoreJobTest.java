@@ -164,10 +164,6 @@ public class RestoreJobTest {
 
         new Expectations(globalStateMgr) {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
