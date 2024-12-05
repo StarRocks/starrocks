@@ -69,6 +69,8 @@ private:
     Filter _chunk_filter;
     std::set<int64_t> _need_skip_rowids;
     std::unique_ptr<ORCHdfsFileStream> _input_stream;
+
+    BlockCache* _cache = nullptr;
 };
 
 } // namespace starrocks

@@ -449,7 +449,7 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
 
     DataCacheHandle cache_handle;
     std::string metacache_key =
-            _build_metacache_key(_file->filename(), _datacache_options->modification_time, _file_size);
+            HdfsScanner::_build_metacache_key(_file->filename(), _datacache_options->modification_time, _file_size);
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
         Status st = _cache->read_object(metacache_key, &cache_handle);
@@ -560,29 +560,6 @@ StatusOr<uint32_t> FileMetaDataParser::_parse_metadata_length(const std::vector<
                 metadata_length));
     }
     return metadata_length;
-}
-
-std::string FileMetaDataParser::_build_metacache_key(const std::string& filename, int64_t modification_time,
-                                                     uint64_t file_size) {
-    std::string metacache_key;
-    metacache_key.resize(14);
-    char* data = metacache_key.data();
-    const std::string footer_suffix = "ft";
-    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
-    memcpy(data, &hash_value, sizeof(hash_value));
-    memcpy(data + 8, footer_suffix.data(), footer_suffix.length());
-    // The modification time is more appropriate to indicate the different file versions.
-    // While some data source, such as Hudi, have no modification time because their files
-    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
-    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
-    if (modification_time > 0) {
-        uint32_t mtime_s = (modification_time >> 9) & 0x00000000FFFFFFFF;
-        memcpy(data + 10, &mtime_s, sizeof(mtime_s));
-    } else {
-        uint32_t size = file_size;
-        memcpy(data + 10, &size, sizeof(size));
-    }
-    return metacache_key;
 }
 
 // reference both be/src/formats/parquet/column_converter.cpp

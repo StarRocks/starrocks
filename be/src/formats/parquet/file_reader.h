@@ -86,8 +86,6 @@ private:
 
     std::shared_ptr<MetaHelper> _build_meta_helper();
 
-    Status _parse_footer(FileMetaDataPtr* file_metadata, int64_t* file_metadata_size);
-
     void _prepare_read_columns(std::unordered_set<std::string>& existed_column_names);
 
     Status _init_group_readers();
