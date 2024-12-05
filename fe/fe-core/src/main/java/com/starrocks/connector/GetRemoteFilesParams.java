@@ -43,6 +43,16 @@ public class GetRemoteFilesParams {
         this.checkPartitionExistence = builder.checkPartitionExistence;
     }
 
+    public int getPartitionSize() {
+        if (partitionKeys != null) {
+            return partitionKeys.size();
+        }
+        if (partitionNames != null) {
+            return partitionNames.size();
+        }
+        return 0;
+    }
+
     public GetRemoteFilesParams copy() {
         return GetRemoteFilesParams.newBuilder()
                 .setPartitionKeys(partitionKeys)
@@ -186,8 +196,9 @@ public class GetRemoteFilesParams {
         List<GetRemoteFilesParams> result = new ArrayList<>();
         int currentSize = minSize;
         int start = 0;
-        while (start < partitionKeys.size()) {
-            int end = Math.min(start + currentSize, partitionKeys.size());
+        int partitionSize = getPartitionSize();
+        while (start < partitionSize) {
+            int end = Math.min(start + currentSize, partitionSize);
             result.add(sub(start, end));
             start = end;
             currentSize = Math.min(currentSize * 2, maxSize);
