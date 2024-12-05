@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.opencsv.CSVWriter;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -602,7 +603,7 @@ public class HiveMetastoreApiConverter {
         if (fieldDelim.isEmpty()) {
             // Support for hive org.apache.hadoop.hive.serde2.OpenCSVSerde
             // https://cwiki.apache.org/confluence/display/hive/csv+serde
-            fieldDelim = parameters.getOrDefault(OpenCSVSerde.SEPARATORCHAR, ",");
+            fieldDelim = parameters.getOrDefault(OpenCSVSerde.SEPARATORCHAR, String.valueOf(CSVWriter.DEFAULT_SEPARATOR));
         }
         String lineDelim = parameters.getOrDefault(serdeConstants.LINE_DELIM, "");
         String mapkeyDelim = parameters.getOrDefault(serdeConstants.MAPKEY_DELIM, "");
