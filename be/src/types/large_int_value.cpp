@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/large_int_value.h"
+#include "types/large_int_value.h"
 
 #include <string>
 

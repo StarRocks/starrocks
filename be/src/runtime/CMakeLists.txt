@@ -40,7 +40,6 @@ set(RUNTIME_FILES
     runtime_state.cpp
     string_value.cpp
     decimalv2_value.cpp
-    large_int_value.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
