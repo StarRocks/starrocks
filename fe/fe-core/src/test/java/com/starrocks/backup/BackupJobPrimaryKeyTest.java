@@ -360,8 +360,7 @@ public class BackupJobPrimaryKeyTest {
             Assert.assertEquals(job.getLabel(), restoreJobInfo.name);
             Assert.assertEquals(1, restoreJobInfo.tables.size());
         } catch (IOException e) {
-            e.printStackTrace();
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
 
         Assert.assertNull(job.getBackupMeta());
