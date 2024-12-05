@@ -317,6 +317,8 @@ protected:
     Status exec_debug_action(TExecNodePhase::type phase);
 
 private:
+    // TODO: delete this function if removed tupleId
+    Status static checkTupleIdsInDescs(const DescriptorTbl& descs, const TPlanNode& planNode);
     RuntimeState* _runtime_state;
     bool _is_closed;
 };
