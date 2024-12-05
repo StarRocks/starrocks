@@ -48,14 +48,16 @@ inline bool parse_ipv4(const char* pos, size_t str_len, int64_t& dst, int64_t fi
         return false;
     }
 
-    for (; true; offset -= IPV4_OCTET_BITS, ++pos) {
+    size_t i = 0;
+    for (; i < str_len; offset -= IPV4_OCTET_BITS, ++pos, ++i) {
         int64_t value = 0;
         size_t len = 0;
 
-        while (is_numeric_ascii(*pos) && len <= 3) {
+        while (i < str_len && is_numeric_ascii(*pos) && len <= 3) {
             value = value * DECIMAL_BASE + (*pos - '0');
             ++len;
             ++pos;
+            ++i;
         }
 
         if (len == 0 || value > IPV4_MAX_OCTET_VALUE || (offset > 0 && *pos != '.')) {
@@ -69,7 +71,13 @@ inline bool parse_ipv4(const char* pos, size_t str_len, int64_t& dst, int64_t fi
         }
     }
 
-    if (*pos != '\0') return false;
+    while (i < str_len) {
+        if (*pos != '\0') {
+            return false;
+        }
+        ++pos;
+        ++i;
+    }
 
     dst = result;
     return true;
