@@ -894,6 +894,7 @@ public class CreateTableWithPartitionTest {
                     "'replication_num' = '1',\n" +
                     "'partition_retention_condition' = 'dt > current_date() - interval 1 month'\n" +
                     ")");
+            starRocksAssert.dropTable("t1");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -981,6 +982,7 @@ public class CreateTableWithPartitionTest {
                     "'replication_num' = '1',\n" +
                     "'partition_retention_condition' = 'dt > current_date() - interval 1 month'\n" +
                     ")");
+            starRocksAssert.dropTable("r1");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
