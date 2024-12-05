@@ -498,7 +498,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             try {
                 for (Dictionary dictionary : dictionaries) {
                     // update dictionary object state
-                    dictionariesMapById.put(dictionary.getDictionaryId(), dictionary);
+                    if (dictionariesMapById.containsKey(dictionary.getDictionaryId())) {
+                        dictionariesMapById.put(dictionary.getDictionaryId(), dictionary);
+                    } else {
+                        LOG.warn("dictionary {}, id {} has been deleted",
+                                dictionary.getDictionaryName(), dictionary.getDictionaryId());
+                    }
                 }
             } finally {
                 lock.unlock();
