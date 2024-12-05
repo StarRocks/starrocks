@@ -1279,7 +1279,8 @@ public class RestoreJob extends AbstractJob {
         for (MaterializedIndex restoreIdx : restorePart.getDefaultPhysicalPartition()
                 .getMaterializedIndices(IndexExtState.VISIBLE)) {
             int schemaHash = restoreTbl.getSchemaHashByIndexId(restoreIdx.getId());
-            TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
+            TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(),
+                    restorePart.getDefaultPhysicalPartition().getId(),
                     restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
             for (Tablet restoreTablet : restoreIdx.getTablets()) {
                 globalStateMgr.getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
