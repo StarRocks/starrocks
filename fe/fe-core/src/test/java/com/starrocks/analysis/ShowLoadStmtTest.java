@@ -60,7 +60,7 @@ public class ShowLoadStmtTest {
         ShowLoadStmt stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM test");
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
-        Assert.assertEquals(20, metaData.getColumnCount());
+        Assert.assertEquals(21, metaData.getColumnCount());
         Assert.assertEquals("JobId", metaData.getColumn(0).getName());
         Assert.assertEquals("Label", metaData.getColumn(1).getName());
         Assert.assertEquals("State", metaData.getColumn(2).getName());
@@ -81,6 +81,7 @@ public class ShowLoadStmtTest {
         Assert.assertEquals("LoadFinishTime", metaData.getColumn(17).getName());
         Assert.assertEquals("TrackingSQL", metaData.getColumn(18).getName());
         Assert.assertEquals("JobDetails", metaData.getColumn(19).getName());
+        Assert.assertEquals("Warehouse", metaData.getColumn(20).getName());
     }
 
     @Test
