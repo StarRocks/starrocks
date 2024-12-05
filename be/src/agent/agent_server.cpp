@@ -180,6 +180,7 @@ void AgentServer::Impl::init_or_die() {
                           .set_max_queue_size(queue_size)                                \
                           .build(&(pool));                                               \
         CHECK(st.ok()) << st;                                                            \
+        REGISTER_THREAD_POOL_METRICS(name, pool);                                        \
     } while (false)
 
 // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
@@ -197,7 +198,6 @@ void AgentServer::Impl::init_or_die() {
         BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", min_publish_version_worker_count,
                                        max_publish_version_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_publish_version);
-        REGISTER_THREAD_POOL_METRICS(publish_version, _thread_pool_publish_version);
 #endif
         int real_drop_tablet_worker_count = (config::drop_tablet_worker_count > 0)
                                                     ? config::drop_tablet_worker_count
