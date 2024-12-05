@@ -583,8 +583,6 @@ public class StarRocksAssert {
         return withTables(List.of(table), action);
     }
 
-<<<<<<< HEAD
-=======
     public StarRocksAssert withTable(String sql, ExceptionConsumer action) {
         return withTables(sql, action);
     }
@@ -616,7 +614,6 @@ public class StarRocksAssert {
         return this;
     }
 
->>>>>>> 5615fb13e1 ([UT] Remove noisy fe ut messages (#53600))
     /**
      * Create table and insert datas into the table and do actions.
      */
