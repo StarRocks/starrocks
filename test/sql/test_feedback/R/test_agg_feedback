@@ -129,7 +129,7 @@ function: assert_explain_not_contains("select count(*) from pre_agg_case group b
 -- result:
 None
 -- !result
-add into plan advisor select count(*) from pre_agg_case group by c3;
+alter plan advisor add select count(*) from pre_agg_case group by c3;
 -- result:
 [REGEX]Add query into plan advisor in FE
 -- !result
@@ -137,7 +137,7 @@ function: assert_explain_contains("select count(*) from pre_agg_case group by c3
 -- result:
 None
 -- !result
-clear plan advisor;
+truncate plan advisor;
 -- result:
 [REGEX]Clear all plan advisor in FE
 -- !result

@@ -4919,7 +4919,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // ------------------------------------------- Plan Tuning Statement -----------------------------------------------
-    public ParseNode visitAddPlanAdvisorStatement(StarRocksParser.AddPlanAdvisorStatementContext context) {
+    public ParseNode visitAlterPlanAdvisorAddStatement(StarRocksParser.AlterPlanAdvisorAddStatementContext context) {
         QueryStatement queryStmt = (QueryStatement) visitQueryStatement(context.queryStatement());
         int start = context.queryStatement().start.getStartIndex();
         int end = context.queryStatement().stop.getStopIndex();
@@ -4933,11 +4933,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new AddPlanAdvisorStmt(createPos(context), queryStmt);
     }
 
-    public ParseNode visitClearPlanAdvisorStatement(StarRocksParser.ClearPlanAdvisorStatementContext context) {
+    public ParseNode visitTruncatePlanAdvisorStatement(StarRocksParser.TruncatePlanAdvisorStatementContext context) {
         return new ClearPlanAdvisorStmt(createPos(context));
     }
 
-    public ParseNode visitDelPlanAdvisorStatement(StarRocksParser.DelPlanAdvisorStatementContext context) {
+    public ParseNode visitAlterPlanAdvisorDropStatement(StarRocksParser.AlterPlanAdvisorDropStatementContext context) {
         String advisorId = ((StringLiteral) visit(context.string())).getStringValue();
         return new DelPlanAdvisorStmt(createPos(context), advisorId);
     }
