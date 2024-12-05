@@ -149,7 +149,7 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
         LOG(INFO) << "transaction streaming load request, handle: " << req->debug_string();
     }
 
-    StreamLoadContext* ctx = (StreamLoadContext*)req->handler_ctx();
+    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(req->handler_ctx());
     if (ctx == nullptr) {
         return;
     }
@@ -494,7 +494,7 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
 }
 
 void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
-    StreamLoadContext* ctx = (StreamLoadContext*)req->handler_ctx();
+    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(req->handler_ctx());
     if (ctx == nullptr) {
         return;
     }
@@ -570,7 +570,7 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
 }
 
 void TransactionStreamLoadAction::free_handler_ctx(void* param) {
-    StreamLoadContext* ctx = (StreamLoadContext*)param;
+    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(param);
     if (ctx == nullptr) {
         return;
     }
