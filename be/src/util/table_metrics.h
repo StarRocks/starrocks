@@ -27,8 +27,8 @@ struct TableMetrics {
 
     METRIC_DEFINE_INT_COUNTER(scan_read_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(scan_read_rows, MetricUnit::ROWS);
-    METRIC_DEFINE_INT_COUNTER(tablet_sink_load_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_COUNTER(tablet_sink_load_rows, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(load_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(load_rows, MetricUnit::BYTES);
     int32_t ref_count = 0;
 };
 using TableMetricsPtr = std::shared_ptr<TableMetrics>;
@@ -68,6 +68,8 @@ public:
     }
 
     TableMetricsPtr get_table_metrics(uint64_t table_id) {
+        // @TODO for load task, table may not exists in sender side
+        // @TODO we should create one
         std::shared_lock l(_mu);
         DCHECK(_metrics_map.contains(table_id));
         return _metrics_map.at(table_id);

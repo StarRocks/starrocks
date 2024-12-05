@@ -50,6 +50,7 @@
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -100,6 +101,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
     _schema = schema;
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
+    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
 
     _senders = std::vector<Sender>(params.num_senders());
     if (is_incremental) {
@@ -226,6 +228,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             }
         }
     }
+
+    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage(): 0;
 
     auto res = _create_write_context(chunk, request, response);
     if (!res.ok()) {
@@ -450,6 +454,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             wait_memtable_flush_time_us);
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
+    _table_metrics->load_rows.increment(total_row_num);
+    _table_metrics->load_bytes.increment(chunk_size);
 
     COUNTER_UPDATE(_add_chunk_counter, 1);
     COUNTER_UPDATE(_add_chunk_timer, watch.elapsed_time());

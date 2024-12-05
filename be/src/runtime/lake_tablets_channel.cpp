@@ -45,6 +45,7 @@
 #include "util/countdown_latch.h"
 #include "util/runtime_profile.h"
 #include "util/stack_trace_mutex.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -301,6 +302,7 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
+    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
     _is_incremental_channel = is_incremental;
     if (params.has_lake_tablet_params() && params.lake_tablet_params().has_write_txn_log()) {
         _finish_mode = params.lake_tablet_params().write_txn_log() ? lake::DeltaWriterFinishMode::kWriteTxnLog

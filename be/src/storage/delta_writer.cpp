@@ -151,6 +151,7 @@ Status DeltaWriter::_init() {
 
     _replica_state = _opt.replica_state;
 
+    // @TODO init metrics
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {

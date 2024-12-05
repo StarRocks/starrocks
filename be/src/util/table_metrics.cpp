@@ -22,12 +22,12 @@
 namespace starrocks {
 
 void TableMetrics::install(MetricRegistry* registry, const std::string& table_id) {
-#define REGISTER_TABLE_METRIC(name) registry->register_metric(#name, MetricLabels().add("table_id", table_id), &name)
+#define REGISTER_TABLE_METRIC(name) registry->register_metric("table_"#name, MetricLabels().add("table_id", table_id), &name)
 
     REGISTER_TABLE_METRIC(scan_read_bytes);
     REGISTER_TABLE_METRIC(scan_read_rows);
-    REGISTER_TABLE_METRIC(tablet_sink_load_bytes);
-    REGISTER_TABLE_METRIC(tablet_sink_load_rows);
+    REGISTER_TABLE_METRIC(load_bytes);
+    REGISTER_TABLE_METRIC(load_rows);
 }
 
 void TableMetrics::uninstall(MetricRegistry* registry) {
@@ -35,8 +35,8 @@ void TableMetrics::uninstall(MetricRegistry* registry) {
 
     UNREGISTER_TABLE_METRIC(scan_read_bytes);
     UNREGISTER_TABLE_METRIC(scan_read_rows);
-    UNREGISTER_TABLE_METRIC(tablet_sink_load_bytes);
-    UNREGISTER_TABLE_METRIC(tablet_sink_load_rows);
+    UNREGISTER_TABLE_METRIC(load_bytes);
+    UNREGISTER_TABLE_METRIC(load_rows);
 }
 
 void TableMetricsManager::cleanup() {
