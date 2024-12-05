@@ -55,7 +55,7 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         OptExpression root = execPlan.getPhysicalPlan();
 
-        NodeExecStats localAgg = new NodeExecStats(1, 3000000000L, 2000000000L, 0, 0, 0);
+        NodeExecStats localAgg = new NodeExecStats(1, 3000000000L, 2000000L, 0, 0, 0);
         NodeExecStats globalAgg = new NodeExecStats(3, 500000, 7, 0, 0, 0);
         Map<Integer, NodeExecStats> map = Maps.newHashMap();
         map.put(1, localAgg);

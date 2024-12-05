@@ -1,4 +1,4 @@
--- name: test_feedback
+-- name: test_join_feedback
 CREATE TABLE `c1_skew` (
   `c0` int(11) NULL COMMENT "",
   `c1` char(50) NULL COMMENT "",
@@ -27,5 +27,4 @@ function: assert_explain_not_contains("select count(*) from (select * from c1_sk
 add into plan advisor select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t;
 function: assert_explain_contains("select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
 function: assert_trace_values_contains("select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
-
 clear plan advisor;
