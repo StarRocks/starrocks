@@ -1314,7 +1314,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 .useDatabase("drop_mv_db")
                 .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
                         + "DISTRIBUTED BY HASH(`k2`)\n"
-                        + "REFRESH ASYNC\n"
+                        + "REFRESH DEFERRED ASYNC\n"
                         + "AS select k1, k2, v1  from drop_db.tbl_with_mv;");
 
         executeInsertSql(connectContext, "insert into drop_db.tbl_with_mv partition(p2) values(\"2022-02-20\", 2, 10)");

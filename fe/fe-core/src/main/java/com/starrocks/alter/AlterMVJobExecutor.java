@@ -19,7 +19,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
+=======
+>>>>>>> e92bd403b ([Feature] (Part 3) Support partition_redention_condition property for native tables (#53478))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
@@ -115,6 +118,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         Pair<String, PeriodDuration> ttlDuration = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
             ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+        }
+        String ttlRetentionCondition = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(materializedView.getDbId());
+            ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db,
+                    materializedView, properties, true);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
@@ -233,6 +242,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 materializedView.getTableProperty().getPartitionTTLNumber() != partitionTTL) {
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(partitionTTL));
             materializedView.getTableProperty().setPartitionTTLNumber(partitionTTL);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION) &&
+                ttlRetentionCondition != null &&
+                !ttlRetentionCondition.equalsIgnoreCase(materializedView.getTableProperty().getPartitionRetentionCondition())) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
+            materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER) &&
                 materializedView.getTableProperty().getPartitionRefreshNumber() != partitionRefreshNumber) {

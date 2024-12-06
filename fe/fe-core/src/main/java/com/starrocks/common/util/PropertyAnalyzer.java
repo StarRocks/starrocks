@@ -45,6 +45,7 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
@@ -72,6 +73,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
@@ -83,6 +85,8 @@ import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;
@@ -191,6 +195,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_TTL = "partition_ttl";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
+    public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
+
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
@@ -415,6 +421,41 @@ public class PropertyAnalyzer {
             }
         }
         return partitionLiveNumber;
+    }
+
+    public static String analyzePartitionRetentionCondition(Database db,
+                                                            OlapTable olapTable,
+                                                            Map<String, String> properties,
+                                                            boolean removeProperties) {
+        String partitionRetentionCondition = "";
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            partitionRetentionCondition = properties.get(PROPERTIES_PARTITION_RETENTION_CONDITION);
+            if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
+                throw new SemanticException("Illegal partition retention condition: " + partitionRetentionCondition);
+            }
+            // parse retention condition
+            Expr whereExpr = null;
+            try {
+                whereExpr = SqlParser.parseSqlToExpr(partitionRetentionCondition, SqlModeHelper.MODE_DEFAULT);
+                if (whereExpr == null) {
+                    throw new SemanticException("Failed to parse retention condition: " + partitionRetentionCondition);
+                }
+            } catch (Exception e) {
+                throw new SemanticException("Failed to parse retention condition: " + partitionRetentionCondition);
+            }
+            // validate retention condition
+            TableName tableName = new TableName(db.getFullName(), olapTable.getName());
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext(null) : ConnectContext.get();
+            try {
+                PartitionSelector.getPartitionIdsByExpr(connectContext, tableName, olapTable, whereExpr, false);
+            } catch (Exception e) {
+                throw new SemanticException("Failed to validate retention condition: " + e.getMessage());
+            }
+            if (removeProperties) {
+                properties.remove(PROPERTIES_PARTITION_RETENTION_CONDITION);
+            }
+        }
+        return partitionRetentionCondition;
     }
 
     public static long analyzeBucketSize(Map<String, String> properties) {
@@ -1414,6 +1455,18 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
                 materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
+            }
+            // partition retention condition
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION
+                            + " is only supported by partitioned materialized-view");
+                }
+                String ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, materializedView,
+                        properties, true);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
+                materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
             }
 
             // partition ttl number
