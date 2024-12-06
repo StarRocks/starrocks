@@ -40,6 +40,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.jetbrains.annotations.TestOnly;
 
 import java.util.List;
 import java.util.Map;
@@ -61,6 +62,34 @@ public abstract class ScanNode extends PlanNode {
         this.columnFilters = columnFilters;
     }
 
+<<<<<<< HEAD
+=======
+    public void setColumnAccessPaths(List<ColumnAccessPath> columnAccessPaths) {
+        this.columnAccessPaths = columnAccessPaths;
+    }
+
+    @TestOnly
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return this.columnAccessPaths;
+    }
+
+    public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
+        this.dataCacheOptions = dataCacheOptions;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public void setScanOptimzeOption(ScanOptimzeOption opt) {
+        this.scanOptimzeOption = opt.copy();
+    }
+
+    public ScanOptimzeOption getScanOptimzeOption() {
+        return scanOptimzeOption;
+    }
+
+>>>>>>> ae7fd35b3a ([UT] Eliminate overuse projecting CommonAccessPaths (#53603))
     public String getTableName() {
         return desc.getTable().getName();
     }
