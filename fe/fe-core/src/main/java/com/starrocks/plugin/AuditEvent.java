@@ -103,6 +103,8 @@ public class AuditEvent {
     public long cpuCostNs = -1;
     @AuditField(value = "MemCostBytes", ignore_zero = true)
     public long memCostBytes = -1;
+    @AuditField(value = "ConnectionId")
+    public int connectionId = -1;
     @AuditField(value = "StmtId")
     public long stmtId = -1;
     @AuditField(value = "QueryId")
@@ -244,6 +246,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setWarehouse(String warehouse) {
             auditEvent.warehouse = warehouse;
+            return this;
+        }
+
+        public AuditEventBuilder setConnectionId(int connectionId) {
+            auditEvent.connectionId = connectionId;
             return this;
         }
 

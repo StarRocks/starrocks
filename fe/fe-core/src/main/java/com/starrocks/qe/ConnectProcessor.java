@@ -197,6 +197,7 @@ public class ConnectProcessor {
                 .setErrorCode(ctx.getNormalizedErrorCode())
                 .setQueryTime(elapseMs)
                 .setReturnRows(ctx.getReturnRows())
+                .setConnectionId(ctx.connectionId)
                 .setStmtId(ctx.getStmtId())
                 .setIsForwardToLeader(isForwardToLeader)
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
