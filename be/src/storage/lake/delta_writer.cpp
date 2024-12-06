@@ -340,6 +340,7 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
+    auto t0 = butil::gettimeofday_ms();
     if (_mem_table == nullptr) {
         // When loading memory usage is larger than hard limit, we will reject new loading task.
         if (!config::enable_new_load_on_memory_limit_exceeded &&
@@ -355,14 +356,21 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     _last_write_ts = butil::gettimeofday_s();
     Status st;
     bool full = _mem_table->insert(chunk, indexes, 0, indexes_size);
+    auto t1 = butil::gettimeofday_ms();
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         st = flush();
+        LOG(INFO) << "DeltaWriterImpl write time: " << t1 - t0 << " flush time: " << butil::gettimeofday_ms() - t1
+                  << " chunk : " << chunk.num_rows() << " " << chunk.byte_size();
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
         st = flush();
+        LOG(INFO) << "DeltaWriterImpl write2 time: " << t1 - t0 << " flush time: " << butil::gettimeofday_ms() - t1
+                  << " chunk : " << chunk.num_rows() << " " << chunk.byte_size();
     } else if (full) {
         st = flush_async();
+        LOG(INFO) << "DeltaWriterImpl write3 time: " << t1 - t0 << " flush time: " << butil::gettimeofday_ms() - t1
+                  << " chunk : " << chunk.num_rows() << " " << chunk.byte_size();
     }
     return st;
 }
