@@ -81,6 +81,11 @@ import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTablePruneRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.tree.DataCachePopulateRewriteRule;
+import com.starrocks.sql.optimizer.rule.tree.EliminateOveruseColumnAccessPathRule;
+>>>>>>> ae7fd35b3a ([UT] Eliminate overuse projecting CommonAccessPaths (#53603))
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
 import com.starrocks.sql.optimizer.rule.tree.InlineCteProjectPruneRule;
@@ -788,6 +793,17 @@ public class Optimizer {
         // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
         result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
 
+<<<<<<< HEAD
+=======
+        // set subfield expr copy flag
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().getEnableSubfieldNoCopy()) {
+            result = new SubfieldExprNoCopyRule().rewrite(result, rootTaskContext);
+        }
+
+        result = new AddIndexOnlyPredicateRule().rewrite(result, rootTaskContext);
+        result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
+        result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
+>>>>>>> ae7fd35b3a ([UT] Eliminate overuse projecting CommonAccessPaths (#53603))
         result.setPlanCount(planCount);
         return result;
     }
