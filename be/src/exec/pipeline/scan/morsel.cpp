@@ -191,15 +191,6 @@ void BucketSequenceMorselQueueFactory::set_has_more(bool v) {
     }
 }
 
-bool BucketSequenceMorselQueueFactory::reach_limit() const {
-    for (const auto& p : _queue_per_driver_seq) {
-        if (p->reach_limit()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 size_t BucketSequenceMorselQueueFactory::num_original_morsels() const {
     size_t total = 0;
     for (const auto& queue : _queue_per_driver_seq) {

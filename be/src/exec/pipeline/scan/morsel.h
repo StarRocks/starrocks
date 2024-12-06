@@ -322,7 +322,6 @@ public:
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     void set_has_more(bool v) override;
-    bool reach_limit() const override;
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
