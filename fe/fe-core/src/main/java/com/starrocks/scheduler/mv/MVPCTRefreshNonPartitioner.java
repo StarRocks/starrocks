@@ -53,8 +53,9 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
         // do nothing
         return null;
     }
+
     @Override
-    public Set<String> getMVPartitionsToRefreshWithForce(int partitionTTLNumber) {
+    public Set<String> getMVPartitionsToRefreshWithForce() {
         return mv.getVisiblePartitionNames();
     }
 
@@ -73,7 +74,6 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     @Override
     public Set<String> getMVPartitionNamesWithTTL(MaterializedView materializedView,
                                                   MVRefreshParams mvRefreshParams,
-                                                  int partitionTTLNumber,
                                                   boolean isAutoRefresh) {
         return Sets.newHashSet();
     }
