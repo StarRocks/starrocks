@@ -50,7 +50,10 @@ public class ExecuteOption {
     public ExecuteOption(int priority, boolean isMergeRedundant, Map<String, String> taskRunProperties) {
         this.priority = priority;
         this.isMergeRedundant = isMergeRedundant;
-        this.taskRunProperties = taskRunProperties;
+        // clone the taskRunProperties to avoid modifying the original map because `mergeProperties` may change it.
+        if (taskRunProperties != null) {
+            this.taskRunProperties = Maps.newHashMap(taskRunProperties);
+        }
     }
 
     public static ExecuteOption makeMergeRedundantOption() {
