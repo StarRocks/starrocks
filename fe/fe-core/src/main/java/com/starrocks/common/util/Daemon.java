@@ -62,12 +62,15 @@ public class Daemon extends Thread {
     public synchronized void start() {
         if (isRunning.compareAndSet(false, true)) {
             isStopped.set(false);
-            super.start();
+            if (getState() == State.NEW) {
+                super.start();
+            }
         }
     }
 
     public void setStop() {
         isStopped.set(true);
+        super.interrupt();
     }
 
     public boolean isRunning() {
