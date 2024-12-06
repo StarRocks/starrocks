@@ -38,6 +38,9 @@ import com.starrocks.StarRocksFE;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
 
+import static java.lang.Math.max;
+import static java.lang.Runtime.getRuntime;
+
 public class Config extends ConfigBase {
 
     /**
@@ -3343,4 +3346,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
             "between any two nodes before triggering a balance")
     public static double batch_write_be_assigner_balance_factor_threshold = 0.1;
+
+    @ConfField(mutable = false)
+    public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
 }
