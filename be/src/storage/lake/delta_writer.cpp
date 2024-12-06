@@ -361,16 +361,19 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         st = flush();
         LOG(INFO) << "DeltaWriterImpl write time: " << t1 - t0 << " flush time: " << butil::gettimeofday_ms() - t1
-                  << " chunk : " << chunk.num_rows() << " " << chunk.byte_size();
+                  << " chunk : " << chunk.num_rows() << " " << chunk.bytes_usage() << " tid " << _tablet_id;
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
         st = flush();
         LOG(INFO) << "DeltaWriterImpl write2 time: " << t1 - t0 << " flush time: " << butil::gettimeofday_ms() - t1
-                  << " chunk : " << chunk.num_rows() << " " << chunk.byte_size();
+                  << " chunk : " << chunk.num_rows() << " " << chunk.bytes_usage() << " tid " << _tablet_id;
     } else if (full) {
         st = flush_async();
         LOG(INFO) << "DeltaWriterImpl write3 time: " << t1 - t0 << " flush time: " << butil::gettimeofday_ms() - t1
-                  << " chunk : " << chunk.num_rows() << " " << chunk.byte_size();
+                  << " chunk : " << chunk.num_rows() << " " << chunk.bytes_usage() << " tid " << _tablet_id;
+    } else {
+        LOG(INFO) << "DeltaWriterImpl write4 time: " << t1 - t0 << " flush time: " << butil::gettimeofday_ms() - t1
+                  << " chunk : " << chunk.num_rows() << " " << chunk.bytes_usage() << " tid " << _tablet_id;
     }
     return st;
 }
