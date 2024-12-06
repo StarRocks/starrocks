@@ -41,7 +41,6 @@
 #include "common/config.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "service/brpc.h"
 #include "util/internal_service_recoverable_stub.h"
