@@ -61,6 +61,7 @@ void CompactionManager::schedule() {
                  .set_max_queue_size(1000)
                  .build(&_compaction_pool);
     DCHECK(st.ok());
+    REGISTER_THREAD_POOL_METRICS(compact_pool, _compaction_pool);
 
     _scheduler_thread = std::thread([this] { _schedule(); });
     Thread::set_thread_name(_scheduler_thread, "compact_sched");

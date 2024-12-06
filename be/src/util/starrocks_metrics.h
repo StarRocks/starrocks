@@ -348,8 +348,30 @@ public:
     METRICS_DEFINE_THREAD_POOL(segment_flush);
     METRICS_DEFINE_THREAD_POOL(update_apply);
     METRICS_DEFINE_THREAD_POOL(pk_index_compaction);
+    METRICS_DEFINE_THREAD_POOL(compact_pool);
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
+
+    // agent server thread pools
+    METRICS_DEFINE_THREAD_POOL(drop);
+    METRICS_DEFINE_THREAD_POOL(create_tablet);
+    METRICS_DEFINE_THREAD_POOL(alter_tablet);
+    METRICS_DEFINE_THREAD_POOL(clear_transaction);
+    METRICS_DEFINE_THREAD_POOL(storage_medium_migrate);
+    METRICS_DEFINE_THREAD_POOL(check_consistency);
+    METRICS_DEFINE_THREAD_POOL(manual_compaction);
+    METRICS_DEFINE_THREAD_POOL(compaction_control);
+    METRICS_DEFINE_THREAD_POOL(update_schema);
+    METRICS_DEFINE_THREAD_POOL(upload);
+    METRICS_DEFINE_THREAD_POOL(download);
+    METRICS_DEFINE_THREAD_POOL(make_snapshot);
+    METRICS_DEFINE_THREAD_POOL(release_snapshot);
+    METRICS_DEFINE_THREAD_POOL(move_dir);
+    METRICS_DEFINE_THREAD_POOL(update_tablet_meta_info);
+    METRICS_DEFINE_THREAD_POOL(drop_auto_increment_map_dir);
+    METRICS_DEFINE_THREAD_POOL(clone);
+    METRICS_DEFINE_THREAD_POOL(remote_snapshot);
+    METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
 
     // short circuit executor
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
