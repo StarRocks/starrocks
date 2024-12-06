@@ -447,6 +447,8 @@ public class StatisticExecutor {
                     externalBasicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
                     externalBasicStatsMeta.setProperties(statsJob.getProperties());
                     externalBasicStatsMeta.setAnalyzeType(statsJob.getType());
+                    // set columns to the latest collect job's columns
+                    externalBasicStatsMeta.setColumns(Lists.newArrayList(statsJob.getColumnNames()));
                 }
 
                 Set<Long> sampledPartitions = new HashSet<>();
