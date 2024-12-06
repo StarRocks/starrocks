@@ -194,6 +194,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private PeriodDuration partitionTTL = PeriodDuration.ZERO;
 
+    // This property can be used to specify the retention condition of the partition table or materialized view,
+    // it's a SQL expression, and the partition will be deleted if the condition is not true.
+    private String partitionRetentionCondition = null;
+
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
     private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
@@ -387,6 +391,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 buildPartitionTTL();
                 buildPartitionLiveNumber();
+                buildPartitionRetentionCondition();
                 buildDataCachePartitionDuration();
                 buildLocation();
                 buildStorageCoolDownTTL();
@@ -493,6 +498,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         partitionRefreshNumber =
                 Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
                         String.valueOf(INVALID)));
+        return this;
+    }
+
+    public TableProperty buildPartitionRetentionCondition() {
+        partitionRetentionCondition = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, "");
         return this;
     }
 
@@ -837,6 +847,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return partitionTTL;
     }
 
+    public String getPartitionRetentionCondition() {
+        return partitionRetentionCondition;
+    }
+
+    public void setPartitionRetentionCondition(String partitionRetentionCondition) {
+        this.partitionRetentionCondition = partitionRetentionCondition;
+    }
+
     public int getAutoRefreshPartitionsLimit() {
         return autoRefreshPartitionsLimit;
     }
@@ -1083,6 +1101,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionLiveNumber();
+        buildPartitionRetentionCondition();
         buildReplicatedStorage();
         buildBucketSize();
         buildEnableLoadProfile();
