@@ -14,7 +14,7 @@
 
 package com.starrocks.connector;
 
-import autovalue.shaded.com.google.common.common.base.Preconditions;
+import com.google.common.base.Preconditions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.hive.Partition;
