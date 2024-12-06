@@ -35,6 +35,7 @@ import org.apache.logging.log4j.util.Strings;
 
 import java.text.MessageFormat;
 import java.time.ZoneId;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -201,7 +202,10 @@ public class TaskRunHistoryTable {
         sql += Joiner.on(" AND ").join(predicates);
 
         List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
-        return TaskRunStatus.fromResultBatch(batch);
+        List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);
+        // sort results by create time desc to make the result more stable.
+        Collections.sort(result, TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
+        return result;
     }
 
     public List<TaskRunStatus> lookupByTaskNames(String dbName, Set<String> taskNames) {
@@ -217,6 +221,9 @@ public class TaskRunHistoryTable {
 
         String sql = LOOKUP + Joiner.on(" AND ").join(predicates);
         List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
-        return TaskRunStatus.fromResultBatch(batch);
+        List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);
+        // sort results by create time desc to make the result more stable.
+        Collections.sort(result, TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
+        return result;
     }
 }
