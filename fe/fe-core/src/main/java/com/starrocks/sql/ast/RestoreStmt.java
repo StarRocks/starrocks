@@ -18,10 +18,12 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class RestoreStmt extends AbstractBackupStmt {
     private boolean allowLoad = false;
@@ -31,13 +33,18 @@ public class RestoreStmt extends AbstractBackupStmt {
     private int starrocksMetaVersion = -1;
 
     public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
-                       Map<String, String> properties) {
-        this(labelName, repoName, tblRefs, properties, NodePosition.ZERO);
+                       List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
+                       boolean withOnClause, String originDbName, Map<String, String> properties) {
+        this(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, NodePosition.ZERO);
     }
 
     public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
+                       List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
+                       boolean withOnClause, String originDbName,
                        Map<String, String> properties, NodePosition pos) {
-        super(labelName, repoName, tblRefs, properties, pos);
+        super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, pos);
     }
 
     public boolean allowLoad() {

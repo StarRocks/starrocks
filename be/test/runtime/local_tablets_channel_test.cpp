@@ -200,7 +200,6 @@ protected:
 
 TEST_F(LocalTabletsChannelTest, test_profile) {
     auto open_request = _open_request;
-
     ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
     PTabletWriterAddChunkRequest add_chunk_request;
@@ -220,20 +219,24 @@ TEST_F(LocalTabletsChannelTest, test_profile) {
         add_chunk_request.add_partition_ids(_partition_id);
     }
 
+    bool close_channel;
     PTabletWriterAddBatchResult add_chunk_response;
-    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK)
             << add_chunk_response.status().error_msgs(0);
+    ASSERT_TRUE(close_channel);
 
+    _tablets_channel->update_profile();
     auto* profile = _root_profile->get_child(fmt::format("Index (id={})", _index_id));
     ASSERT_NE(nullptr, profile);
-    ASSERT_EQ(1, profile->get_counter("PrimaryTabletsNum")->value());
-    ASSERT_EQ(0, profile->get_counter("SecondaryTabletsNum")->value());
-    ASSERT_EQ(1, profile->get_counter("OpenCount")->value());
-    ASSERT_TRUE(profile->get_counter("OpenTime")->value() > 0);
-    ASSERT_EQ(1, profile->get_counter("AddChunkCount")->value());
-    ASSERT_TRUE(profile->get_counter("AddChunkTime")->value() > 0);
+    ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
+    ASSERT_TRUE(profile->get_counter("OpenRpcTime")->value() > 0);
+    ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
+    ASSERT_TRUE(profile->get_counter("AddChunkRpcTime")->value() > 0);
     ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
+    auto* primary_replicas_profile = profile->get_child("PrimaryReplicas");
+    ASSERT_NE(nullptr, primary_replicas_profile);
+    ASSERT_EQ(1, primary_replicas_profile->get_counter("TabletsNum")->value());
 }
 
 } // namespace starrocks

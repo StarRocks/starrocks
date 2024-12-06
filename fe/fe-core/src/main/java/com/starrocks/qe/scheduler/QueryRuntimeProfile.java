@@ -35,6 +35,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadDataCacheMetrics;
@@ -71,11 +72,13 @@ public class QueryRuntimeProfile {
      * Set the queue size to a large value. The decision to execute the profile process task asynchronously
      * occurs when a listener is added to {@link QueryRuntimeProfile#profileDoneSignal}. The function
      * {@link QueryRuntimeProfile#addListener} will then determine if the size of the queued task exceeds
-     * {@link Config#profile_process_blocking_queue_size}.
+     * queue size.
      */
     private static final ThreadPoolExecutor EXECUTOR =
-            ThreadPoolManager.newDaemonFixedThreadPool(Config.profile_process_threads_num,
-                    Integer.MAX_VALUE, "profile-worker", false);
+            ThreadPoolManager.newDaemonCacheThreadPool(
+                    ThreadPoolManager.cpuIntensiveThreadPoolSize(),
+                    ThreadPoolManager.cpuIntensiveThreadPoolSize() * 4,
+                    "profile-worker", true);
 
     /**
      * The value is meaningless, and it is just used as a value placeholder of {@link MarkedCountDownLatch}.
@@ -256,7 +259,14 @@ public class QueryRuntimeProfile {
     }
 
     public boolean addListener(Consumer<Boolean> task) {
-        if (EXECUTOR.getQueue().size() > Config.profile_process_blocking_queue_size) {
+        if (connectContext instanceof ArrowFlightSqlConnectContext) {
+            profileDoneSignal.addListener(() -> EXECUTOR.submit(() -> {
+                task.accept(true);
+            }));
+            return true;
+        }
+
+        if (EXECUTOR.getQueue().remainingCapacity() <= 0) {
             return false;
         }
 

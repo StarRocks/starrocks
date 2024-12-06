@@ -48,6 +48,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
+import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -62,6 +63,7 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -160,7 +162,7 @@ public class BackupJobTest {
 
     @Before
     public void setUp() {
-
+        globalStateMgr = GlobalStateMgr.getCurrentState();
         repoMgr = new MockRepositoryMgr();
         backupHandler = new MockBackupHandler(globalStateMgr);
 
@@ -171,8 +173,18 @@ public class BackupJobTest {
         View view = UnitTestUtil.createTestView(viewId);
         db.registerTableUnlocked(view);
 
+        LockManager lockManager = new LockManager();
+
         new Expectations(globalStateMgr) {
             {
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = lockManager;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
+
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;

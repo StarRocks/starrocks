@@ -70,6 +70,10 @@ public class Catalog implements Writable {
         return name;
     }
 
+    public void setName(String name) {
+        this.name = name;
+    }
+
     public String getType() {
         return config.get(CATALOG_TYPE);
     }

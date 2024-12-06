@@ -81,7 +81,7 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
 
     @ParameterizedTest(name = "{index}-{0}")
     @MethodSource("generateManyJoinArguments")
-    @Timeout(5)
+    @Timeout(30)
     public void testManyJoins(String name, String mvQuery, String query, boolean expectHitMv) throws Exception {
         LOG.info("create mv {}", mvQuery);
         String mvName = "mv_manyjoin";

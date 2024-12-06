@@ -330,17 +330,22 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     public static Pair<Table, Column> getRefBaseTablePartitionColumn(MaterializedView mv) {
-        Map<Table, Column> result = mv.getRefBaseTablePartitionColumns();
+        Map<Table, List<Column>> result = mv.getRefBaseTablePartitionColumns();
         Assert.assertTrue(result.size() == 1);
-        Map.Entry<Table, Column> e = result.entrySet().iterator().next();
-        return Pair.create(e.getKey(), e.getValue());
+        Map.Entry<Table, List<Column>> e = result.entrySet().iterator().next();
+        Assert.assertEquals(1, e.getValue().size());
+        return Pair.create(e.getKey(), e.getValue().get(0));
     }
 
     public String getQueryPlan(String query) {
+        return getQueryPlan(query, TExplainLevel.NORMAL);
+    }
+
+    public String getQueryPlan(String query, TExplainLevel level) {
         try {
             Pair<ExecPlan, String> planAndTrace =
                     UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
-            return planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+            return planAndTrace.first.getExplainString(level);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }

@@ -146,7 +146,9 @@ void calculate_metrics(void* arg_this) {
                 datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
             }
 #ifdef USE_STAROS
-            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+            if (!config::datacache_unified_instance_enable) {
+                datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+            }
 #endif
             datacache_mem_tracker->set(datacache_mem_bytes);
         }
@@ -331,6 +333,14 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
     LOG(INFO) << MemInfo::debug_string();
     LOG(INFO) << base::CPU::instance()->debug_string();
     LOG(INFO) << "openssl aesni support: " << openssl_supports_aesni();
+    auto unsupported_flags = CpuInfo::unsupported_cpu_flags_from_current_env();
+    if (!unsupported_flags.empty()) {
+        LOG(FATAL) << fmt::format(
+                "CPU flags check failed! The following instruction sets are enabled during compiling but not supported "
+                "in current running env: {}!",
+                fmt::join(unsupported_flags, ","));
+        std::abort();
+    }
 
     CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
 

@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -37,9 +37,9 @@ public class HMSTablePartitionsProcDir implements ProcDirInterface {
             .add("PartitionName")
             .build();
 
-    private final HiveMetaStoreTable hmsTable;
+    private final Table hmsTable;
 
-    public HMSTablePartitionsProcDir(HiveMetaStoreTable hmsTable) {
+    public HMSTablePartitionsProcDir(Table hmsTable) {
         this.hmsTable = hmsTable;
     }
 
@@ -51,11 +51,12 @@ public class HMSTablePartitionsProcDir implements ProcDirInterface {
         result.setNames(TITLE_NAMES);
 
         if (hmsTable.isUnPartitioned()) {
-            result.addRow(Lists.newArrayList(hmsTable.getTableName()));
+            result.addRow(Lists.newArrayList(hmsTable.getCatalogTableName()));
         } else {
             try {
                 List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
+                        .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getCatalogDBName(),
+                                hmsTable.getCatalogTableName(), ConnectorMetadatRequestContext.DEFAULT);
                 for (String partitionName : partitionNames) {
                     result.addRow(Lists.newArrayList(partitionName));
                 }

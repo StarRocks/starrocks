@@ -61,7 +61,6 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
@@ -101,6 +100,7 @@ import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -109,6 +109,7 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -141,8 +142,11 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -225,7 +229,6 @@ public class AstToStringBuilder {
 
             return sb.toString();
         }
-
 
         public StringBuilder buildAuthOptionSql(UserAuthOption authOption) {
             StringBuilder sb = new StringBuilder();
@@ -941,6 +944,103 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
+        @Override
+        public String visitInsertStatement(InsertStmt insert, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("INSERT ");
+
+            // add hint
+            if (insert.getHintNodes() != null) {
+                sb.append(extractHintStr(insert.getHintNodes()));
+            }
+
+            if (insert.isOverwrite()) {
+                sb.append("OVERWRITE ");
+            } else {
+                sb.append("INTO ");
+            }
+
+            // target
+            if (insert.useTableFunctionAsTargetTable()) {
+                sb.append(visitFileTableFunction(
+                        new FileTableFunctionRelation(insert.getTableFunctionProperties(), NodePosition.ZERO),
+                        context));
+            } else if (insert.useBlackHoleTableAsTargetTable()) {
+                sb.append("blackhole()");
+            } else {
+                sb.append(insert.getTableName().toSql());
+            }
+            sb.append(" ");
+
+            // target partition
+            if (insert.getTargetPartitionNames() != null &&
+                    org.apache.commons.collections4.CollectionUtils.isNotEmpty(
+                            insert.getTargetPartitionNames().getPartitionNames())) {
+                List<String> names = insert.getTargetPartitionNames().getPartitionNames();
+                sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
+            }
+
+            // label
+            visitInsertLabel(insert.getLabel(), sb);
+
+            // target column
+            if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(insert.getTargetColumnNames())) {
+                String columns = insert.getTargetColumnNames().stream()
+                        .map(x -> '`' + x + '`')
+                        .collect(Collectors.joining(","));
+                sb.append("(").append(columns).append(") ");
+            }
+
+            // source
+            if (insert.getQueryStatement() != null) {
+                sb.append(visit(insert.getQueryStatement()));
+            }
+            return sb.toString();
+        }
+
+        protected void visitInsertLabel(String label, StringBuilder sb) {
+            if (StringUtils.isNotEmpty(label)) {
+                sb.append("WITH LABEL `").append(label).append("` ");
+            }
+        }
+
+        @Override
+        public String visitCreatePipeStatement(CreatePipeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE ");
+            if (stmt.isReplace()) {
+                sb.append("OR REPLACE ");
+            }
+            sb.append("PIPE ");
+            if (stmt.isIfNotExists()) {
+                sb.append("IF NOT EXISTS ");
+            }
+            sb.append(stmt.getPipeName()).append(" ");
+
+            Map<String, String> properties = stmt.getProperties();
+            if (properties != null && !properties.isEmpty()) {
+                sb.append("PROPERTIES(").append(new PrintableMap<>(properties, "=", true, false, hideCredential))
+                        .append(") ");
+            }
+
+            sb.append("AS ").append(visitInsertStatement(stmt.getInsertStmt(), context));
+            return sb.toString();
+        }
+
+        @Override
+        public String visitDeleteStatement(DeleteStmt delete, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("DELETE FROM ");
+            sb.append(delete.getTableName().toSql());
+
+            if (delete.getWherePredicate() != null) {
+                sb.append(" WHERE ");
+                sb.append(visit(delete.getWherePredicate()));
+            }
+            return sb.toString();
+        }
+
+        @Override
         public String visitArrayExpr(ArrayExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append('[');
@@ -949,6 +1049,7 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
+        @Override
         public String visitMapExpr(MapExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("map{");
@@ -1384,7 +1485,7 @@ public class AstToStringBuilder {
             return Joiner.on(", ").join(contexts.stream().map(this::visit).collect(toList()));
         }
 
-        private String printWithParentheses(ParseNode node) {
+        protected String printWithParentheses(ParseNode node) {
             if (node instanceof SlotRef || node instanceof LiteralExpr) {
                 return visit(node);
             } else {
@@ -1464,6 +1565,7 @@ public class AstToStringBuilder {
             }
             return hintBuilder.toString();
         }
+
     }
 
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
@@ -1609,8 +1711,8 @@ public class AstToStringBuilder {
             sb.append("\"port\" = \"").append(mysqlTable.getPort()).append("\",\n");
             sb.append("\"user\" = \"").append(mysqlTable.getUserName()).append("\",\n");
             sb.append("\"password\" = \"").append(hidePassword ? "" : mysqlTable.getPasswd()).append("\",\n");
-            sb.append("\"database\" = \"").append(mysqlTable.getMysqlDatabaseName()).append("\",\n");
-            sb.append("\"table\" = \"").append(mysqlTable.getMysqlTableName()).append("\"\n");
+            sb.append("\"database\" = \"").append(mysqlTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(mysqlTable.getCatalogTableName()).append("\"\n");
             sb.append(")");
         } else if (table.getType() == Table.TableType.BROKER) {
             BrokerTable brokerTable = (BrokerTable) table;
@@ -1670,8 +1772,8 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
+            sb.append("\"database\" = \"").append(hiveTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(hiveTable.getCatalogTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
             if (!hiveTable.getProperties().isEmpty()) {
                 sb.append(",\n");
@@ -1693,8 +1795,8 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hudiTable.getDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(hudiTable.getTableName()).append("\",\n");
+            sb.append("\"database\" = \"").append(hudiTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(hudiTable.getCatalogTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == Table.TableType.ICEBERG) {
@@ -1703,8 +1805,8 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(icebergTable.getRemoteDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(icebergTable.getRemoteTableName()).append("\",\n");
+            sb.append("\"database\" = \"").append(icebergTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(icebergTable.getCatalogTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == Table.TableType.JDBC) {
@@ -1714,7 +1816,7 @@ public class AstToStringBuilder {
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
-            sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
+            sb.append("\"table\" = \"").append(jdbcTable.getCatalogTableName()).append("\"");
             sb.append("\n)");
         }
         sb.append(";");
@@ -1740,7 +1842,7 @@ public class AstToStringBuilder {
                 sb.append(entry.getValue().lowerEndpoint().toSql());
                 sb.append(", ").append(entry.getValue().upperEndpoint().toSql()).append(")");
                 sb.append("(\"version_info\" = \"");
-                sb.append(partition.getVisibleVersion()).append("\"");
+                sb.append(partition.getDefaultPhysicalPartition().getVisibleVersion()).append("\"");
                 sb.append(");");
                 addPartitionStmt.add(sb.toString());
             }
@@ -1808,7 +1910,7 @@ public class AstToStringBuilder {
         // Location
         String location = null;
         if (table.isHiveTable() || table.isHudiTable()) {
-            location = ((HiveMetaStoreTable) table).getTableLocation();
+            location = (table).getTableLocation();
         } else if (table.isIcebergTable()) {
             location = table.getTableLocation();
         } else if (table.isDeltalakeTable()) {

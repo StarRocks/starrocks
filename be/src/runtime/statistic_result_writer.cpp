@@ -38,7 +38,7 @@ const int STATISTIC_EXTERNAL_QUERY_VERSION_V2 = 8;
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
                                              starrocks::RuntimeProfile* parent_profile)
-        : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
+        : BufferControlResultWriter(sinker, parent_profile), _output_expr_ctxs(output_expr_ctxs) {}
 
 StatisticResultWriter::~StatisticResultWriter() = default;
 
@@ -51,13 +51,12 @@ Status StatisticResultWriter::init(RuntimeState* state) {
 }
 
 void StatisticResultWriter::_init_profile() {
-    _total_timer = ADD_TIMER(_parent_profile, "TotalSendTime");
-    _serialize_timer = ADD_CHILD_TIMER(_parent_profile, "SerializeTime", "TotalSendTime");
-    _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
+    BufferControlResultWriter::_init_profile();
+    _serialize_timer = ADD_TIMER(_parent_profile, "SerializeTime");
 }
 
 Status StatisticResultWriter::append_chunk(Chunk* chunk) {
-    SCOPED_TIMER(_total_timer);
+    SCOPED_TIMER(_append_chunk_timer);
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok() || process_status.value() == nullptr) {
         return process_status.status();
@@ -77,7 +76,7 @@ Status StatisticResultWriter::append_chunk(Chunk* chunk) {
 }
 
 StatusOr<TFetchDataResultPtrs> StatisticResultWriter::process_chunk(Chunk* chunk) {
-    SCOPED_TIMER(_total_timer);
+    SCOPED_TIMER(_append_chunk_timer);
     TFetchDataResultPtrs results;
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok()) {
@@ -87,26 +86,6 @@ StatusOr<TFetchDataResultPtrs> StatisticResultWriter::process_chunk(Chunk* chunk
         results.push_back(std::move(process_status.value()));
     }
     return results;
-}
-
-StatusOr<bool> StatisticResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
-    size_t num_rows = 0;
-    for (auto& result : results) {
-        num_rows += result->result_batch.rows.size();
-    }
-
-    auto status = _sinker->try_add_batch(results);
-
-    if (status.ok()) {
-        if (status.value()) {
-            _written_rows += num_rows;
-            results.clear();
-        }
-    } else {
-        results.clear();
-        LOG(WARNING) << "Append statistic result to sink failed.";
-    }
-    return status;
 }
 
 StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk) {
@@ -559,11 +538,6 @@ Status StatisticResultWriter::_fill_full_statistic_query_external_v2(int version
     for (int i = 0; i < num_rows; ++i) {
         RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
     }
-    return Status::OK();
-}
-
-Status StatisticResultWriter::close() {
-    COUNTER_SET(_sent_rows_counter, _written_rows);
     return Status::OK();
 }
 

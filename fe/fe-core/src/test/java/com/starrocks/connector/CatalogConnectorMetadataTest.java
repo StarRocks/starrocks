@@ -18,7 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
@@ -161,7 +161,7 @@ public class CatalogConnectorMetadataTest {
     }
 
     @Test
-    void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws UserException {
+    void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws StarRocksException {
         ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
         ctx.setThreadLocalInfo();
         GetRemoteFilesParams getRemoteFilesParams =
@@ -174,7 +174,7 @@ public class CatalogConnectorMetadataTest {
                 times = 1;
 
                 connectorMetadata.clear();
-                connectorMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+                connectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
                 connectorMetadata.dropTable(null);
                 connectorMetadata.refreshTable("test_db", null, null, false);
                 connectorMetadata.alterMaterializedView(null);
@@ -211,7 +211,7 @@ public class CatalogConnectorMetadataTest {
         );
 
         catalogConnectorMetadata.clear();
-        catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+        catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
         catalogConnectorMetadata.dropTable(null);
         catalogConnectorMetadata.refreshTable("test_db", null, null, false);
         catalogConnectorMetadata.alterMaterializedView(null);

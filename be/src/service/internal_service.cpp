@@ -64,6 +64,7 @@
 #include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
@@ -79,6 +80,7 @@
 #include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
+#include "util/arrow/row_batch.h"
 #include "util/failpoint/fail_point.h"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
@@ -892,6 +894,27 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::fetch_arrow_schema(google::protobuf::RpcController* controller,
+                                                     const PFetchArrowSchemaRequest* request,
+                                                     PFetchArrowSchemaResult* result, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    std::shared_ptr<arrow::Schema> schema =
+            ExecEnv::GetInstance()->result_mgr()->get_arrow_schema(UniqueId(request->finst_id()).to_thrift());
+    if (schema == nullptr) {
+        const auto status = Status::NotFound("arrow schema not found");
+        status.to_protobuf(result->mutable_status());
+        return;
+    }
+
+    std::string schema_as_str;
+    const auto status = serialize_arrow_schema(&schema, &schema_as_str);
+    if (status.ok()) {
+        result->set_schema(std::move(schema_as_str));
+    }
+    status.to_protobuf(result->mutable_status());
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcController* controller,
                                                    const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
                                                    google::protobuf::Closure* done) {
@@ -1248,6 +1271,15 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     st.to_protobuf(response->mutable_status());
     uint64_t elapsed_time_ns = watch.elapsed_time();
     StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* cntl_base,
+                                              const PStreamLoadRequest* request, PStreamLoadResponse* response,
+                                              google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    BatchWriteMgr::receive_stream_load_rpc(_exec_env, cntl, request, response);
 }
 
 template class PInternalServiceImplBase<PInternalService>;

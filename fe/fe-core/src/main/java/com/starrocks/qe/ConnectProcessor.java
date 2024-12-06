@@ -216,10 +216,11 @@ public class ConnectProcessor {
                 // err query
                 MetricRepo.COUNTER_QUERY_ERR.increase(1L);
                 ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
-                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
                 //represent analysis err
                 if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
                     MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
+                } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
+                    MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
                 } else {
                     MetricRepo.COUNTER_QUERY_INTERNAL_ERR.increase(1L);
                 }
@@ -228,12 +229,12 @@ public class ConnectProcessor {
                 MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
                 MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
                 ResourceGroupMetricMgr.updateQueryLatency(ctx, elapseMs);
-                if (elapseMs > Config.qe_slow_log_ms || ctx.getSessionVariable().isEnableSQLDigest()) {
-                    if (elapseMs > Config.qe_slow_log_ms) {
-                        MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
-                    }
-                    ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
+                if (elapseMs > Config.qe_slow_log_ms) {
+                    MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
                 }
+            }
+            if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
+                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
             }
             ctx.getAuditEventBuilder().setIsQuery(true);
             if (ctx.getSessionVariable().isEnableBigQueryLog()) {
@@ -302,6 +303,8 @@ public class ConnectProcessor {
                 .setCatalog(ctx.getCurrentCatalog())
                 .setWarehouse(ctx.getCurrentWarehouseName());
         Tracers.register(ctx);
+        // set isQuery before `forwardToLeader` to make it right for audit log.
+        ctx.getState().setIsQuery(true);
 
         // execute this query.
         StatementBase parsedStmt = null;
@@ -510,7 +513,17 @@ public class ConnectProcessor {
 
             executor = new StmtExecutor(ctx, executeStmt);
             ctx.setExecutor(executor);
-            executor.execute();
+
+            boolean isQuery = ctx.isQueryStmt(executeStmt);
+            ctx.getState().setIsQuery(isQuery);
+
+            if (enableAudit && isQuery) {
+                executor.addRunningQueryDetail(executeStmt);
+                executor.execute();
+                executor.addFinishedQueryDetail();
+            } else {
+                executor.execute();
+            }
 
             if (enableAudit) {
                 auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());

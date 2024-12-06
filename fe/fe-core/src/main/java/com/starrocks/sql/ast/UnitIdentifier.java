@@ -37,6 +37,11 @@ public class UnitIdentifier implements ParseNode {
     }
 
     @Override
+    public String toSql() {
+        return description;
+    }
+
+    @Override
     public NodePosition getPos() {
         return pos;
     }

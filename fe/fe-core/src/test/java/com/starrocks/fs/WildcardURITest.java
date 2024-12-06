@@ -17,7 +17,7 @@
 
 package com.starrocks.fs;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.hdfs.WildcardURI;
 import org.junit.Assert;
 import org.junit.Test;
@@ -54,7 +54,7 @@ public class WildcardURITest {
             path = "abfs://brokerload@smith.dfs.core.windows.net/file_table.orc";
             wildcardURI = new WildcardURI(path);
             Assert.assertEquals("brokerload@smith.dfs.core.windows.net", wildcardURI.getAuthority());
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Assert.fail(e.getMessage());
         }
     }

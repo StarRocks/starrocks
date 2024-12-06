@@ -42,7 +42,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -133,7 +133,7 @@ public class MaterializedViewHandlerTest {
     public void testRollupReplica(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
                                   @Injectable Database db,
                                   @Injectable OlapTable olapTable,
-                                  @Injectable Partition partition,
+                                  @Injectable PhysicalPartition partition,
                                   @Injectable MaterializedIndex materializedIndex) {
         final String baseIndexName = "t1";
         final Long baseIndexId = new Long(1);
@@ -149,8 +149,10 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexId;
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
+
                 partition.getIndex(baseIndexId);
                 result = materializedIndex;
+
                 materializedIndex.getState();
                 result = MaterializedIndex.IndexState.SHADOW;
             }
@@ -320,7 +322,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testCheckDropMaterializedView(@Injectable OlapTable olapTable, @Injectable Partition partition,
+    public void testCheckDropMaterializedView(@Injectable OlapTable olapTable, @Injectable PhysicalPartition partition,
                                               @Injectable MaterializedIndex materializedIndex,
                                               @Injectable Database db) {
         String mvName = "mv_1";
@@ -336,8 +338,10 @@ public class MaterializedViewHandlerTest {
                 result = 1L;
                 olapTable.getSchemaHashByIndexId(1L);
                 result = 1;
+
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
+
                 partition.getIndex(1L);
                 result = materializedIndex;
             }

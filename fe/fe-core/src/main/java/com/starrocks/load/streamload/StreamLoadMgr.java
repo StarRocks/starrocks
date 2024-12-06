@@ -27,7 +27,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -43,6 +43,8 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -71,6 +73,10 @@ public class StreamLoadMgr implements MemoryTrackable {
     private Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
 
     private Map<Long, Map<String, StreamLoadTask>> dbToLabelToStreamLoadTask;
+
+    protected final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
+            new WarehouseLoadInfoBuilder();
+
     private ReentrantReadWriteLock lock;
 
     private void writeLock() {
@@ -102,13 +108,14 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
-                              int channelNum, int channelId, TransactionResult resp) throws UserException {
+                              int channelNum, int channelId, TransactionResult resp) throws StarRocksException {
         beginLoadTask(dbName, tableName, label, user, clientIp, timeoutMillis, channelNum, channelId, resp,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
-                              int channelNum, int channelId, TransactionResult resp, long warehouseId) throws UserException {
+                              int channelNum, int channelId, TransactionResult resp, long warehouseId) throws
+            StarRocksException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -150,7 +157,8 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     // for sync stream load task
     public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
-                              TransactionResult resp, boolean isRoutineLoad, long warehouseId) throws UserException {
+                              TransactionResult resp, boolean isRoutineLoad, long warehouseId) throws
+            StarRocksException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -171,7 +179,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     // for sync stream load
     public StreamLoadTask createLoadTask(Database db, String tableName, String label, String user, String clientIp,
                                          long timeoutMillis, boolean isRoutineLoad, long warehouseId)
-            throws UserException {
+            throws StarRocksException {
         Table table;
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
@@ -190,19 +198,19 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public StreamLoadTask createLoadTaskWithoutLock(Database db, String tableName, String label, String user, String clientIp,
-                                         long timeoutMillis, boolean isRoutineLoad, long warehouseId)
-            throws UserException {
+                                                    long timeoutMillis, boolean isRoutineLoad, long warehouseId)
+            throws StarRocksException {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db,
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName),
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName),
                 label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
         return streamLoadTask;
     }
 
     public StreamLoadTask createLoadTask(Database db, String tableName, String label, String user, String clientIp,
                                          long timeoutMillis, int channelNum,
-                                         int channelId, long warehouseId) throws UserException {
+                                         int channelId, long warehouseId) throws StarRocksException {
         Table table;
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
@@ -221,7 +229,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void unprotectedCheckMeta(Database db, String tblName)
-            throws UserException {
+            throws StarRocksException {
         if (tblName == null) {
             throw new AnalysisException("Table name must be specified when calling /begin/transaction/ first time");
         }
@@ -250,11 +258,11 @@ public class StreamLoadMgr implements MemoryTrackable {
                 .build());
     }
 
-    public Database checkDbName(String dbName) throws UserException {
+    public Database checkDbName(String dbName) throws StarRocksException {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
-            throw new UserException("Database[" + dbName + "] does not exist");
+            throw new StarRocksException("Database[" + dbName + "] does not exist");
         }
         return db;
     }
@@ -299,23 +307,23 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers,
                                            TransactionResult resp, String dbName, String tableName)
-            throws UserException {
+            throws StarRocksException {
         boolean needUnLock = true;
         readLock();
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
-                throw new UserException("stream load task " + label + " does not exist");
+                throw new StarRocksException("stream load task " + label + " does not exist");
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
 
             // check whether the database and table are consistent with the transaction,
             // for single database and single table are supported so far
             if (!task.getDBName().equals(dbName)) {
-                throw new UserException(
+                throw new StarRocksException(
                         String.format("Request table %s not equal transaction table %s", dbName, task.getDBName()));
             }
             if (!task.getTableName().equals(tableName)) {
-                throw new UserException(
+                throw new StarRocksException(
                         String.format("Request table %s not equal transaction table %s", tableName, task.getTableName()));
             }
 
@@ -334,12 +342,12 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void prepareLoadTask(String label, int channelId, HttpHeaders headers, TransactionResult resp)
-            throws UserException {
+            throws StarRocksException {
         boolean needUnLock = true;
         readLock();
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
-                throw new UserException("stream load task " + label + " does not exist");
+                throw new StarRocksException("stream load task " + label + " does not exist");
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
             readUnlock();
@@ -353,12 +361,12 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void tryPrepareLoadTaskTxn(String label, TransactionResult resp)
-            throws UserException {
+            throws StarRocksException {
         boolean needUnLock = true;
         readLock();
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
-                throw new UserException("stream load task " + label + " does not exist");
+                throw new StarRocksException("stream load task " + label + " does not exist");
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
             readUnlock();
@@ -374,12 +382,12 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void commitLoadTask(String label, TransactionResult resp)
-            throws UserException {
+            throws StarRocksException {
         boolean needUnLock = true;
         readLock();
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
-                throw new UserException("stream load task " + label + " does not exist");
+                throw new StarRocksException("stream load task " + label + " does not exist");
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
             readUnlock();
@@ -393,12 +401,12 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void rollbackLoadTask(String label, TransactionResult resp)
-            throws UserException {
+            throws StarRocksException {
         boolean needUnLock = true;
         readLock();
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
-                throw new UserException("stream load task" + label + "does not exist");
+                throw new StarRocksException("stream load task" + label + "does not exist");
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
             readUnlock();
@@ -481,6 +489,8 @@ public class StreamLoadMgr implements MemoryTrackable {
                 dbToLabelToStreamLoadTask.remove(dbId);
             }
         }
+
+        warehouseLoadStatusInfoBuilder.withRemovedJob(streamLoadTask);
     }
 
     /*
@@ -532,6 +542,15 @@ public class StreamLoadMgr implements MemoryTrackable {
                         .collect(Collectors.toList());
             }
             return result;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadStatusInfoBuilder.buildFromJobs(idToStreamLoadTask.values());
         } finally {
             readUnlock();
         }

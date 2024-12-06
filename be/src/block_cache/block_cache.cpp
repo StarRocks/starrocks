@@ -189,7 +189,16 @@ Status BlockCache::shutdown() {
         _disk_space_monitor->stop();
     }
     _initialized.store(false, std::memory_order_relaxed);
+    _kv_cache.reset();
     return st;
+}
+
+void BlockCache::disk_spaces(std::vector<DirSpace>* spaces) {
+    spaces->clear();
+    auto metrics = _kv_cache->cache_metrics(0);
+    for (auto& dir : metrics.disk_dir_spaces) {
+        spaces->push_back({.path = dir.path, .size = dir.quota_bytes});
+    }
 }
 
 DataCacheEngineType BlockCache::engine_type() {

@@ -97,6 +97,8 @@ public class Config extends ConfigBase {
     public static String sys_log_roll_mode = "SIZE-MB-1024";
     @ConfField
     public static boolean sys_log_enable_compress = false;
+    @ConfField
+    public static String[] sys_log_warn_modules = {};
     /**
      * Log to file by default. set to `true` if you want to log to console
      */
@@ -589,6 +591,19 @@ public class Config extends ConfigBase {
     public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
     /**
+     * Timeout seconds for doing checkpoint
+     */
+    @ConfField(mutable = true)
+    public static long checkpoint_timeout_seconds = 24 * 3600;
+
+    /**
+     * True to only do checkpoint on leader node.
+     * False to do checkpoint on the node with low memory usage.
+     */
+    @ConfField(mutable = true)
+    public static boolean checkpoint_only_on_leader = false;
+
+    /**
      * the max txn number which bdbje can roll back when trying to rejoin the group
      */
     @ConfField
@@ -606,16 +621,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int heartbeat_mgr_blocking_queue_size = 1024;
 
-    /**
-     * num of thread to handle profile processing
-     */
-    @ConfField
+    @ConfField(comment = "[DEPRECATED] Number of thread to handle profile processing")
+    @Deprecated
     public static int profile_process_threads_num = 2;
 
-    /**
-     * blocking queue size to store profile process task
-     */
-    @ConfField
+    @ConfField(comment = "[DEPRECATED] Size of blocking queue to store profile process task")
+    @Deprecated
     public static int profile_process_blocking_queue_size = profile_process_threads_num * 128;
 
     /**
@@ -880,7 +891,7 @@ public class Config extends ConfigBase {
      * global variable version.
      */
     @ConfField(mutable = true)
-    public static String mysql_server_version = "5.1.0";
+    public static String mysql_server_version = "8.0.33";
 
     /**
      * If a backend is down for *max_backend_down_time_second*, a BACKEND_DOWN event will be triggered.
@@ -2090,9 +2101,18 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_sample_collect_rows = 200000;
 
+    /**
+     * The partition size of sample collect, default 1k partitions
+     */
+    @ConfField(mutable = true)
+    public static int statistic_sample_collect_partition_size = 1000;
+
     @ConfField(mutable = true, comment = "If changed ratio of a table/partition is larger than this threshold, " +
             "we would use sample statistics instead of full statistics")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
+
+    @ConfField(mutable = true)
+    public static boolean statistic_use_meta_statistics = true;
 
     /**
      * default bucket size of histogram statistics
@@ -2117,6 +2137,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
+
+    @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample")
+    public static boolean histogram_enable_table_sample = true;
 
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
@@ -2442,6 +2465,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
 
+    @ConfField(mutable = true,
+            comment = "Enable the sql digest feature, building a parameterized digest for each sql in the query detail")
+    public static boolean enable_sql_digest = false;
+
     @ConfField(mutable = true, comment = "explain level of query plan in this detail")
     public static String query_detail_explain_level = "COSTS";
 
@@ -2714,6 +2741,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
+
+    @ConfField(mutable = true)
+    public static int lake_warehouse_max_compute_replica = 3;
 
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
@@ -3183,12 +3213,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lock_manager_enable_resolve_deadlock = false;
 
-    /**
-     * Whether to use table level lock
-     */
-    @ConfField
-    public static boolean lock_manager_enable_using_fine_granularity_lock = true;
-
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
     /**
@@ -3301,4 +3325,22 @@ public class Config extends ConfigBase {
     public static int batch_write_idle_ms = 3600000;
 
     public static int batch_write_executor_threads_num = 4096;
+
+    /**
+     * Enable Arrow Flight SQL server only when the port is set to positive value.
+     */
+    @ConfField
+    public static int arrow_flight_port = -1;
+
+    @ConfField(mutable = true)
+    public static int arrow_token_cache_size = 1024;
+
+    @ConfField(mutable = true)
+    public static int arrow_token_cache_expire = 3600;
+
+    public static int batch_write_be_assigner_schedule_interval_ms = 5000;
+
+    @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
+            "between any two nodes before triggering a balance")
+    public static double batch_write_be_assigner_balance_factor_threshold = 0.1;
 }

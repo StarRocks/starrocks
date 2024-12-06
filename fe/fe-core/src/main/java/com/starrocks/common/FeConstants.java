@@ -77,6 +77,8 @@ public class FeConstants {
     public static int checkpoint_interval_second = 60; // 1 minutes
     // set this flag true to skip some step when running FE unit test
     public static boolean runningUnitTest = false;
+    // set this flat true to enable unit statistics mock
+    public static boolean enableUnitStatistics = false;
     // set this flag false to skip test view in plan test
     public static boolean unitTestView = true;
     // Set this flag false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
@@ -94,6 +96,8 @@ public class FeConstants {
     // Every 3GB, corresponds a new tablet. Assume compression ratio equals to 3,
     // the raw data of one tablet equals to 10GB approximately
     public static final long AUTO_DISTRIBUTION_UNIT = 3221225472L;
+
+    public static final String GENERATED_PARTITION_COLUMN_PREFIX = "__generated_partition_column_";
 
     // Max counter num of TOP K function
     public static final int MAX_COUNTER_NUM_OF_TOP_K = 100000;

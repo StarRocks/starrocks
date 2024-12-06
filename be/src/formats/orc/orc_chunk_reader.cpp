@@ -190,6 +190,9 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader, const OrcPredic
         return Status::InternalError(s);
     }
 
+    // _batch can't be reused because the schema between files may be different
+    _batch.reset();
+
     // TODO(SmithCruise) delete _init_position_in_orc() when develop subfield lazy load.
     RETURN_IF_ERROR(_init_position_in_orc());
     RETURN_IF_ERROR(_init_cast_exprs());

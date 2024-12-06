@@ -15,14 +15,15 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.server.RunMode;
 
-import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -54,10 +55,10 @@ public class FeNameFormat {
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
-    private static final Set<String> FORBIDDEN_COLUMN_NAMES;
+    public static final Set<String> FORBIDDEN_COLUMN_NAMES;
 
     static {
-        FORBIDDEN_COLUMN_NAMES = new HashSet<>();
+        FORBIDDEN_COLUMN_NAMES = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         FORBIDDEN_COLUMN_NAMES.add("__op");
         FORBIDDEN_COLUMN_NAMES.add("__row");
         String allowedSpecialCharacters = "";
@@ -98,6 +99,10 @@ public class FeNameFormat {
     }
 
     public static void checkColumnName(String columnName) {
+        checkColumnName(columnName, false);
+    }
+
+    public static void checkColumnName(String columnName, boolean isPartitionColumn) {
         if (Strings.isNullOrEmpty(columnName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
@@ -121,7 +126,12 @@ public class FeNameFormat {
             if (FORBIDDEN_COLUMN_NAMES.contains(columnName)) {
                 throw new SemanticException(
                         "Column name [" + columnName + "] is a system reserved name. " +
-                        "If you are sure you want to use it, please set FE configuration allow_system_reserved_names");
+                                "Please choose a different one.");
+            }
+            if (!isPartitionColumn && columnName.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                throw new SemanticException(
+                        "Column name [" + columnName + "] starts with " + FeConstants.GENERATED_PARTITION_COLUMN_PREFIX +
+                                " is a system reserved name. Please choose a different one.");
             }
         }
     }

@@ -172,7 +172,11 @@ public:
     // If unref() returns true, this object should be delete
     bool unref() { return _refs.fetch_sub(1) == 1; }
 
+    int num_refs() { return _refs.load(); }
+
     bool check_and_set_http_limiter(ConcurrentLimiter* limiter);
+
+    static void release(StreamLoadContext* context);
 
 public:
     // 1) Before the stream load receiving thread exits, Fragment may have been destructed.
@@ -198,6 +202,9 @@ public:
 
     std::string db;
     std::string table;
+    // if enable_batch_write is false, the label represents the txn
+    // otherwise, it just represents the request id of the load, and
+    // the batch_write_label represents the txn
     std::string label;
     // optional
     double max_filter_ratio = 0.0;
@@ -277,6 +284,15 @@ public:
 
     int64_t load_deadline_sec = -1;
     std::unique_ptr<ConcurrentLimiterGuard> _http_limiter_guard;
+
+    // for batch write
+    bool enable_batch_write = false;
+    std::map<std::string, std::string> load_parameters;
+    // the txn for the data belongs to. put the txn id into `txn_id`,
+    // and put label in this `batch_write_label`
+    std::string batch_write_label;
+    // A hint for the left time of this batch to finish
+    int64_t batch_left_time_nanos = -1;
 
 public:
     bool is_channel_stream_load_context() { return channel_id != -1; }

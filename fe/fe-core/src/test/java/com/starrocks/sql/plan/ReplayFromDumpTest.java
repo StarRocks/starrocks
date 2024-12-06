@@ -655,7 +655,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_1"),
                         null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("32:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("33:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(212: case)\n" +
                 "  |  group by: 34: cast, 33: cast, 38: handle, 135: concat, 136: case, 36: cast"));
     }
@@ -999,5 +999,60 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/join_init_error"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("HASH JOIN"));
+    }
+
+    @Test
+    public void testPushdownSubfield() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/pushdown_subfield");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(
+                "get_json_string(107: mock_031, '$.\"fY21_Territory_Score__c\"')\n" +
+                "  |  \n" +
+                "  9:OlapScanNode\n" +
+                "     TABLE: tbl_mock_103"));
+    }
+
+    @Test
+    public void testEliminateConstantCTEAndNestLoopJoin() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/eliminate_nestloop_join");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  29:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----28:EXCHANGE\n" +
+                "  |    \n" +
+                "  18:Project\n" +
+                "  |  <slot 119> : 119: mock_189\n" +
+                "  |  \n" +
+                "  17:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 286: mock_278 = 67: mock_216\n" +
+                "  |  \n" +
+                "  |----16:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 6\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 28\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  27:Project\n" +
+                "  |  <slot 603> : array_contains(601: array_agg, 'asdfasdfasdf')\n" +
+                "  |  \n" +
+                "  26:AGGREGATE (merge finalize)\n" +
+                "  |  output: array_agg(601: array_agg)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  25:EXCHANGE"));
     }
 }

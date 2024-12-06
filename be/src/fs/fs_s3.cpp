@@ -14,10 +14,8 @@
 
 #include "fs/fs_s3.h"
 
-#include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
-#include <aws/core/client/ClientConfiguration.h>
 #include <aws/core/client/SpecifiedRetryableErrorsRetryStrategy.h>
 #include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/s3/model/CopyObjectRequest.h>
@@ -44,7 +42,6 @@
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
 #include "util/hdfs_util.h"
-#include "util/random.h"
 
 namespace starrocks {
 
@@ -70,96 +67,12 @@ bool operator==(const Aws::Client::ClientConfiguration& lhs, const Aws::Client::
            lhs.maxConnections == rhs.maxConnections && lhs.scheme == rhs.scheme;
 }
 
-class S3ClientFactory {
-public:
-    using ClientConfiguration = Aws::Client::ClientConfiguration;
-    using S3Client = Aws::S3::S3Client;
-    using S3ClientPtr = std::shared_ptr<S3Client>;
-    using ClientConfigurationPtr = std::shared_ptr<ClientConfiguration>;
-    using AWSCloudConfigurationPtr = std::shared_ptr<AWSCloudConfiguration>;
-
-    static S3ClientFactory& instance() {
-        static S3ClientFactory obj;
-        return obj;
+bool S3ClientFactory::ClientCacheKey::operator==(const ClientCacheKey& rhs) const {
+    if (config && rhs.config && aws_cloud_configuration && rhs.aws_cloud_configuration) {
+        return *config == *(rhs.config) && *aws_cloud_configuration == *(rhs.aws_cloud_configuration);
     }
-
-    // Indicates the different S3 operation of using the client.
-    // This class is used to set different configuration for clients
-    // with different purposes.
-    enum class OperationType {
-        UNKNOWN,
-        RENAME_FILE,
-    };
-
-    ~S3ClientFactory() = default;
-
-    S3ClientFactory(const S3ClientFactory&) = delete;
-    void operator=(const S3ClientFactory&) = delete;
-    S3ClientFactory(S3ClientFactory&&) = delete;
-    void operator=(S3ClientFactory&&) = delete;
-
-    S3ClientPtr new_client(const TCloudConfiguration& cloud_configuration,
-                           S3ClientFactory::OperationType operation_type = S3ClientFactory::OperationType::UNKNOWN);
-    S3ClientPtr new_client(const ClientConfiguration& config, const FSOptions& opts);
-
-    void close();
-
-    static ClientConfiguration& getClientConfig() {
-        // We cached config here and make a deep copy each time.Since aws sdk has changed the
-        // Aws::Client::ClientConfiguration default constructor to search for the region
-        // (where as before 1.8 it has been hard coded default of "us-east-1").
-        // Part of that change is looking through the ec2 metadata, which can take a long time.
-        // For more details, please refer https://github.com/aws/aws-sdk-cpp/issues/1440
-        static ClientConfiguration instance;
-        return instance;
-    }
-
-    // Only use for UT
-    bool find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
-                                               AWSCloudConfiguration* cloud_config = nullptr) {
-        return _find_client_cache_keys_by_config_TEST(config);
-    }
-
-private:
-    S3ClientFactory();
-
-    static std::shared_ptr<Aws::Auth::AWSCredentialsProvider> _get_aws_credentials_provider(
-            const AWSCloudCredential& aws_cloud_credential);
-
-    class ClientCacheKey {
-    public:
-        ClientConfigurationPtr config;
-        AWSCloudConfigurationPtr aws_cloud_configuration;
-
-        bool operator==(const ClientCacheKey& rhs) const {
-            if (config && rhs.config && aws_cloud_configuration && rhs.aws_cloud_configuration) {
-                return *config == *(rhs.config) && *aws_cloud_configuration == *(rhs.aws_cloud_configuration);
-            }
-            return !config && !rhs.config && !aws_cloud_configuration && !rhs.aws_cloud_configuration;
-        }
-    };
-
-    constexpr static int kMaxItems = 8;
-
-    // Only use for UT
-    bool _find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
-                                                AWSCloudConfiguration* cloud_config = nullptr) {
-        auto aws_config = cloud_config == nullptr ? AWSCloudConfiguration{} : *cloud_config;
-        for (size_t i = 0; i < _items; i++) {
-            if (_client_cache_keys[i] == ClientCacheKey{std::make_shared<Aws::Client::ClientConfiguration>(config),
-                                                        std::make_shared<AWSCloudConfiguration>(aws_config)})
-                return true;
-        }
-        return false;
-    }
-
-    std::mutex _lock;
-    int _items{0};
-    // _client_cache_keys[i] is the client cache key of |_clients[i].
-    ClientCacheKey _client_cache_keys[kMaxItems];
-    S3ClientPtr _clients[kMaxItems];
-    Random _rand;
-};
+    return !config && !rhs.config && !aws_cloud_configuration && !rhs.aws_cloud_configuration;
+}
 
 S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 
@@ -182,7 +95,7 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
 
     if (!aws_cloud_credential.iam_role_arn.empty()) {
         // Do assume role
-        Aws::Client::ClientConfiguration clientConfiguration{};
+        Aws::Client::ClientConfiguration clientConfiguration = S3ClientFactory::getClientConfig();
         if (!aws_cloud_credential.sts_region.empty()) {
             clientConfiguration.region = aws_cloud_credential.sts_region;
         }
@@ -337,6 +250,18 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
         _items++;
     }
     return client;
+}
+
+// Only use for UT
+bool S3ClientFactory::_find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
+                                                             AWSCloudConfiguration* cloud_config) {
+    auto aws_config = cloud_config == nullptr ? AWSCloudConfiguration{} : *cloud_config;
+    for (size_t i = 0; i < _items; i++) {
+        if (_client_cache_keys[i] == ClientCacheKey{std::make_shared<Aws::Client::ClientConfiguration>(config),
+                                                    std::make_shared<AWSCloudConfiguration>(aws_config)})
+            return true;
+    }
+    return false;
 }
 
 // If you find yourself change this code, see also `bool operator==(const Aws::Client::ClientConfiguration&, const Aws::Client::ClientConfiguration&)`

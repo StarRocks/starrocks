@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
-public class OdpsTable extends Table implements HiveMetaStoreTable {
+public class OdpsTable extends Table {
     private static final Logger LOG = LogManager.getLogger(OdpsTable.class);
     public static final String PARTITION_NULL_VALUE = "null";
 
@@ -74,12 +74,12 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public String getDbName() {
+    public String getCatalogDBName() {
         return dbName;
     }
 
     @Override
-    public String getTableName() {
+    public String getCatalogTableName() {
         return tableName;
     }
 
@@ -123,7 +123,7 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.ODPS_TABLE,
-                fullSchema.size(), 0, getName(), getDbName());
+                fullSchema.size(), 0, getName(), getCatalogDBName());
         THdfsTable hdfsTable = new THdfsTable();
         hdfsTable.setColumns(getColumns().stream().map(Column::toThrift).collect(Collectors.toList()));
         // for be, partition column is equals to data column

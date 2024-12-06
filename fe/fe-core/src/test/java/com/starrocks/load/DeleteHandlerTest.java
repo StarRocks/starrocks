@@ -32,7 +32,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockException;
@@ -87,6 +87,7 @@ public class DeleteHandlerTest {
     private static final long REPLICA_ID_3 = 70002L;
     private static final long TABLET_ID = 60000L;
     private static final long PARTITION_ID = 40000L;
+    private static final long PH_PARTITION_ID = 40011L;
     private static final long TBL_ID = 30000L;
     private static final long DB_ID = 20000L;
 
@@ -120,7 +121,7 @@ public class DeleteHandlerTest {
             e.printStackTrace();
             Assert.fail();
         }
-        TabletMeta tabletMeta = new TabletMeta(DB_ID, TBL_ID, PARTITION_ID, TBL_ID, 0, null);
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TBL_ID, PH_PARTITION_ID, TBL_ID, 0, null);
         invertedIndex.addTablet(TABLET_ID, tabletMeta);
         invertedIndex.addReplica(TABLET_ID, new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         invertedIndex.addReplica(TABLET_ID, new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
@@ -231,7 +232,7 @@ public class DeleteHandlerTest {
             {
                 try {
                     globalTransactionMgr.abortTransaction(db.getId(), anyLong, anyString);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                 }
                 minTimes = 0;
             }
@@ -256,7 +257,7 @@ public class DeleteHandlerTest {
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
         new MockUp<OlapDeleteJob>() {
@@ -305,7 +306,7 @@ public class DeleteHandlerTest {
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
         new MockUp<OlapDeleteJob>() {
@@ -355,7 +356,7 @@ public class DeleteHandlerTest {
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
         new MockUp<OlapDeleteJob>() {
@@ -381,9 +382,9 @@ public class DeleteHandlerTest {
                     globalTransactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
                             (TxnCommitAttachment) any);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                 }
-                result = new UserException("commit fail");
+                result = new StarRocksException("commit fail");
             }
         };
 
@@ -420,7 +421,7 @@ public class DeleteHandlerTest {
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
         new MockUp<OlapDeleteJob>() {
@@ -477,7 +478,7 @@ public class DeleteHandlerTest {
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
         new MockUp<OlapDeleteJob>() {
@@ -524,7 +525,7 @@ public class DeleteHandlerTest {
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
         new MockUp<OlapDeleteJob>() {

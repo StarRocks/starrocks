@@ -25,8 +25,8 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "jsonpath.h"
-#include "runtime/large_int_value.h"
 #include "runtime/types.h"
+#include "types/large_int_value.h"
 
 namespace starrocks {
 

@@ -202,6 +202,10 @@ public class AnalyzeStmtTest {
         sql = "analyze full table db.tbl with async mode";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assert.assertTrue(analyzeStmt.isAsync());
+
+        sql = "analyze full table db.tbl partition(`tbl`) with async mode";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertTrue(analyzeStmt.isAsync());
     }
 
     @Test
@@ -323,7 +327,7 @@ public class AnalyzeStmtTest {
         OlapTable t0 = (OlapTable) starRocksAssert.getCtx().getGlobalStateMgr()
                 .getLocalMetastore().getDb("db").getTable("tbl");
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(10000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
         }
 
         String sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -332,7 +336,7 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("1", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(400000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(400000);
         }
 
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -341,7 +345,7 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(20000000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(20000000);
         }
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
                 "properties(\"histogram_sample_ratio\"=\"0.9\")";

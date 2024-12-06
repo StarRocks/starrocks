@@ -297,7 +297,7 @@ public class SelectStmtTest {
                 "select * from db1.tbl1 where not(k1 <=> k2)",
                 "select * from db1.tbl1 where not(k1 <=> 'abc-def')",
         };
-        Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*");
+        Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*", Pattern.CASE_INSENSITIVE);
         for (String q : queryList) {
             String s = starRocksAssert.query(q).explainQuery();
             Assert.assertTrue(re.matcher(s).find());
@@ -375,6 +375,19 @@ public class SelectStmtTest {
                 "  |  <slot 5> : 5: cast\n" +
                 "  |  <slot 6> : 6: cast\n" +
                 "  |  <slot 8> : CAST(murmur_hash3_32(CAST(6: cast AS VARCHAR)) % 512 AS SMALLINT)"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    void testGroupByCountDistinctWithSkewHintLossPredicate() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql =
+                "select t from(select cast(k1 as int), count(distinct [skew] cast(k2 as int)) as t from db1.tbl1 group by cast(k1 as int)) temp where t > 1";
+        String s = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(s, s.contains(" 8:AGGREGATE (merge finalize)\n" +
+                "  |  output: sum(7: count)\n" +
+                "  |  group by: 5: cast\n" +
+                "  |  having: 7: count > 1"));
         FeConstants.runningUnitTest = false;
     }
 

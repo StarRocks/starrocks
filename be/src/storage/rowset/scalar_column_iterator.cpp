@@ -34,6 +34,7 @@
 
 #include "storage/rowset/scalar_column_iterator.h"
 
+#include "common/status.h"
 #include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -228,6 +229,31 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
     dst->set_delete_state(contain_deleted_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
     *n -= remaining;
     _opts.stats->bytes_read += static_cast<int64_t>(dst->byte_size() - prev_bytes);
+    return Status::OK();
+}
+
+Status ScalarColumnIterator::null_count(size_t* count) {
+    if (!_reader->is_nullable()) {
+        *count = 0;
+        return Status::OK();
+    }
+    bool eos = false;
+    while (!eos) {
+        *count += _page->read_null_count();
+        _current_ordinal += _page->num_rows();
+        RETURN_IF_ERROR(_load_next_page(&eos));
+        if (eos) {
+            // release shareBufferStream
+            if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
+                auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                if (shared_buffer_stream != nullptr) {
+                    shared_buffer_stream->release();
+                }
+            }
+            break;
+        }
+    }
+    _opts.stats->bytes_read += static_cast<int64_t>(*count);
     return Status::OK();
 }
 

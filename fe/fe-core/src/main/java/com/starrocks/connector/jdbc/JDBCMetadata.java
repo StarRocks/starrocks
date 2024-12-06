@@ -26,11 +26,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -63,7 +63,6 @@ public class JDBCMetadata implements ConnectorMetadata {
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
     }
-
 
     public JDBCMetadata(Map<String, String> properties, String catalogName, HikariDataSource dataSource) {
         this.properties = properties;
@@ -220,7 +219,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
         return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),
                 k -> {
                     try (Connection connection = getConnection()) {
@@ -253,7 +252,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         JDBCTable jdbcTable = (JDBCTable) table;
         List<Partition> partitions = partitionInfoCache.get(
-                new JDBCTableName(null, jdbcTable.getDbName(), jdbcTable.getName()),
+                new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName()),
                 k -> {
                     try (Connection connection = getConnection()) {
                         List<Partition> partitionsForCache = schemaResolver.getPartitions(connection, table);
@@ -292,7 +291,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         JDBCTable jdbcTable = (JDBCTable) table;
-        JDBCTableName jdbcTableName = new JDBCTableName(null, jdbcTable.getDbName(), jdbcTable.getName());
+        JDBCTableName jdbcTableName = new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName());
         if (!onlyCachedPartitions) {
             tableInstanceCache.invalidate(jdbcTableName);
         }

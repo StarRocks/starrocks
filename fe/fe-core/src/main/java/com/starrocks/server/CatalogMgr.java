@@ -95,6 +95,11 @@ public class CatalogMgr {
         createCatalog(stmt.getCatalogType(), stmt.getCatalogName(), stmt.getComment(), stmt.getProperties());
     }
 
+    public void createCatalogForRestore(Catalog catalog) throws DdlException {
+        dropCatalogForRestore(catalog, false);
+        createCatalog(catalog.getType(), catalog.getName(), catalog.getComment(), catalog.getConfig());
+    }
+
     // please keep connector and catalog create together, they need keep in consistent asap.
     public void createCatalog(String type, String catalogName, String comment, Map<String, String> properties)
             throws DdlException {
@@ -155,6 +160,16 @@ public class CatalogMgr {
         }
     }
 
+    public void dropCatalogForRestore(Catalog catalog, boolean isReplay) {
+        if (!isReplay && catalogExists(catalog.getName())) {
+            DropCatalogStmt stmt = new DropCatalogStmt(catalog.getName());
+            dropCatalog(stmt);
+        } else if (isReplay) {
+            DropCatalogLog dropCatalogLog = new DropCatalogLog(catalog.getName());
+            replayDropCatalog(dropCatalogLog);
+        }
+    }
+
     public void dropCatalog(DropCatalogStmt stmt) {
         String catalogName = stmt.getName();
         readLock();
@@ -191,7 +206,7 @@ public class CatalogMgr {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
 
-                if (serviceName.isEmpty()) {
+                if (Strings.isNullOrEmpty(serviceName)) {
                     if (Config.access_control.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                     } else {
@@ -272,8 +287,7 @@ public class CatalogMgr {
                 readUnlock();
             }
 
-            Map<String, String> properties = catalog.getConfig();
-            String serviceName = properties.get("ranger.plugin.hive.service.name");
+            String serviceName = config.get("ranger.plugin.hive.service.name");
             if (serviceName == null || serviceName.isEmpty()) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
@@ -340,7 +354,7 @@ public class CatalogMgr {
             String catalogName = log.getCatalogName();
             Map<String, String> properties = log.getProperties();
             String serviceName = properties.get("ranger.plugin.hive.service.name");
-            if (serviceName.isEmpty()) {
+            if (Strings.isNullOrEmpty(serviceName)) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                 } else {

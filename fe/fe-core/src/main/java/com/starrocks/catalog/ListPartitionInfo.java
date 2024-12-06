@@ -56,6 +56,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
+import static com.starrocks.persist.gson.GsonUtils.GSON;
 
 public class ListPartitionInfo extends PartitionInfo {
 
@@ -313,6 +314,10 @@ public class ListPartitionInfo extends PartitionInfo {
         super.isMultiColumnPartition = this.partitionColumnIds.size() > 1;
     }
 
+    public boolean isDeFactoMultiItemPartition() {
+        return MapUtils.isNotEmpty(idToMultiValues) || MapUtils.isNotEmpty(idToMultiLiteralExprValues);
+    }
+
     public Map<Long, List<List<String>>> getIdToMultiValues() {
         return idToMultiValues;
     }
@@ -328,7 +333,7 @@ public class ListPartitionInfo extends PartitionInfo {
      * @param id
      * @return true if the partition can be pruned
      */
-    public boolean pruneById(long id) {
+    public boolean isSingleValuePartition(long id) {
         List<String> values = getIdToValues().get(id);
         if (values != null && values.size() == 1) {
             return true;
@@ -456,20 +461,32 @@ public class ListPartitionInfo extends PartitionInfo {
         return partitionColumnIds.size();
     }
 
+    /**
+     * Use json's format for latter use.
+     */
     public String getValuesFormat(long partitionId) {
         if (!idToLiteralExprValues.isEmpty()) {
             List<LiteralExpr> literalExprs = idToLiteralExprValues.get(partitionId);
-            if (literalExprs != null) {
-                return this.valuesToString(literalExprs);
+            if (CollectionUtils.isNotEmpty(literalExprs)) {
+                List<List<String>> jsonValues = literalExprs.stream()
+                        .map(literalExpr -> Lists.newArrayList(literalExpr.getStringValue()))
+                        .collect(Collectors.toList());
+                return GSON.toJson(jsonValues);
             }
         }
         if (!idToMultiLiteralExprValues.isEmpty()) {
             List<List<LiteralExpr>> lists = idToMultiLiteralExprValues.get(partitionId);
-            if (lists != null) {
-                return this.multiValuesToString(lists);
+            if (CollectionUtils.isNotEmpty(lists)) {
+                List<List<String>> jsonValues = lists.stream()
+                        .map(literalExprs -> literalExprs.stream()
+                                .map(LiteralExpr::getStringValue)
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+                return GSON.toJson(jsonValues);
             }
         }
         return "";
+
     }
 
     public void handleNewListPartitionDescs(Map<ColumnId, Column> idToColumn,
@@ -607,6 +624,27 @@ public class ListPartitionInfo extends PartitionInfo {
                     .collect(Collectors.toList());
         } else {
             throw new NotImplementedException("todo");
+        }
+    }
+
+    /**
+     * ListPartition would put the NULL value into a real NULL partition, whose partition value is NullLiteral
+     */
+    @Override
+    public Set<Long> getNullValuePartitions() {
+        if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
+            return idToLiteralExprValues.entrySet().stream()
+                    .filter(x -> x.getValue().stream().anyMatch(LiteralExpr::isConstantNull))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toSet());
+        } else if (MapUtils.isNotEmpty(idToMultiLiteralExprValues)) {
+            // only if all partition columns are NULL
+            return idToMultiLiteralExprValues.entrySet().stream()
+                    .filter(x -> x.getValue().stream().anyMatch(y -> y.stream().allMatch(LiteralExpr::isConstantNull)))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toSet());
+        } else {
+            return Sets.newHashSet();
         }
     }
 

@@ -255,18 +255,18 @@ public class MvRewritePreprocessor {
                     prepareRelatedMVs(queryTables, mvWithPlanContexts);
                 }
 
-                // 5. process relate mvs with views
-                try (Timer t4 = Tracers.watchScope("MVProcessWithView")) {
-                    processPlanWithView(queryMaterializationContext, connectContext, queryOptExpression,
-                            queryColumnRefFactory, requiredColumns);
-                }
-
                 // To avoid disturbing queries without mv, only initialize materialized view context
                 // when there are candidate mvs.
                 if (CollectionUtils.isNotEmpty(context.getCandidateMvs())) {
                     // it's safe used in the optimize context here since the query mv context is not shared across the
                     // connect-context.
                     connectContext.setQueryMVContext(queryMaterializationContext);
+                }
+
+                // 5. process relate mvs with views
+                try (Timer t4 = Tracers.watchScope("MVProcessWithView")) {
+                    processPlanWithView(queryMaterializationContext, connectContext, queryOptExpression,
+                            queryColumnRefFactory, requiredColumns);
                 }
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
@@ -348,6 +348,10 @@ public class MvRewritePreprocessor {
         List<LogicalViewScanOperator> viewScans = Lists.newArrayList();
         // process equivalent operator，construct logical plan with view
         OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewScans);
+        if (queryMaterializationContext != null && queryMaterializationContext.getValidCandidateMVs().isEmpty()) {
+            return;
+        }
+
         if (viewScans.isEmpty()) {
             // means there is no plan with view
             return;

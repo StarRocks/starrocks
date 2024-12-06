@@ -47,9 +47,8 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
-import com.starrocks.common.UserException;
-import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.EtlJobType;
@@ -75,13 +74,11 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -107,7 +104,7 @@ import java.util.stream.Collectors;
  * LoadManager.lock
  * LoadJob.lock
  */
-public class LoadMgr implements Writable, MemoryTrackable {
+public class LoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
     private static final int MEMORY_JOB_SAMPLES = 10;
 
@@ -116,6 +113,9 @@ public class LoadMgr implements Writable, MemoryTrackable {
     private final LoadJobScheduler loadJobScheduler;
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    protected final WarehouseLoadInfoBuilder warehouseLoadInfoBuilder =
+            new WarehouseLoadInfoBuilder();
 
     public LoadMgr(LoadJobScheduler loadJobScheduler) {
         this.loadJobScheduler = loadJobScheduler;
@@ -216,7 +216,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public void recordFinishedOrCacnelledLoadJob(long jobId, EtlJobType jobType, String failMsg, String trackingUrl)
-            throws UserException {
+            throws StarRocksException {
         LoadJob loadJob = getLoadJob(jobId);
         if (loadJob.isTxnDone() && !Strings.isNullOrEmpty(failMsg)) {
             throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name()
@@ -237,7 +237,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
                                                EtlJobType jobType, long createTimestamp, long estimateScanRows,
                                                int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
-                                               Coordinator coordinator) throws UserException {
+                                               Coordinator coordinator) throws StarRocksException {
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -386,6 +386,8 @@ public class LoadMgr implements Writable, MemoryTrackable {
         if (job instanceof SparkLoadJob) {
             ((SparkLoadJob) job).clearSparkLauncherLog();
         }
+
+        warehouseLoadInfoBuilder.withRemovedJob(job);
     }
 
     private boolean isJobExpired(LoadJob job, long currentTimeMs) {
@@ -415,7 +417,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
                     recordFinishedOrCacnelledLoadJob(
                             job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
                     LOG.warn("abort job: {}-{} since transaction status unknown", job.getLabel(), job.getId());
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     LOG.warn("failed to abort job: {}", job.getLabel(), e);
                 }
             }
@@ -487,7 +489,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
                     } catch (TimeoutException e) {
                         // timeout, retry next time
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
-                    } catch (UserException e) {
+                    } catch (StarRocksException e) {
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
                     } catch (Exception e) {
@@ -502,7 +504,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
                 .forEach(job -> {
                     try {
                         ((SparkLoadJob) job).updateLoadingStatus();
-                    } catch (UserException e) {
+                    } catch (StarRocksException e) {
                         LOG.warn("update load job loading status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
                     } catch (Exception e) {
@@ -740,42 +742,6 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
-
-        out.writeInt(loadJobs.size());
-        for (LoadJob loadJob : loadJobs) {
-            loadJob.write(out);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int size = in.readInt();
-        long now = System.currentTimeMillis();
-        for (int i = 0; i < size; i++) {
-            LoadJob loadJob = LoadJob.read(in);
-            // discard expired job right away
-            if (isJobExpired(loadJob, now)) {
-                LOG.info("discard expired job: {}", loadJob);
-                continue;
-            }
-
-            putLoadJob(loadJob);
-        }
-    }
-
-    public long loadLoadJobsV2(DataInputStream in, long checksum) throws IOException {
-        readFields(in);
-        LOG.info("finished replay loadJobsV2 from image");
-        return checksum;
-    }
-
-    public long saveLoadJobsV2(DataOutputStream out, long checksum) throws IOException {
-        write(out);
-        return checksum;
-    }
-
     public void loadLoadJobsV2JsonFormat(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long now = System.currentTimeMillis();
@@ -788,6 +754,15 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
             putLoadJob(loadJob);
         });
+    }
+
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadInfoBuilder.buildFromJobs(idToLoadJob.values());
+        } finally {
+            readUnlock();
+        }
     }
 
     private void putLoadJob(LoadJob loadJob) {

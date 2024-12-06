@@ -368,9 +368,11 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
             DistributionInfo distributionInfo = new HashDistributionInfo(8, Lists.newArrayList(c1));
 
             long partitionId = BASE_PARTITION_ID + i;
-            Partition partition = new Partition(partitionId, "testPartition_" + i, baseIndex, distributionInfo);
-            partition.setVisibleVersion(testStartVersion, System.currentTimeMillis());
-            partition.setNextVersion(testStartVersion + 1);
+            long physicalPartitionId = partitionId + partitionSize;
+            Partition partition = new Partition(partitionId, physicalPartitionId,
+                    "testPartition_" + i, baseIndex, distributionInfo);
+            partition.getDefaultPhysicalPartition().setVisibleVersion(testStartVersion, System.currentTimeMillis());
+            partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
             PartitionKey rangeLower = PartitionKey.createPartitionKey(
                     Lists.newArrayList(new PartitionValue(String.valueOf(i * 10))), Lists.newArrayList(c1));
@@ -458,9 +460,11 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
             DistributionInfo distributionInfo = new HashDistributionInfo(8, Lists.newArrayList(c1));
 
             long partitionId = BASE_PARTITION_ID + i;
-            Partition partition = new Partition(partitionId, "testPartition_" + i, baseIndex, distributionInfo);
-            partition.setVisibleVersion(testStartVersion, System.currentTimeMillis());
-            partition.setNextVersion(testStartVersion + 1);
+            long physicalPartitionId = partitionId + partitionSize;
+            Partition partition = new Partition(partitionId, physicalPartitionId,
+                    "testPartition_" + i, baseIndex, distributionInfo);
+            partition.getDefaultPhysicalPartition().setVisibleVersion(testStartVersion, System.currentTimeMillis());
+            partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
             PartitionKey rangeLower = PartitionKey.createPartitionKey(
                     Lists.newArrayList(new PartitionValue(String.valueOf(i * 10))), Lists.newArrayList(c1));

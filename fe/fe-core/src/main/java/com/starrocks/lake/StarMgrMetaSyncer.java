@@ -28,7 +28,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -82,8 +82,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
                                 .map(Partition::getSubPartitions)
-                                .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupId))
-                                .forEach(groupIds::add);
+                                .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupIds))
+                                .forEach(groupIds::addAll);
                     }
                 }
             } finally {
@@ -105,7 +105,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
-            } catch (UserException ignored1) {
+            } catch (StarRocksException ignored1) {
                 // ignore error
             }
         }
@@ -321,23 +321,25 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 if (table.hasShardGroupChanged()) {
                     return false;
                 }
+
                 // no need to check db/table/partition again, everything still works
-                long groupId = physicalPartition.getShardGroupId();
-                Set<Long> starmgrShardIdsSet = null;
-                if (redundantGroupToShards.get(groupId) != null) {
-                    starmgrShardIdsSet = redundantGroupToShards.get(groupId);
-                } else {
-                    List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
-                    starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
-                }
                 for (MaterializedIndex materializedIndex :
                         physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    long groupId = materializedIndex.getShardGroupId();
+                    Set<Long> starmgrShardIdsSet = null;
+                    if (redundantGroupToShards.get(groupId) != null) {
+                        starmgrShardIdsSet = redundantGroupToShards.get(groupId);
+                    } else {
+                        List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                        starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                    }
+
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         starmgrShardIdsSet.remove(tablet.getId());
                     }
+                    // collect shard in starmgr but not in fe
+                    redundantGroupToShards.put(materializedIndex.getShardGroupId(), starmgrShardIdsSet);
                 }
-                // collect shard in starmgr but not in fe
-                redundantGroupToShards.put(groupId, starmgrShardIdsSet);
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }

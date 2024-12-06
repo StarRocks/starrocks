@@ -46,8 +46,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -60,7 +62,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
@@ -155,6 +157,11 @@ public class BackupJob extends AbstractJob {
 
     private boolean testPrimaryKey = false;
 
+    @SerializedName(value = "backupFunctions")
+    private List<Function> backupFunctions = Lists.newArrayList();
+    @SerializedName(value = "backupCatalogs")
+    private List<Catalog> backupCatalogs = Lists.newArrayList();
+
     public BackupJob() {
         super(JobType.BACKUP);
     }
@@ -196,6 +203,14 @@ public class BackupJob extends AbstractJob {
 
     public List<TableRef> getTableRef() {
         return tableRefs;
+    }
+
+    public void setBackupFunctions(List<Function> functions) {
+        this.backupFunctions = functions;
+    }
+
+    public void setBackupCatalogs(List<Catalog> backupCatalogs) {
+        this.backupCatalogs = backupCatalogs;
     }
 
     public synchronized boolean finishTabletSnapshotTask(SnapshotTask task, TFinishTaskRequest request) {
@@ -455,6 +470,14 @@ public class BackupJob extends AbstractJob {
 
     private void prepareAndSendSnapshotTask() {
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
+        if (!backupCatalogs.isEmpty()) {
+            // short cut for external catalogs backup
+            backupMeta = new BackupMeta(Lists.newArrayList());
+            backupMeta.setCatalogs(backupCatalogs);
+            state = BackupJobState.SAVE_META;
+
+            return;
+        }
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -541,6 +564,7 @@ public class BackupJob extends AbstractJob {
                 copiedTables.add(copiedTbl);
             }
             backupMeta = new BackupMeta(copiedTables);
+            backupMeta.setFunctions(backupFunctions);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -636,7 +660,7 @@ public class BackupJob extends AbstractJob {
                 BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
                 try {
                     HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
                     return;
                 }

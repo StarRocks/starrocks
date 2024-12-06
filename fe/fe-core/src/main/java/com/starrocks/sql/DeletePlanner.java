@@ -24,7 +24,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
@@ -86,7 +87,7 @@ public class DeletePlanner {
 
             OlapTable table = (OlapTable) deleteStatement.getTable();
             for (Column column : table.getBaseSchema()) {
-                if (column.isKey()) {
+                if (column.isKey() || column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                     SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
                     slotDescriptor.setIsMaterialized(true);
                     slotDescriptor.setType(column.getType());
@@ -120,10 +121,9 @@ public class DeletePlanner {
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
                     catalogDbTable.getDb());
             try {
-                olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(),
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(), session.getExecTimeout());
                 olapTableSink.complete();
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new SemanticException(e.getMessage());
             }
 

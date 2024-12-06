@@ -17,21 +17,15 @@ package com.starrocks.statistic.sample;
 public class TabletStats {
 
     private final long tabletId;
-    private final long partitionId;
     private final long rowCount;
 
     public TabletStats(long tabletId, long partitionId, long rowCount) {
         this.tabletId = tabletId;
-        this.partitionId = partitionId;
         this.rowCount = rowCount;
     }
 
     public long getTabletId() {
         return tabletId;
-    }
-
-    public long getPartitionId() {
-        return partitionId;
     }
 
     public long getRowCount() {

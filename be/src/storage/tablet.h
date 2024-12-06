@@ -67,11 +67,13 @@ class Tablet;
 class TabletMeta;
 class TabletUpdates;
 class CompactionTask;
+class BaseRowset;
 struct CompactionCandidate;
 struct CompactionContext;
 struct TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 
 class ChunkIterator;
 
@@ -164,7 +166,7 @@ public:
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     [[nodiscard]] bool version_for_delete_predicate(const Version& version);
     [[nodiscard]] bool version_for_delete_predicate_unlocked(const Version& version);
-    [[nodiscard]] bool has_delete_predicates(const Version& version);
+    [[nodiscard]] StatusOr<bool> has_delete_predicates(const Version& version) override;
 
     // meta lock
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
@@ -272,7 +274,11 @@ public:
 
     void set_compaction_context(std::unique_ptr<CompactionContext>& context);
 
+#ifdef BE_TEST
+    virtual std::shared_ptr<CompactionTask> create_compaction_task();
+#else
     std::shared_ptr<CompactionTask> create_compaction_task();
+#endif
 
     bool has_compaction_task();
 

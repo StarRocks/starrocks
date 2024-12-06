@@ -17,7 +17,7 @@ package com.starrocks.scheduler.mv;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.rpc.BackendServiceClient;
@@ -146,7 +146,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             GlobalStateMgr.getCurrentState().getEditLog().logMVEpochChange(epoch);
 
             epoch.onCommitted(binlogState);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             epoch.onFailed();
             // TODO(murphy) handle error
             LOG.warn("Failed to commit transaction for epoch {}", epoch);
@@ -163,7 +163,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason,
                     epoch.getCommitInfos(), epoch.getFailedInfos(), null);
             epoch.onFailed();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Abort transaction failed: {}", txnId);
         }
     }

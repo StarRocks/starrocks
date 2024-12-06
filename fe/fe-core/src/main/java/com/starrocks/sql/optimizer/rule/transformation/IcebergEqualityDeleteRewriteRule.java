@@ -164,8 +164,8 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             List<Column> deleteColumns = columnNames.stream().map(icebergTable::getColumn).collect(Collectors.toList());
             IcebergTable equalityDeleteTable = new IcebergTable(
                     ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), equalityDeleteTableName,
-                    icebergTable.getCatalogName(), icebergTable.getResourceName(), icebergTable.getRemoteDbName(),
-                    icebergTable.getRemoteTableName(), EQUALITY_DELETE_TABLE_COMMENT, deleteColumns,
+                    icebergTable.getCatalogName(), icebergTable.getResourceName(), icebergTable.getCatalogDBName(),
+                    icebergTable.getCatalogTableName(), EQUALITY_DELETE_TABLE_COMMENT, deleteColumns,
                     icebergTable.getNativeTable(), ImmutableMap.of());
 
             ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumn = ImmutableMap.builder();
@@ -250,41 +250,53 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         String tableName = noDeleteTable.getName() + "_" + "with_delete_file";
         IcebergTable withDeleteIcebergTable = new IcebergTable(
                 ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), tableName,
-                noDeleteTable.getCatalogName(), noDeleteTable.getResourceName(), noDeleteTable.getRemoteDbName(),
-                noDeleteTable.getRemoteTableName(), "iceberg_table_with_delete", noDeleteTable.getFullSchema(),
+                noDeleteTable.getCatalogName(), noDeleteTable.getResourceName(), noDeleteTable.getCatalogDBName(),
+                noDeleteTable.getCatalogTableName(), "iceberg_table_with_delete", noDeleteTable.getFullSchema(),
                 noDeleteTable.getNativeTable(), ImmutableMap.of());
         Table nativeTable = noDeleteTable.getNativeTable();
 
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = scanOperator.getColRefToColumnMetaMap();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = scanOperator.getColumnMetaToColRefMap();
 
-        Set<ColumnRefOperator> deleteColumns = deleteSchemas.stream()
+        Map<ColumnRefOperator, Column> deleteColumns = deleteSchemas.stream()
                 .map(IcebergDeleteSchema::equalityIds)
                 .flatMap(List::stream)
                 .distinct()
                 .map(fieldId -> nativeTable.schema().findColumnName(fieldId))
                 .map(withDeleteIcebergTable::getColumn)
-                .map(columnMetaToColRefMap::get)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toMap(columnMetaToColRefMap::get, column -> column));
 
         ImmutableMap.Builder<ColumnRefOperator, Column> newColRefToColBuilder =
                 ImmutableMap.builder();
         ImmutableMap.Builder<Column, ColumnRefOperator> newColToColRefBuilder =
                 ImmutableMap.builder();
 
+        // fill ImmutableMap.Builder<Column, ColumnRefOperator> newColToColRefBuilder
         Map<ColumnRefOperator, ColumnRefOperator> originToNewCols = new HashMap<>();
         for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
             Column originalCol = entry.getKey();
             ColumnRefOperator originalColRef = entry.getValue();
             ColumnRefOperator newColRef = buildNewColumnRef(originalCol, columnRefFactory, withDeleteIcebergTable);
-            if (colRefToColumnMetaMap.containsKey(originalColRef) || deleteColumns.contains(originalColRef)) {
-                if (colRefToColumnMetaMap.containsKey(originalColRef)) {
-                    projectForUnion.put(newColRef, newColRef);
-                }
-                newColRefToColBuilder.put(newColRef, originalCol);
-            }
             newColToColRefBuilder.put(originalCol, newColRef);
             originToNewCols.put(originalColRef, newColRef);
+        }
+
+        // fill newColRefToColBuilder and projectForUnion to guarantee column order.
+        for (Map.Entry<ColumnRefOperator, Column> entry : colRefToColumnMetaMap.entrySet()) {
+            ColumnRefOperator originRef = entry.getKey();
+            Column originCol = entry.getValue();
+            ColumnRefOperator newRef = originToNewCols.get(originRef);
+            projectForUnion.put(newRef, newRef);
+            newColRefToColBuilder.put(newRef, originCol);
+        }
+
+        // fill unselected delete columns
+        for (Map.Entry<ColumnRefOperator, Column> entry : deleteColumns.entrySet()) {
+            ColumnRefOperator deleteColRef = entry.getKey();
+            Column deleteCol = entry.getValue();
+            if (!colRefToColumnMetaMap.containsKey(deleteColRef)) {
+                newColRefToColBuilder.put(originToNewCols.get(deleteColRef), deleteCol);
+            }
         }
 
         fillExtendedColumns(columnRefFactory, newColRefToColBuilder, newColToColRefBuilder, hasPartitionEvolution, noDeleteTable);
@@ -328,7 +340,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
 
     // equality table name format : origin_table_name + "_eq_delete_" + [pk1_pk2_pk3_..._]
     private String buildEqualityDeleteTableName(IcebergTable icebergTable, List<Integer> equalityIds) {
-        return icebergTable.getRemoteTableName() + "_eq_delete_" + equalityIds.stream()
+        return icebergTable.getCatalogTableName() + "_eq_delete_" + equalityIds.stream()
                         .map(id -> icebergTable.getNativeTable().schema().findColumnName(id))
                         .collect(Collectors.joining("_"));
     }

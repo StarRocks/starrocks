@@ -740,7 +740,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     " as" +
                     " select id_date, sum(t1b) from table_with_day_partition group by id_date");
             MaterializedView mv = starRocksAssert.getMv("test", "test_loose_mv");
-            mv.getPartition("p19910330")
+            mv.getPartition("p19910330").getDefaultPhysicalPartition()
                     .setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
             String query5 = "select id_date, sum(t1b) from table_with_day_partition" +
                     " where id_date >= '1991-03-30' and id_date < '1991-04-03' group by id_date";
@@ -788,7 +788,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         {
             String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
-                    " FROM base_tbl1 where `k1` = '2020-02-11' group by ds";
+                    " FROM base_tbl1 where date_trunc('minute', `k1`) = '2020-02-11' group by ds";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
         }
@@ -872,8 +872,8 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         {
             String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
-                    " FROM base_tbl1 where `k1` = '2020-02-11' group by ds";
-            String plan = getFragmentPlan(query);
+                    " FROM base_tbl1 where date_trunc('minute', `k1`)  = '2020-02-11' group by ds";
+            String plan = getFragmentPlan(query, "MV");
             PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
         }
 

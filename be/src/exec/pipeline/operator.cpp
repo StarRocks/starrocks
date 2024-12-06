@@ -15,6 +15,7 @@
 #include "exec/pipeline/operator.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "common/logging.h"
@@ -23,6 +24,7 @@
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "util/failpoint/fail_point.h"
@@ -68,7 +70,7 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
-    _mem_tracker = state->query_ctx()->operator_mem_tracker(_plan_node_id);
+    _mem_tracker = std::make_shared<MemTracker>();
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
@@ -120,24 +122,6 @@ void Operator::close(RuntimeState* state) {
         _init_rf_counters(false);
         _runtime_in_filter_num_counter->set((int64_t)runtime_in_filters().size());
         _runtime_bloom_filter_num_counter->set((int64_t)rf_bloom_filters->size());
-    }
-
-    if (!_is_subordinate) {
-        _common_metrics
-                ->add_counter("OperatorPeakMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->peak_consumption());
-        _common_metrics
-                ->add_counter("OperatorAllocatedMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->allocation());
-        _common_metrics
-                ->add_counter("OperatorDeallocatedMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->deallocation());
     }
 
     // Pipeline do not need the built in total time counter
@@ -324,22 +308,7 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to
         RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _runtime_profile.get()));
-        auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
-        for (auto& [filter_id, desc] : descriptors) {
-            if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
-                continue;
-            }
-            auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
-            ExecEnv::GetInstance()->add_rf_event({_state->query_id(), filter_id, BackendOptions::get_localhost(),
-                                                  strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
-                                                                      this->_plan_node_id, grf != nullptr)});
-
-            if (grf == nullptr) {
-                continue;
-            }
-
-            desc->set_shared_runtime_filter(grf);
-        }
+        acquire_runtime_filter(state);
     }
     return Status::OK();
 }
@@ -400,6 +369,28 @@ bool OperatorFactory::has_topn_filter() const {
     }
     auto* global_rf_collector = _runtime_filter_collector->get_rf_probe_collector();
     return global_rf_collector != nullptr && global_rf_collector->has_topn_filter();
+}
+
+void OperatorFactory::acquire_runtime_filter(RuntimeState* state) {
+    if (_runtime_filter_collector == nullptr) {
+        return;
+    }
+    auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
+    for (auto& [filter_id, desc] : descriptors) {
+        if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
+            continue;
+        }
+        auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
+        ExecEnv::GetInstance()->add_rf_event({state->query_id(), filter_id, BackendOptions::get_localhost(),
+                                              strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
+                                                                  this->_plan_node_id, grf != nullptr)});
+
+        if (grf == nullptr) {
+            continue;
+        }
+
+        desc->set_shared_runtime_filter(grf);
+    }
 }
 
 } // namespace starrocks::pipeline

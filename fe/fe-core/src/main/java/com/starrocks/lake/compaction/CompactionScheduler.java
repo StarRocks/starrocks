@@ -26,7 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -199,25 +199,26 @@ public class CompactionScheduler extends Daemon {
         }
 
         // Create new compaction tasks.
-        int index = 0;
         int compactionLimit = compactionTaskLimit();
         int numRunningTasks = runningCompactions.values().stream().mapToInt(CompactionJob::getNumTabletCompactionTasks).sum();
         if (numRunningTasks >= compactionLimit) {
             return;
         }
 
-        List<PartitionIdentifier> partitions = compactionManager.choosePartitionsToCompact(runningCompactions.keySet(),
-                disabledTables);
+        List<PartitionStatisticsSnapshot> partitions = compactionManager.choosePartitionsToCompact(
+                runningCompactions.keySet(), disabledTables);
+        int index = 0;
         while (numRunningTasks < compactionLimit && index < partitions.size()) {
-            PartitionIdentifier partition = partitions.get(index++);
-            CompactionJob job = startCompaction(partition);
+            PartitionStatisticsSnapshot partitionStatisticsSnapshot = partitions.get(index++);
+            CompactionJob job = startCompaction(partitionStatisticsSnapshot);
             if (job == null) {
                 continue;
             }
             numRunningTasks += job.getNumTabletCompactionTasks();
-            runningCompactions.put(partition, job);
+            runningCompactions.put(partitionStatisticsSnapshot.getPartition(), job);
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Created new compaction job. partition={} txnId={}", partition, job.getTxnId());
+                LOG.debug("Created new compaction job. {}, txnId={}",
+                        partitionStatisticsSnapshot.toString(), job.getTxnId());
             }
         }
     }
@@ -227,7 +228,7 @@ public class CompactionScheduler extends Daemon {
             List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
             transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
                     Collections.emptyList(), null);
-        } catch (UserException ex) {
+        } catch (StarRocksException ex) {
             LOG.error("Fail to abort txn " + job.getTxnId(), ex);
         }
     }
@@ -255,7 +256,8 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
-    private CompactionJob startCompaction(PartitionIdentifier partitionIdentifier) {
+    private CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot) {
+        PartitionIdentifier partitionIdentifier = partitionStatisticsSnapshot.getPartition();
         Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
         if (db == null) {
             compactionManager.removePartition(partitionIdentifier);
@@ -315,7 +317,7 @@ public class CompactionScheduler extends Daemon {
         CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success);
         try {
             List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
-                    job.getAllowPartialSuccess());
+                    job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority());
             for (CompactionTask task : tasks) {
                 task.sendRequest();
             }
@@ -336,12 +338,13 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
-            boolean allowPartialSuccess) throws UserException, RpcException {
+            boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority)
+            throws StarRocksException, RpcException {
         List<CompactionTask> tasks = new ArrayList<>();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (node == null) {
-                throw new UserException("Node " + entry.getKey() + " has been dropped");
+                throw new StarRocksException("Node " + entry.getKey() + " has been dropped");
             }
 
             LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
@@ -353,6 +356,7 @@ public class CompactionScheduler extends Daemon {
             request.timeoutMs = LakeService.TIMEOUT_COMPACT;
             request.allowPartialSuccess = allowPartialSuccess;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
+            request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
 
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
@@ -399,7 +403,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job, boolean forceCommit)
-            throws UserException {
+            throws StarRocksException {
         List<TabletCommitInfo> commitInfoList = job.buildTabletCommitInfo();
 
         Database db = stateMgr.getLocalMetastore().getDb(partition.getDbId());
@@ -436,7 +440,7 @@ public class CompactionScheduler extends Daemon {
             List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
             transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
                     Collections.emptyList(), null);
-        } catch (UserException ex) {
+        } catch (StarRocksException ex) {
             LOG.error(ex);
         }
     }

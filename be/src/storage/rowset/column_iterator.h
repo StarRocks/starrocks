@@ -158,6 +158,8 @@ public:
 
     virtual ordinal_t get_current_ordinal() const = 0;
 
+    virtual bool has_zone_map() const { return false; }
+
     /// Store the row ranges that satisfy the given predicates into |row_ranges|.
     /// |pred_relation| is the relation among |predicates|, it can be AND or OR.
     virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
@@ -257,9 +259,16 @@ public:
 
     virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
 
+    virtual Status null_count(size_t* count) { return Status::OK(); };
+
+    // RAW interface, should be used carefully
+    virtual ColumnReader* get_column_reader() {
+        CHECK(false) << "unreachable";
+        return nullptr;
+    }
+
 protected:
     ColumnIteratorOptions _opts;
-    virtual ColumnReader* get_column_reader() { return nullptr; };
 };
 
 } // namespace starrocks

@@ -15,7 +15,7 @@
 package com.starrocks.datacache;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -70,13 +70,13 @@ public class DataCacheSelectExecutor {
 
         if (connectContext.getState().isError()) {
             // throw exception if StmtExecutor execute failed
-            throw new UserException(connectContext.getState().getErrorMessage());
+            throw new StarRocksException(connectContext.getState().getErrorMessage());
         }
 
         DataCacheSelectMetrics metrics = null;
         Coordinator coordinator = stmtExecutor.getCoordinator();
         Preconditions.checkNotNull(coordinator, "Coordinator can't be null");
-        coordinator.join(connectContext.getSessionVariable().getQueryTimeoutS());
+        coordinator.join(stmtExecutor.getExecTimeout());
         if (coordinator.isDone()) {
             metrics = stmtExecutor.getCoordinator().getDataCacheSelectMetrics();
         }

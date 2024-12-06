@@ -403,6 +403,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("emps");
         setTableStatistics(t7, 6000000);
+
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
     }
 
     @Test
@@ -5774,6 +5776,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "as \n" +
                 "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1, k2;");
         {
+            String query = "select k1, k2, avg_merge(v1) from (" +
+                    "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2) t " +
+                    "group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "select k1, k2, avg_merge(v1) from (" +
+                    " SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2 " +
+                    " UNION ALL" +
+                    " SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2 " +
+                    ") t " +
+                    "group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+
+        {
             String query = "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1, k2;";
             String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
             PlanTestBase.assertContains(plan, "test_mv1");
@@ -5812,5 +5833,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         PlanTestBase.assertContains(plan, "   TABLE: mv0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 20: lo_linenumber = 1, 21: lo_shipmode IN ('A', 'a')");
+    }
+
+    @Test
+    public void testAggregateToProjection() {
+        // If agg push down is open, cannot rewrite.
+        String mv = "select lo_orderkey from lineorder group by lo_orderkey";
+        String sql = "select count(distinct lo_orderkey) from lineorder where lo_orderkey = 1";
+        testRewriteOK(mv, sql);
     }
 }

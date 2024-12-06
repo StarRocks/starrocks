@@ -159,6 +159,7 @@ message MetadataUpdateInfoPB {
     // enable persistent index in primary key table
     optional bool enable_persistent_index = 1;
     optional TabletSchemaPB tablet_schema = 2;
+    optional PersistentIndexTypePB persistent_index_type = 3;
 }
 
 message TxnLogPB {

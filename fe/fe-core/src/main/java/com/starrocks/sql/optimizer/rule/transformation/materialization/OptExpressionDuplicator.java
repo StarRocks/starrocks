@@ -82,7 +82,7 @@ public class OptExpressionDuplicator {
     private final ReplaceColumnRefRewriter rewriter;
     private final boolean partialPartitionRewrite;
     private final OptimizerContext optimizerContext;
-    private final Map<Table, Column> mvRefBaseTableColumns;
+    private final Map<Table, List<Column>> mvRefBaseTableColumns;
 
     public OptExpressionDuplicator(MaterializationContext materializationContext) {
         this.columnRefFactory = materializationContext.getQueryRefFactory();
@@ -235,7 +235,7 @@ public class OptExpressionDuplicator {
                     Table refBaseTable = scanOperator.getTable();
                     IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
                     String catalogName = cachedIcebergTable.getCatalogName();
-                    String dbName = cachedIcebergTable.getRemoteDbName();
+                    String dbName = cachedIcebergTable.getCatalogDBName();
                     TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
                     Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
                     if (currentTable == null) {
@@ -259,11 +259,13 @@ public class OptExpressionDuplicator {
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
                 OlapTable table = (OlapTable) olapScan.getTable();
                 if (mvRefBaseTableColumns.containsKey(table)) {
-                    Column partitionColumn = mvRefBaseTableColumns.get(table);
-                    if (!columnRefOperatorColumnMap.containsValue(partitionColumn) &&
-                            newColumnMetaToColRefMap.containsKey(partitionColumn)) {
-                        ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
-                        columnRefColumnMapBuilder.put(partitionColumnRef, partitionColumn);
+                    List<Column> partitionColumns = mvRefBaseTableColumns.get(table);
+                    for (Column partitionColumn : partitionColumns) {
+                        if (!columnRefOperatorColumnMap.containsValue(partitionColumn) &&
+                                newColumnMetaToColRefMap.containsKey(partitionColumn)) {
+                            ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
+                            columnRefColumnMapBuilder.put(partitionColumnRef, partitionColumn);
+                        }
                     }
                 }
             }

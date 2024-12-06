@@ -17,7 +17,9 @@ package com.starrocks.statistic;
 import com.google.gson.annotations.SerializedName;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Meta of column-level statistics
@@ -33,10 +35,23 @@ public class ColumnStatsMeta {
     @SerializedName("updateTime")
     private LocalDateTime updateTime;
 
+    @SerializedName("sampledPartitions")
+    private Set<Long> sampledPartitionsHashValue;
+
+    @SerializedName("allPartitionSize")
+    private int allPartitionSize;
+
     public ColumnStatsMeta(String columnName, StatsConstants.AnalyzeType type, LocalDateTime updateTime) {
+        this(columnName, type, updateTime, new HashSet<>(), -1);
+    }
+
+    public ColumnStatsMeta(String columnName, StatsConstants.AnalyzeType type, LocalDateTime updateTime,
+                           Set<Long> sampledPartitionsHashValue, int allPartitionSize) {
         this.columnName = columnName;
         this.type = type;
         this.updateTime = updateTime;
+        this.sampledPartitionsHashValue = sampledPartitionsHashValue;
+        this.allPartitionSize = allPartitionSize;
     }
 
     public String getColumnName() {
@@ -63,8 +78,21 @@ public class ColumnStatsMeta {
         this.updateTime = updateTime;
     }
 
+    public Set<Long> getSampledPartitionsHashValue() {
+        return sampledPartitionsHashValue;
+    }
+
+    public int getAllPartitionSize() {
+        return allPartitionSize;
+    }
+
     public String simpleString() {
-        return String.format("(%s,%s)", columnName, type.toString());
+        if (type == StatsConstants.AnalyzeType.SAMPLE && sampledPartitionsHashValue != null) {
+            return String.format("(%s,%s,sampled_partition_size=%d,all_partition_size=%d)", columnName, type,
+                    sampledPartitionsHashValue.size(), allPartitionSize);
+        } else {
+            return String.format("(%s,%s)", columnName, type.toString());
+        }
     }
 
     @Override

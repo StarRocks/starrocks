@@ -24,8 +24,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.Version;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -70,6 +70,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.LoadJobWithWarehouse;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -87,7 +88,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 
 public class StreamLoadTask extends AbstractTxnStateChangeCallback
-        implements Writable, GsonPostProcessable, GsonPreProcessable {
+        implements Writable, GsonPostProcessable, GsonPreProcessable, LoadJobWithWarehouse {
     private static final Logger LOG = LogManager.getLogger(StreamLoadTask.class);
 
     public enum State {
@@ -264,6 +265,21 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.streamLoadParams = null;
         this.streamLoadInfo = null;
         this.isCommitting = false;
+    }
+
+    @Override
+    public long getCurrentWarehouseId() {
+        return warehouseId;
+    }
+
+    @Override
+    public boolean isFinal() {
+        return isFinalState();
+    }
+
+    @Override
+    public long getFinishTimestampMs() {
+        return endTimeMs();
     }
 
     public void beginTxn(int channelId, int channelNum, TransactionResult resp) {
@@ -636,12 +652,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 return;
             }
             if (this.state != State.PREPARING) {
-                throw new UserException("stream load task " + this.label
+                throw new StarRocksException("stream load task " + this.label
                         + " s state (" + this.state + ") is not preparing, can not prepare txn");
             }
             unprotectedWaitCoordFinish();
             if (!checkDataQuality()) {
-                throw new UserException("abnormal data more than max filter rate, tracking_url: " +
+                throw new StarRocksException("abnormal data more than max filter rate, tracking_url: " +
                         this.trackingUrl);
             }
         } catch (Exception e) {
@@ -688,7 +704,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 label, dbName, tableName, txnId);
     }
 
-    public void commitTxn(TransactionResult resp) throws UserException {
+    public void commitTxn(TransactionResult resp) throws StarRocksException {
         long startTimeMs = System.currentTimeMillis();
         boolean exception = false;
         readLock();
@@ -740,7 +756,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         resp.setOKMsg("stream load " + label + " commit");
     }
 
-    public void manualCancelTask(TransactionResult resp) throws UserException {
+    public void manualCancelTask(TransactionResult resp) throws StarRocksException {
         long startTimeMs = System.currentTimeMillis();
         readLock();
         try {
@@ -766,7 +782,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return new DefaultCoordinator.Factory();
     }
 
-    public void unprotectedExecute(HttpHeaders headers) throws UserException {
+    public void unprotectedExecute(HttpHeaders headers) throws StarRocksException {
         streamLoadParams = StreamLoadKvParams.fromHttpHeaders(headers);
         streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(
                 loadId, txnId, Optional.of((int) timeoutMs / 1000), streamLoadParams);
@@ -797,11 +813,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             this.channelIdToBEHTTPAddress = coord.getChannelIdToBEHTTPMap();
             this.channelIdToBEHTTPPort = coord.getChannelIdToBEPortMap();
         } catch (Exception e) {
-            throw new UserException(e.getMessage());
+            throw new StarRocksException(e.getMessage());
         }
     }
 
-    private void unprotectedFinishStreamLoadChannel(int channelId) throws UserException {
+    private void unprotectedFinishStreamLoadChannel(int channelId) throws StarRocksException {
         TNetworkAddress address = channelIdToBEHTTPPort.get(channelId);
         try {
             TStreamLoadChannel streamLoadChannel = new TStreamLoadChannel();
@@ -818,11 +834,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             LOG.info("finish stream load channel label: {} channel id {}", label, channelId);
         } catch (Exception e) {
-            throw new UserException("failed to send finish stream load channel: " + e.getMessage(), e);
+            throw new StarRocksException("failed to send finish stream load channel: " + e.getMessage(), e);
         }
     }
 
-    private void unprotectedWaitCoordFinish() throws UserException {
+    private void unprotectedWaitCoordFinish() throws StarRocksException {
         try {
             int waitSecond = (int) (getLeftTimeMs() / 1000);
             if (waitSecond <= 0) {
@@ -855,7 +871,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 throw new LoadException("coordinator could not finished before job timeout");
             }
         } catch (Exception e) {
-            throw new UserException(e.getMessage());
+            throw new StarRocksException(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
@@ -906,7 +922,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return null;
     }
 
-    public void unprotectedBeginTxn(boolean replay) throws UserException {
+    public void unprotectedBeginTxn(boolean replay) throws StarRocksException {
         this.txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 dbId, Lists.newArrayList(tableId), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
@@ -914,7 +930,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 timeoutMs / 1000, warehouseId);
     }
 
-    public void unprotectedPrepareTxn() throws UserException {
+    public void unprotectedPrepareTxn() throws StarRocksException {
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());
         List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(coord.getFailInfos());
         finishPreparingTimeMs = System.currentTimeMillis();
@@ -968,7 +984,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     @Override
-    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         if (!txnOperated) {
             return;
         }
@@ -1013,7 +1029,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         if (!txnOperated) {
             return;
         }
@@ -1130,7 +1146,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
-            throws UserException {
+            throws StarRocksException {
         if (!txnOperated) {
             return;
         }

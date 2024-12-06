@@ -94,6 +94,8 @@ struct PartitionHashMapBase {
     bool init_null_key_partition = false;
     static constexpr size_t kNullKeyPartitionIdx = 0;
 
+    bool enable_pre_agg = false;
+
     PartitionHashMapBase(int32_t chunk_size) : chunk_size(chunk_size) {}
 
 protected:
@@ -148,7 +150,9 @@ protected:
             return;
         }
         auto partition_num = hash_map.size();
-        if (partition_num > 512 && total_num_rows < 10000 * partition_num) {
+        size_t partition_num_hwm = enable_pre_agg ? 32768 : 512;
+
+        if (partition_num > partition_num_hwm && total_num_rows < 10000 * partition_num) {
             is_passthrough = true;
         }
     }
