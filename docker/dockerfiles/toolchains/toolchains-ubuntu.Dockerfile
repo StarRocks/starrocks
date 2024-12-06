@@ -15,7 +15,7 @@ RUN apt-get update -y && \
 # Set the soft link to jvm
 RUN ARCH=`uname -m` && \
     cd /lib/jvm && \
-    if [[ $ARCH == "aarch64" ]] ; then ln -s java-17-openjdk-arm64 java-17-openjdk ; else ln -s java-17-openjdk-amd64 java-17-openjdk  ; fi ;
+    if [ "$ARCH" = "aarch64" ] ; then ln -s java-17-openjdk-arm64 java-17-openjdk ; else ln -s java-17-openjdk-amd64 java-17-openjdk  ; fi ;
 
 ENV JAVA_HOME=/lib/jvm/java-17-openjdk
 ENV STARROCKS_LINKER=lld
