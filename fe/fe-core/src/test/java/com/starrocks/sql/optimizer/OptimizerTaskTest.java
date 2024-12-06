@@ -55,11 +55,13 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -2349,5 +2351,59 @@ public class OptimizerTaskTest {
         assertEquals(rightOperator.getDistributionSpec().getType(), DistributionSpec.DistributionType.BROADCAST);
         rightScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(1).getInputs().get(0).getOp();
         assertEquals(olapTable1.getId(), rightScan.getTable().getId());
+    }
+
+    @Test
+    public void testSplitAggregateRuleConstantColumns(@Mocked OlapTable olapTable1) {
+        ctx.getSessionVariable().setNewPlanerAggStage(2);
+
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("agg", ScalarType.INT, true);
+
+        Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
+        scanColumnMap.put(column1, new Column());
+
+        List<ScalarOperator> arguments = new ArrayList<>();
+        arguments.add(column1);
+        arguments.add(new ConstantOperator("const_str", Type.VARCHAR));
+
+        List<ScalarOperator> arrayValues = new ArrayList<>();
+        arrayValues.add(new ConstantOperator(1, Type.INT));
+        arrayValues.add(new ConstantOperator(2, Type.INT));
+        arguments.add(new ArrayOperator(Type.INT, false, arrayValues));
+
+        List<ScalarOperator> functionArguments = new ArrayList<>();
+        CallOperator constFunction = new CallOperator("call", Type.INT, functionArguments);
+        arguments.add(constFunction);
+
+        List<Type> aggFnArguments = new ArrayList<>();
+        aggFnArguments.add(Type.INT);
+        aggFnArguments.add(Type.VARCHAR);
+        aggFnArguments.add(Type.ARRAY_INT);
+        aggFnArguments.add(Type.INT);
+        Function fn = new AggregateFunction(new FunctionName("agg_function"), aggFnArguments, Type.INT, Type.INT, false);
+        CallOperator aggFunction = new CallOperator("agg", Type.INT, arguments, fn);
+        Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
+        map.put(column2, aggFunction);
+        LogicalAggregationOperator aggregationOperator =
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(column1), map);
+
+        OptExpression expression = OptExpression.create(aggregationOperator,
+                OptExpression.create(
+                        new LogicalOlapScanOperator(olapTable1, scanColumnMap, Maps.newHashMap(), null, -1,
+                                null)));
+
+        SplitTwoPhaseAggRule splitTwoPhaseAggRule = SplitTwoPhaseAggRule.getInstance();
+        List<OptExpression> list = splitTwoPhaseAggRule.transform(
+                expression, new OptimizerContext(new Memo(), new ColumnRefFactory()));
+
+        assertEquals(OperatorType.LOGICAL_AGGR, list.get(0).getOp().getOpType());
+        LogicalAggregationOperator result = (LogicalAggregationOperator) list.get(0).getOp();
+
+        // The merge stage of the aggregate function should accept 3 constant columns.
+        assertEquals(AggType.GLOBAL, result.getType());
+        assertEquals(1, result.getAggregations().values().size());
+        assertEquals(OperatorType.CALL, result.getAggregations().get(column2).getOpType());
+        assertEquals(4, result.getAggregations().get(column2).getChildren().size());
     }
 }
