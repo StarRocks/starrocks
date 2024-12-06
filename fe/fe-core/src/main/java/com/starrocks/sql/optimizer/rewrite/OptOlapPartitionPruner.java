@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -92,7 +93,7 @@ public class OptOlapPartitionPruner {
 
         // Do further partition prune if needed
         if (isNeedFurtherPrune(selectedPartitionIds, logicalOlapScanOperator, partitionInfo)) {
-            selectedPartitionIds = doFurtherPartitionPrune(table, partitionInfo, logicalOlapScanOperator.getPredicate(),
+            selectedPartitionIds = doFurtherPartitionPrune(table, logicalOlapScanOperator.getPredicate(),
                     logicalOlapScanOperator.getColumnMetaToColRefMap(), selectedPartitionIds);
         }
 
@@ -369,19 +370,31 @@ public class OptOlapPartitionPruner {
     }
 
     public static List<Long> doFurtherPartitionPrune(OlapTable table,
-                                                     PartitionInfo partitionInfo,
                                                      ScalarOperator predicate,
                                                      Map<Column, ColumnRefOperator> columnRefOperatorMap,
                                                      List<Long> selectedPartitionIds) {
-        List<Column> partitionColumns = partitionInfo.getPartitionColumns(table.getIdToColumn());
+        Preconditions.checkArgument(table.getPartitionInfo() instanceof RangePartitionInfo);
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
+        List<Range<PartitionKey>> candidateRanges = selectedPartitionIds.stream()
+                .map(rangePartitionInfo::getRange)
+                .collect(Collectors.toList());
+        return doFurtherPartitionPrune(table, predicate, columnRefOperatorMap, selectedPartitionIds, candidateRanges);
+    }
+
+    /**
+     * Use input candidateRanges to prune partitions rather than all table's partitions.
+     */
+    public static List<Long> doFurtherPartitionPrune(OlapTable table,
+                                                     ScalarOperator predicate,
+                                                     Map<Column, ColumnRefOperator> columnRefOperatorMap,
+                                                     List<Long> selectedPartitionIds,
+                                                     List<Range<PartitionKey>> candidateRanges) {
+        List<Column> partitionColumns = table.getPartitionColumns();
         PartitionColPredicateExtractor extractor = new PartitionColPredicateExtractor(
                 partitionColumns,
-                (RangePartitionInfo) partitionInfo,
                 columnRefOperatorMap);
         PartitionColPredicateEvaluator evaluator = new PartitionColPredicateEvaluator(
-                partitionColumns,
-                (RangePartitionInfo) partitionInfo,
-                selectedPartitionIds);
+                partitionColumns, selectedPartitionIds, candidateRanges);
         return evaluator.prunePartitions(extractor, predicate);
     }
 
@@ -392,27 +405,45 @@ public class OptOlapPartitionPruner {
         if (candidatePartitions.isEmpty() || predicate == null) {
             return false;
         }
+        if (partitionInfo == null || !(partitionInfo instanceof RangePartitionInfo)) {
+            return false;
+        }
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        return isNeedFurtherPrune(olapTable, candidatePartitions, predicate, rangePartitionInfo,
+                rangePartitionInfo.getIdToRange(true));
+    }
+
+    /**
+     * Use input idToRange to check whether to further prune partitions rather than all table's partitions.
+     */
+    public static boolean isNeedFurtherPrune(OlapTable olapTable,
+                                             List<Long> candidatePartitions,
+                                             ScalarOperator predicate,
+                                             RangePartitionInfo rangePartitionInfo,
+                                             Map<Long, Range<PartitionKey>> tmpIdToRange) {
+        if (candidatePartitions.isEmpty() || predicate == null) {
+            return false;
+        }
 
         // only support RANGE and EXPR_RANGE
         // EXPR_RANGE_V2 type like partition by RANGE(cast(substring(col, 3)) as int)) is unsupported
-        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
             List<Expr> partitionExpr = exprPartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
             if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr.get(0);
                 String functionName = functionCallExpr.getFnName().getFunction();
                 return (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)
                         || FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName))
-                        && !exprPartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+                        && !tmpIdToRange.containsKey(candidatePartitions.get(0));
             } else if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof SlotRef) {
-                return !exprPartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+                return !tmpIdToRange.containsKey(candidatePartitions.get(0));
             }
-        } else if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
+        } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
             return false;
-        } else if (partitionInfo instanceof RangePartitionInfo) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        } else if (rangePartitionInfo instanceof RangePartitionInfo) {
             return rangePartitionInfo.getPartitionColumnsSize() == 1
-                    && !rangePartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+                    && !tmpIdToRange.containsKey(candidatePartitions.get(0));
         }
         return false;
     }

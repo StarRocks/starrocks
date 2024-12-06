@@ -232,11 +232,17 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         Map<String, String> curProp = materializedView.getTableProperty().getProperties();
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL) && ttlDuration != null &&
                 !materializedView.getTableProperty().getPartitionTTL().equals(ttlDuration.second)) {
+            if (!materializedView.getPartitionInfo().isRangePartition()) {
+                throw new SemanticException("partition_ttl is only supported for range partitioned materialized view");
+            }
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
             materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER) &&
                 materializedView.getTableProperty().getPartitionTTLNumber() != partitionTTL) {
+            if (!materializedView.getPartitionInfo().isRangePartition()) {
+                throw new SemanticException("partition_ttl_number is only supported for range partitioned materialized view");
+            }
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(partitionTTL));
             materializedView.getTableProperty().setPartitionTTLNumber(partitionTTL);
             isChanged = true;
