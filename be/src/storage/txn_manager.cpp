@@ -278,9 +278,6 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
                            !rowset_ptr->rowset_meta()->get_meta_pb_without_schema().has_txn_meta() &&
                            !tablet->is_update_schema_running();
         if (skip_schema) {
-            // avoid `update_max_version_schema` and `commit_txn` run concurrency, so hold a read
-            // lock for `schema_lock` is enough
-            std::shared_lock l(tablet->get_schema_lock());
             skip_schema = tablet->add_committed_rowset(rowset_ptr);
             if (skip_schema) {
                 rowset_ptr->rowset_meta()->set_skip_tablet_schema(true);
