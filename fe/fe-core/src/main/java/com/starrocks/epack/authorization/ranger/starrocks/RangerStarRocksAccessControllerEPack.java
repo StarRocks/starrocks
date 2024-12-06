@@ -80,24 +80,28 @@ public class RangerStarRocksAccessControllerEPack extends RangerStarRocksAccessC
     @Override
     public void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        throw new AccessDeniedException();
+        RangerStarRocksResourceEPack resource = RangerStarRocksResourceEPack.makeWarehouseResource(name);
+        hasPermission(resource, currentUser, privilegeType);
     }
 
     @Override
     public void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name) throws AccessDeniedException {
-        throw new AccessDeniedException();
+        RangerStarRocksResourceEPack resource = RangerStarRocksResourceEPack.makeWarehouseResource(name);
+        hasPermission(resource, currentUser, PrivilegeType.ANY);
     }
 
     @Override
     public void checkFailoverGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        throw new AccessDeniedException();
+        RangerStarRocksResourceEPack resource = RangerStarRocksResourceEPack.makeFailoverGroup(name);
+        hasPermission(resource, currentUser, privilegeType);
     }
 
     @Override
     public void checkAnyActionOnFailoverGroup(UserIdentity currentUser, Set<Long> roleIds, String name)
             throws AccessDeniedException {
-        throw new AccessDeniedException();
+        RangerStarRocksResourceEPack resource = RangerStarRocksResourceEPack.makeFailoverGroup(name);
+        hasPermission(resource, currentUser, PrivilegeType.ANY);
     }
 
     private void hasPermission(RangerStarRocksResourceEPack resource, UserIdentity user, PrivilegeType privilegeType)

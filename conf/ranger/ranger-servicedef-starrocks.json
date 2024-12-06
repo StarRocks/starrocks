@@ -60,7 +60,9 @@
         "alter",
         "create view",
         "create function",
-        "create materialized view"
+        "create materialized view",
+        "create masking policy",
+        "create row access policy"
       ]
     },
     {
@@ -349,7 +351,114 @@
         "repository",
         "create resource group",
         "create global function",
-        "create storage volume"
+        "create storage volume",
+        "create warehouse",
+        "security",
+        "create failover group"
+      ]
+    },
+    {
+      "itemId": 101,
+      "name": "warehouse",
+      "type": "string",
+      "level": 10,
+      "parent": "",
+      "mandatory": true,
+      "lookupSupported": true,
+      "recursiveSupported": false,
+      "excludesSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": true
+      },
+      "validationRegEx": "",
+      "validationMessage": "",
+      "uiHint": "",
+      "label": "StarRocks Warehouse",
+      "description": "StarRocks Warehouse",
+      "accessTypeRestrictions": [
+        "usage",
+        "alter",
+        "drop"
+      ]
+    },
+    {
+      "itemId": 102,
+      "name": "masking_policy",
+      "type": "string",
+      "level": 10,
+      "parent": "",
+      "mandatory": true,
+      "lookupSupported": true,
+      "recursiveSupported": false,
+      "excludesSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": true
+      },
+      "validationRegEx": "",
+      "validationMessage": "",
+      "uiHint": "",
+      "label": "StarRocks Masking Policy",
+      "description": "StarRocks Masking Policy",
+      "accessTypeRestrictions": [
+        "apply",
+        "alter",
+        "drop"
+      ]
+    },
+    {
+      "itemId": 103,
+      "name": "row_access_policy",
+      "type": "string",
+      "level": 10,
+      "parent": "",
+      "mandatory": true,
+      "lookupSupported": true,
+      "recursiveSupported": false,
+      "excludesSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": true
+      },
+      "validationRegEx": "",
+      "validationMessage": "",
+      "uiHint": "",
+      "label": "StarRocks Row Access Policy",
+      "description": "StarRocks Row Access Policy",
+      "accessTypeRestrictions": [
+        "apply",
+        "alter",
+        "drop"
+      ]
+    },
+    {
+      "itemId": 104,
+      "name": "failover_group",
+      "type": "string",
+      "level": 10,
+      "parent": "",
+      "mandatory": true,
+      "lookupSupported": true,
+      "recursiveSupported": false,
+      "excludesSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": true
+      },
+      "validationRegEx": "",
+      "validationMessage": "",
+      "uiHint": "",
+      "label": "StarRocks Failover Group",
+      "description": "StarRocks Failover Group",
+      "accessTypeRestrictions": [
+        "usage",
+        "alter",
+        "drop"
       ]
     }
   ],
@@ -488,6 +597,37 @@
       "itemId": 27,
       "name": "create storage volume",
       "label": "CREATE STORAGE VOLUME"
+    },
+
+    {
+      "itemId": 101,
+      "name": "create warehouse",
+      "label": "CREATE WAREHOUSE"
+    },
+    {
+      "itemId": 102,
+      "name": "create masking policy",
+      "label": "CREATE MASKING POLICY"
+    },
+    {
+      "itemId": 103,
+      "name": "create row access policy",
+      "label": "CREATE ROW ACCESS POLICY"
+    },
+    {
+      "itemId": 104,
+      "name": "apply",
+      "label": "APPLY"
+    },
+    {
+      "itemId": 105,
+      "name": "security",
+      "label": "SECURITY"
+    },
+    {
+      "itemId": 106,
+      "name": "create failover group",
+      "label": "CREATE FAILOVER GROUP"
     }
   ],
   "configs": [

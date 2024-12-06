@@ -55,18 +55,6 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
     }
 
     @Override
-    public void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
-            throws AccessDeniedException {
-        checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectTypeEPack.WAREHOUSE,
-                Collections.singletonList(name));
-    }
-
-    @Override
-    public void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name) throws AccessDeniedException {
-        checkAnyActionOnObject(currentUser, roleIds, ObjectTypeEPack.WAREHOUSE, Collections.singletonList(name));
-    }
-
-    @Override
     public void checkFailoverGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
         checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectTypeEPack.FAILOVER_GROUP,

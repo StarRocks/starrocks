@@ -9,6 +9,7 @@ import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -99,17 +100,13 @@ public class PolicyPEntryObject implements PEntryObject {
             dbUUID = PrivilegeBuiltinConstants.ALL_DATABASES_UUID;
             policyId = PrivilegeBuiltinConstantsEPack.ALL_POLICY_ID;
         } else {
-            Database database = mgr.getMetadataMgr().getDb(catalogName, tokens.get(0));
-            if (database == null) {
-                throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
-            }
-            dbUUID = database.getUUID();
+            dbUUID = DbPEntryObject.getDatabaseUUID(mgr, catalogName, tokens.get(0));
 
             if (tokens.get(1).equals("*")) {
                 policyId = PrivilegeBuiltinConstantsEPack.ALL_POLICY_ID;
             } else {
                 Policy policy = mgr.getSecurityPolicyManager().getPolicyByName(policyType,
-                        new PolicyName(catalogName, database.getFullName(), tokens.get(1), NodePosition.ZERO));
+                        new PolicyName(catalogName, tokens.get(0), tokens.get(1), NodePosition.ZERO));
                 if (policy == null) {
                     throw new PrivObjNotFoundException("cannot find policy : " + tokens.get(1));
                 }

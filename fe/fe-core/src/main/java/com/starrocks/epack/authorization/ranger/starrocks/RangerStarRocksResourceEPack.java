@@ -36,11 +36,27 @@ public class RangerStarRocksResourceEPack extends RangerAccessResourceImpl {
         return resourceEPack;
     }
 
+    public static RangerStarRocksResourceEPack makeWarehouseResource(String warehouseName) {
+        RangerStarRocksResourceEPack resourceEPack = new RangerStarRocksResourceEPack();
+        resourceEPack.setValue(convertToRangerType(ObjectType.WAREHOUSE), warehouseName);
+        return resourceEPack;
+    }
+
+    public static RangerStarRocksResourceEPack makeFailoverGroup(String failoverGroupName) {
+        RangerStarRocksResourceEPack resourceEPack = new RangerStarRocksResourceEPack();
+        resourceEPack.setValue(convertToRangerType(ObjectTypeEPack.FAILOVER_GROUP), failoverGroupName);
+        return resourceEPack;
+    }
+
     private static String convertToRangerType(ObjectType objectType) {
         if (objectType.equals(ObjectTypeEPack.MASKING_POLICY)) {
             return "masking_policy";
         } else if (objectType.equals(ObjectTypeEPack.ROW_ACCESS_POLICY)) {
             return "row_access_policy";
+        } else if (objectType.equals(ObjectType.WAREHOUSE)) {
+            return "warehouse";
+        } else if (objectType.equals(ObjectTypeEPack.FAILOVER_GROUP)) {
+            return "failover_group";
         } else {
             return "unknown";
         }

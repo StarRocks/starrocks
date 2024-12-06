@@ -49,9 +49,11 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -174,6 +176,7 @@ public class BackupJobTest {
         db.registerTableUnlocked(view);
 
         LockManager lockManager = new LockManager();
+        WarehouseManager warehouseManager = new WarehouseManagerEPack();
 
         new Expectations(globalStateMgr) {
             {
@@ -193,7 +196,9 @@ public class BackupJobTest {
                 minTimes = 0;
                 result = db;
 
-
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
 
                 globalStateMgr.getNextId();
                 minTimes = 0;

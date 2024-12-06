@@ -220,6 +220,12 @@ public class CompactionSchedulerTest {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
+
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
         };
 
         Assert.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit());
