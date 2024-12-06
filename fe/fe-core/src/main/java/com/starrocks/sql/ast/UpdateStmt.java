@@ -50,7 +50,7 @@ public class UpdateStmt extends DmlStmt {
         this.fromRelations = fromRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
-        this.assignmentColumns = Sets.newHashSet();
+        this.assignmentColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnAssignment each : assignments) {
             this.assignmentColumns.add(each.getColumn());
         }
