@@ -18,7 +18,6 @@
 #include <queue>
 
 #include "exec/tablet_info.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "serde/protobuf_serde.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"

@@ -254,5 +254,4 @@ void BackendInternalServiceImpl<T>::local_tablet_reader_scan_get_next(google::pr
 }
 
 template class BackendInternalServiceImpl<PInternalService>;
-template class BackendInternalServiceImpl<doris::PBackendService>;
 } // namespace starrocks

@@ -24,7 +24,6 @@
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"

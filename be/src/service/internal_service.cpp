@@ -1283,6 +1283,5 @@ void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* c
 }
 
 template class PInternalServiceImplBase<PInternalService>;
-template class PInternalServiceImplBase<doris::PBackendService>;
 
 } // namespace starrocks
