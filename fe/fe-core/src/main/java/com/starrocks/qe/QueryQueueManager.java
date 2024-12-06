@@ -70,7 +70,7 @@ public class QueryQueueManager {
             while (allocatedSlot == null) {
                 // Check timeout.
                 long currentMs = System.currentTimeMillis();
-                if (currentMs >= deadlineEpochMs) {
+                if (slotRequirement.isPendingTimeout()) {
                     MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.increase(1L);
                     slotProvider.cancelSlotRequirement(slotRequirement);
                     String errMsg = String.format(PENDING_TIMEOUT_ERROR_MSG_FORMAT,
@@ -94,13 +94,12 @@ public class QueryQueueManager {
                 } catch (TimeoutException e) {
                     // Check timeout in the next loop.
                 } catch (CancellationException e) {
-                    // There are two threads checking timeout, one is there, the other is CheckTimer.
+                    // There are two threads checking timeout, one is current thread, the other is CheckTimer.
                     // So this thread can get be cancelled by CheckTimer
-                    if (System.currentTimeMillis() >= deadlineEpochMs) {
-                        MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.increase(1L);
-                        ResourceGroupMetricMgr.increaseTimeoutQueuedQuery(context, 1L);
+                    if (slotRequirement.isPendingTimeout()) {
+                        continue;
                     }
-                    throw new StarRocksException(e);
+                    throw new StarRocksException("Cancelled", e);
                 }
             }
         } finally {
