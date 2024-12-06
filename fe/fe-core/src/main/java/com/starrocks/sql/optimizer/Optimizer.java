@@ -97,6 +97,7 @@ import com.starrocks.sql.optimizer.rule.tree.AddIndexOnlyPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.ApplyTuningGuideRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.DataCachePopulateRewriteRule;
+import com.starrocks.sql.optimizer.rule.tree.EliminateOveruseColumnAccessPathRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
 import com.starrocks.sql.optimizer.rule.tree.InlineCteProjectPruneRule;
@@ -986,7 +987,7 @@ public class Optimizer {
 
         result = new AddIndexOnlyPredicateRule().rewrite(result, rootTaskContext);
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
-
+        result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
         result.setPlanCount(planCount);
         return result;
     }
