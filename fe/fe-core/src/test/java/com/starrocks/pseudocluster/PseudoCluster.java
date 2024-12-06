@@ -57,6 +57,7 @@ import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.SQLSyntaxErrorException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -97,7 +98,7 @@ public class PseudoCluster {
 
     static {
         try {
-            Class.forName("org.mariadb.jdbc.Driver").newInstance();
+            Class.forName("com.mysql.cj.jdbc.Driver").newInstance();
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -254,7 +255,7 @@ public class PseudoCluster {
     public ClusterConfig getConfig() {
         return config;
     }
-
+    
     public PseudoBackend getBackend(long beId) {
         String host = backendIdToHost.get(beId);
         if (host == null) {
@@ -317,8 +318,8 @@ public class PseudoCluster {
                     System.out.printf("runSql(%.3fs): %s\n", (end - start) / 1e9, sql);
                 }
                 break;
-            } catch (SQLException e) {
-                if (e.getMessage().contains("rpc failed, host")) {
+            } catch (SQLSyntaxErrorException e) {
+                if (e.getMessage().startsWith("rpc failed, host")) {
                     try {
                         Thread.sleep(1000);
                     } catch (InterruptedException ie) {
@@ -404,7 +405,7 @@ public class PseudoCluster {
 
         BasicDataSource dataSource = new BasicDataSource();
         dataSource.setUrl(
-                "jdbc:mariadb://127.0.0.1:" + queryPort + "/?permitMysqlScheme" +
+                "jdbc:mysql://127.0.0.1:" + queryPort + "/?permitMysqlScheme" +
                         "&usePipelineAuth=false&useBatchMultiSend=false&" +
                         "autoReconnect=true&failOverReadOnly=false&maxReconnects=10");
         dataSource.setUsername("root");

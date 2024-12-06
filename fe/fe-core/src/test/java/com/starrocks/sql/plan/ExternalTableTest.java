@@ -50,7 +50,7 @@ public class ExternalTableTest extends PlanTestBase {
     public void testKeyWordWhereCaluse() throws Exception {
         String sql = "select * from test.jdbc_key_words_test where `schema` = \"test\"";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "schema = 'test'");
+        assertContains(plan, "`schema` = 'test'");
     }
 
     @Test
@@ -211,8 +211,8 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  group by: b\n" +
                         "  |  \n" +
                         "  0:SCAN JDBC\n" +
-                        "     TABLE: test_table\n" +
-                        "     QUERY: SELECT a, b FROM test_table"));
+                        "     TABLE: `test_table`\n" +
+                        "     QUERY: SELECT `a`, `b` FROM `test_table`"));
     }
 
     @Test
