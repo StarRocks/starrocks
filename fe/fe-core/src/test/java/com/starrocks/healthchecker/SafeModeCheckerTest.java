@@ -38,7 +38,7 @@ public class SafeModeCheckerTest {
     public void setUp() {
         globalStateMgr.getNodeMgr().getClusterInfo().addBackend(be);
         ImmutableMap<String, DiskInfo> disksRef;
-        DiskInfo diskInfo = new DiskInfo("");
+        DiskInfo diskInfo = new DiskInfo("/disk1");
         diskInfo.setTotalCapacityB(100);
         diskInfo.setAvailableCapacityB(5);
         disksRef = ImmutableMap.of("", diskInfo);

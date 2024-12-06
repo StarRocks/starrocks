@@ -50,31 +50,38 @@ public class SafeModeChecker extends FrontendDaemon {
             // the left space of one disk less than min(0.9 * disk_capacity, 50GB),
             // we should enter safe mode
             if (be.isAlive()) {
+                boolean enterSafeMode = false;
+                StringBuilder path = new StringBuilder();
                 for (DiskInfo diskInfo : be.getDisks().values()) {
                     double safeModeCheckDiskCapacity = Math.min(
                             0.1 * diskInfo.getTotalCapacityB(), Config.safe_mode_check_disk_space);
                     if (diskInfo.getAvailableCapacityB() < safeModeCheckDiskCapacity) {
-                        if (!GlobalStateMgr.getCurrentState().isSafeMode()) {
-                            String warnMsg = String.format(
-                                    "The cluster is entering safe mode since left disk space of %d" +
-                                            " is %d. The load jobs will fail with exception.",
-                                    be.getId(),
-                                    diskInfo.getAvailableCapacityB());
-                            LOG.warn(warnMsg);
-
-                            // set safe mode flag to disable load jobs
-                            GlobalStateMgr.getCurrentState().setSafeMode(true);
-
-                            // abort all running transactions
-                            try {
-                                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                                        .abortAllRunningTransactions();
-                            } catch (Exception e) {
-                                LOG.error("Abort transactions failed with exceptions!", e);
-                            }
-                        }
-                        return true;
+                        enterSafeMode = true;
+                        path.append(diskInfo.getRootPath()).append(";");
                     }
+                }
+                if (enterSafeMode) {
+                    if (!GlobalStateMgr.getCurrentState().isSafeMode()) {
+                        String warnMsg = String.format(
+                                "The cluster is entering safe mode since left disk space of %d" +
+                                        " is not enough, path: %s The load jobs will fail with exception.",
+                                be.getId(),
+                                path);
+                        LOG.warn(warnMsg);
+
+                        // set safe mode flag to disable load jobs
+                        GlobalStateMgr.getCurrentState().setSafeMode(true);
+                        GlobalStateMgr.getCurrentState().setSafeModeHintMsg(path.toString());
+
+                        // abort all running transactions
+                        try {
+                            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                                    .abortAllRunningTransactions();
+                        } catch (Exception e) {
+                            LOG.error("Abort transactions failed with exceptions!", e);
+                        }
+                    }
+                    return true;
                 }
             } else if (GlobalStateMgr.getCurrentState().isSafeMode()) {
                 // If cluster is under safe mode and be is not alive
@@ -88,6 +95,7 @@ public class SafeModeChecker extends FrontendDaemon {
         if (GlobalStateMgr.getCurrentState().isSafeMode()) {
             LOG.info("The cluster exit safe mode");
             GlobalStateMgr.getCurrentState().setSafeMode(false);
+            GlobalStateMgr.getCurrentState().setSafeModeHintMsg("not in safe mode");
         }
         return false;
     }

@@ -180,7 +180,8 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
         if (GlobalStateMgr.getCurrentState().isSafeMode()  && !label.contains("delete")) {
             throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
-                    "The cluster is under safe mode state, all load jobs are rejected.");
+                    "The cluster is under safe mode state, disk path is: " +
+                            GlobalStateMgr.getCurrentState().getSafeModeHintMsg() + ", all load jobs are rejected.");
         }
 
         switch (sourceType) {

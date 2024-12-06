@@ -47,8 +47,8 @@ public class RemoteTransactionMgr {
         }
 
         if (GlobalStateMgr.getCurrentState().isSafeMode()) {
-            throw new AnalysisException(String.format("The cluster is under safe mode state," +
-                    " all load jobs are rejected."));
+            throw new AnalysisException("The cluster is under safe mode state, disk path is:"
+                    + GlobalStateMgr.getCurrentState().getSafeModeHintMsg() + " all load jobs are rejected.");
         }
 
         switch (sourceType) {
