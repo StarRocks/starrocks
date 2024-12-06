@@ -43,6 +43,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.jetbrains.annotations.TestOnly;
 
 import java.util.Collections;
 import java.util.List;
@@ -72,6 +73,22 @@ public abstract class ScanNode extends PlanNode {
         this.columnAccessPaths = columnAccessPaths;
     }
 
+<<<<<<< HEAD
+=======
+    @TestOnly
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return this.columnAccessPaths;
+    }
+
+    public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
+        this.dataCacheOptions = dataCacheOptions;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+>>>>>>> ae7fd35b3a ([UT] Eliminate overuse projecting CommonAccessPaths (#53603))
     public void setScanOptimzeOption(ScanOptimzeOption opt) {
         this.scanOptimzeOption = opt.copy();
     }
