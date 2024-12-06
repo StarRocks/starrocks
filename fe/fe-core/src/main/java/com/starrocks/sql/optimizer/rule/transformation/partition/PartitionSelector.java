@@ -205,12 +205,12 @@ public class PartitionSelector {
         List<Long> selectedPartitionIds;
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            selectedPartitionIds = getRangePartitionIdsByExpr(olapTable, rangePartitionInfo, inputCells, scalarOperator,
-                    columnRefOperatorMap, isRecyclingCondition);
+            selectedPartitionIds = getRangePartitionIdsByExpr(olapTable, rangePartitionInfo, scalarOperator,
+                    columnRefOperatorMap, isRecyclingCondition, inputCells);
         } else if (partitionInfo.isListPartition()) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-            selectedPartitionIds = getListPartitionIdsByExpr(tableName.getDb(), olapTable, listPartitionInfo, inputCells,
-                    whereExpr, scalarOperator, exprToColumnIdxes);
+            selectedPartitionIds = getListPartitionIdsByExpr(tableName.getDb(), olapTable, listPartitionInfo,
+                    whereExpr, scalarOperator, exprToColumnIdxes, inputCells);
         } else {
             throw new SemanticException("Unsupported partition type: " + partitionInfo.getType());
         }
@@ -332,10 +332,10 @@ public class PartitionSelector {
 
     private static List<Long> getRangePartitionIdsByExpr(OlapTable olapTable,
                                                          RangePartitionInfo rangePartitionInfo,
-                                                         Map<Long, ? extends PCell> inputCells,
                                                          ScalarOperator predicate,
                                                          Map<Column, ColumnRefOperator> columnRefOperatorMap,
-                                                         boolean isRecyclingCondition) {
+                                                         boolean isRecyclingCondition,
+                                                         Map<Long, ? extends PCell> inputCells) {
         // clone it to avoid changing the original map
         Map<Long, Range<PartitionKey>> keyRangeById = Maps.newHashMap(rangePartitionInfo.getIdToRange(false));
         if (!CollectionUtils.sizeIsEmpty(inputCells)) {
@@ -395,15 +395,15 @@ public class PartitionSelector {
 
     private static List<Long> getListPartitionIdsByExpr(String dbName, OlapTable olapTable,
                                                         ListPartitionInfo listPartitionInfo,
-                                                        Map<Long, ? extends PCell> inputCells,
                                                         Expr whereExpr,
                                                         ScalarOperator scalarOperator,
-                                                        Map<Expr, Integer> exprToColumnIdxes) {
+                                                        Map<Expr, Integer> exprToColumnIdxes,
+                                                        Map<Long, ? extends PCell> inputCells) {
 
         List<Long> result = null;
         // try to prune partitions by FE's constant evaluation ability
         try {
-            result = getListPartitionIdsByExprV1(olapTable, listPartitionInfo, inputCells, scalarOperator);
+            result = getListPartitionIdsByExprV1(olapTable, listPartitionInfo, scalarOperator, inputCells);
             if (result != null) {
                 return result;
             }
@@ -412,6 +412,7 @@ public class PartitionSelector {
         }
 
         try {
+            // TODO: support to prune extra inputCells.
             return getListPartitionIdsByExprV2(dbName, olapTable, listPartitionInfo, whereExpr, exprToColumnIdxes);
         } catch (Exception e2) {
             LOG.warn("Failed to prune partitions with where expression(v2): " + e2.getMessage());
@@ -424,8 +425,8 @@ public class PartitionSelector {
      */
     private static List<Long> getListPartitionIdsByExprV1(OlapTable olapTable,
                                                           ListPartitionInfo listPartitionInfo,
-                                                          Map<Long, ? extends PCell> inputCells,
-                                                          ScalarOperator scalarOperator) {
+                                                          ScalarOperator scalarOperator,
+                                                          Map<Long, ? extends PCell> inputCells) {
         // eval for each conjunct
         Map<ColumnRefOperator, Integer> colRefIdxMap = Maps.newHashMap();
         List<String> partitionColNames = olapTable.getPartitionColumns().stream()
