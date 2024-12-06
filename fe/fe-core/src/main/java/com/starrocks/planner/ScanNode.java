@@ -45,6 +45,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.jetbrains.annotations.TestOnly;
 
 import java.util.Collections;
 import java.util.List;
@@ -74,6 +75,11 @@ public abstract class ScanNode extends PlanNode {
 
     public void setColumnAccessPaths(List<ColumnAccessPath> columnAccessPaths) {
         this.columnAccessPaths = columnAccessPaths;
+    }
+
+    @TestOnly
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return this.columnAccessPaths;
     }
 
     public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
