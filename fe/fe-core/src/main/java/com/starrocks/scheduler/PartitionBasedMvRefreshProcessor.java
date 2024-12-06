@@ -1011,8 +1011,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throws AnalysisException {
         if (mvRefreshParams.isForceCompleteRefresh()) {
             // Force refresh
-            int partitionTTLNumber = mvContext.getPartitionTTLNumber();
-            return mvRefreshPartitioner.getMVPartitionsToRefreshWithForce(partitionTTLNumber);
+            return mvRefreshPartitioner.getMVPartitionsToRefreshWithForce();
         } else {
             return mvRefreshPartitioner.getMVPartitionsToRefresh(mvPartitionInfo, snapshotBaseTables,
                     mvRefreshParams, mvPotentialPartitionNames);

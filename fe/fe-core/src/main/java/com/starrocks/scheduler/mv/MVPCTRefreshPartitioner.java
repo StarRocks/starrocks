@@ -77,11 +77,12 @@ public abstract class MVPCTRefreshPartitioner {
 
     /**
      * Generate partition predicate for mv refresh according ref base table changed partitions.
-     * @param refBaseTable: ref base table to check.
+     *
+     * @param refBaseTable:               ref base table to check.
      * @param refBaseTablePartitionNames: ref base table partition names to check.
-     * @param mvPartitionSlotRefs: mv partition slot ref to generate partition predicate.
-     * @return: Return partition predicate for mv refresh.
+     * @param mvPartitionSlotRefs:        mv partition slot ref to generate partition predicate.
      * @throws AnalysisException
+     * @return: Return partition predicate for mv refresh.
      */
     public abstract Expr generatePartitionPredicate(Table refBaseTable,
                                                     Set<String> refBaseTablePartitionNames,
@@ -89,29 +90,30 @@ public abstract class MVPCTRefreshPartitioner {
 
     /**
      * Get mv partitions to refresh based on the ref base table partitions.
-     * @param mvPartitionInfo: mv partition info to check.
-     * @param snapshotBaseTables: snapshot base tables to check.
+     *
+     * @param mvPartitionInfo:           mv partition info to check.
+     * @param snapshotBaseTables:        snapshot base tables to check.
      * @param mvPotentialPartitionNames: mv potential partition names to check.
-     * @return: Return mv partitions to refresh based on the ref base table partitions.
      * @throws AnalysisException
+     * @return: Return mv partitions to refresh based on the ref base table partitions.
      */
     public abstract Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
                                                          Map<Long, TableSnapshotInfo> snapshotBaseTables,
                                                          MVRefreshParams mvRefreshParams,
                                                          Set<String> mvPotentialPartitionNames) throws AnalysisException;
-    public abstract Set<String> getMVPartitionsToRefreshWithForce(int partitionTTLNumber) throws AnalysisException;
+
+    public abstract Set<String> getMVPartitionsToRefreshWithForce() throws AnalysisException;
 
     /**
      * Get mv partition names with TTL based on the ref base table partitions.
+     *
      * @param materializedView: materialized view to check.
-     * @param partitionTTLNumber: mv partition TTL number.
-     * @param isAutoRefresh: is auto refresh or not.
-     * @return: mv to refresh partition names with TTL based on the ref base table partitions.
+     * @param isAutoRefresh:    is auto refresh or not.
      * @throws AnalysisException
+     * @return: mv to refresh partition names with TTL based on the ref base table partitions.
      */
     public abstract Set<String> getMVPartitionNamesWithTTL(MaterializedView materializedView,
                                                            MVRefreshParams mvRefreshParams,
-                                                           int partitionTTLNumber,
                                                            boolean isAutoRefresh) throws AnalysisException;
 
     /**
@@ -119,7 +121,7 @@ public abstract class MVPCTRefreshPartitioner {
      *
      * @param mvPartitionsToRefresh     : mv partitions to refresh.
      * @param mvPotentialPartitionNames : mv potential partition names to check.
-     * @param tentative see {@link com.starrocks.scheduler.PartitionBasedMvRefreshProcessor}
+     * @param tentative                 see {@link com.starrocks.scheduler.PartitionBasedMvRefreshProcessor}
      */
     public abstract void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
                                                         Set<String> mvPotentialPartitionNames,
@@ -134,7 +136,7 @@ public abstract class MVPCTRefreshPartitioner {
 
     /**
      * Get mv partitions to refresh based on the ref base table partitions and its updated partitions.
-     * @param refBaseTable : ref base table to check.
+     * @param refBaseTable            : ref base table to check.
      * @param baseTablePartitionNames : ref base table partition names to check.
      * @return : Return mv corresponding partition names to the ref base table partition names, null if sync info don't contain.
      */
@@ -144,14 +146,14 @@ public abstract class MVPCTRefreshPartitioner {
         Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMaps = mvContext.getRefBaseTableMVIntersectedPartitions();
         if (refBaseTableMVPartitionMaps == null || !refBaseTableMVPartitionMaps.containsKey(refBaseTable)) {
             LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
-                            "refBaseTableMVPartitionMaps: {}", refBaseTable, refBaseTableMVPartitionMaps);
+                    "refBaseTableMVPartitionMaps: {}", refBaseTable, refBaseTableMVPartitionMaps);
             return null;
         }
         Map<String, Set<String>> refBaseTableMVPartitionMap = refBaseTableMVPartitionMaps.get(refBaseTable);
         for (String basePartitionName : baseTablePartitionNames) {
             if (!refBaseTableMVPartitionMap.containsKey(basePartitionName)) {
                 LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
-                                "refBaseTableMVPartitionMaps: {}", basePartitionName, refBaseTableMVPartitionMaps);
+                        "refBaseTableMVPartitionMaps: {}", basePartitionName, refBaseTableMVPartitionMaps);
                 return null;
             }
             result.addAll(refBaseTableMVPartitionMap.get(basePartitionName));
@@ -197,7 +199,7 @@ public abstract class MVPCTRefreshPartitioner {
             }
             ans.retainAll(mvPartitionNames);
             LOG.info("The ref base table {} has updated partitions: {}, the corresponding " +
-                    "mv partitions to refresh: {}, " + "mvRangePartitionNames: {}", baseTable.getName(),
+                            "mv partitions to refresh: {}, " + "mvRangePartitionNames: {}", baseTable.getName(),
                     refBaseTablePartitionNames, ans, mvPartitionNames);
             result.addAll(ans);
         }
