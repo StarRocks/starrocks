@@ -279,8 +279,7 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
-        List<Partition> partitions = buildGetRemoteFilesPartitions(table, params);
-        return fileOps.getRemoteFilesAsync(table, partitions, params);
+        return fileOps.getRemoteFilesAsync(table, params, (p) -> this.buildGetRemoteFilesPartitions(table, p));
     }
 
     @Override

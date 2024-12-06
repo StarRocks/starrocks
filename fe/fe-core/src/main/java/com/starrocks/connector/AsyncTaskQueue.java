@@ -55,9 +55,11 @@ public class AsyncTaskQueue<T> {
     private static final Logger LOG = LogManager.getLogger(AsyncTaskQueue.class);
 
     public interface Task<T> {
-        List<T> run() throws InterruptedException;
+        default List<T> run() throws InterruptedException {
+            return null;
+        }
 
-        default List<Task<T>> moreTasks() {
+        default List<Task<T>> subTasks() {
             return null;
         }
 
@@ -282,15 +284,19 @@ public class AsyncTaskQueue<T> {
                 // run it only when there is no exception.
                 try {
                     List<T> outputs = task.run();
-                    addOutputs(outputs);
-                    List<Task<T>> moreTasks = task.moreTasks();
-                    if (moreTasks != null) {
-                        taskQueueSize.addAndGet(moreTasks.size());
-                        taskQueue.addAll(moreTasks);
+                    if (outputs != null) {
+                        addOutputs(outputs);
+                    }
+                    List<Task<T>> subTasks = task.subTasks();
+                    if (subTasks != null) {
+                        taskQueueSize.addAndGet(subTasks.size());
+                        for (Task t : subTasks) {
+                            taskQueue.addFirst(t);
+                        }
                     }
                     if (!task.isDone()) {
                         taskQueueSize.addAndGet(1);
-                        taskQueue.addFirst(task);
+                        taskQueue.addLast(task);
                     }
                 } catch (Exception e) {
                     updateTaskException(e);
