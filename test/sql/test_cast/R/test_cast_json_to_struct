@@ -1,0 +1,49 @@
+-- name: test_cast_json_to_struct
+select cast(PARSE_JSON('[1,2,3]') as struct<col1 int, col2 int, col3 int>);
+-- result:
+{"col1":1,"col2":2,"col3":3}
+-- !result
+select cast(PARSE_JSON('[1,2,3]') as struct<col1 int, col2 int>);
+-- result:
+{"col1":1,"col2":2}
+-- !result
+select cast(PARSE_JSON('[1,2,3]') as struct<col1 int, col2 int, col3 int, col4 int>);
+-- result:
+{"col1":1,"col2":2,"col3":3,"col4":null}
+-- !result
+select cast(PARSE_JSON('[1,   2,    3, "a"]') as struct<col1 int, col2 int, col3 int, col4 int>);
+-- result:
+{"col1":1,"col2":2,"col3":3,"col4":null}
+-- !result
+select cast(PARSE_JSON('[1.1, 2.2, 3.3]') as struct<col1 double, col2 double, col3 double>);
+-- result:
+{"col1":1.1,"col2":2.2,"col3":3.3}
+-- !result
+select cast(PARSE_JSON('[1.1, 2.2, 3.3]') as struct<col1 double, col2 double, col3 int>);
+-- result:
+{"col1":1.1,"col2":2.2,"col3":3}
+-- !result
+select cast(PARSE_JSON('{"star": "rocks", "number": 1}') as struct<number int, star varchar>);
+-- result:
+{"number":1,"star":"rocks"}
+-- !result
+select cast(PARSE_JSON('{"star": "rocks", "number": 1}') as struct<number int, not_found varchar>);
+-- result:
+{"number":1,"not_found":null}
+-- !result
+select cast(PARSE_JSON('{"star": "rocks", "number": [1, 2, 3]}') as struct<number array<int>, not_found varchar>);
+-- result:
+{"number":[1,2,3],"not_found":null}
+-- !result
+select cast(PARSE_JSON('[1, [{"star": "rocks"}, {"star": "rocks"}]]') as struct<col1 int, col2 array<json>>);
+-- result:
+{"col1":1,"col2":['{"star": "rocks"}','{"star": "rocks"}']}
+-- !result
+select cast(PARSE_JSON('{"star" : "rocks", "length": 5, "numbers": [1, 4, 7], "nest": [1, 2, 3]}') as struct<star varchar(10), length int, numbers array<int>, nest struct<col1 int, col2 int, col3 int>>);
+-- result:
+{"star":"rocks","length":5,"numbers":[1,4,7],"nest":{"col1":1,"col2":2,"col3":3}}
+-- !result
+select cast(PARSE_JSON('[{"star" : "rocks", "length": 5, "numbers": [1, 4, 7], "nest": [1, 2, 3]}, {"star" : "rockses", "length": 33, "numbers": [2, 5, 9], "nest": [3, 6, 9]}]') as array<struct<star varchar(10), length int, numbers array<int>, nest struct<col1 int, col2 int, col3 int>>>);
+-- result:
+[{"star":"rocks","length":5,"numbers":[1,4,7],"nest":{"col1":1,"col2":2,"col3":3}},{"star":"rockses","length":33,"numbers":[2,5,9],"nest":{"col1":3,"col2":6,"col3":9}}]
+-- !result
