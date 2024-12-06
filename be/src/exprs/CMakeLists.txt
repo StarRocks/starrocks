@@ -65,6 +65,7 @@ set(EXPR_FILES
   hyperloglog_functions.cpp
   in_const_predicate.cpp
   info_func.cpp
+  inet_aton.cpp
   in_predicate.cpp
   is_null_predicate.cpp
   json_functions.cpp

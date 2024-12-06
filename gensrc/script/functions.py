@@ -290,6 +290,7 @@ vectorized_functions = [
     [30120, 'length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::length'],
     [30130, 'char_length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::utf8_length'],
     [30131, 'character_length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::utf8_length'],
+    [30132, 'inet_aton', True, False, 'BIGINT', ['VARCHAR'], 'StringFunctions::inet_aton'],
 
     [30140, 'lower', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
     [30141, 'lcase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
