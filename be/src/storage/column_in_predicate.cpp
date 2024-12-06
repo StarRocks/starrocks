@@ -29,7 +29,7 @@
 namespace starrocks {
 
 template <LogicalType field_type, typename ItemSet>
-class ColumnInPredicate : public ColumnPredicate {
+class ColumnInPredicate final : public ColumnPredicate {
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     static_assert(std::is_same_v<ValueType, typename ItemSet::value_type>);
 
@@ -195,7 +195,7 @@ private:
 
 // Template specialization for binary column
 template <LogicalType field_type>
-class BinaryColumnInPredicate : public ColumnPredicate {
+class BinaryColumnInPredicate final : public ColumnPredicate {
 public:
     BinaryColumnInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)
             : ColumnPredicate(type_info, id), _zero_padded_strs(std::move(strings)) {
@@ -368,7 +368,7 @@ private:
     ItemHashSet<Slice> _slices;
 };
 
-class DictionaryCodeInPredicate : public ColumnPredicate {
+class DictionaryCodeInPredicate final : public ColumnPredicate {
 private:
     enum LogicOp { ASSIGN, AND, OR };
 
