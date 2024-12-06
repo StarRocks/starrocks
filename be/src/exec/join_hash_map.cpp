@@ -228,6 +228,8 @@ void SerializedJoinProbeFunc::_probe_column(const JoinHashTableItems& table_item
         ptr += probe_state->probe_slice[i].size;
     }
 
+    probe_state->null_array = nullptr;
+
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->next[i] = table_items.first[probe_state->buckets[i]];
     }
