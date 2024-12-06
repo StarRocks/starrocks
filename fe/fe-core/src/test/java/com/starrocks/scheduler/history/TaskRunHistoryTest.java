@@ -15,6 +15,7 @@
 package com.starrocks.scheduler.history;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.gson.GsonUtils;
@@ -23,6 +24,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TResultBatch;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -34,7 +36,9 @@ import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.text.MessageFormat;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -321,5 +325,100 @@ public class TaskRunHistoryTest {
         String res = MessageFormat.format("{0}", Strings.quote(status.toJSON()));
         System.out.println(res);
         Assert.assertTrue(res.contains("\"datacache\":\"{\\\"enable\\\": \\\"true\\\"}\""));
+    }
+
+    private TaskRunStatus createTaskRunStatus(long createdTime) {
+        TaskRunStatus status = new TaskRunStatus();
+        status.setCreateTime(createdTime);
+        status.setExpireTime(createdTime + 10000);
+        status.setQueryId("q1");
+        status.setTaskName("t1");
+        status.setState(Constants.TaskRunState.SUCCESS);
+        return status;
+    }
+
+    @Test
+    public void testLookByTaskNamesOrder(@Mocked RepoExecutor repo) {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+
+        TaskRunHistoryTable history = new TaskRunHistoryTable();
+        List<TaskRunStatus> taskRuns = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            TaskRunStatus status = createTaskRunStatus(i);
+            taskRuns.add(status);
+        }
+        // shuffle the taskRuns' order
+        Collections.shuffle(taskRuns);
+        new MockUp<RepoExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(String sql) {
+                TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
+                record.data = taskRuns;
+                String json = GsonUtils.GSON.toJson(record);
+
+                TResultBatch resultBatch = new TResultBatch();
+                ByteBuffer buffer = ByteBuffer.wrap(json.getBytes());
+                resultBatch.setRows(Lists.newArrayList(buffer));
+                return Lists.newArrayList(resultBatch);
+            }
+        };
+        // lookup by task names
+        String dbName = "";
+        Set<String> taskNames = Set.of("t1", "t2");
+        List<TaskRunStatus> result = history.lookupByTaskNames(dbName, taskNames);
+        Assert.assertEquals(10, result.size());
+        // result always sorted by createTime desc
+        for (int i = 0; i < 10; i++) {
+            Assert.assertEquals(9 - i, result.get(i).getCreateTime());
+        }
+    }
+
+    @Test
+    public void testLookOrder(@Mocked RepoExecutor repo) {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+
+        TaskRunHistoryTable history = new TaskRunHistoryTable();
+        List<TaskRunStatus> taskRuns = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            TaskRunStatus status = createTaskRunStatus(i);
+            taskRuns.add(status);
+        }
+
+        // shuffle the taskRuns' order
+        Collections.shuffle(taskRuns);
+
+        new MockUp<RepoExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(String sql) {
+                TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
+                record.data = taskRuns;
+                String json = GsonUtils.GSON.toJson(record);
+                TResultBatch resultBatch = new TResultBatch();
+                ByteBuffer buffer = ByteBuffer.wrap(json.getBytes());
+                resultBatch.setRows(Lists.newArrayList(buffer));
+                return Lists.newArrayList(resultBatch);
+            }
+        };
+        // lookup by params
+        TGetTasksParams params = new TGetTasksParams();
+        params.setDb(null);
+        params.setState(null);
+        params.setTask_name("t1");
+        List<TaskRunStatus> result = history.lookup(params);
+        Assert.assertEquals(10, result.size());
+        // result always sorted by createTime desc
+        for (int i = 0; i < 10; i++) {
+            Assert.assertEquals(9 - i, result.get(i).getCreateTime());
+        }
     }
 }
