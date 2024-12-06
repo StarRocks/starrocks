@@ -1120,8 +1120,13 @@ public abstract class Type implements Cloneable {
             return true;
         } else if (from.isStringType() && to.isArrayType()) {
             return true;
-        } else if (from.isJsonType() && to.isArrayScalar()) {
-            // now we only support cast json to one dimensional array
+        } else if (from.isJsonType() && to.isArrayType()) {
+            ArrayType array = (ArrayType) to;
+            if (array.getItemType().isScalarType() || array.getItemType().isStructType()) {
+                return true;
+            }
+            return false;
+        } else if (from.isJsonType() && to.isStructType()) {
             return true;
         } else if (from.isBoolean() && to.isComplexType()) {
             // for mock nest type with NULL value, the cast must return NULL
@@ -1130,14 +1135,6 @@ public abstract class Type implements Cloneable {
         } else {
             return false;
         }
-    }
-
-    public boolean isArrayScalar() {
-        if (!isArrayType()) {
-            return false;
-        }
-        ArrayType array = (ArrayType) this;
-        return array.getItemType().isScalarType();
     }
 
     /**
