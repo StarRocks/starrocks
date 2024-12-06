@@ -119,7 +119,6 @@ public class PartitionSelector {
                                                    Expr whereExpr,
                                                    boolean isRecyclingCondition) {
         return getPartitionIdsByExpr(context, tableName, olapTable, whereExpr, isRecyclingCondition, null);
-
     }
 
     /**
@@ -254,13 +253,13 @@ public class PartitionSelector {
         } catch (Exception e) {
             throw new SemanticException("Failed to parse retention condition: " + ttlCondition);
         }
-        Map<Long, PCell> inputCellsMap = null;
-        Map<Long, String> inputCellIdToNameMap = null;
 
         // if isMockPartitionIds is true, we mock partition ids for input cells because the partition is not added into table
         // yet which may happen in mv's refresh `syncAddOrDropPartitions` process.
         // TODO: remove this mock partition ids logic if `PartitionPruner` can support to prune partitions by partition name
         //  rather than by ids.
+        Map<Long, PCell> inputCellsMap = null;
+        Map<Long, String> inputCellIdToNameMap = null;
         long initialPartitionId = 0;
         if (!CollectionUtils.sizeIsEmpty(inputCells)) {
             inputCellsMap = Maps.newHashMap();

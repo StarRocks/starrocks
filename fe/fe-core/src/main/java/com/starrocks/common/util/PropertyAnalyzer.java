@@ -1510,7 +1510,7 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().setPartitionRefreshNumber(number);
                 if (isNonPartitioned) {
                     throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER
-                            + " does not support non-range-partitioned materialized view.");
+                            + " does not support non-partitioned materialized view.");
                 }
             }
             // exclude trigger tables
