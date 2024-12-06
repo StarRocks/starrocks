@@ -302,8 +302,11 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(size_t row_num) {
     CHECK(deserialize_thrift_msg(buf, &len, TProtocolType::JSON, &tbl).ok());
 
     std::vector<SlotDescriptor> slots;
+    phmap::flat_hash_set<SlotId> seen_slots;
     for (auto& t_slot : tbl.slotDescriptors) {
-        slots.emplace_back(t_slot);
+        if (auto [_, is_new] = seen_slots.insert(t_slot.id); is_new) {
+            slots.emplace_back(t_slot);
+        }
     }
 
     std::vector<SlotDescriptor*> p_slots;
