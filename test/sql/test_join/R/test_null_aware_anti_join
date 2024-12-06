@@ -70,3 +70,14 @@ None	None	None
 2	3	None
 2	3	2
 -- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+select count(*) from (SELECT * from (SELECT if (generate_series <= 1000, null, generate_series) x0 FROM TABLE(generate_series(1,  8192))) t where (x0, x0 + 1) not in  ( select l3.l_orderkey, l3.l_orderkey + 1 from lineitem l3 ) order by 1) t;
+-- result:
+7192
+-- !result
+select count(*) from (SELECT * from (SELECT if (generate_series <= 1000, null, generate_series) x0 FROM TABLE(generate_series(1,  8192))) t where (x0, concat("l", x0)) not in  ( select l3.l_orderkey, concat("l", l_orderkey) from lineitem l3 ) order by 1) t;
+-- result:
+7192
+-- !result

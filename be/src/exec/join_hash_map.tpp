@@ -351,7 +351,7 @@ void FixedSizeJoinProbeFunc<LT>::_probe_column(const JoinHashTableItems& table_i
                                                            row_count);
     const auto& data = get_key_data(*probe_state);
     JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, &probe_state->buckets, 0, row_count);
-
+    probe_state->null_array = nullptr;
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->next[i] = table_items.first[probe_state->buckets[i]];
     }
