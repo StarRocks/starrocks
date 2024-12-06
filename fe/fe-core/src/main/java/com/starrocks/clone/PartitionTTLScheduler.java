@@ -15,6 +15,7 @@ package com.starrocks.clone;
 
 import com.google.api.client.util.Preconditions;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -39,6 +40,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -140,6 +142,7 @@ public class PartitionTTLScheduler {
                                              PartitionInfo partitionInfo) {
         long dbId = db.getId();
         long tableId = olapTable.getId();
+        String ttlCondition = olapTable.getTableProperty().getPartitionRetentionCondition();
         if (partitionInfo instanceof RangePartitionInfo) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             if (rangePartitionInfo.getPartitionColumnsSize() != 1) {
@@ -150,12 +153,15 @@ public class PartitionTTLScheduler {
 
             int ttlNumber = olapTable.getTableProperty().getPartitionTTLNumber();
             PeriodDuration ttlDuration = olapTable.getTableProperty().getPartitionTTL();
-            if (Objects.equals(ttlNumber, INVALID) && ttlDuration.isZero()) {
+            if (Objects.equals(ttlNumber, INVALID) && ttlDuration.isZero() && Strings.isNullOrEmpty(ttlCondition)) {
                 LOG.warn("database={}, table={} have no ttl. remove it from scheduler", dbId, tableId);
                 return false;
             }
         } else if (partitionInfo instanceof ListPartitionInfo) {
-            return false;
+            if (Strings.isNullOrEmpty(ttlCondition)) {
+                LOG.warn("database={}, table={} have no retention condition. remove it from scheduler", dbId, tableId);
+                return false;
+            }
         }
         return true;
     }
@@ -167,16 +173,22 @@ public class PartitionTTLScheduler {
         long tableId = olapTable.getId();
         List<String> dropPartitionNames = null;
         try {
+            String ttlCondition = olapTable.getTableProperty().getPartitionRetentionCondition();
             if (partitionInfo instanceof RangePartitionInfo) {
                 int ttlNumber = olapTable.getTableProperty().getPartitionTTLNumber();
                 PeriodDuration ttlDuration = olapTable.getTableProperty().getPartitionTTL();
-                if (!ttlDuration.isZero()) {
+                // prefer ttlCondition first
+                if (!Strings.isNullOrEmpty(ttlCondition)) {
+                    dropPartitionNames = PartitionSelector.getExpiredPartitionsByRetentionCondition(db, olapTable, ttlCondition);
+                } else if (!ttlDuration.isZero()) {
                     dropPartitionNames = buildDropPartitionClauseByTTLDuration(olapTable, ttlDuration);
-                } else {
+                } else if (ttlNumber != INVALID) {
                     dropPartitionNames = buildDropPartitionClauseByTTLNumber(olapTable, ttlNumber);
                 }
             } else if (partitionInfo instanceof ListPartitionInfo) {
-                return dropPartitionNames;
+                if (!Strings.isNullOrEmpty(ttlCondition)) {
+                    dropPartitionNames = PartitionSelector.getExpiredPartitionsByRetentionCondition(db, olapTable, ttlCondition);
+                }
             }
         } catch (AnalysisException e) {
             LOG.warn("database={}-{}, table={}-{} failed to build drop partition statement.",
