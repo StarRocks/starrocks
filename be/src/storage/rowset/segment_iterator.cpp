@@ -483,7 +483,7 @@ Status SegmentIterator::_init() {
             VLOG(2) << "seg_iter init delvec tablet:" << _opts.tablet_id << " rowset:" << _opts.rowset_id
                     << " seg:" << segment_id() << " version req:" << _opts.version << " actual:" << _del_vec->version()
                     << " " << _del_vec->cardinality() << "/" << _segment->num_rows();
-            roaring_init_iterator(&_del_vec->roaring()->roaring, &_roaring_iter);
+            roaring_iterator_init(&_del_vec->roaring()->roaring, &_roaring_iter);
         }
     }
 
