@@ -104,6 +104,7 @@ public class LocalWarehouse extends Warehouse {
                 TimeUtils.longToTimeString(createdTime),
                 TimeUtils.longToTimeString(resumedTime),
                 TimeUtils.longToTimeString(updatedTime),
+                (property != null) ? property.toString() : "",
                 comment);
     }
 

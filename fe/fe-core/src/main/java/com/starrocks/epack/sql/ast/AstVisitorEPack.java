@@ -14,7 +14,6 @@
 package com.starrocks.epack.sql.ast;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -61,10 +60,6 @@ public interface AstVisitorEPack<R, C> extends AstVisitor<R, C> {
 
     default R visitShowNodesStatement(ShowNodesStmt statement, C context) {
         return visitShowStatement(statement, context);
-    }
-
-    default R visitAlterWarehouseStatement(AlterWarehouseStmt statement, C context) {
-        return visitStatement(statement, context);
     }
 
     // ------------------------------------------- Alter Clause --------------------------------------------------------

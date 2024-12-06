@@ -34,6 +34,7 @@
 
 package com.starrocks.epack.warehouse;
 
+import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -58,5 +59,9 @@ public class WarehouseProperty {
 
     public int getComputeReplica() {
         return computeReplica;
+    }
+
+    public String toString() {
+        return new Gson().toJson(this);
     }
 }
