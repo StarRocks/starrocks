@@ -30,7 +30,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionKeyDiscreteDomain;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -71,15 +70,13 @@ public class PartitionColPredicateEvaluator {
     private final Column partitionColumn;
 
     public PartitionColPredicateEvaluator(List<Column> partitionColumns,
-                                          RangePartitionInfo rangePartitionInfo, List<Long> candidatePartitions) {
+                                          List<Long> candidatePartitions,
+                                          List<Range<PartitionKey>> candidateRanges) {
         this.candidatePartitions = candidatePartitions;
-        candidateNum = candidatePartitions.size();
-        partitionColumn = partitionColumns.get(0);
-        candidateRanges = Lists.newArrayList();
-        for (long id : candidatePartitions) {
-            candidateRanges.add(rangePartitionInfo.getIdToRange(false).get(id));
-        }
-        exprToCandidateRanges = Maps.newHashMap();
+        this.candidateNum = candidatePartitions.size();
+        this.partitionColumn = partitionColumns.get(0);
+        this.candidateRanges = candidateRanges;
+        this.exprToCandidateRanges = Maps.newHashMap();
     }
 
     public List<Long> prunePartitions(PartitionColPredicateExtractor extractor, ScalarOperator predicates) {
