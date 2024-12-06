@@ -89,7 +89,7 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setSelectRatioThreshold(-1);
         connectContext.getSessionVariable().setEnableSyncMaterializedViewRewrite(false);
         String sql = "select * from pushdown_test where k1 >= 0 and (k3 > k4 or k3 = 1)";
-        assertContains(getFragmentPlan(sql), "sUNION");
+        assertContains(getFragmentPlan(sql), "UNION");
     }
 
     @Test
