@@ -2380,4 +2380,98 @@ TEST_F(VectorizedCastExprTest, unsupported_test) {
     ASSERT_FALSE(Expr::create_vectorized_expr(&pool, cast_expr, &expr3, &runtime_state).ok());
 }
 
+TTypeDesc gen_struct_type_desc(const std::vector<TPrimitiveType::type> field_types,
+                               const std::vector<std::string> field_names) {
+    std::vector<TTypeNode> types_list;
+    TTypeDesc type_desc;
+
+    TTypeNode type_struct;
+    type_struct.type = TTypeNodeType::STRUCT;
+    std::vector<TStructField> fields;
+    for (const auto& field_name : field_names) {
+        TStructField field;
+        field.__set_name(field_name);
+        fields.push_back(field);
+    }
+    type_struct.__set_struct_fields(fields);
+    types_list.push_back(type_struct);
+
+    for (int index = 0; index < field_types.size(); index++) {
+        TTypeNode type_scalar;
+        TScalarType scalar_type;
+        scalar_type.__set_type(field_types[index]);
+        scalar_type.__set_precision(0);
+        scalar_type.__set_scale(0);
+        scalar_type.__set_len(0);
+        type_scalar.__set_scalar_type(scalar_type);
+        types_list.push_back(type_scalar);
+    }
+    type_desc.__set_types(types_list);
+    return type_desc;
+}
+
+static std::string cast_json_to_struct(TExprNode& cast_expr, std::vector<LogicalType> element_types,
+                                       std::vector<std::string> field_names, const std::string& str) {
+    cast_expr.child_type = to_thrift(TYPE_JSON);
+    std::vector<TPrimitiveType::type> field_types;
+    for (const auto& element_type : element_types) {
+        field_types.emplace_back(to_thrift(element_type));
+    }
+    cast_expr.type = gen_struct_type_desc(field_types, field_names);
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+
+    auto json = JsonValue::parse(str);
+    if (!json.ok()) {
+        return "INVALID JSON";
+    }
+    cast_expr.type = gen_type_desc(cast_expr.child_type);
+    MockVectorizedExpr<TYPE_JSON> col1(cast_expr, 1, &json.value());
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    if (ptr->size() != 1) {
+        return "EMPTY";
+    }
+    return ptr->debug_item(0);
+}
+
+TEST_F(VectorizedCastExprTest, json_to_struct) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+
+    EXPECT_EQ("{col1:1,col2:2,col3:3}",
+              cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_INT, TYPE_INT}, {"col1", "col2", "col3"}, "[1,2,3]"));
+    EXPECT_EQ("{col1:1,col2:2,col3:3}",
+              cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_INT, TYPE_INT}, {"col1", "col2", "col3"}, "[1,   2,  3]"));
+    EXPECT_EQ("{col1:NULL,col2:NULL,col3:NULL}",
+              cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_INT, TYPE_INT}, {"col1", "col2", "col3"}, "[]"));
+    EXPECT_EQ("{col1:NULL}", cast_json_to_struct(cast_expr, {TYPE_INT}, {"col1"}, ""));
+    EXPECT_EQ("{col1:NULL}", cast_json_to_struct(cast_expr, {TYPE_INT}, {"col1"}, "a"));
+    EXPECT_EQ("{col1:NULL,col2:NULL}",
+              cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_INT}, {"col1", "col2"}, R"(["a","b"])"));
+
+    EXPECT_EQ("{col1:1.1,col2:2.2,col3:3.3}", cast_json_to_struct(cast_expr, {TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE},
+                                                                  {"col1", "col2", "col3"}, "[1.1,2.2,3.3]"));
+
+    EXPECT_EQ("{col1:'a',col2:'b'}",
+              cast_json_to_struct(cast_expr, {TYPE_VARCHAR, TYPE_VARCHAR}, {"col1", "col2"}, R"(["a","b"])"));
+    EXPECT_EQ("{col1:'a',col2:' b'}",
+              cast_json_to_struct(cast_expr, {TYPE_VARCHAR, TYPE_VARCHAR}, {"col1", "col2"}, R"(["a", " b"])"));
+    EXPECT_EQ("{col1:'1',col2:'2'}",
+              cast_json_to_struct(cast_expr, {TYPE_VARCHAR, TYPE_VARCHAR}, {"col1", "col2"}, R"([1, 2])"));
+
+    EXPECT_EQ("{star:'rocks',number:1}", cast_json_to_struct(cast_expr, {TYPE_VARCHAR, TYPE_INT}, {"star", "number"},
+                                                             R"({"star": "rocks", "number": 1})"));
+    EXPECT_EQ("{number:1,star:'rocks'}", cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_VARCHAR}, {"number", "star"},
+                                                             R"({"star": "rocks", "number": 1})"));
+    EXPECT_EQ("{number:1,not_found:NULL}",
+              cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_VARCHAR}, {"number", "not_found"},
+                                  R"({"star": "rocks", "number": 1})"));
+}
+
 } // namespace starrocks
