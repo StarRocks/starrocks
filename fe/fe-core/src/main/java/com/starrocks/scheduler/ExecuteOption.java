@@ -45,8 +45,16 @@ public class ExecuteOption {
 
     public ExecuteOption(int priority, boolean mergeRedundant, Map<String, String> taskRunProperties) {
         this.priority = priority;
+<<<<<<< HEAD
         this.mergeRedundant = mergeRedundant;
         this.taskRunProperties = taskRunProperties;
+=======
+        this.isMergeRedundant = isMergeRedundant;
+        // clone the taskRunProperties to avoid modifying the original map because `mergeProperties` may change it.
+        if (taskRunProperties != null) {
+            this.taskRunProperties = Maps.newHashMap(taskRunProperties);
+        }
+>>>>>>> c8accacf23 ([BugFix] Fix ExecuteOption may change task's taskRunProperties bug (#53660))
     }
 
     public static ExecuteOption makeMergeRedundantOption() {
