@@ -1866,7 +1866,6 @@ struct TGetKeysResponse {
     1: optional list<binary> key_metas;
 }
 
-<<<<<<< HEAD
 struct TStartCheckpointRequest {
     1: optional i64 epoch;
     2: optional i64 journal_id;
@@ -2022,12 +2021,9 @@ service FrontendService {
 
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
 
-<<<<<<< HEAD
     TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
 
     TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
-=======
     TListRecycleBinCatalogsResult listRecycleBinCatalogs(1: TListRecycleBinCatalogsParams params)
->>>>>>> 0df9e55cac ([Enhancement] support show catalog recycle bin)
 }
 

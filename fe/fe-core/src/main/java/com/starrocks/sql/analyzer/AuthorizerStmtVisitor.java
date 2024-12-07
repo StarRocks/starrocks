@@ -164,7 +164,6 @@ import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
-import com.starrocks.sql.ast.ShowCatalogRecycleBinStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
@@ -2713,24 +2712,6 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.ANY.name(), ObjectType.WAREHOUSE.name(), statement.getWarehouseName());
         }
-    }
-
-    @Override
-    public Void visitShowCatalogRecycleBinStatement(ShowCatalogRecycleBinStmt statement, ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE);
-        } catch (AccessDeniedException e) {
-            try {
-                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.NODE);
-            } catch (AccessDeniedException e2) {
-                AccessDeniedException.reportAccessDenied(
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.OPERATE.name() + " OR " + PrivilegeType.NODE.name(),
-                        ObjectType.SYSTEM.name(), null);
-            }
-        }
-        return null;
     }
 
     private String getTableNameByRoutineLoadLabel(ConnectContext context,

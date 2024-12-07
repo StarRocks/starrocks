@@ -175,7 +175,6 @@ import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
-import com.starrocks.sql.ast.ShowCatalogRecycleBinStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
@@ -2779,38 +2778,6 @@ public class ShowExecutor {
             }
             return new ShowResultSet(statement.getMetaData(), rows);
         }
-
-        public ShowResultSet visitShowCatalogRecycleBinStatement(ShowCatalogRecycleBinStmt statement, ConnectContext context) {
-            List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getRecycleBin().getCatalogRecycleBinInfo().stream()
-                    .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
-            return new ShowResultSet(statement.getMetaData(), rowSet);
-        }
-
-        private List<List<String>> doPredicate(ShowStmt showStmt,
-                                               ShowResultSetMetaData showResultSetMetaData,
-                                               List<List<String>> rows) {
-            Predicate predicate = showStmt.getPredicate();
-            if (predicate == null) {
-                return rows;
-            }
-
-            SlotRef slotRef = (SlotRef) predicate.getChild(0);
-            StringLiteral stringLiteral = (StringLiteral) predicate.getChild(1);
-            List<List<String>> returnRows = new ArrayList<>();
-            BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
-
-            int idx = showResultSetMetaData.getColumnIdx(slotRef.getColumnName());
-            if (binaryPredicate.getOp().isEquivalence()) {
-                for (List<String> row : rows) {
-                    if (row.get(idx).equals(stringLiteral.getStringValue())) {
-                        returnRows.add(row);
-                    }
-                }
-            }
-
-            return returnRows;
-        }
-    }
 
     public static List<ShowMaterializedViewStatus> listMaterializedViewStatus(
             String dbName,
