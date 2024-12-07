@@ -69,7 +69,7 @@ public class FeExecuteCoordinator extends Coordinator {
         this.execPlan = execPlan;
     }
     @Override
-    public void startScheduling(boolean needDeploy) throws Exception {
+    public void startScheduling(ScheduleOption option) throws Exception {
 
     }
 
