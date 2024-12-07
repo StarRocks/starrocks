@@ -2197,7 +2197,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowCatalogsStatement(StarRocksParser.ShowCatalogsStatementContext context) {
-        return new ShowCatalogsStmt(createPos(context));
+        NodePosition pos = createPos(context);
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new ShowCatalogsStmt(stringLiteral.getValue(), pos);
+        }
+        return new ShowCatalogsStmt(null, createPos(context));
     }
 
     @Override
