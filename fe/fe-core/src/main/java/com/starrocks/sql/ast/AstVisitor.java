@@ -1517,4 +1517,5 @@ public interface AstVisitor<R, C> {
     default R visitUserVariableHint(UserVariableHint node, C context) {
         return visitNode(node, context);
     }
+
 }
