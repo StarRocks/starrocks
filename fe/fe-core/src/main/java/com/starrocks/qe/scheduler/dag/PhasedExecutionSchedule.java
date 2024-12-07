@@ -202,11 +202,7 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     }
 
     // schedule next
-<<<<<<< HEAD
-    public void schedule() throws RpcException, UserException {
-=======
-    public void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
->>>>>>> ea6b33df6a ([Enhancement] short circuit optimization on `select limit` case (on FE side) (#53661))
+    public void schedule(Coordinator.ScheduleOption option) throws RpcException, UserException {
         buildDeployStates();
         final int oldTaskCnt = inputScheduleTaskNums.getAndIncrement();
         if (oldTaskCnt == 0) {
@@ -218,15 +214,11 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         }
     }
 
-<<<<<<< HEAD
-    private void doDeploy() throws RpcException, UserException {
-=======
     public void cancel() {
         cancelled = true;
     }
 
-    private void doDeploy() throws RpcException, StarRocksException {
->>>>>>> ea6b33df6a ([Enhancement] short circuit optimization on `select limit` case (on FE side) (#53661))
+    private void doDeploy() throws RpcException, UserException {
         if (deployStates.isEmpty()) {
             return;
         }
@@ -247,14 +239,10 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         }
     }
 
-<<<<<<< HEAD
     public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, UserException {
-=======
-    public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException {
         if (cancelled) {
             return;
         }
->>>>>>> ea6b33df6a ([Enhancement] short circuit optimization on `select limit` case (on FE side) (#53661))
         final FragmentInstance instance = dag.getInstanceByInstanceId(fragmentInstanceId);
         final PlanFragmentId fragmentId = instance.getFragmentId();
         final AtomicInteger countDowns = schedulingFragmentInstances.get(fragmentId);

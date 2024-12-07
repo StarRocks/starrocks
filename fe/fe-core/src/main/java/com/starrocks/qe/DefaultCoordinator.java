@@ -638,11 +638,7 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
-<<<<<<< HEAD
-    private void deliverExecFragments(boolean needDeploy) throws RpcException, UserException {
-=======
-    private void deliverExecFragments(ScheduleOption option) throws RpcException, StarRocksException {
->>>>>>> ea6b33df6a ([Enhancement] short circuit optimization on `select limit` case (on FE side) (#53661))
+    private void deliverExecFragments(ScheduleOption option) throws RpcException, UserException {
         lock();
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
             Deployer deployer =

@@ -55,7 +55,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                 for (DeployState state : states) {
                     deployer.deployFragments(state);
                 }
-            } catch (StarRocksException | RpcException e) {
+            } catch (UserException | RpcException e) {
                 throw new RuntimeException(e);
             }
             // jvm should use tail optimization.
@@ -79,11 +79,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
     }
 
     @Override
-<<<<<<< HEAD
-    public void schedule() throws RpcException, UserException {
-=======
-    public void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
->>>>>>> ea6b33df6a ([Enhancement] short circuit optimization on `select limit` case (on FE side) (#53661))
+    public void schedule(Coordinator.ScheduleOption option) throws RpcException, UserException {
         List<DeployState> states = new ArrayList<>();
         for (List<ExecutionFragment> executionFragments : dag.getFragmentsInTopologicalOrderFromRoot()) {
             final DeployState deployState = deployer.createFragmentExecStates(executionFragments);
