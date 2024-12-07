@@ -226,10 +226,24 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
 
     auto tablet_type = create_tablet_req.tablet_type;
     Status create_status;
-    if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        create_status = exec_env->lake_tablet_manager()->create_tablet(create_tablet_req);
-    } else {
-        create_status = StorageEngine::instance()->create_tablet(create_tablet_req);
+
+    if (create_tablet_req.__isset.timeout_ms && create_tablet_req.timeout_ms > 0) {
+        if (agent_task_req->isset.recv_time) {
+            int64_t elapsed_seconds = std::difftime(time(nullptr), agent_task_req->recv_time);
+            if (elapsed_seconds * 1000 > create_tablet_req.timeout_ms) {
+                create_status =
+                        Status::TimedOut(fmt::format("the task waits too long in the queue. "
+                                                     "timeout: {}ms, elapsed: {}s",
+                                                     create_tablet_req.timeout_ms, elapsed_seconds));
+            }
+        }
+    }
+    if (create_status.ok()) {
+        if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+            create_status = exec_env->lake_tablet_manager()->create_tablet(create_tablet_req);
+        } else {
+            create_status = StorageEngine::instance()->create_tablet(create_tablet_req);
+        }
     }
     if (!create_status.ok()) {
         LOG(WARNING) << "create table failed. status: " << create_status.to_string()
