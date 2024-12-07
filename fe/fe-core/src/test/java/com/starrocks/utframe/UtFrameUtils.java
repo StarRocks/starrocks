@@ -584,7 +584,7 @@ public class UtFrameUtils {
                     (context, statementBase, execPlan) -> {
                         DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
 
-                        scheduler.startScheduling();
+                        scheduler.exec();
 
                         return scheduler;
                     });
@@ -596,7 +596,7 @@ public class UtFrameUtils {
                     (context, statementBase, execPlan) -> {
                         DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
 
-                        scheduler.startSchedulingWithoutDeploy();
+                        scheduler.execWithoutDeploy();
                         String plan = scheduler.getSchedulerExplain();
 
                         return Pair.create(plan, scheduler);
