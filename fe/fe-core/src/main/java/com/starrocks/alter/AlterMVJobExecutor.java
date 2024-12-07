@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -101,6 +102,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         Pair<String, PeriodDuration> ttlDuration = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
             ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+        }
+        String ttlRetentionCondition = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(materializedView.getDbId());
+            ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db,
+                    materializedView, properties, true);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
@@ -212,13 +219,25 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         Map<String, String> curProp = materializedView.getTableProperty().getProperties();
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL) && ttlDuration != null &&
                 !materializedView.getTableProperty().getPartitionTTL().equals(ttlDuration.second)) {
+            if (!materializedView.getPartitionInfo().isRangePartition()) {
+                throw new SemanticException("partition_ttl is only supported for range partitioned materialized view");
+            }
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
             materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER) &&
                 materializedView.getTableProperty().getPartitionTTLNumber() != partitionTTL) {
+            if (!materializedView.getPartitionInfo().isRangePartition()) {
+                throw new SemanticException("partition_ttl_number is only supported for range partitioned materialized view");
+            }
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(partitionTTL));
             materializedView.getTableProperty().setPartitionTTLNumber(partitionTTL);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION) &&
+                ttlRetentionCondition != null &&
+                !ttlRetentionCondition.equalsIgnoreCase(materializedView.getTableProperty().getPartitionRetentionCondition())) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
+            materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER) &&
                 materializedView.getTableProperty().getPartitionRefreshNumber() != partitionRefreshNumber) {
@@ -250,7 +269,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
             curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES,
                     propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES));
-            materializedView.getTableProperty().setExcludedRefreshTables(excludedTriggerTables);
+            materializedView.getTableProperty().setExcludedRefreshTables(excludedRefreshBaseTables);
             isChanged = true;
         }
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {

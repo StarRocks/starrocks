@@ -236,6 +236,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = _runtime_state->use_page_cache();
     _params.use_pk_index = thrift_olap_scan_node.use_pk_index;
+    _params.sample_options = thrift_olap_scan_node.sample_options;
     if (thrift_olap_scan_node.__isset.enable_prune_column_after_index_filter) {
         _params.prune_column_after_index_filter = thrift_olap_scan_node.enable_prune_column_after_index_filter;
     }
@@ -393,7 +394,7 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
     _params.column_access_paths = &_column_access_paths;
 
     // update counter
-    COUNTER_UPDATE(_pushdown_access_paths_counter, leaf_size);
+    COUNTER_SET(_pushdown_access_paths_counter, leaf_size);
     return Status::OK();
 }
 
@@ -520,9 +521,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
         _non_pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "NonPushdownPredicates",
                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
-        COUNTER_UPDATE(
-                _non_pushdown_predicates_counter,
-                static_cast<int64_t>(_scan_ctx->not_push_down_conjuncts().size() + _non_pushdown_pred_tree.size()));
+        COUNTER_SET(_non_pushdown_predicates_counter,
+                    static_cast<int64_t>(_scan_ctx->not_push_down_conjuncts().size() + _non_pushdown_pred_tree.size()));
         if (runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
             _runtime_profile->add_info_string(
                     "NonPushdownPredicateTree",
@@ -698,7 +698,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
-    COUNTER_UPDATE(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
+    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
     if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
         _runtime_profile->add_info_string(
@@ -777,6 +777,23 @@ void OlapChunkSource::_update_counter() {
     if (_reader->stats().json_flatten_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
+    }
+
+    // Data sampling
+    if (_params.sample_options.enable_sampling) {
+        _runtime_profile->add_info_string("SampleMethod", to_string(_params.sample_options.sample_method));
+        _runtime_profile->add_info_string("SamplePercent",
+                                          std::to_string(_params.sample_options.probability_percent) + "%");
+        COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleTime", parent_name),
+                       _reader->stats().sample_population_size);
+        COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleBuildHistogramTime", parent_name),
+                       _reader->stats().sample_build_histogram_time_ns);
+        COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "SampleSize", TUnit::UNIT, parent_name),
+                       _reader->stats().sample_size);
+        COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "SamplePopulationSize", TUnit::UNIT, parent_name),
+                       _reader->stats().sample_population_size);
+        COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "SampleBuildHistogramCount", TUnit::UNIT, parent_name),
+                       _reader->stats().sample_build_histogram_count);
     }
 }
 

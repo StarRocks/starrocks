@@ -85,6 +85,12 @@ The optimization for unused column filtering at the Scan stage may cause a crash
 SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
 ```
 
+#### enable_filter_unused_columns_in_scan_stage
+
+* **Description**: Whether to filter unused column at the Scan stage.
+* **Default**: true
+* **Introduced in**: v3.1
+
 ### Configure Data Migration (Optional)
 
 You can configure data migration operations using the following FE and BE parameters. In most cases, the default configuration can meet your needs. If you wish to use the default configuration, you can skip this step.

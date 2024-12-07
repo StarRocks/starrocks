@@ -141,6 +141,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
+    public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
@@ -362,7 +363,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
 
-
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_PUSH_DOWN_GROUPINGSET = "cbo_push_down_groupingset";
@@ -465,6 +465,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
+
+    public static final String STATISTIC_META_COLLECT_PARALLEL = "statistic_meta_collect_parallel";
 
     public static final String ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS = "enable_analyze_phase_prune_columns";
 
@@ -819,18 +821,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
     public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
     public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
-
+    public static final String ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS = "enable_connector_async_list_partitions";
     public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
 
     public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
 
     public static final String DISABLE_GENERATED_COLUMN_REWRITE = "disable_generated_column_rewrite";
-    
+
     public static final String ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK = "enable_push_down_pre_agg_with_rank";
 
-    public static final  String INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG = "insert_local_shuffle_for_window_pre_agg";
+    public static final String INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG = "insert_local_shuffle_for_window_pre_agg";
 
     public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
+
+    public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -965,6 +969,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    // Toggle ANSI color in explain output
+    @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
+    private boolean colorExplainOutput = true;
 
     @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
     private boolean enableMetadataProfile = false;
@@ -1498,6 +1506,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
     private int statisticCollectParallelism = 1;
 
+    @VarAttr(name = STATISTIC_META_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
+    private int statisticMetaCollectParallelism = 10;
+
     @VarAttr(name = ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS, flag = VariableMgr.INVISIBLE)
     private boolean enableAnalyzePhasePruneColumns = false;
 
@@ -1620,6 +1631,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = DISABLE_GENERATED_COLUMN_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean disableGeneratedColumnRewrite = false;
+
+    @VarAttr(name = ENABLE_SCAN_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
+    private boolean enableScanPredicateExprReuse = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -2250,6 +2264,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
     private int connectorIncrementalScanRangeSize = 500;
 
+    @VarAttr(name = ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS)
+    private boolean enableConnectorAsyncListPartitions = false;
+
     @VarAttr(name = ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK)
     private boolean enablePushDownPreAggWithRank = true;
 
@@ -2570,6 +2587,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.statisticCollectParallelism = parallelism;
     }
 
+    public int getStatisticMetaCollectParallelism() {
+        return statisticMetaCollectParallelism;
+    }
+
+    public void setStatisticMetaCollectParallelism(int statisticMetaCollectParallelism) {
+        this.statisticMetaCollectParallelism = statisticMetaCollectParallelism;
+    }
+
     public boolean isEnableAnalyzePhasePruneColumns() {
         return enableAnalyzePhasePruneColumns;
     }
@@ -2685,6 +2710,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
+    }
+
+    public boolean getColorExplainOutput() {
+        return colorExplainOutput;
     }
 
     public boolean isEnableLoadProfile() {
@@ -4383,6 +4412,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return disableGeneratedColumnRewrite;
     }
 
+    public boolean isEnableScanPredicateExprReuse() {
+        return enableScanPredicateExprReuse;
+    }
+
     public int getConnectorIncrementalScanRangeNumber() {
         return connectorIncrementalScanRangeSize;
     }
@@ -4393,6 +4426,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableConnectorIncrementalScanRanges() {
         return enableConnectorIncrementalScanRanges;
+    }
+
+    public boolean isEnableConnectorAsyncListPartitions() {
+        return enableConnectorAsyncListPartitions;
+    }
+
+    public void setEnableConnectorAsyncListPartitions(boolean v) {
+        enableConnectorAsyncListPartitions = v;
     }
 
     public void setEnableConnectorIncrementalScanRanges(boolean v) {

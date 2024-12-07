@@ -27,7 +27,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.thrift.TExplainLevel;
@@ -53,7 +53,7 @@ public class JDBCScanNode extends ScanNode {
         super(id, desc, "SCAN JDBC");
         table = tbl;
         String objectIdentifier = getIdentifierSymbol();
-        tableName = objectIdentifier + tbl.getJdbcTable() + objectIdentifier;
+        tableName = objectIdentifier + tbl.getCatalogTableName() + objectIdentifier;
     }
 
     @Override
@@ -63,7 +63,7 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
         createJDBCTableColumns();
         createJDBCTableFilters();
         computeStats(analyzer);

@@ -65,7 +65,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
@@ -851,6 +851,7 @@ public class PlanFragmentBuilder {
             scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
             scanNode.setGtid(node.getGtid());
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
+            scanNode.setSample(node.getSample());
             currentExecGroup.add(scanNode);
             // set tablet
             try {
@@ -905,7 +906,7 @@ public class PlanFragmentBuilder {
                 }
                 scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
                 scanNode.setTotalTabletsNum(totalTabletsNum);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
                         "Build Exec OlapScanNode fail, scan info is invalid", INTERNAL_ERROR, e);
             }
@@ -1265,7 +1266,7 @@ public class PlanFragmentBuilder {
             } catch (AnalysisException e) {
                 LOG.warn("Delta lake scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("Delta scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
@@ -1477,7 +1478,7 @@ public class PlanFragmentBuilder {
                     HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                     prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
                 }
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("Iceberg scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
@@ -1837,7 +1838,7 @@ public class PlanFragmentBuilder {
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
                 scanNode.assignNodes();
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
             scanNode.setShardScanRanges(scanNode.computeShardLocations(node.getSelectedIndex()));
@@ -3286,6 +3287,26 @@ public class PlanFragmentBuilder {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
             PhysicalFilterOperator filter = (PhysicalFilterOperator) optExpr.getOp();
 
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+
+            Map<SlotId, Expr> commonSubOperatorMap = Maps.newHashMap();
+            if (filter.getPredicateCommonOperators() != null) {
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : filter.getPredicateCommonOperators().entrySet()) {
+                    Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
+                                    filter.getPredicateCommonOperators()));
+
+                    commonSubOperatorMap.put(new SlotId(entry.getKey().getId()), expr);
+
+                    SlotDescriptor slotDescriptor =
+                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                    slotDescriptor.setIsNullable(expr.isNullable());
+                    slotDescriptor.setIsMaterialized(false);
+                    slotDescriptor.setType(expr.getType());
+                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+                }
+            }
+
             List<Expr> predicates = Utils.extractConjuncts(filter.getPredicate()).stream()
                     .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
@@ -3295,6 +3316,7 @@ public class PlanFragmentBuilder {
                     new SelectNode(context.getNextNodeId(), inputFragment.getPlanRoot(), predicates);
             selectNode.setLimit(filter.getLimit());
             selectNode.computeStatistics(optExpr.getStatistics());
+            selectNode.setCommonSlotMap(commonSubOperatorMap);
             currentExecGroup.add(selectNode);
             inputFragment.setPlanRoot(selectNode);
             return inputFragment;
@@ -3762,7 +3784,7 @@ public class PlanFragmentBuilder {
             currentExecGroup.add(binlogScanNode, true);
             try {
                 binlogScanNode.computeScanRanges();
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
                         "Failed to compute scan ranges for StreamScanNode, " + e.getMessage(), INTERNAL_ERROR);
             }
@@ -3833,7 +3855,7 @@ public class PlanFragmentBuilder {
             try {
                 BrokerFileGroup grp = new BrokerFileGroup(table, scanColumns);
                 fileGroups.add(grp);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
                         INTERNAL_ERROR);
@@ -3850,7 +3872,7 @@ public class PlanFragmentBuilder {
             try {
                 scanNode.init(analyzer);
                 scanNode.finalizeStats(analyzer);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
                         INTERNAL_ERROR);

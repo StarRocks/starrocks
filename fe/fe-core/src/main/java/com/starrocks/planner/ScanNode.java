@@ -39,12 +39,13 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.jetbrains.annotations.TestOnly;
 
 import java.util.Collections;
 import java.util.List;
@@ -74,6 +75,11 @@ public abstract class ScanNode extends PlanNode {
 
     public void setColumnAccessPaths(List<ColumnAccessPath> columnAccessPaths) {
         this.columnAccessPaths = columnAccessPaths;
+    }
+
+    @TestOnly
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return this.columnAccessPaths;
     }
 
     public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
@@ -107,7 +113,7 @@ public abstract class ScanNode extends PlanNode {
     /**
      * cast expr to SlotDescriptor type
      */
-    protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws UserException {
+    protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws StarRocksException {
         if (!slotDesc.getType().matchesType(expr.getType())) {
             return expr.castTo(slotDesc.getType());
         } else {
@@ -165,6 +171,12 @@ public abstract class ScanNode extends PlanNode {
 
     @Override
     public boolean needCollectExecStats() {
+        return true;
+    }
+
+    // We use this flag to know how many connector scan nodes at BE side, and connector framework
+    // will use this number to fair share memory usage between those scan nodes.
+    public boolean isRunningAsConnectorOperator() {
         return true;
     }
 }

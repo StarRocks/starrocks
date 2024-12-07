@@ -22,7 +22,7 @@ import com.google.common.collect.Queues;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.proto.AbortCompactionRequest;
@@ -586,7 +586,7 @@ public class PseudoBackend {
         return ts;
     }
 
-    void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws UserException {
+    void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws StarRocksException {
         // Ignore the initial disk usage of tablet
         if (request.create_tablet_req.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
             lakeTabletManager.createTablet(request.create_tablet_req);
@@ -1407,7 +1407,8 @@ public class PseudoBackend {
             void cancel() {
             }
 
-            void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
+            void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws
+                    StarRocksException {
                 for (PTabletWithPartition tabletWithPartition : tablets) {
                     Tablet tablet = tabletManager.getTablet(tabletWithPartition.tabletId);
                     if (tablet == null) {
@@ -1447,7 +1448,7 @@ public class PseudoBackend {
             }
         }
 
-        void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
+        void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws StarRocksException {
             TabletsChannel tabletsChannel = indexToTabletsChannel.get(request.indexId);
             if (tabletsChannel == null) {
                 result.status =
@@ -1521,7 +1522,7 @@ public class PseudoBackend {
                 }
                 try {
                     channel.close(request, result);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     LOG.warn("error close load channel", e);
                     channel.cancel();
                     loadChannels.remove(loadIdString);

@@ -86,8 +86,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
@@ -255,6 +255,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -509,6 +510,7 @@ public class GlobalStateMgr {
     private final Authorizer authorizer;
     private final DDLStmtExecutor ddlStmtExecutor;
     private final ShowExecutor showExecutor;
+    private final ExecutorService queryDeployExecutor;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -807,6 +809,9 @@ public class GlobalStateMgr {
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
         this.temporaryTableCleaner = new TemporaryTableCleaner();
+        this.queryDeployExecutor =
+                ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
+                        "query-deploy", true);
     }
 
     public static void destroyCheckpoint() {
@@ -1035,6 +1040,10 @@ public class GlobalStateMgr {
 
     public ShowExecutor getShowExecutor() {
         return showExecutor;
+    }
+
+    public ExecutorService getQueryDeployExecutor() {
+        return queryDeployExecutor;
     }
 
     public GtidGenerator getGtidGenerator() {
@@ -1300,7 +1309,7 @@ public class GlobalStateMgr {
                                 LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
             LOG.warn("transfer to leader failed with error", t);

@@ -325,6 +325,9 @@ public class PartitionPruneRuleTest {
             {
                 olapTable.getPartitionInfo();
                 result = partitionInfo;
+                
+                partitionInfo.isListPartition();
+                result = true;
 
                 partitionInfo.getType();
                 result = PartitionType.LIST;
@@ -410,6 +413,9 @@ public class PartitionPruneRuleTest {
 
                 partitionInfo.getLiteralExprValues();
                 result = literalExprValues;
+
+                partitionInfo.isListPartition();
+                result = true;
 
                 olapTable.getPartitions();
                 result = Lists.newArrayList(part1, part2);

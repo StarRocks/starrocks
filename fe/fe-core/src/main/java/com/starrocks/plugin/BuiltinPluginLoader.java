@@ -17,7 +17,7 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 
 import java.io.IOException;
 
@@ -30,13 +30,13 @@ public class BuiltinPluginLoader extends PluginLoader {
     }
 
     @Override
-    public void install() throws UserException, IOException {
+    public void install() throws StarRocksException, IOException {
         pluginInstallValid();
         plugin.init(pluginInfo, pluginContext);
     }
 
     @Override
-    public void uninstall() throws IOException, UserException {
+    public void uninstall() throws IOException, StarRocksException {
         if (plugin != null) {
             pluginUninstallValid();
             plugin.close();

@@ -14,7 +14,7 @@
 
 #include "util/int96.h"
 
-#include "runtime/large_int_value.h"
+#include "types/large_int_value.h"
 
 namespace starrocks {
 

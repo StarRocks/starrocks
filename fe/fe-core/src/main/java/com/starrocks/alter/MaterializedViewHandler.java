@@ -58,7 +58,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
@@ -371,7 +371,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
             LOG.info("finished to create materialized view job: {}", mvJob.getJobId());
             return mvJob;
-        } catch (UserException exception) {
+        } catch (StarRocksException exception) {
             throw new DdlException(exception.getMessage());
         }
     }
@@ -947,9 +947,6 @@ public class MaterializedViewHandler extends AlterHandler {
     @Override
     public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
             throws DdlException, AnalysisException, MetaNotFoundException {
-        if (olapTable.isCloudNativeTable()) {
-            throw new DdlException("Does not support add rollup on lake table");
-        }
         if (olapTable.existTempPartitions()) {
             throw new DdlException("Can not alter table when there are temp partitions in table");
         }

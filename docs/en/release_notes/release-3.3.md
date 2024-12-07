@@ -10,6 +10,29 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.7
+
+Release date: November 29, 2024
+
+### Improvements
+
+- Rewrote `unnest(bitmap_to_array)` as `unnest_bitmap` to improve performance. [#52870](https://github.com/StarRocks/starrocks/pull/52870)
+- Reduced the write and delete operations of Txn logs. [#42542](https://github.com/StarRocks/starrocks/pull/42542)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Failure to connect Power BI to external tables. [#52977](https://github.com/StarRocks/starrocks/pull/52977)
+- Misleading FE Thrift RPC failure messages in logs. [#52706](https://github.com/StarRocks/starrocks/pull/52706)
+- Routine Load tasks were canceled due to expired transactions (now tasks are canceled only if the database or table no longer exists). [#50334](https://github.com/StarRocks/starrocks/pull/50334)
+- Stream Load failures when submitted using HTTP 1.0. [#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- Integer overflow of partition IDs. [#52965](https://github.com/StarRocks/starrocks/pull/52965)
+- Hive Text Reader failed to recognize the last empty element. [#52990](https://github.com/StarRocks/starrocks/pull/52990)
+- Issues caused by `array_map` in Join conditions. [#52911](https://github.com/StarRocks/starrocks/pull/52911)
+- Metadata cache issues under high concurrency scenarios. [#52968](https://github.com/StarRocks/starrocks/pull/52968)
+- The whole materialized view was refreshed when a partition was dropped from the base table. [#52740](https://github.com/StarRocks/starrocks/pull/52740)
+
 ## 3.3.6
 
 Release date: November 18, 2024
@@ -68,6 +91,7 @@ Fixed the following issues:
 - The return type of `SELECT @@autocommit` has changed from BOOLEAN to BIGINT. [#51946](https://github.com/StarRocks/starrocks/pull/51946)
 - Added a new FE configuration item, `max_bucket_number_per_partition`, to control the maximum number of buckets per partition. [#47852](https://github.com/StarRocks/starrocks/pull/47852)
 - Enabled memory usage checks by default for Primary Key tables. [#52393](https://github.com/StarRocks/starrocks/pull/52393)
+- Optimized loading strategy to reduce loading speed when Compaction tasks cannot be completed on time. [#52269](https://github.com/StarRocks/starrocks/pull/52269)
 
 ## 3.3.5
 

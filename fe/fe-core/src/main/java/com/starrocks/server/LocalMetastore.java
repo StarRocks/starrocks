@@ -37,6 +37,7 @@ package com.starrocks.server;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -108,7 +109,7 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -119,6 +120,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.journal.SerializeException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
@@ -1332,11 +1334,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (!isCheckpointThread()) {
                 // add to inverted index
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-                for (MaterializedIndex index :
-                        partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                    TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(), partition.getId(),
+                    TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(), physicalPartition.getId(),
                             index.getId(), schemaHash, info.getDataProperty().getStorageMedium());
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
@@ -1919,6 +1921,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
             table.onCreate(db);
+        } catch (SerializeException e) {
+            db.unRegisterTableUnlocked(table);
+            LOG.warn("create table failed", e);
+            ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), e.getMessage());
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
@@ -2714,7 +2720,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * including SchemaChangeHandler and RollupHandler
      */
     @Override
-    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         AlterJobExecutor alterJobExecutor = new AlterJobExecutor();
         alterJobExecutor.process(stmt, context);
     }
@@ -2723,7 +2729,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * used for handling AlterViewStmt (the ALTER VIEW command).
      */
     @Override
-    public void alterView(AlterViewStmt stmt) throws UserException {
+    public void alterView(AlterViewStmt stmt) throws StarRocksException {
         new AlterJobExecutor().process(stmt, ConnectContext.get());
     }
 
@@ -3548,7 +3554,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
-        Map<String, Object> results = validateToBeModifiedProps(properties, table);
+        Map<String, Object> results = validateToBeModifiedProps(properties, db, table);
 
         TableProperty tableProperty = table.getTableProperty();
         for (String key : results.keySet()) {
@@ -3618,21 +3624,69 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                 ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                String ttlRetentionCondition =
+                        propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION);
+                tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION,
+                        ttlRetentionCondition);
+                tableProperty.setPartitionRetentionCondition(ttlRetentionCondition);
+                // register or remove ttl partition table
+                if (Strings.isNullOrEmpty(ttlRetentionCondition)) {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().removeTtlPartitionTable(db.getId(),
+                            table.getId());
+                } else {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().registerTtlPartitionTable(db.getId(),
+                            table.getId());
+                }
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
     }
 
-    private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties, OlapTable table) throws DdlException {
+    private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties,
+                                                          Database db, OlapTable table) throws DdlException {
         Map<String, Object> results = Maps.newHashMap();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            if (!table.getPartitionInfo().isRangePartition()) {
+                throw new DdlException("Table[" + table.getName() + "] is not range partitioned. "
+                        + "no need to set partition live number.");
+            }
             int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+            if (!table.getPartitionInfo().isRangePartition()) {
+                throw new DdlException("Table[" + table.getName() + "] is not range partitioned. "
+                        + "no need to set partition ttl.");
+            }
             Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
             if (ttlDuration == null) {
                 throw new DdlException("Invalid partition ttl duration");
             }
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+            if (!table.getPartitionInfo().isRangePartition()) {
+                throw new DdlException("Table[" + table.getName() + "] is not range partitioned. "
+                        + "no need to set partition live number.");
+            }
+            int partitionTTLNumber = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
+            results.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, partitionTTLNumber);
+        }
+        // partition retention condition
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            if (!table.getPartitionInfo().isPartitioned()) {
+                throw new DdlException("Table[" + table.getName() + "] is not partitioned. "
+                        + "no need to set partition retention condition.");
+            }
+            String partitionRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(
+                    db, table, properties, true);
+            if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
+                throw new DdlException("Invalid partition retention condition");
+            }
+            results.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             try {
@@ -4179,7 +4233,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // init here in case the stmt string from view.toSql() has some syntax error.
             try {
                 view.init();
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new DdlException("failed to init view stmt", e);
             }
 

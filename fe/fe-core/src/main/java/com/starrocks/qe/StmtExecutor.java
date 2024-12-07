@@ -71,9 +71,9 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.QueryDumpLog;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
-import com.starrocks.common.UserException;
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -680,12 +680,13 @@ public class StmtExecutor {
                             if (parsedStmt.isExplain() &&
                                     StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                                 if (coord != null && coord.isShortCircuit()) {
-                                    throw new UserException(
+                                    throw new StarRocksException(
                                             "short circuit point query doesn't suppot explain analyze stmt, " +
                                                     "you can set it off by using  set enable_short_circuit=false");
                                 }
                                 handleExplainStmt(ExplainAnalyzer.analyze(
-                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
+                                        ProfilingExecPlan.buildFrom(execPlan), profile, null,
+                                        context.getSessionVariable().getColorExplainOutput()));
                             }
                         }
 
@@ -698,7 +699,8 @@ public class StmtExecutor {
 
                         if (isAsync) {
                             QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
-                                    System.currentTimeMillis() + context.getSessionVariable().getProfileTimeout() * 1000L);
+                                    System.currentTimeMillis() +
+                                            context.getSessionVariable().getProfileTimeout() * 1000L);
                         } else {
                             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                         }
@@ -770,7 +772,7 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
             LOG.info("execute Exception, sql: {}, error: {}", sql, e.getMessage());
@@ -1251,12 +1253,12 @@ public class StmtExecutor {
                 new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
 
         if (isSchedulerExplain) {
-            coord.startSchedulingWithoutDeploy();
+            coord.execWithoutDeploy();
             handleExplainStmt(coord.getSchedulerExplain());
             return;
         }
 
-        coord.exec();
+        coord.execWithQueryDeployExecutor();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
         coord.setExecPlan(execPlan);
 
@@ -1324,11 +1326,14 @@ public class StmtExecutor {
                 context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");
             }
 
+            if (null != statisticsForAuditLog) {
+                analyzePlanWithExecStats(execPlan);
+            }
+
             if (null == statisticsForAuditLog || null == statisticsForAuditLog.statsItems ||
                     statisticsForAuditLog.statsItems.isEmpty()) {
                 return;
             }
-            analyzePlanWithExecStats(execPlan);
 
             // collect table-level metrics
             Set<Long> tableIds = Sets.newHashSet();
@@ -1365,6 +1370,9 @@ public class StmtExecutor {
                 PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
                 PlanTuningAdvisor.getInstance()
                         .putTuningGuides(parsedStmt.getOrigStmt().getOrigStmt(), pair.first, tuningGuides);
+                if (!tuningGuides.isEmpty()) {
+                    Tracers.record(Tracers.Module.BASE, "BuildTuningGuides", tuningGuides.getFullTuneGuidesInfo());
+                }
             }
         }
     }
@@ -1452,7 +1460,7 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void handleAnalyzeProfileStmt() throws IOException, UserException {
+    private void handleAnalyzeProfileStmt() throws IOException, StarRocksException {
         AnalyzeProfileStmt analyzeProfileStmt = (AnalyzeProfileStmt) parsedStmt;
         String queryId = analyzeProfileStmt.getQueryId();
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
@@ -1461,13 +1469,13 @@ public class StmtExecutor {
         // For short circuit query, 'ProfileElement#plan' is null
         if (profileElement.plan == null && profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
                 !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {
-            throw new UserException(
+            throw new StarRocksException(
                     "short circuit point query doesn't suppot analyze profile stmt, " +
                             "you can set it off by using  set enable_short_circuit=false");
         }
         handleExplainStmt(ExplainAnalyzer.analyze(profileElement.plan,
                 RuntimeProfileParser.parseFrom(CompressionUtils.gzipDecompressString(profileElement.profileContent)),
-                planNodeIds));
+                planNodeIds, context.getSessionVariable().getColorExplainOutput()));
     }
 
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
@@ -1479,6 +1487,7 @@ public class StmtExecutor {
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
         statsConnectCtx.setThreadLocalInfo();
+        statsConnectCtx.setStatisticsConnection(true);
         try {
             executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
         } finally {
@@ -1526,7 +1535,7 @@ public class StmtExecutor {
                 StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
                         StatsConstants.AnalyzeType.FULL;
                 statisticExecutor.collectStatistics(statsConnectCtx,
-                        StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                        StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, analyzeStmt.getPartitionIds(),
                                 analyzeStmt.getColumnNames(),
                                 analyzeStmt.getColumnTypes(),
                                 analyzeType,
@@ -1657,13 +1666,13 @@ public class StmtExecutor {
         }
     }
 
-    private void handleAddBackendBlackListStmt() throws UserException {
+    private void handleAddBackendBlackListStmt() throws StarRocksException {
         AddBackendBlackListStmt addBackendBlackListStmt = (AddBackendBlackListStmt) parsedStmt;
         Authorizer.check(addBackendBlackListStmt, context);
         for (Long beId : addBackendBlackListStmt.getBackendIds()) {
             SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             if (sis.getBackend(beId) == null) {
-                throw new UserException("Not found backend: " + beId);
+                throw new StarRocksException("Not found backend: " + beId);
             }
             SimpleScheduler.getHostBlacklist().addByManual(beId);
         }
@@ -1677,11 +1686,11 @@ public class StmtExecutor {
         }
     }
 
-    private void handleExecAsStmt() throws UserException {
+    private void handleExecAsStmt() throws StarRocksException {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
-    private void handleExecScriptStmt() throws IOException, UserException {
+    private void handleExecScriptStmt() throws IOException, StarRocksException {
         ShowResultSet resultSet = ExecuteScriptExecutor.execute((ExecuteScriptStmt) parsedStmt, context);
         if (isProxy) {
             proxyResultSet = resultSet;
@@ -1691,11 +1700,11 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void handleSetRole() throws PrivilegeException, UserException {
+    private void handleSetRole() throws PrivilegeException, StarRocksException {
         SetRoleExecutor.execute((SetRoleStmt) parsedStmt, context);
     }
 
-    private void handleSetDefaultRole() throws PrivilegeException, UserException {
+    private void handleSetDefaultRole() throws PrivilegeException, StarRocksException {
         SetDefaultRoleExecutor.execute((SetDefaultRoleStmt) parsedStmt, context);
     }
 
@@ -2025,7 +2034,7 @@ public class StmtExecutor {
         DeallocateStmt deallocateStmt = (DeallocateStmt) parsedStmt;
         String stmtName = deallocateStmt.getStmtName();
         if (context.getPreparedStmt(stmtName) == null) {
-            throw new UserException("PrepareStatement `" + stmtName + "` not exist");
+            throw new StarRocksException("PrepareStatement `" + stmtName + "` not exist");
         }
         context.removePreparedStmt(stmtName);
         context.getState().setOk();
@@ -2175,7 +2184,8 @@ public class StmtExecutor {
                 isAsync = tryProcessProfileAsync(execPlan, 0);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
+                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
+                            profile, null, context.getSessionVariable().getColorExplainOutput()));
                 }
             }
             if (isAsync) {
@@ -2351,7 +2361,7 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
 
             if (isSchedulerExplain) {
-                coord.startSchedulingWithoutDeploy();
+                coord.execWithoutDeploy();
                 handleExplainStmt(coord.getSchedulerExplain());
                 return;
             }
@@ -2634,7 +2644,7 @@ public class StmtExecutor {
             } catch (Exception abortTxnException) {
                 LOG.warn("errors when cancel insert load job {}", jobId);
             }
-            throw new UserException(t.getMessage(), t);
+            throw new StarRocksException(t.getMessage(), t);
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
             if (insertError) {
@@ -2854,6 +2864,15 @@ public class StmtExecutor {
         }
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);
+        long pendingTime = ctx.getAuditEventBuilder().build().pendingTimeMs;
+        pendingTime = pendingTime < 0 ? 0 : pendingTime;
+        queryDetail.setPendingTime(pendingTime);
+        queryDetail.setNetTime(elapseMs - pendingTime);
+        long parseTime = Tracers.getSpecifiedTimer("Parser").map(Timer::getTotalTime).orElse(0L);
+        long planTime = Tracers.getSpecifiedTimer("Total").map(Timer::getTotalTime).orElse(0L);
+        long prepareTime = Tracers.getSpecifiedTimer("Prepare").map(Timer::getTotalTime).orElse(0L);
+        long deployTime = Tracers.getSpecifiedTimer("Deploy").map(Timer::getTotalTime).orElse(0L);
+        queryDetail.setNetComputeTime(elapseMs - parseTime - planTime - prepareTime - pendingTime - deployTime);
         queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
         // add execution statistics into queryDetail
         queryDetail.setReturnRows(ctx.getReturnRows());

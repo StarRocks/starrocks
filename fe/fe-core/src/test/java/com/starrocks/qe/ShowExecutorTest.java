@@ -70,7 +70,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
@@ -500,7 +500,7 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
+    public void testShowPartitions(@Mocked Analyzer analyzer) throws StarRocksException {
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -567,9 +567,9 @@ public class ShowExecutorTest {
         Assert.assertEquals(partitionKey2, "dt, province");
 
         String values1 = resultSet.getResultRows().get(0).get(7);
-        Assert.assertEquals(values1, "(('2022-04-15', 'guangdong'), ('2022-04-15', 'tianjin'))");
+        Assert.assertEquals(values1, "[[\"2022-04-15\",\"guangdong\"],[\"2022-04-15\",\"tianjin\"]]");
         String values2 = resultSet.getResultRows().get(1).get(7);
-        Assert.assertEquals(values2, "(('2022-04-16', 'shanghai'), ('2022-04-16', 'beijing'))");
+        Assert.assertEquals(values2, "[[\"2022-04-16\",\"shanghai\"],[\"2022-04-16\",\"beijing\"]]");
     }
 
     @Test
