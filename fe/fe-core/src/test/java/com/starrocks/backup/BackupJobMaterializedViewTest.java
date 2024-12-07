@@ -403,8 +403,7 @@ public class BackupJobMaterializedViewTest {
             Assert.assertTrue(mv.getInactiveReason().contains(String.format("Set the materialized view %s inactive in backup",
                         UnitTestUtil.MATERIALIZED_VIEW_NAME)));
         } catch (IOException e) {
-            e.printStackTrace();
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
 
         Assert.assertNull(job.getBackupMeta());

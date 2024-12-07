@@ -154,6 +154,7 @@ set(EXEC_FILES
         ./exprs/runtime_filter_test.cpp
         ./exprs/subfield_expr_test.cpp
         ./exprs/vectorized_literal_test.cpp
+        ./exprs/min_max_predicate_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -356,6 +357,8 @@ set(EXEC_FILES
         ./storage/persistent_index_consistency_test.cpp
         ./storage/meta_reader_test.cpp
         ./storage/dictionary_cache_manager_test.cpp
+        ./storage/column_or_predicate_test.cpp
+        ./storage/column_and_predicate_test.cpp
         ./runtime/agg_state_desc_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
@@ -425,6 +428,7 @@ set(EXEC_FILES
         ./util/core_local_test.cpp
         ./util/core_local_counter_test.cpp
         ./util/countdown_latch_test.cpp
+        ./util/cpu_info_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp

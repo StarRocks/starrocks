@@ -38,6 +38,9 @@ import com.starrocks.StarRocksFE;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
 
+import static java.lang.Math.max;
+import static java.lang.Runtime.getRuntime;
+
 public class Config extends ConfigBase {
 
     /**
@@ -2742,6 +2745,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
 
+    @ConfField(mutable = true)
+    public static int lake_warehouse_max_compute_replica = 3;
+
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
@@ -3210,12 +3216,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lock_manager_enable_resolve_deadlock = false;
 
-    /**
-     * Whether to use table level lock
-     */
-    @ConfField
-    public static boolean lock_manager_enable_using_fine_granularity_lock = true;
-
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
     /**
@@ -3346,4 +3346,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
             "between any two nodes before triggering a balance")
     public static double batch_write_be_assigner_balance_factor_threshold = 0.1;
+
+    @ConfField(mutable = false)
+    public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
 }

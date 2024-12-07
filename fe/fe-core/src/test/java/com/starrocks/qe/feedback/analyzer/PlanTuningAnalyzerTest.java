@@ -20,6 +20,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.feedback.NodeExecStats;
 import com.starrocks.qe.feedback.OperatorTuningGuides;
+import com.starrocks.qe.feedback.PlanTuningAdvisor;
 import com.starrocks.qe.feedback.guide.LeftChildEstimationErrorTuningGuide;
 import com.starrocks.qe.feedback.guide.RightChildEstimationErrorTuningGuide;
 import com.starrocks.qe.feedback.guide.StreamingAggTuningGuide;
@@ -54,7 +55,7 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         OptExpression root = execPlan.getPhysicalPlan();
 
-        NodeExecStats localAgg = new NodeExecStats(1, 3000000000L, 2000000000L, 0, 0, 0);
+        NodeExecStats localAgg = new NodeExecStats(1, 3000000000L, 2000000L, 0, 0, 0);
         NodeExecStats globalAgg = new NodeExecStats(3, 500000, 7, 0, 0, 0);
         Map<Integer, NodeExecStats> map = Maps.newHashMap();
         map.put(1, localAgg);
@@ -117,6 +118,9 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
             OperatorTuningGuides tuningGuides = new OperatorTuningGuides(UUID.randomUUID(), 50);
             PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
             Assert.assertTrue(tuningGuides.getTuningGuides(5).get(0) instanceof LeftChildEstimationErrorTuningGuide);
+            PlanTuningAdvisor.getInstance().putTuningGuides(sql, pair.first, tuningGuides);
+            List<List<String>> showResult = PlanTuningAdvisor.getInstance().getShowResult();
+            Assert.assertEquals(8, showResult.get(0).size());
         }
     }
 

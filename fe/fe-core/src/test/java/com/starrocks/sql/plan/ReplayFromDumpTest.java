@@ -655,7 +655,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_1"),
                         null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("32:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("33:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(212: case)\n" +
                 "  |  group by: 34: cast, 33: cast, 38: handle, 135: concat, 136: case, 36: cast"));
     }

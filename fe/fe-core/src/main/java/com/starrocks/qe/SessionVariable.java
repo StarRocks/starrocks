@@ -141,6 +141,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
+    public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
@@ -833,6 +834,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
 
+    public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -966,6 +969,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    // Toggle ANSI color in explain output
+    @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
+    private boolean colorExplainOutput = true;
 
     @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
     private boolean enableMetadataProfile = false;
@@ -1624,6 +1631,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = DISABLE_GENERATED_COLUMN_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean disableGeneratedColumnRewrite = false;
+
+    @VarAttr(name = ENABLE_SCAN_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
+    private boolean enableScanPredicateExprReuse = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -2700,6 +2710,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
+    }
+
+    public boolean getColorExplainOutput() {
+        return colorExplainOutput;
     }
 
     public boolean isEnableLoadProfile() {
@@ -4396,6 +4410,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isDisableGeneratedColumnRewrite() {
         return disableGeneratedColumnRewrite;
+    }
+
+    public boolean isEnableScanPredicateExprReuse() {
+        return enableScanPredicateExprReuse;
     }
 
     public int getConnectorIncrementalScanRangeNumber() {

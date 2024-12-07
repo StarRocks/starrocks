@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.feedback.skeleton;
 
+import com.starrocks.catalog.Table;
 import com.starrocks.qe.feedback.NodeExecStats;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -22,6 +23,8 @@ import java.util.Objects;
 
 public class ScanNode extends SkeletonNode {
 
+    // The tableId of the external table is monotonically increasing for each instance.
+    // There is no need to compare between hashcode and equals
     private final long tableId;
 
     private final String tableIdentifier;
@@ -30,7 +33,8 @@ public class ScanNode extends SkeletonNode {
                     NodeExecStats nodeExecStats, SkeletonNode parent) {
         super(optExpression, nodeExecStats, parent);
         PhysicalScanOperator scanOperator = (PhysicalScanOperator) optExpression.getOp();
-        tableId = scanOperator.getTable().getId();
+        Table table = scanOperator.getTable();
+        tableId = table.isExternalTableWithFileSystem() ? -1 : table.getId();
         tableIdentifier = scanOperator.getTable().getTableIdentifier();
     }
 

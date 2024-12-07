@@ -20,7 +20,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -47,13 +46,5 @@ public class CompactionTxnCommitAttachment extends TxnCommitAttachment {
         super.write(out);
         String s = GsonUtils.GSON.toJson(this);
         Text.writeString(out, s);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        String s = Text.readString(in);
-        CompactionTxnCommitAttachment compactionTxnCommitAttachment = GsonUtils.GSON.fromJson(s,
-                CompactionTxnCommitAttachment.class);
-        this.forceCommit = compactionTxnCommitAttachment.getForceCommit();
     }
 }

@@ -22,10 +22,10 @@
 #include "exprs/function_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
-#include "runtime/large_int_value.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
+#include "types/large_int_value.h"
 
 namespace starrocks {
 
@@ -1531,6 +1531,45 @@ PARALLEL_TEST(VecStringFunctionsTest, charTest) {
     ASSERT_EQ("b", v->get_data()[3].to_string());
     ASSERT_EQ("!", v->get_data()[4].to_string());
     ASSERT_EQ("~", v->get_data()[5].to_string());
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, inetAtonInvalidIPv4Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    Columns columns;
+    auto input_column = BinaryColumn::create();
+    input_column->append("999.999.999.999");
+    input_column->append("abc.def.ghi.jkl");
+    input_column->append("192.168.1.1.1");
+    input_column->append("192.168.1");
+    input_column->append("");
+    columns.emplace_back(input_column);
+
+    auto result = StringFunctions::inet_aton(ctx.get(), columns).value();
+
+    ASSERT_TRUE(result->is_null(0));
+    ASSERT_TRUE(result->is_null(1));
+    ASSERT_TRUE(result->is_null(2));
+    ASSERT_TRUE(result->is_null(3));
+    ASSERT_TRUE(result->is_null(4));
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, inetAtonValidIPv4Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    Columns columns;
+    auto input_column = BinaryColumn::create();
+    input_column->append("192.168.1.1");
+    input_column->append("0.0.0.0");
+    input_column->append("255.255.255.255");
+    columns.emplace_back(input_column);
+
+    auto result = StringFunctions::inet_aton(ctx.get(), columns).value();
+
+    auto res_column = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+    ASSERT_EQ(3232235777, res_column->get_data()[0]);
+    ASSERT_EQ(0, res_column->get_data()[1]);
+    ASSERT_EQ(4294967295, res_column->get_data()[2]);
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, instrTest) {
