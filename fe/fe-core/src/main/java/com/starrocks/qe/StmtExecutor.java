@@ -515,6 +515,9 @@ public class StmtExecutor {
             if (parsedStmt.isExistQueryScopeHint()) {
                 processQueryScopeHint();
             }
+            if (parsedStmt instanceof QueryStatement) {
+                context.getState().setIsQuery(true);
+            }
 
             // set warehouse for auditLog
             context.getAuditEventBuilder().setWarehouse(context.getCurrentWarehouseName());
