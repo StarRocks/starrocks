@@ -23,7 +23,14 @@ import com.starrocks.thrift.TUniqueId;
 public interface ExecutionSchedule {
     void prepareSchedule(Coordinator coordinator, Deployer deployer, ExecutionDAG dag);
 
+<<<<<<< HEAD
     void schedule() throws RpcException, UserException;
 
     void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, UserException;
+=======
+    void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException;
+
+    void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException;
+    void cancel();
+>>>>>>> ea6b33df6a ([Enhancement] short circuit optimization on `select limit` case (on FE side) (#53661))
 }

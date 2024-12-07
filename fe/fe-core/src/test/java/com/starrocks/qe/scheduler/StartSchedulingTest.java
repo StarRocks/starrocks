@@ -191,7 +191,11 @@ public class StartSchedulingTest extends SchedulerTestBase {
         isFirstFragmentToDeploy.set(true);
         deployFuture.setRef(mockFutureWithException(new InterruptedException("test interrupted exception")));
         DefaultCoordinator scheduler = getScheduler(sql);
+<<<<<<< HEAD
         Assert.assertThrows("test interrupted exception", UserException.class, () -> scheduler.startScheduling());
+=======
+        Assert.assertThrows("test interrupted exception", StarRocksException.class, () -> scheduler.exec());
+>>>>>>> ea6b33df6a ([Enhancement] short circuit optimization on `select limit` case (on FE side) (#53661))
 
         // The deployed executions haven't reported.
         Assert.assertFalse(scheduler.isDone());
@@ -253,7 +257,11 @@ public class StartSchedulingTest extends SchedulerTestBase {
         String sql =
                 "select count(1) from lineitem UNION ALL select count(1) from lineitem UNION ALL select count(1) from lineitem";
         DefaultCoordinator scheduler = getScheduler(sql);
+<<<<<<< HEAD
         Assert.assertThrows("test error message", UserException.class, scheduler::startScheduling);
+=======
+        Assert.assertThrows("test error message", StarRocksException.class, scheduler::exec);
+>>>>>>> ea6b33df6a ([Enhancement] short circuit optimization on `select limit` case (on FE side) (#53661))
 
         // All the deployed fragment instances should be cancelled.
         Assert.assertEquals(successDeployedFragmentCount, cancelledInstanceIds.size());
@@ -288,7 +296,11 @@ public class StartSchedulingTest extends SchedulerTestBase {
 
             String sql = "select count(1) from lineitem t1 JOIN [shuffle] lineitem t2 using(l_orderkey)";
             DefaultCoordinator scheduler = getScheduler(sql);
+<<<<<<< HEAD
             Assert.assertThrows("deploy query timeout", UserException.class, () -> scheduler.startScheduling());
+=======
+            Assert.assertThrows("deploy query timeout", StarRocksException.class, () -> scheduler.exec());
+>>>>>>> ea6b33df6a ([Enhancement] short circuit optimization on `select limit` case (on FE side) (#53661))
         } finally {
             connectContext.getSessionVariable().setQueryDeliveryTimeoutS(prevQueryDeliveryTimeoutSecond);
         }
