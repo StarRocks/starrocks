@@ -2711,6 +2711,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.ANY.name(), ObjectType.WAREHOUSE.name(), statement.getWarehouseName());
         }
+        return null;
     }
 
     private String getTableNameByRoutineLoadLabel(ConnectContext context,
