@@ -22,20 +22,14 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -43,7 +37,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class CatalogRecycleBinTest {
     private static void waitTableClearFinished(CatalogRecycleBin recycleBin, long id,
@@ -86,26 +79,6 @@ public class CatalogRecycleBinTest {
             } catch (Exception ignore) {
             }
         }
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
-    private VariableMgr variableMgr = new VariableMgr();
-    private SessionVariable defSessionVariable = new SessionVariable();
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        connectContext = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(connectContext);
-    }
-
-    private static String rowsToString(List<List<String>> rows) {
-        List<String> lines = rows.stream().map(
-                row -> {
-                    row.remove(1);
-                    return java.lang.String.join("|",
-                            row.toArray(new String[0])).replaceAll("id=\\d+(,\\s+)?", "");
-                }
-        ).collect(Collectors.toList());
-        return java.lang.String.join("\n", lines.toArray(new String[0]));
     }
 
     @Test

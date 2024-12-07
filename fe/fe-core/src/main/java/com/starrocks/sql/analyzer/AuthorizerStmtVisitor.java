@@ -2632,7 +2632,6 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         return null;
     }
 
-<<<<<<< HEAD
     // --------------------------------- Warehouse Statement ---------------------------------
     @Override
     public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {

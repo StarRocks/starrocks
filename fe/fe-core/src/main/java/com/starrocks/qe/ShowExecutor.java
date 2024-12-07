@@ -2779,6 +2779,32 @@ public class ShowExecutor {
             return new ShowResultSet(statement.getMetaData(), rows);
         }
 
+        private List<List<String>> doPredicate(ShowStmt showStmt,
+                                               ShowResultSetMetaData showResultSetMetaData,
+                                               List<List<String>> rows) {
+            Predicate predicate = showStmt.getPredicate();
+            if (predicate == null) {
+                return rows;
+            }
+
+            SlotRef slotRef = (SlotRef) predicate.getChild(0);
+            StringLiteral stringLiteral = (StringLiteral) predicate.getChild(1);
+            List<List<String>> returnRows = new ArrayList<>();
+            BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
+
+            int idx = showResultSetMetaData.getColumnIdx(slotRef.getColumnName());
+            if (binaryPredicate.getOp().isEquivalence()) {
+                for (List<String> row : rows) {
+                    if (row.get(idx).equals(stringLiteral.getStringValue())) {
+                        returnRows.add(row);
+                    }
+                }
+            }
+
+            return returnRows;
+        }
+    }
+
     public static List<ShowMaterializedViewStatus> listMaterializedViewStatus(
             String dbName,
             List<MaterializedView> materializedViews,

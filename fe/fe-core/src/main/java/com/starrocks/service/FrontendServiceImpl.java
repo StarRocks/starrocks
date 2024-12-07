@@ -2958,7 +2958,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-<<<<<<< HEAD
     public TStartCheckpointResponse startCheckpoint(TStartCheckpointRequest request) throws TException {
         CheckpointWorker worker;
         if (request.is_global_state_mgr) {
