@@ -277,6 +277,7 @@ public class AuthenticationMgr {
                 clearFailedAttemptRecords(userAndHost);
             }
         }
+        resetFailedAttemptRecords();
         return authenticatedUser;
     }
 
@@ -308,6 +309,14 @@ public class AuthenticationMgr {
             FAIL_TIME.remove(userAndHost);
             FAIL_COUNT.remove(userAndHost);
             LOCKED_TIMES.remove(userAndHost);
+        }
+    }
+
+    private void resetFailedAttemptRecords() {
+        for (Map.Entry<String, Long> entry : FAIL_TIME.entrySet()) {
+            if (((System.currentTimeMillis() - entry.getValue()) / 1000) > Config.password_lock_reset_interval_seconds) {
+                clearFailedAttemptRecords(entry.getKey());
+            }
         }
     }
 
