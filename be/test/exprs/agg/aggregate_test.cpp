@@ -2737,17 +2737,20 @@ TEST_F(AggregateTest, test_ds_hll) {
     convert_data_column->append(2.0);
     ColumnPtr convert_result_column = BinaryColumn::create();
     func->convert_to_serialize_format(local_ctx.get(), Columns{convert_data_column}, 2, &convert_result_column);
-    const AggregateFunction* str_arg_func = get_aggregate_function("ds_hll_count_distinct", TYPE_VARCHAR, TYPE_BIGINT, false);
+    const AggregateFunction* str_arg_func =
+            get_aggregate_function("ds_hll_count_distinct", TYPE_VARCHAR, TYPE_BIGINT, false);
     auto ubswf_state = ManagedAggrState::create(ctx, str_arg_func);
     std::vector<TypeDescriptor> str_arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    std::unique_ptr<FunctionContext> str_local_ctx(FunctionContext::create_test_context(std::move(str_arg_types), return_type));
+    std::unique_ptr<FunctionContext> str_local_ctx(
+            FunctionContext::create_test_context(std::move(str_arg_types), return_type));
     auto ubswf_data_column = BinaryColumn::create();
     ubswf_data_column->append("abc");
     ubswf_data_column->append("bcd");
     std::vector<const Column*> ubswf_raw_columns;
     ubswf_raw_columns.resize(1);
     ubswf_raw_columns[0] = ubswf_data_column.get();
-    str_arg_func->update_batch_single_state_with_frame(str_local_ctx.get(), ubswf_state->state(), ubswf_raw_columns.data(), 0, 0, 0,2);
+    str_arg_func->update_batch_single_state_with_frame(str_local_ctx.get(), ubswf_state->state(),
+                                                       ubswf_raw_columns.data(), 0, 0, 0,2);
 
     auto data_column1 = DoubleColumn::create();
     data_column1->append(2.0);
@@ -2817,14 +2820,16 @@ TEST_F(AggregateTest, test_ds_theta) {
     const AggregateFunction* str_arg_func = get_aggregate_function("ds_theta", TYPE_VARCHAR, TYPE_BIGINT, false);
     auto ubswf_state = ManagedAggrState::create(ctx, str_arg_func);
     std::vector<TypeDescriptor> str_arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    std::unique_ptr<FunctionContext> str_local_ctx(FunctionContext::create_test_context(std::move(str_arg_types), return_type));
+    std::unique_ptr<FunctionContext> str_local_ctx(
+            FunctionContext::create_test_context(std::move(str_arg_types), return_type));
     auto ubswf_data_column = BinaryColumn::create();
     ubswf_data_column->append("abc");
     ubswf_data_column->append("bcd");
     std::vector<const Column*> ubswf_raw_columns;
     ubswf_raw_columns.resize(1);
     ubswf_raw_columns[0] = ubswf_data_column.get();
-    str_arg_func->update_batch_single_state_with_frame(str_local_ctx.get(), ubswf_state->state(), ubswf_raw_columns.data(), 0, 0, 0,2);
+    str_arg_func->update_batch_single_state_with_frame(str_local_ctx.get(),
+                                                       ubswf_state->state(), ubswf_raw_columns.data(), 0, 0, 0,2);
 
     auto data_column1 = DoubleColumn::create();
     data_column1->append(2.0);
@@ -2884,7 +2889,8 @@ TEST_F(AggregateTest, test_ds_quantile) {
     std::vector<const Column*> ubswf_raw_columns;
     ubswf_raw_columns.resize(1);
     ubswf_raw_columns[0] = ubswf_data_column.get();
-    func->update_batch_single_state_with_frame(local_ctx.get(), ubswf_state->state(), ubswf_raw_columns.data(), 0, 0, 0,2);
+    func->update_batch_single_state_with_frame(local_ctx.get(), ubswf_state->state(), ubswf_raw_columns.data(), 0, 0, 0,
+                                               2);
 
     auto data_column1 = DoubleColumn::create();
     data_column1->append(2.0);
@@ -2930,14 +2936,16 @@ TEST_F(AggregateTest, test_ds_quantile) {
 
     auto get_values_elem = DoubleColumn::create();
     auto get_values_offsets = UInt32Column::create(0);
-    auto get_values_result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(get_values_elem), get_values_offsets);
+    auto get_values_result_column =
+            ArrayColumn::create(ColumnHelper::cast_to_nullable_column(get_values_elem), get_values_offsets);
     func->get_values(local_ctx.get(), merge_state->state(), get_values_result_column.get(), 0, 1);
     ASSERT_EQ(1, get_values_result_column->size());
     ASSERT_EQ(3, get_values_result_column->get(0).get_array()[0].get_double());
 
     auto finalize_elem = DoubleColumn::create();
     auto finalize_offsets = UInt32Column::create(0);
-    auto finalize_result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(finalize_elem), finalize_offsets);
+    auto finalize_result_column =
+            ArrayColumn::create(ColumnHelper::cast_to_nullable_column(finalize_elem), finalize_offsets);
     func->finalize_to_column(local_ctx.get(), merge_state->state(), finalize_result_column.get());
     ASSERT_EQ(1, finalize_result_column->size());
     ASSERT_EQ(3, finalize_result_column->get(0).get_array()[0].get_double());
@@ -2964,7 +2972,8 @@ TEST_F(AggregateTest, test_ds_frequent) {
     std::vector<const Column*> ubswf_raw_columns;
     ubswf_raw_columns.resize(1);
     ubswf_raw_columns[0] = ubswf_data_column.get();
-    func->update_batch_single_state_with_frame(local_ctx.get(), ubswf_state->state(), ubswf_raw_columns.data(), 0, 0, 0,2);
+    func->update_batch_single_state_with_frame(local_ctx.get(), ubswf_state->state(), ubswf_raw_columns.data(), 0, 0, 0,
+                                               2);
 
     auto data_column1 = DoubleColumn::create();
     data_column1->append(2.0);
@@ -3021,7 +3030,8 @@ TEST_F(AggregateTest, test_ds_frequent) {
     Columns get_values_fields{get_values_value, get_values_count, get_values_lower_bound, get_values_upper_bound};
     auto get_values_elem = StructColumn::create(get_values_fields, get_values_field_name);
     auto get_values_offsets = UInt32Column::create(0);
-    auto get_values_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(get_values_elem), get_values_offsets);
+    auto get_values_column =
+            ArrayColumn::create(ColumnHelper::cast_to_nullable_column(get_values_elem), get_values_offsets);
     func->get_values(local_ctx.get(), merge_state->state(), get_values_column.get(), 0, 1);
 
     std::vector<std::string> finalize_field_name{"value", "count", "lower_bound", "upper_bound"};
