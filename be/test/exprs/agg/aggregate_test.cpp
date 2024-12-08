@@ -2750,7 +2750,7 @@ TEST_F(AggregateTest, test_ds_hll) {
     ubswf_raw_columns.resize(1);
     ubswf_raw_columns[0] = ubswf_data_column.get();
     str_arg_func->update_batch_single_state_with_frame(str_local_ctx.get(), ubswf_state->state(),
-                                                       ubswf_raw_columns.data(), 0, 0, 0,2);
+                                                       ubswf_raw_columns.data(), 0, 0, 0, 2);
 
     auto data_column1 = DoubleColumn::create();
     data_column1->append(2.0);
@@ -2828,8 +2828,8 @@ TEST_F(AggregateTest, test_ds_theta) {
     std::vector<const Column*> ubswf_raw_columns;
     ubswf_raw_columns.resize(1);
     ubswf_raw_columns[0] = ubswf_data_column.get();
-    str_arg_func->update_batch_single_state_with_frame(str_local_ctx.get(),
-                                                       ubswf_state->state(), ubswf_raw_columns.data(), 0, 0, 0,2);
+    str_arg_func->update_batch_single_state_with_frame(str_local_ctx.get(), ubswf_state->state(),
+                                                       ubswf_raw_columns.data(), 0, 0, 0, 2);
 
     auto data_column1 = DoubleColumn::create();
     data_column1->append(2.0);
