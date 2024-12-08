@@ -22,14 +22,20 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -37,6 +43,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class CatalogRecycleBinTest {
     private static void waitTableClearFinished(CatalogRecycleBin recycleBin, long id,
@@ -79,6 +86,28 @@ public class CatalogRecycleBinTest {
             } catch (Exception ignore) {
             }
         }
+    }
+
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+    private VariableMgr variableMgr = new VariableMgr();
+    private SessionVariable defSessionVariable = new SessionVariable();
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+    }
+
+    private static String rowsToString(List<List<String>> rows) {
+        List<String> lines = rows.stream().map(
+                row -> {
+                    row.remove(1);
+                    return java.lang.String.join("|",
+                            row.toArray(new String[0])).replaceAll("id=\\d+(,\\s+)?", "");
+                }
+        ).collect(Collectors.toList());
+        return java.lang.String.join("\n", lines.toArray(new String[0]));
     }
 
     @Test
@@ -658,5 +687,251 @@ public class CatalogRecycleBinTest {
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), null);
         Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+    }
+    @Test
+    public void testShowCatalogRecycleBinDatabase(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+        Database db1 = new Database(111, "uno");
+        Database db2SameName = new Database(22, "dos"); // samename
+        Database db2 = new Database(222, "dos");
+
+        // 1. recycle 2 dbs
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        recycleBin.recycleDatabase(db1, new HashSet<>());
+        recycleBin.recycleDatabase(db2SameName, new HashSet<>());  // will remove same name
+        recycleBin.recycleDatabase(db2, new HashSet<>());
+
+        Assert.assertEquals(recycleBin.getDatabase(db1.getId()), db1);
+        Assert.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
+        Assert.assertEquals(recycleBin.getDatabase(999), null);
+        Assert.assertEquals(2, recycleBin.idToRecycleTime.size());
+        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+
+        // 2. manually set db expire time & recycle db1
+        Config.catalog_trash_expire_second = 3600;
+        long now = System.currentTimeMillis();
+        long expireFromNow = now - 3600 * 1000L;
+        recycleBin.idToRecycleTime.put(db1.getId(), expireFromNow - 1000);
+
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().onEraseDatabase(anyLong);
+                minTimes = 0;
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+            }
+        };
+        new Expectations() {
+            {
+                editLog.logEraseDb(anyLong);
+                minTimes = 0;
+            }
+        };
+        String tz = "Asia/Shanghai";
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+            }
+        };
+        new Expectations() {
+            {
+                variableMgr.getDefaultSessionVariable();
+                minTimes = 0;
+                result = defSessionVariable;
+
+                defSessionVariable.getTimeZone();
+                minTimes = 0;
+                result = tz;
+            }
+        };
+        new Expectations() {
+            {
+                ConnectContext.get().getSessionVariable().getTimeZone();
+                minTimes = 0;
+                result = tz;
+            }
+        };
+
+        recycleBin.eraseDatabase(now);
+
+        Assert.assertEquals(recycleBin.getDatabase(db1.getId()), null);
+        Assert.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
+        Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
+        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+
+        List<List<String>> recyclebininfo = recycleBin.getCatalogRecycleBinInfo();
+        Assert.assertEquals(recyclebininfo.size(), 1);
+        String actual = rowsToString(recyclebininfo);
+        Assert.assertTrue(actual.contains("222"));
+    }
+
+    @Test
+    public void testShowCatalogRecycleBinTable(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog,
+            @Mocked VariableMgr variableMgr) {
+        Table table1 = new Table(111, "uno", Table.TableType.VIEW, null);
+        Table table2SameName = new Table(22, "dos", Table.TableType.VIEW, null);
+        Table table2 = new Table(222, "dos", Table.TableType.VIEW, null);
+
+        new Expectations() {
+            {
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+            }
+        };
+        new Expectations() {
+            {
+                editLog.logEraseMultiTables((List<Long>) any);
+                minTimes = 0;
+                result = null;
+            }
+        };
+        String tz = "Asia/Shanghai";
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+            }
+        };
+        new Expectations() {
+            {
+                variableMgr.getDefaultSessionVariable();
+                minTimes = 0;
+                result = defSessionVariable;
+
+                defSessionVariable.getTimeZone();
+                minTimes = 0;
+                result = tz;
+            }
+        };
+        new Expectations() {
+            {
+                ConnectContext.get().getSessionVariable().getTimeZone();
+                minTimes = 0;
+                result = tz;
+            }
+        };
+
+        // 1. add 2 tables
+        long dbId = 1;
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        recycleBin.recycleTable(dbId, table1, true);
+        recycleBin.recycleTable(dbId, table2SameName, true);
+        recycleBin.recycleTable(dbId, table2, true);
+
+        Assert.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table1, table2SameName, table2));
+        Assert.assertSame(recycleBin.getTable(dbId, table1.getId()), table1);
+        Assert.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
+        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(table1.getId()));
+        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(table2.getId()));
+
+        // 2. manually set table expire time & recycle table1
+        Config.catalog_trash_expire_second = 3600;
+        long now = System.currentTimeMillis();
+        long expireFromNow = now - 3600 * 1000L;
+        recycleBin.idToRecycleTime.put(table1.getId(), expireFromNow - 1000);
+        recycleBin.eraseTable(now);
+
+        Assert.assertEquals(recycleBin.getTables(dbId), List.of(table2));
+        Assert.assertNull(recycleBin.getTable(dbId, table1.getId()));
+        Assert.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
+
+        List<List<String>> recyclebininfo = recycleBin.getCatalogRecycleBinInfo();
+        Assert.assertEquals(recyclebininfo.size(), 1);
+        String actual = rowsToString(recyclebininfo);
+        Assert.assertTrue(actual.contains("222"));        
+    }
+
+    @Test
+    public void testShowCatalogRecycleBinPartition(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+        Partition p1 = new Partition(111, 112, "uno", null, null);
+        Partition p2SameName = new Partition(22, 23, "dos", null, null);
+        Partition p2 = new Partition(222, 223, "dos", null, null);
+
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().onErasePartition((Partition) any);
+                minTimes = 0;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+            }
+        };
+        new Expectations() {
+            {
+                editLog.logErasePartition(anyLong);
+                minTimes = 0;
+            }
+        };
+        String tz = "Asia/Shanghai";
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+            }
+        };
+        new Expectations() {
+            {
+                variableMgr.getDefaultSessionVariable();
+                minTimes = 0;
+                result = defSessionVariable;
+
+                defSessionVariable.getTimeZone();
+                minTimes = 0;
+                result = tz;
+            }
+        };
+
+        new Expectations() {
+            {
+                ConnectContext.get().getSessionVariable().getTimeZone();
+                minTimes = 0;
+                result = tz;
+            }
+        };
+
+        // 1. add 2 partitions
+        long dbId = 1;
+        long tableId = 2;
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+
+        recycleBin.recyclePartition(new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, false, null));
+        recycleBin.recyclePartition(
+                new RecycleRangePartitionInfo(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null));
+        recycleBin.recyclePartition(new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, false, null));
+
+        Assert.assertEquals(recycleBin.getPartition(p1.getId()), p1);
+        Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
+        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p1.getId()));
+        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p2.getId()));
+
+        // 2. manually set table expire time & recycle table1
+        Config.catalog_trash_expire_second = 3600;
+        long now = System.currentTimeMillis();
+        long expireFromNow = now - 3600 * 1000L;
+        recycleBin.idToRecycleTime.put(p1.getId(), expireFromNow - 1000);
+        recycleBin.erasePartition(now);
+
+        List<List<String>> recyclebininfo = recycleBin.getCatalogRecycleBinInfo();
+        String actual = rowsToString(recyclebininfo);
+        Assert.assertTrue(actual.contains("222"));          
     }
 }
