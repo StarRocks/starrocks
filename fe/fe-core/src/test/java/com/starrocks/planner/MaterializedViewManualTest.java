@@ -136,13 +136,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 ")\n" +
                 "DISTRIBUTED BY HASH(`order_id`) BUCKETS 9\n" +
                 "PROPERTIES (\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.time_unit\" = \"HOUR\",\n" +
-                "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
-                "\"dynamic_partition.start\" = \"-240\",\n" +
-                "\"dynamic_partition.end\" = \"2\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\",\n" +
-                "\"dynamic_partition.buckets\" = \"9\"," +
                 "\"replication_num\" = \"1\"" +
                 ");";
         starRocksAssert.withTable(tableSQL);

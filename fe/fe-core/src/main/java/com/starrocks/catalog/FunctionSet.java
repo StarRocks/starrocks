@@ -257,6 +257,7 @@ public class FunctionSet {
     public static final String DS_QUANTILE = "ds_quantile";
     public static final String DS_FREQUENT = "ds_frequent";
     public static final String DS_THETA = "ds_theta";
+    public static final String DS_THETA_COUNT_DISTINCT = "ds_theta_count_distinct";
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";

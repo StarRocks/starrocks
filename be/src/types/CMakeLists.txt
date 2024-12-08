@@ -20,6 +20,11 @@ add_library(Types STATIC
     date_value.cpp
     ds_sketch.cpp
     hll.cpp
+<<<<<<< HEAD
+=======
+    hll_sketch.cpp
+    large_int_value.cpp
+>>>>>>> ea6b33df6ad855915586a54e29b93768fd5f4d94
     logical_type.cpp
     map_type_info.cpp
     struct_type_info.cpp

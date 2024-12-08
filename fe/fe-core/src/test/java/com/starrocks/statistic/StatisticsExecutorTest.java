@@ -261,6 +261,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false);
         externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
                 getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
+        Assert.assertEquals(externalBasicStatsMeta.getColumns(), Lists.newArrayList("col1", "col3"));
         Assert.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 3);
     }
 

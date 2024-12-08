@@ -181,6 +181,9 @@ public:
     void update(T value) { _sketch->update(value); }
 
     void merge(const DataSketchesQuantile& other) {
+        if (other._sketch == nullptr) {
+            return;
+        }
         if (UNLIKELY(_sketch == nullptr)) {
             _sketch = std::make_unique<quantile_sketch_type>(other._sketch->get_k(), std::less<T>(),
                                                              alloc_type(_memory_usage));
@@ -326,6 +329,9 @@ public:
     }
 
     void merge(const DataSketchesFrequent& other) {
+        if (other._sketch == nullptr) {
+            return;
+        }
         if (UNLIKELY(_sketch == nullptr)) {
             _sketch = std::make_unique<frequent_sketch_type>(_lg_max_map_size, _lg_start_map_size, std::equal_to<T>(),
                                                              alloc_type(_memory_usage));
@@ -467,7 +473,9 @@ public:
             _sketch_union =
                     std::make_unique<theta_union_type>(theta_union_type::builder(alloc_type(_memory_usage)).build());
         }
-        _sketch_union->update(other._sketch->compact());
+        if (other._sketch != nullptr) {
+            _sketch_union->update(other._sketch->compact());
+        }
         if (other._sketch_union != nullptr) {
             _sketch_union->update(other._sketch_union->get_result());
         }

@@ -302,9 +302,9 @@ statement
     | cancelRefreshDictionaryStatement
 
     // Plan advisor statement
-    | addPlanAdvisorStatement
-    | clearPlanAdvisorStatement
-    | delPlanAdvisorStatement
+    | alterPlanAdvisorAddStatement
+    | truncatePlanAdvisorStatement
+    | alterPlanAdvisorDropStatement
     | showPlanAdvisorStatement
 
     // Warehouse Statement
@@ -1991,14 +1991,14 @@ lock_type
     ;
 
 // ------------------------------------------- Plan Tuning Statement ---------------------------------------------------
-addPlanAdvisorStatement
-    : ADD INTO PLAN ADVISOR queryStatement;
+alterPlanAdvisorAddStatement
+    : ALTER PLAN ADVISOR ADD queryStatement;
 
-clearPlanAdvisorStatement
-    : CLEAR PLAN ADVISOR;
+truncatePlanAdvisorStatement
+    : TRUNCATE PLAN ADVISOR;
 
-delPlanAdvisorStatement
-    : DELETE PLAN ADVISOR string;
+alterPlanAdvisorDropStatement
+    : ALTER PLAN ADVISOR DROP string;
 
 showPlanAdvisorStatement
     : SHOW PLAN ADVISOR;

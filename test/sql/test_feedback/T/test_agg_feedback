@@ -1,0 +1,58 @@
+-- name: test_agg_feedback
+CREATE TABLE `pre_agg_case` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` char(50) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 5
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+insert into pre_agg_case select generate_series, generate_series, generate_series, generate_series from TABLE(generate_series(1, 50));
+
+analyze full table pre_agg_case with sync mode;
+set enable_plan_advisor=true;
+set enable_plan_analyzer=true;
+set enable_global_runtime_filter = false;
+function: assert_explain_not_contains("select count(*) from pre_agg_case group by c3", "StreamingAggTuningGuide")
+alter plan advisor add select count(*) from pre_agg_case group by c3;
+function: assert_explain_contains("select count(*) from pre_agg_case group by c3", "StreamingAggTuningGuide")
+truncate plan advisor;
