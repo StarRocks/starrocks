@@ -62,6 +62,8 @@ import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TImmutablePartitionRequest;
 import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
+import com.starrocks.thrift.TListRecycleBinCatalogsParams;
+import com.starrocks.thrift.TListRecycleBinCatalogsResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
@@ -1329,5 +1331,18 @@ public class FrontendServiceImplTest {
         System.out.println(result);
 
         Assert.assertNotEquals(0, result.getLocation().getTabletsSize());
+    }
+
+    @Test
+    public void testlistRecycleBinCatalogs() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TListRecycleBinCatalogsParams request = new TListRecycleBinCatalogsParams();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test4");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setUser_ident(userIdentity);
+
+        TListRecycleBinCatalogsResult result = impl.listRecycleBinCatalogs(request);
     }
 }
