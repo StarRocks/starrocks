@@ -16,6 +16,9 @@ select s1, s1 % 1000, repeat('a', 128) FROM TABLE(generate_series(1, 655350)) s(
 
 create table pk_t1 primary key(k1) as select * from t1;
 
+alter table t1 compact;
+alter table pk_t1 compact;
+
 -- arguments
 select count(k1), sum(k1), sum(k2) from t1 sample('method'='by_nothing');
 select count(k1), sum(k1), sum(k2) from t1 sample('percent'='1111');
