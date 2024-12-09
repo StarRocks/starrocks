@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/olap_runtime_range_pruner.h"
+#include "storage/olap_runtime_range_pruner.hpp"
 
 #include <gtest/gtest.h>
 
