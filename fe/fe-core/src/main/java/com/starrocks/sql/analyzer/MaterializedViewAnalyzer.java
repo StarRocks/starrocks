@@ -265,7 +265,6 @@ public class MaterializedViewAnalyzer {
             if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getCatalog())) {
                 tableNameObject.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             }
-
             if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getDb())) {
                 if (com.google.common.base.Strings.isNullOrEmpty(context.getDatabase())) {
                     throw new SemanticException("No database selected. " +
@@ -317,7 +316,7 @@ public class MaterializedViewAnalyzer {
             }
             Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getTableName().getDb());
             if (db == null) {
-                String errMsg = String.format("Can not find database %s in default_catalog", statement.getTableName().getDb());
+                String errMsg = String.format("Can not find database:%s in default_catalog", statement.getTableName().getDb());
                 throw new SemanticException(errMsg, statement.getTableName().getPos());
             }
             Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
