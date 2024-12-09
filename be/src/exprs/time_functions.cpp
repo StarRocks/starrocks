@@ -3222,4 +3222,85 @@ Status TimeFunctions::last_day_close(FunctionContext* context, FunctionContext::
     return Status::OK();
 }
 
+// Format a time value according to a format string
+StatusOr<ColumnPtr> TimeFunctions::format_time(FunctionContext* context, const starrocks::Columns& columns) {
+    if (columns.size() != 2) {
+        return Status::InvalidArgument("FORMAT_TIME requires exactly 2 arguments");
+    }
+
+    const auto& time_column = columns[0];
+    const auto& format_column = columns[1];
+
+    if (time_column->is_nullable() || format_column->is_nullable()) {
+        return Status::InvalidArgument("FORMAT_TIME arguments cannot be NULL");
+    }
+
+    auto* time_col = ColumnHelper::cast_to<TYPE_TIME>(time_column);
+    auto* format_col = ColumnHelper::cast_to<TYPE_VARCHAR>(format_column);
+
+    const size_t size = time_column->size();
+    auto builder = ColumnHelper::get_builder<TYPE_VARCHAR>(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        TimeValue time_val = time_col->get_time(i);
+        std::string_view format_str = format_col->get_slice(i);
+
+        // Convert TimeValue to hours, minutes, seconds
+        int hours = time_val.hour();
+        int minutes = time_val.minute();
+        int seconds = time_val.second();
+        int microseconds = time_val.microsecond();
+
+        std::stringstream result;
+        bool in_format = false;
+
+        for (size_t j = 0; j < format_str.size(); ++j) {
+            char c = format_str[j];
+            if (c == '%') {
+                in_format = true;
+                continue;
+            }
+
+            if (!in_format) {
+                result << c;
+                continue;
+            }
+
+            in_format = false;
+            switch (c) {
+                case 'H': // Hour (00-23)
+                    result << std::setfill('0') << std::setw(2) << hours;
+                    break;
+                case 'h': // Hour (01-12)
+                    result << std::setfill('0') << std::setw(2) << (((hours % 12) == 0) ? 12 : (hours % 12));
+                    break;
+                case 'i': // Minutes (00-59)
+                    result << std::setfill('0') << std::setw(2) << minutes;
+                    break;
+                case 'S': // Seconds (00-59)
+                case 's': // Seconds (00-59)
+                    result << std::setfill('0') << std::setw(2) << seconds;
+                    break;
+                case 'f': // Microseconds (000000-999999)
+                    result << std::setfill('0') << std::setw(6) << microseconds;
+                    break;
+                case 'p': // AM or PM
+                    result << (hours < 12 ? "AM" : "PM");
+                    break;
+                default:
+                    result << '%' << c;
+                    break;
+            }
+        }
+
+        if (in_format) {
+            result << '%'; // Handle trailing %
+        }
+
+        builder->append(result.str());
+    }
+
+    return builder->build();
+}
+
 } // namespace starrocks
