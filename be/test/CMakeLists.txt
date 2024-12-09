@@ -354,6 +354,11 @@ set(EXEC_FILES
         ./storage/dictionary_cache_manager_test.cpp
         ./storage/column_or_predicate_test.cpp
         ./storage/column_and_predicate_test.cpp
+<<<<<<< HEAD
+=======
+        ./storage/olap_runtime_range_pruner_test.cpp
+        ./runtime/agg_state_desc_test.cpp
+>>>>>>> f09a6c1448 ([Refactor] OlapRuntimeScanRangePruner use object pool to manager the life cycle of predicate (#53692))
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
         ./runtime/datetime_value_test.cpp
