@@ -149,6 +149,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
             mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName);
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
+        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
         return mvUpdateInfo;
     }
 }
