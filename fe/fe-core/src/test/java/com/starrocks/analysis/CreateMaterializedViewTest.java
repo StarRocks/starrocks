@@ -2534,7 +2534,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
-        assertParseFailWithException(sql, "Can not find database:unexisted_db1.");
+        assertParseFailWithException(sql, "Can not find database:unexisted_db1 in default_catalog.");
     }
 
     @Test
@@ -5052,7 +5052,6 @@ public class CreateMaterializedViewTest {
         starRocksAssert.dropTable("t3");
         starRocksAssert.dropTable("t4");
     }
-
 
     @Test
     public void testHiveMVInExternalCatalog() {
