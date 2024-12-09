@@ -180,6 +180,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
             mvUpdateInfo.addMvToRefreshPartitionNames(mvPartitionName);
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
+        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
         return mvUpdateInfo;
     }
 }
