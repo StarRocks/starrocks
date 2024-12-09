@@ -40,6 +40,12 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.SqlUtils;
+>>>>>>> 2d7f4836d4 ([Enhancement] improve error message of killed sql (#53708))
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
@@ -781,7 +787,7 @@ public class ConnectContext {
                     Thread.sleep(10);
                     times++;
                     if (times > 100) {
-                        LOG.warn("wait for close fail, break.");
+                        LOG.warn("kill queryId={} connectId={} wait for close fail, break.", queryId, connectionId);
                         break;
                     }
                 } catch (InterruptedException e) {
@@ -812,7 +818,11 @@ public class ConnectContext {
             if (delta > sessionVariable.getWaitTimeoutS() * 1000L) {
                 // Need kill this connection.
                 LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
+<<<<<<< HEAD
                         getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS(), queryId, sql);
+=======
+                        getMysqlChannel().getRemoteHostPortString(), waitTimeout, queryId, SqlUtils.sqlPrefix(sql));
+>>>>>>> 2d7f4836d4 ([Enhancement] improve error message of killed sql (#53708))
 
                 killFlag = true;
                 killConnection = true;
@@ -820,8 +830,14 @@ public class ConnectContext {
         } else {
             long timeoutSecond = sessionVariable.getQueryTimeoutS();
             if (delta > timeoutSecond * 1000L) {
+<<<<<<< HEAD
                 LOG.warn("kill query timeout, remote: {}, query timeout: {}, query id: {}, sql: {}",
                         getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS(), queryId, sql);
+=======
+                LOG.warn("kill timeout {}, remote: {}, execute timeout: {}, query id: {}, sql: {}",
+                        getExecType().toLowerCase(), getMysqlChannel().getRemoteHostPortString(), timeoutSecond,
+                        queryId, SqlUtils.sqlPrefix(sql));
+>>>>>>> 2d7f4836d4 ([Enhancement] improve error message of killed sql (#53708))
 
                 // Only kill
                 killFlag = true;
