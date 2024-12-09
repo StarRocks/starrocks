@@ -596,6 +596,8 @@ TEST_F(LakeServiceTest, test_publish_version_transform_batch_to_single) {
         ASSERT_EQ(_tablet_id, metadata->id());
         ASSERT_EQ(101, metadata->rowsets(0).num_rows());
         ASSERT_EQ(4096, metadata->rowsets(0).data_size());
+
+        ASSERT_TRUE(_tablet_mgr->delete_tablet_metadata(_tablet_id, 3).ok());
     }
 
     // Publish single
@@ -632,8 +634,6 @@ TEST_F(LakeServiceTest, test_publish_version_transform_batch_to_single) {
 
     // publish second txn
     {
-        _tablet_mgr->metacache()->prune();
-
         PublishVersionResponse response;
         _lake_service.publish_version(nullptr, &publish_request_1002, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());

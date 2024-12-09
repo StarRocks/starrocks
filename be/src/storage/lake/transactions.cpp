@@ -172,14 +172,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
             << ", new_version: " << new_version;
 
     auto commit_time = txns.back().commit_time();
-    auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
-    auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
-    if (cached_new_metadata != nullptr) {
-        // The retries may be caused by some tablets failing to publish in a partition
-        // set the following log as debug log to prevent excessive logging
-        VLOG(1) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
+    // protobuf can not guarantee idempotent, so check new tablet meta here to prevent
+    // same tablet meta from being written twice
+    auto res = tablet_mgr->get_tablet_metadata(tablet_id, new_version);
+    if (res.ok()) {
+        VLOG(1) << "Skipped publish version because target metadata existed. tablet_id=" << tablet_id
                 << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
-        return std::move(cached_new_metadata);
+        return res;
     }
 
     auto new_version_metadata_or_error = [=](Status error) -> StatusOr<TabletMetadataPtr> {
