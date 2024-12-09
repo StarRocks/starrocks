@@ -3231,18 +3231,23 @@ StatusOr<ColumnPtr> TimeFunctions::format_time(FunctionContext* context, const s
     const auto& time_column = columns[0];
     const auto& format_column = columns[1];
 
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
-
-    auto* time_col = ColumnHelper::cast_to<TYPE_TIME>(time_column);
-    auto* format_col = ColumnHelper::cast_to<TYPE_VARCHAR>(format_column);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    
+    auto time_viewer = ColumnViewer<TYPE_TIME>(time_column);
+    auto format_viewer = ColumnViewer<TYPE_VARCHAR>(format_column);
 
     const size_t size = time_column->size();
     auto builder = ColumnHelper::get_builder<TYPE_VARCHAR>(size);
 
     for (size_t i = 0; i < size; ++i) {
-        TimeValue time_val = time_col->get_time(i);
-        std::string_view format_str = format_col->get_slice(i);
+        TimeValue time_val = time_viewer.value(i);
+        std::string_view format_str = format_viewer.value(i);
 
+        if (time_viewer.is_null(i) || format_viewer.is_null(i)) {
+            builder->append_null();
+            continue;
+        }
+        
         // Convert TimeValue to hours, minutes, seconds
         int hours = time_val.hour();
         int minutes = time_val.minute();
