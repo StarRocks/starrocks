@@ -516,9 +516,9 @@ public class DynamicPartitionUtil {
         }
     }
 
-    private static boolean isEnabledTablePartitionTTL(OlapTable olapTable,
-                                                      PartitionInfo partitionInfo,
-                                                      TableProperty tableProperty) {
+    public static boolean isEnabledTablePartitionTTL(OlapTable olapTable,
+                                                     PartitionInfo partitionInfo,
+                                                     TableProperty tableProperty) {
         if (olapTable == null || tableProperty == null) {
             return false;
         }

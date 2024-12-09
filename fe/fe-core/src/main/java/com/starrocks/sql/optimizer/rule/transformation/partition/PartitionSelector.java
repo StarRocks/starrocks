@@ -14,6 +14,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.partition;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -35,6 +36,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.information.PartitionsMetaSystemTable;
+import com.starrocks.common.Pair;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
@@ -219,25 +221,12 @@ public class PartitionSelector {
         return selectedPartitionIds;
     }
 
-    /**
-     * Get expired partitions by retention condition.
-     */
-    public static List<String> getExpiredPartitionsByRetentionCondition(Database db,
-                                                                        OlapTable olapTable,
-                                                                        String ttlCondition) {
-        return getExpiredPartitionsByRetentionCondition(db, olapTable, ttlCondition, null, false);
-    }
-
-    /**
-     * Get expired partitions by retention condition.
-     * inputCells and isMockPartitionIds are used for mv refresh since the partition is not added into table yet, but
-     * we need to check whether inputCells are expired or created for mv refresh.
-     */
-    public static List<String> getExpiredPartitionsByRetentionCondition(Database db,
-                                                                        OlapTable olapTable,
-                                                                        String ttlCondition,
-                                                                        Map<String, ? extends PCell> inputCells,
-                                                                        boolean isMockPartitionIds) {
+    private static List<Long> getPartitionsByRetentionCondition(Database db,
+                                                                OlapTable olapTable,
+                                                                String ttlCondition,
+                                                                Map<String, ? extends PCell> inputCells,
+                                                                Map<Long, String> inputCellIdToNameMap,
+                                                                boolean isMockPartitionIds) {
         TableName tableName = new TableName(db.getFullName(), olapTable.getName());
         ConnectContext context = ConnectContext.get() != null ? ConnectContext.get() : new ConnectContext();
         // needs to parse the expr each schedule because it can be changed dynamically
@@ -259,11 +248,9 @@ public class PartitionSelector {
         // TODO: remove this mock partition ids logic if `PartitionPruner` can support to prune partitions by partition name
         //  rather than by ids.
         Map<Long, PCell> inputCellsMap = null;
-        Map<Long, String> inputCellIdToNameMap = null;
         long initialPartitionId = 0;
         if (!CollectionUtils.sizeIsEmpty(inputCells)) {
             inputCellsMap = Maps.newHashMap();
-            inputCellIdToNameMap = Maps.newHashMap();
             if (isMockPartitionIds) {
                 for (Map.Entry<String, ? extends PCell> e : inputCells.entrySet()) {
                     inputCellsMap.put(initialPartitionId, e.getValue());
@@ -278,24 +265,68 @@ public class PartitionSelector {
                 }
             }
         }
-        List<Long> retentionPartitionIds = PartitionSelector.getPartitionIdsByExpr(context, tableName, olapTable,
+        return PartitionSelector.getPartitionIdsByExpr(context, tableName, olapTable,
                 whereExpr, false, inputCellsMap);
+    }
+
+    private static List<String> getPartitionsByRetentionCondition(Database db,
+                                                                  OlapTable olapTable,
+                                                                  String ttlCondition,
+                                                                  Map<String, ? extends PCell> inputCells,
+                                                                  boolean isMockPartitionIds,
+                                                                  Predicate<Pair<Set<Long>, Long>> pred) {
+
+        Map<Long, String> inputCellIdToNameMap = Maps.newHashMap();
+        List<Long> retentionPartitionIds = getPartitionsByRetentionCondition(db, olapTable, ttlCondition, inputCells,
+                inputCellIdToNameMap, isMockPartitionIds);
         if (retentionPartitionIds == null) {
             return null;
         }
         Set<Long> retentionPartitionSet = Sets.newHashSet(retentionPartitionIds);
         List<String> result = olapTable.getVisiblePartitions().stream()
-                .filter(p -> !retentionPartitionSet.contains(p.getId()))
+                .filter(p -> pred.apply(Pair.create(retentionPartitionSet, p.getId())))
                 .map(Partition::getName)
                 .collect(Collectors.toList());
         // if input cells are not empty, filter out the partitions which are expired too.
         if (!CollectionUtils.sizeIsEmpty(inputCells)) {
             Preconditions.checkArgument(inputCellIdToNameMap != null);
             inputCellIdToNameMap.entrySet().stream()
-                    .filter(e -> !retentionPartitionSet.contains(e.getKey()))
+                    .filter(e -> pred.apply(Pair.create(retentionPartitionSet, e.getKey())))
                     .forEach(e -> result.add(e.getValue()));
         }
         return result;
+    }
+
+    public static List<String> getReservedPartitionsByRetentionCondition(Database db,
+                                                                         OlapTable olapTable,
+                                                                         String ttlCondition,
+                                                                         Map<String, ? extends PCell> inputCells,
+                                                                         boolean isMockPartitionIds) {
+        return getPartitionsByRetentionCondition(db, olapTable, ttlCondition, inputCells, isMockPartitionIds,
+                (pair) -> pair.first.contains(pair.second));
+    }
+
+    /**
+     * Get expired partitions by retention condition.
+     */
+    public static List<String> getExpiredPartitionsByRetentionCondition(Database db,
+                                                                        OlapTable olapTable,
+                                                                        String ttlCondition) {
+        return getExpiredPartitionsByRetentionCondition(db, olapTable, ttlCondition, null, false);
+    }
+
+    /**
+     * Get expired partitions by retention condition.
+     * inputCells and isMockPartitionIds are used for mv refresh since the partition is not added into table yet, but
+     * we need to check whether inputCells are expired or created for mv refresh.
+     */
+    public static List<String> getExpiredPartitionsByRetentionCondition(Database db,
+                                                                        OlapTable olapTable,
+                                                                        String ttlCondition,
+                                                                        Map<String, ? extends PCell> inputCells,
+                                                                        boolean isMockPartitionIds) {
+        return getPartitionsByRetentionCondition(db, olapTable, ttlCondition, inputCells, isMockPartitionIds,
+                (pair) -> !pair.first.contains(pair.second));
     }
 
     private static Map<ColumnRefOperator, ScalarOperator> buildReplaceMap(Map<ColumnRefOperator, Integer> colRefIdxMap,

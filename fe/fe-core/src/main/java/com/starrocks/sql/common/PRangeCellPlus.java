@@ -36,6 +36,11 @@ public class PRangeCellPlus implements Comparable<PRangeCellPlus> {
         this.cell = new PRangeCell(partitionKeyRange);
     }
 
+    public PRangeCellPlus(String partitionName, PRangeCell rangeCell) {
+        this.partitionName = partitionName;
+        this.cell = rangeCell;
+    }
+
     public String getPartitionName() {
         return partitionName;
     }
@@ -48,6 +53,12 @@ public class PRangeCellPlus implements Comparable<PRangeCellPlus> {
         return cell.isIntersected(o.getCell());
     }
 
+    public static List<PRangeCellPlus> toPRangeCellPlus(Map<String, ? extends PCell> rangeMap) {
+        return rangeMap.entrySet().stream()
+                .map(e -> new PRangeCellPlus(e.getKey(), (PRangeCell) e.getValue()))
+                .sorted(PRangeCellPlus::compareTo)
+                .collect(Collectors.toList());
+    }
     /**
      * Convert range map to list of partition range cell plus which is sorted by range cell.
      * @param rangeMap range map to be converted

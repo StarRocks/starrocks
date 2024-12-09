@@ -100,7 +100,7 @@ public class MvUpdateInfo {
         return queryRewriteConsistencyMode;
     }
 
-    public void addMVPartitionNameToCellMap(Map<String, PCell> m) {
+    public void addMVPartitionNameToCellMap(Map<String, ? extends PCell> m) {
         mvPartitionNameToCellMap.putAll(m);
     }
 
