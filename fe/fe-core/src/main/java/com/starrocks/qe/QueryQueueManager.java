@@ -65,12 +65,12 @@ public class QueryQueueManager {
             MetricRepo.COUNTER_QUERY_QUEUE_TOTAL.increase(1L);
             ResourceGroupMetricMgr.increaseQueuedQuery(context, 1L);
 
-            long timeoutMs = slotRequirement.getExpiredPendingTimeMs();
+            long deadlineEpochMs = slotRequirement.getExpiredPendingTimeMs();
             LogicalSlot allocatedSlot = null;
             while (allocatedSlot == null) {
                 // Check timeout.
                 long currentMs = System.currentTimeMillis();
-                if (currentMs >= timeoutMs) {
+                if (slotRequirement.isPendingTimeout()) {
                     MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.increase(1L);
                     slotProvider.cancelSlotRequirement(slotRequirement);
                     String errMsg = String.format(PENDING_TIMEOUT_ERROR_MSG_FORMAT,
@@ -84,7 +84,7 @@ public class QueryQueueManager {
 
                 // Wait for slot allocated.
                 try {
-                    allocatedSlot = slotFuture.get(timeoutMs - currentMs, TimeUnit.MILLISECONDS);
+                    allocatedSlot = slotFuture.get(deadlineEpochMs - currentMs, TimeUnit.MILLISECONDS);
                 } catch (ExecutionException e) {
                     LOG.warn("[Slot] failed to allocate resource to query [slot={}]", slotRequirement, e);
                     if (e.getCause() instanceof RecoverableException) {
@@ -94,7 +94,12 @@ public class QueryQueueManager {
                 } catch (TimeoutException e) {
                     // Check timeout in the next loop.
                 } catch (CancellationException e) {
-                    throw new StarRocksException("Cancelled");
+                    // There are two threads checking timeout, one is current thread, the other is CheckTimer.
+                    // So this thread can get be cancelled by CheckTimer
+                    if (slotRequirement.isPendingTimeout()) {
+                        continue;
+                    }
+                    throw new StarRocksException("Cancelled", e);
                 }
             }
         } finally {
@@ -117,7 +122,7 @@ public class QueryQueueManager {
         TWorkGroup group = coord.getJobSpec().getResourceGroup();
         long groupId = group == null ? LogicalSlot.ABSENT_GROUP_ID : group.getId();
 
-        long nowMs = System.currentTimeMillis();
+        long nowMs = context.getStartTime();
         long queryTimeoutSecond = coord.getJobSpec().getQueryOptions().getQuery_timeout();
         long expiredPendingTimeMs =
                 nowMs + Math.min(GlobalVariable.getQueryQueuePendingTimeoutSecond(), queryTimeoutSecond) * 1000L;
