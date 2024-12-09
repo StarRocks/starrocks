@@ -25,7 +25,7 @@ select count(*) from t1 where c1 > 2;
 admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
 select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't1' order by column_name;
 [UC]analyze table t1 predicate columns with sync mode;
-select `table`, `columns` from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
+select `table`, array_join(array_sort(split(`columns`, ',')), ',') from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
 
 -- aggregation
 select c1, count(c1), sum(c2), max(c3), min(c4) from t1 group by c1;
@@ -33,7 +33,7 @@ select c2, count(c1), max(c3), min(c4) from t1 where c1 > 2 group by c2;
 admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
 select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't1' order by column_name;
 [UC]analyze table t1 predicate columns;
-select `table`, `columns` from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
+select `table`, array_join(array_sort(split(`columns`, ',')), ',') from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
 
 -- join
 create table t2(c5 int, c6 bigint, c7 string, c8 string) 
@@ -46,7 +46,7 @@ admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColum
 select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't1' order by column_name;
 select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't2' order by column_name;
 [UC]analyze table t1 predicate columns;
-select `table`, `columns` from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
+select `table`, array_join(array_sort(split(`columns`, ',')), ',') from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
 
 admin set frontend config ('enable_statistic_collect_on_first_load'='true');
 admin set frontend config ('enable_statistic_collect'='false');
