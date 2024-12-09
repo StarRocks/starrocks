@@ -1979,10 +1979,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // Compatible with older versions, `Config.max_create_table_timeout_second` is the timeout time for a single index.
             // Here we assume that all partitions have the same number of indexes.
             int maxTimeout = partitionCount * indexCountPerPartition * Config.max_create_table_timeout_second;
+            int maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
+            tasks.forEach(task -> task.setTimeoutMs(maxWaitTimeSeconds * 1000L));
             try {
                 LOG.info("build partitions sequentially, send task one by one, all tasks timeout {}s",
-                        Math.min(timeout, maxTimeout));
-                sendCreateReplicaTasksAndWaitForFinished(tasks, Math.min(timeout, maxTimeout));
+                        maxWaitTimeSeconds);
+                sendCreateReplicaTasksAndWaitForFinished(tasks, maxWaitTimeSeconds);
                 LOG.info("build partitions sequentially, all tasks finished, took {}ms",
                         System.currentTimeMillis() - start);
                 tasks.clear();
@@ -2002,13 +2004,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         int numIndexes = partitions.stream().mapToInt(
                 partition -> partition.getMaterializedIndices(IndexExtState.VISIBLE).size()).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
+        long maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(numReplicas);
         Map<Long, List<Long>> taskSignatures = new HashMap<>();
         try {
             int numFinishedTasks;
             int numSendedTasks = 0;
             long startTime = System.currentTimeMillis();
-            long maxWaitTimeMs = Math.min(timeout, maxTimeout) * 1000L;
             for (PhysicalPartition partition : partitions) {
                 if (!countDownLatch.getStatus().ok()) {
                     break;
@@ -2018,6 +2020,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     List<Long> signatures =
                             taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
                     signatures.add(task.getSignature());
+                    // set timeout to 2 * maxWaitTimeSeconds because this for loop can wait for maxWaitTimeSeconds
+                    // to limit the number of tasks that can be sent at the same time, and outside the loop it can
+                    // wait for maxWaitTimeSeconds again. So the total waiting time is 2 * maxWaitTimeSeconds.
+                    task.setTimeoutMs(maxWaitTimeSeconds * 1000 * 2);
                 }
                 sendCreateReplicaTasks(tasks, countDownLatch);
                 numSendedTasks += tasks.size();
@@ -2031,7 +2037,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
                     long currentTime = System.currentTimeMillis();
                     // Add timeout check
-                    if (currentTime > startTime + maxWaitTimeMs) {
+                    if (currentTime > startTime + maxWaitTimeSeconds * 1000) {
                         throw new TimeoutException("Wait in buildPartitionsConcurrently exceeded timeout");
                     }
                     ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
@@ -2039,8 +2045,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
             LOG.info("build partitions concurrently for {}, waiting for all tasks finish with timeout {}s",
-                    table.getName(), Math.min(timeout, maxTimeout));
-            waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
+                    table.getName(), maxWaitTimeSeconds);
+            waitForFinished(countDownLatch, maxWaitTimeSeconds);
             LOG.info("build partitions concurrently for {}, all tasks finished, took {}ms",
                     table.getName(), System.currentTimeMillis() - start);
 

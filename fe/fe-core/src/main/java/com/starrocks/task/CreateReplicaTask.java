@@ -82,6 +82,7 @@ public class CreateReplicaTask extends AgentTask {
     private int primaryIndexCacheExpireSec = 0;
     private boolean createSchemaFile = true;
     private final TTabletSchema tabletSchema;
+    private long timeoutMs = -1;
 
     private CreateReplicaTask(Builder builder) {
         super(null, builder.getNodeId(), TTaskType.CREATE, builder.getDbId(), builder.getTableId(),
@@ -138,6 +139,10 @@ public class CreateReplicaTask extends AgentTask {
     public void setBaseTablet(long baseTabletId, int baseSchemaHash) {
         this.baseTabletId = baseTabletId;
         this.baseSchemaHash = baseSchemaHash;
+    }
+
+    public void setTimeoutMs(long timeoutMs) {
+        this.timeoutMs = timeoutMs;
     }
 
     public TTabletType getTabletType() {
