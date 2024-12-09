@@ -277,26 +277,14 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         bool skip_schema = config::skip_schema_in_rowset_meta &&
                            !rowset_ptr->rowset_meta()->get_meta_pb_without_schema().has_txn_meta() &&
                            !tablet->is_update_schema_running();
-        if (skip_schema) {
-            // avoid `update_max_version_schema` and `commit_txn` run concurrency, so hold a read
-            // lock for `schema_lock` is enough
+        {
             std::shared_lock l(tablet->get_schema_lock());
             skip_schema = tablet->add_committed_rowset(rowset_ptr);
+            rowset_ptr->rowset_meta()->set_skip_tablet_schema(skip_schema);
             rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb, skip_schema);
-            owset_ptr->rowset_meta()->set_skip_tablet_schema(skip_schema);
-            /*
-            if (skip_schema) {
-                rowset_ptr->rowset_meta()->set_skip_tablet_schema(true);
-                rowset_meta_pb = rowset_ptr->rowset_meta()->get_meta_pb_without_schema();
-            } else {
-                rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
-            }
-            */
-            st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
-        } else {
-            rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
             st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
         }
+
         if (!st.ok()) {
             if (skip_schema) {
                 tablet->erase_committed_rowset(rowset_ptr);
