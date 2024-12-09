@@ -17,8 +17,11 @@
 #include <gtest/gtest.h>
 
 #include "exec/tablet_scanner.h"
+#include "exprs/column_ref.h"
+#include "exprs/in_const_predicate.hpp"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "storage/predicate_parser.h"
+#include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 #include "testutil/schema_test_helper.h"
 
@@ -34,6 +37,7 @@ public:
         _opts.runtime_state = &_runtime_state;
         _opts.obj_pool = &_pool;
         _opts.pred_tree_params.enable_or = true;
+        _opts.key_column_names = &_key_column_names;
     }
 
 protected:
@@ -56,6 +60,7 @@ protected:
 
     ColumnPredicatePtrs _predicate_free_pool;
     TypeDescriptor _type_varchar;
+    std::vector<BoxedExprContext> _expr_containers;
 };
 
 template <LogicalType Type>
@@ -139,10 +144,8 @@ TEST_F(ChunkPredicateBuilderTest, rt_has_no_null) {
     ASSERT_TRUE(ret1.ok());
 
     _opts.runtime_filters = ret1.value();
-    _opts.key_column_names = &_key_column_names;
 
-    std::vector<BoxedExprContext> containers;
-    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, containers, true);
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
 
     auto ret2 = builder.parse_conjuncts();
     ASSERT_TRUE(ret1.ok());
@@ -163,10 +166,8 @@ TEST_F(ChunkPredicateBuilderTest, rt_has_null) {
     ASSERT_TRUE(ret1.ok());
 
     _opts.runtime_filters = ret1.value();
-    _opts.key_column_names = &_key_column_names;
 
-    std::vector<BoxedExprContext> containers;
-    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, containers, true);
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
 
     auto ret2 = builder.parse_conjuncts();
     ASSERT_TRUE(ret1.ok());
@@ -188,10 +189,9 @@ TEST_F(ChunkPredicateBuilderTest, varchar_rt_has_no_null) {
     ASSERT_TRUE(ret1.ok());
 
     _opts.runtime_filters = ret1.value();
-    _opts.key_column_names = &_key_column_names;
 
     std::vector<BoxedExprContext> containers;
-    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, containers, true);
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
 
     auto ret2 = builder.parse_conjuncts();
     ASSERT_TRUE(ret1.ok());
@@ -212,10 +212,8 @@ TEST_F(ChunkPredicateBuilderTest, varchar_rt_has_null) {
     ASSERT_TRUE(ret1.ok());
 
     _opts.runtime_filters = ret1.value();
-    _opts.key_column_names = &_key_column_names;
 
-    std::vector<BoxedExprContext> containers;
-    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, containers, true);
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
 
     auto ret2 = builder.parse_conjuncts();
     ASSERT_TRUE(ret1.ok());
@@ -237,10 +235,8 @@ TEST_F(ChunkPredicateBuilderTest, range_rt_has_null_min) {
     ASSERT_TRUE(ret1.ok());
 
     _opts.runtime_filters = ret1.value();
-    _opts.key_column_names = &_key_column_names;
 
-    std::vector<BoxedExprContext> containers;
-    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, containers, true);
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
 
     auto ret2 = builder.parse_conjuncts();
     ASSERT_TRUE(ret1.ok());
@@ -262,10 +258,8 @@ TEST_F(ChunkPredicateBuilderTest, range_rt_has_null_max) {
     ASSERT_TRUE(ret1.ok());
 
     _opts.runtime_filters = ret1.value();
-    _opts.key_column_names = &_key_column_names;
 
-    std::vector<BoxedExprContext> containers;
-    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, containers, true);
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
 
     auto ret2 = builder.parse_conjuncts();
     ASSERT_TRUE(ret1.ok());
@@ -276,5 +270,67 @@ TEST_F(ChunkPredicateBuilderTest, range_rt_has_null_max) {
     ASSERT_EQ(
             ret3.value().debug_string(),
             "{\"and\":[{\"or\":[{\"pred\":\"(ColumnId(1) IS NULL)\"},{\"and\":[{\"pred\":\"(columnId(1)<10)\"}]}]}]}");
+}
+
+TEST_F(ChunkPredicateBuilderTest, in_runtime_filter_has_null) {
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    RuntimeFilterProbeCollector collector;
+    _opts.runtime_filters = &collector;
+
+    ColumnRef* col_ref = _pool.add(new ColumnRef(TYPE_INT_DESC, 1));
+    VectorizedInConstPredicateBuilder builder(&_runtime_state, &_pool, col_ref);
+    builder.set_null_in_set(true);
+    builder.use_as_join_runtime_filter();
+    Status st = builder.create();
+
+    std::vector<int32_t> values{1, 3, 5, 7, 9};
+    ColumnPtr col = ColumnTestHelper::build_column(values);
+    builder.add_values(col, 0);
+
+    ExprContext* expr_ctx = builder.get_in_const_predicate();
+
+    containers.emplace_back(BoxedExprContext(expr_ctx));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> pred_builder(_opts, expr_containers, true);
+    auto ret = pred_builder.parse_conjuncts();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value());
+
+    auto ret2 = pred_builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool);
+    ASSERT_TRUE(ret2.ok());
+    ASSERT_EQ(ret2.value().debug_string(),
+              "{\"and\":[{\"or\":[{\"pred\":\"((columnId=1)IN(9,5,1,7,3))\"},{\"pred\":\"(ColumnId(1) IS NULL)\"}]}]}");
+}
+
+TEST_F(ChunkPredicateBuilderTest, in_runtime_filter_has_no_null) {
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    RuntimeFilterProbeCollector collector;
+    _opts.runtime_filters = &collector;
+
+    ColumnRef* col_ref = _pool.add(new ColumnRef(TYPE_INT_DESC, 1));
+    VectorizedInConstPredicateBuilder builder(&_runtime_state, &_pool, col_ref);
+    builder.use_as_join_runtime_filter();
+    Status st = builder.create();
+
+    std::vector<int32_t> values{1, 3, 5, 7, 9};
+    ColumnPtr col = ColumnTestHelper::build_column(values);
+    builder.add_values(col, 0);
+
+    ExprContext* expr_ctx = builder.get_in_const_predicate();
+
+    containers.emplace_back(BoxedExprContext(expr_ctx));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> pred_builder(_opts, _expr_containers, true);
+    auto ret = pred_builder.parse_conjuncts();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value());
+
+    auto ret2 = pred_builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool);
+    ASSERT_TRUE(ret2.ok());
+    ASSERT_EQ(ret2.value().debug_string(), "{\"and\":[{\"pred\":\"((columnId=1)IN(9,5,1,7,3))\"}]}");
 }
 } // namespace starrocks

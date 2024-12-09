@@ -612,16 +612,39 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                 // Ensure we don't compute this conjuncts again in olap scanner
                 _normalized_exprs[i] = true;
 
-                if (pred->is_not_in() || pred->null_in_set() ||
-                    pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
+                if (pred->is_not_in() || pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                     continue;
                 }
 
-                std::set<RangeValueType> values;
-                for (const auto& value : pred->hash_set()) {
-                    values.insert(value);
+                if (pred->null_in_set()) {
+                    std::vector<BoxedExpr> containers;
+                    auto* new_in_pred = down_cast<VectorizedInConstPredicate<SlotType>*>(root_expr->clone(_opts.obj_pool));
+                    const auto& childs = root_expr->children();
+                    for (const auto& child : childs) {
+                        new_in_pred->add_child(child);
+                    }
+                    new_in_pred->set_null_in_set(false);
+                    new_in_pred->set_is_join_runtime_filter(false);
+
+                    auto* is_null_pred = _gen_is_null_pred(childs[0]);
+
+                    containers.emplace_back(new_in_pred);
+                    containers.emplace_back(is_null_pred);
+
+                    ChunkPredicateBuilder<BoxedExpr, CompoundNodeType::OR> child_builder(_opts, containers, false);
+                    auto normalized = child_builder.parse_conjuncts();
+                    if (!normalized.ok()) {
+                        continue;
+                    } else if (normalized.value()) {
+                        _child_builders.emplace_back(child_builder);
+                    }
+                } else {
+                    std::set<RangeValueType> values;
+                    for (const auto& value : pred->hash_set()) {
+                        values.insert(value);
+                    }
+                    (void)range->add_fixed_values(FILTER_IN, values);
                 }
-                (void)range->add_fixed_values(FILTER_IN, values);
             }
         }
     }
