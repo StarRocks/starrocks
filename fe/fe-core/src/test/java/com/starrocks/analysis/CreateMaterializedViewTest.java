@@ -5054,7 +5054,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testHiveMVInExternalCatalog() {
+    public void testHiveMVInExternalCatalog() throws DdlException {
         try {
             starRocksAssert.useCatalog("hive0");
             String sql = "CREATE MATERIALIZED VIEW tpch.supplier_mv " +
@@ -5065,6 +5065,8 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Can not find database"));
+        } finally {
+            starRocksAssert.useCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         }
     }
 
