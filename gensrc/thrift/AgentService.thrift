@@ -120,6 +120,14 @@ struct TCreateTabletReq {
     19: optional i32 primary_index_cache_expire_sec;
     // Whether or not need to create a separate file to hold schema information.
     20: optional bool create_schema_file = true;
+<<<<<<< HEAD
+=======
+    21: optional i32 compression_level = -1;
+    // Whether or not use shared tablet initial metadata.
+    22: optional bool enable_tablet_creation_optimization = false;
+    // The timeout FE will wait for the tablet to be created.
+    23: optional i64 timeout_ms = -1;
+>>>>>>> 2064d9b2a0 ([Enhancement] BE cancels the create tablet task if it has already timed out (#53696))
 }
 
 struct TDropTabletReq {
