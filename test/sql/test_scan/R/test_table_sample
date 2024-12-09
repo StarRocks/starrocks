@@ -19,6 +19,12 @@ select s1, s1 % 1000, repeat('a', 128) FROM TABLE(generate_series(1, 655350)) s(
 create table pk_t1 primary key(k1) as select * from t1;
 -- result:
 -- !result
+alter table t1 compact;
+-- result:
+-- !result
+alter table pk_t1 compact;
+-- result:
+-- !result
 select count(k1), sum(k1), sum(k2) from t1 sample('method'='by_nothing');
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 43 to line 1, column 71. Detail message: unrecognized sample-method: by_nothing.')
@@ -37,7 +43,7 @@ E: (1064, 'Getting syntax error from line 1, column 43 to line 1, column 63. Det
 -- !result
 [UC] select count(k1), sum(k1), sum(k2) from t1 sample;
 -- result:
-9216	3071808000	4599000
+7168	2461535744	3552744
 -- !result
 select count(k1), sum(k1), sum(k2) from t1 sample('seed'='1', 'method'='by_block', 'percent'='1');
 -- result:
