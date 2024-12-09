@@ -3919,4 +3919,73 @@ TEST_F(TimeFunctionsTest, MakeDateTest) {
     ASSERT_TRUE(nullable_col->is_null(8));
     ASSERT_TRUE(nullable_col->is_null(9));
 }
+
+// Tests for format_time function
+TEST_F(TimeFunctionsTest, formatTimeTest) {
+    // Basic format test
+    {
+        // Create time column
+        auto time_builder = ColumnHelper::get_builder<TYPE_TIME>(1);
+        TimeValue time_val(14, 30, 45, 0);
+        time_builder->append(time_val);
+        auto time_column = time_builder->build();
+
+        // Create format column with basic format string
+        auto format_builder = ColumnHelper::get_builder<TYPE_VARCHAR>(1);
+        format_builder->append("%H:%i:%S");
+        auto format_column = format_builder->build();
+
+        // Set up columns and function context
+        Columns columns;
+        columns.emplace_back(time_column);
+        columns.emplace_back(format_column);
+
+        // Execute format_time function
+        TimeFunctions::format_prepare(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::format_time(_utils->get_fn_ctx(), columns).value();
+        TimeFunctions::format_close(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+
+        // Verify result
+        ASSERT_TRUE(result->is_binary());
+        auto result_viewer = ColumnViewer<TYPE_VARCHAR>(result);
+        EXPECT_EQ("14:30:45", std::string(result_viewer.get_slice(0)));
+    }
+
+    // Multiple format strings test
+    {
+        // Create time column with multiple rows
+        auto time_builder = ColumnHelper::get_builder<TYPE_TIME>(4);
+        TimeValue time_val(14, 30, 45, 0);
+        for (int i = 0; i < 4; i++) {
+            time_builder->append(time_val);
+        }
+        auto time_column = time_builder->build();
+
+        // Create format column with different format strings
+        auto format_builder = ColumnHelper::get_builder<TYPE_VARCHAR>(4);
+        format_builder->append("%H:%i:%S");
+        format_builder->append("%H:%i");
+        format_builder->append("Time: %H:%i");
+        format_builder->append("%H");
+        auto format_column = format_builder->build();
+
+        // Set up columns and function context
+        Columns columns;
+        columns.emplace_back(time_column);
+        columns.emplace_back(format_column);
+
+        // Execute format_time function
+        TimeFunctions::format_prepare(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::format_time(_utils->get_fn_ctx(), columns).value();
+        TimeFunctions::format_close(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+
+        // Verify results
+        ASSERT_TRUE(result->is_binary());
+        auto result_viewer = ColumnViewer<TYPE_VARCHAR>(result);
+        EXPECT_EQ("14:30:45", std::string(result_viewer.get_slice(0)));
+        EXPECT_EQ("14:30", std::string(result_viewer.get_slice(1)));
+        EXPECT_EQ("Time: 14:30", std::string(result_viewer.get_slice(2)));
+        EXPECT_EQ("14", std::string(result_viewer.get_slice(3)));
+    }
+}
 } // namespace starrocks
