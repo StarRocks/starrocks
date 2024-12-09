@@ -175,6 +175,8 @@ int MemTableFlushExecutor::calc_max_threads_for_lake_table(const std::vector<Dat
     int data_dir_num = static_cast<int>(data_dirs.size());
     data_dir_num = std::max(1, data_dir_num);
     data_dir_num = std::min(8, data_dir_num);
+    LOG(INFO) << "calc_max_threads_for_lake_table " << config::lake_flush_thread_num_per_store << " "
+              << CpuInfo::num_cores() << " " << data_dirs.size() << " result : " << data_dir_num << " * " << threads;
     return data_dir_num * threads;
 }
 
