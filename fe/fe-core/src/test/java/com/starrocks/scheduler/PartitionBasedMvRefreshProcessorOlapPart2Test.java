@@ -408,7 +408,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                     }
                     Assert.assertEquals(1, statuses.size());
                     TaskRunStatus status = statuses.get(0);
-                    Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), status.getPriority());
+                    Assert.assertEquals(Constants.TaskRunPriority.HIGHER.value(), status.getPriority());
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
                 }
         );
