@@ -103,7 +103,7 @@ public class ConnectScheduler {
                 }
             } catch (Throwable e) {
                 //Catch Exception to avoid thread exit
-                LOG.warn("Timeout checker exception, Internal error : " + e.getMessage());
+                LOG.warn("Timeout checker exception, Internal error : {}", e.getMessage(), e);
             }
         }
     }
