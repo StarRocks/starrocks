@@ -70,12 +70,15 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -95,6 +98,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     private static final int ABSENT_MAX_CPU_CORES = -1;
 
     private final QueryQueueManager manager = QueryQueueManager.getInstance();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     private final Map<Long, ResourceGroup> mockedGroups = new ConcurrentHashMap<>();
 
@@ -146,6 +150,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         };
 
         MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(-MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+
+        connectContext.setStartTime();
     }
 
     @After
@@ -611,6 +617,31 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coord = getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
             Assert.assertThrows("pending timeout", UserException.class, () -> manager.maybeWait(connectContext, coord));
             mockFrontendService(new MockFrontendServiceClient());
+        }
+        {
+            // 2.4 timeout by CheckTimer
+            Instant fakeStart = Instant.now().minusSeconds(3);
+            connectContext.setStartTime(fakeStart);
+            DefaultCoordinator coord =
+                    getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=5)*/ count(1) from lineitem");
+
+            // cancel the execution to simulate timeout
+            new MockUp<LogicalSlot>() {
+                private boolean first = true;
+
+                @Mock
+                public boolean isPendingTimeout() {
+                    boolean res = !first;
+                    first = false;
+                    return res;
+                }
+            };
+            scheduler.schedule(() -> {
+                coord.cancel("simulate timeout");
+            }, 1, TimeUnit.SECONDS);
+
+            Assert.assertThrows("pending timeout", UserException.class,
+                    () -> manager.maybeWait(connectContext, coord));
         }
 
         // 3. Finish the first `concurrencyLimit` non-group queries.
