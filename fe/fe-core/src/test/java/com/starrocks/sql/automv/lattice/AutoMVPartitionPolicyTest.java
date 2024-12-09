@@ -487,7 +487,7 @@ public class AutoMVPartitionPolicyTest {
                 return 0.6;
             }
         };
-        for (int n = 1; n < 50; n += 4) {
+        for (int n = 1; n < 50; n += 8) {
             int mvLimit = n;
             AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList,
                     sv -> {

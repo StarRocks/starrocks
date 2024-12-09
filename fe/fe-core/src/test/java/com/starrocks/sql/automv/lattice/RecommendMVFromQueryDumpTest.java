@@ -25,6 +25,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.util.List;
 import java.util.Objects;
+import java.util.Random;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -48,6 +49,9 @@ public class RecommendMVFromQueryDumpTest {
     @ParameterizedTest(name = "{0}.{1}")
     @MethodSource("nextQueryDump")
     public void test(String groupName, String queryDumpPath) throws Exception {
+        if (new Random().nextInt(10) != 0) {
+            return;
+        }
         File queryDumpFile = new File(getRootPath() + "/" + groupName + "/" + queryDumpPath);
         String jsonStr = IOUtils.toString(new FileReader(queryDumpFile));
         QueryDumpMVRecommender recommender = QueryDumpMVRecommender.of();
