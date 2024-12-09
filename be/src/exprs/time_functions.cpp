@@ -3231,9 +3231,7 @@ StatusOr<ColumnPtr> TimeFunctions::format_time(FunctionContext* context, const s
     const auto& time_column = columns[0];
     const auto& format_column = columns[1];
 
-    if (time_column->is_nullable() || format_column->is_nullable()) {
-        return Status::InvalidArgument("FORMAT_TIME arguments cannot be NULL");
-    }
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto* time_col = ColumnHelper::cast_to<TYPE_TIME>(time_column);
     auto* format_col = ColumnHelper::cast_to<TYPE_VARCHAR>(format_column);
