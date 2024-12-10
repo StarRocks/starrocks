@@ -72,12 +72,14 @@ import static com.starrocks.sql.optimizer.rule.transformation.partition.Partitio
 
 public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     private static final Logger LOG = LogManager.getLogger(MVPCTRefreshListPartitioner.class);
+    private final ListPartitionDiffer differ;
 
     public MVPCTRefreshListPartitioner(MvTaskRunContext mvContext,
                                        TaskRunContext context,
                                        Database db,
                                        MaterializedView mv) {
         super(mvContext, context, db, mv);
+        this.differ = new ListPartitionDiffer(mv);
     }
 
     @Override
@@ -127,11 +129,11 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         {
             final Map<Table, Map<String, PCell>> refBaseTablePartitionMap = result.refBaseTablePartitionMap;
             // base table -> Map<partition name -> mv partition names>
-            Map<Table, Map<String, Set<String>>> baseToMvNameRef = ListPartitionDiffer
-                    .generateBaseRefMap(refBaseTablePartitionMap, result.mvPartitionToCells);
+            Map<Table, Map<String, Set<String>>> baseToMvNameRef =
+                    differ.generateBaseRefMap(refBaseTablePartitionMap, result.mvPartitionToCells);
             // mv partition name -> Map<base table -> base partition names>
-            Map<String, Map<Table, Set<String>>> mvToBaseNameRef = ListPartitionDiffer
-                    .generateMvRefMap(result.mvPartitionToCells, refBaseTablePartitionMap);
+            Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
+                    differ.generateMvRefMap(result.mvPartitionToCells, refBaseTablePartitionMap);
 
             mvContext.setMVToCellMap(result.mvPartitionToCells);
             mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);

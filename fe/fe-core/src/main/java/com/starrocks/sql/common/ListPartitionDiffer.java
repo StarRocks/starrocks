@@ -36,6 +36,10 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public final class ListPartitionDiffer extends PartitionDiffer {
     private static final Logger LOG = LogManager.getLogger(ListPartitionDiffer.class);
 
+    public ListPartitionDiffer(MaterializedView mv) {
+        super(mv);
+    }
+
     /**
      * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into result.
      *
@@ -263,9 +267,9 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @param mvPartitionMap mv partition name to its list partition cell
      * @return base table -> <partition name, mv partition names> mapping
      */
-    public static Map<Table, Map<String, Set<String>>> generateBaseRefMap(
-            Map<Table, Map<String, PCell>> basePartitionMaps,
-            Map<String, PCell> mvPartitionMap) {
+    @Override
+    public Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, Map<String, PCell>> basePartitionMaps,
+                                                                   Map<String, PCell> mvPartitionMap) {
         Map<PListAtom, Set<PListCellPlus>> mvAtoms = toAtoms(mvPartitionMap);
         Map<Table, Map<String, Set<String>>> result = Maps.newHashMap();
         for (Map.Entry<Table, Map<String, PCell>> entry : basePartitionMaps.entrySet()) {
@@ -283,9 +287,9 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @param basePartitionMaps src partition list map of the base table
      * @return mv partition name -> <base table, base partition names> mapping
      */
-    public static  Map<String, Map<Table, Set<String>>> generateMvRefMap(
-            Map<String, PCell> mvPartitionMap,
-            Map<Table, Map<String, PCell>> basePartitionMaps) {
+    @Override
+    public Map<String, Map<Table, Set<String>>> generateMvRefMap(Map<String, PCell> mvPartitionMap,
+                                                                 Map<Table, Map<String, PCell>> basePartitionMaps) {
         Map<String, Map<Table, Set<String>>> result = Maps.newHashMap();
         // for each partition of base, find the corresponding partition of mv
         Map<PListAtom, Set<PListCellPlus>> mvAtoms = toAtoms(mvPartitionMap);

@@ -83,11 +83,13 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
     private static final Logger LOG = LogManager.getLogger(MVPCTRefreshRangePartitioner.class);
 
+    private final RangePartitionDiffer differ;
     public MVPCTRefreshRangePartitioner(MvTaskRunContext mvContext,
                                         TaskRunContext context,
                                         Database db,
                                         MaterializedView mv) {
         super(mvContext, context, db, mv);
+        this.differ = new RangePartitionDiffer(mv, null);
     }
 
     @Override
@@ -126,11 +128,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 mv.getName(), adds);
 
         // used to get partitions to refresh
-        Map<Table, List<Expr>> tableToExprMap = mv.getRefBaseTablePartitionExprs();
-        Map<Table, Map<String, Set<String>>> baseToMvNameRef = RangePartitionDiffer
-                .generateBaseRefMap(result.refBaseTablePartitionMap, tableToExprMap, result.mvPartitionToCells);
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = RangePartitionDiffer
-                .generateMvRefMap(result.mvPartitionToCells, tableToExprMap, result.refBaseTablePartitionMap);
+        Map<Table, Map<String, Set<String>>> baseToMvNameRef =
+                differ.generateBaseRefMap(result.refBaseTablePartitionMap, result.mvPartitionToCells);
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
+                differ.generateMvRefMap(result.mvPartitionToCells, result.refBaseTablePartitionMap);
 
         mvContext.setMVToCellMap(result.mvPartitionToCells);
         mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);

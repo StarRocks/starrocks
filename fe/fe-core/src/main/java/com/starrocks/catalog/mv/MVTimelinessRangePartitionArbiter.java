@@ -46,9 +46,12 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
  */
 public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter {
     private static final Logger LOG = LogManager.getLogger(MVTimelinessRangePartitionArbiter.class);
+    // range differ
+    private final RangePartitionDiffer differ;
 
     public MVTimelinessRangePartitionArbiter(MaterializedView mv, boolean isQueryRewrite) {
         super(mv, isQueryRewrite);
+        this.differ = new RangePartitionDiffer(mv, null);
     }
 
     @Override
@@ -113,11 +116,10 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         // add mv partition name to range map into timeline info to be used if it's a sub mv of nested mv
         mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionNameToRangeMap);
 
-        Map<Table, List<Expr>> refBaseTablePartitionExprs = mv.getRefBaseTablePartitionExprs();
-        Map<Table, Map<String, Set<String>>> baseToMvNameRef = RangePartitionDiffer
-                .generateBaseRefMap(basePartitionNameToRangeMap, refBaseTablePartitionExprs, mvPartitionNameToRangeMap);
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = RangePartitionDiffer
-                .generateMvRefMap(mvPartitionNameToRangeMap, refBaseTablePartitionExprs, basePartitionNameToRangeMap);
+        Map<Table, Map<String, Set<String>>> baseToMvNameRef =
+                differ.generateBaseRefMap(basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
+                differ.generateMvRefMap(mvPartitionNameToRangeMap, basePartitionNameToRangeMap);
         mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 

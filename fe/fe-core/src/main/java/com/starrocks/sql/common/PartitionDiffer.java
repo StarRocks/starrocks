@@ -15,6 +15,7 @@
 package com.starrocks.sql.common;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
@@ -28,6 +29,29 @@ import java.util.Set;
  * partition or list partition.
  */
 public abstract class PartitionDiffer {
+    private final MaterializedView mv;
+
+    public PartitionDiffer(MaterializedView mv) {
+        this.mv = mv;
+    }
+
+    /**
+     * Generate the reference map between the base table and the mv.
+     * @param baseRangeMap src partition list map of the base table
+     * @param mvRangeMap mv partition name to its list partition cell
+     * @return base table -> <partition name, mv partition names> mapping
+     */
+    public abstract Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, Map<String, PCell>> baseRangeMap,
+                                                                            Map<String, PCell> mvRangeMap);
+
+    /**
+     * Generate the mapping from materialized view partition to base table partition.
+     * @param mvRangeMap : materialized view partition range map: <partitionName, partitionRange>
+     * @param baseRangeMap: base table partition range map, <baseTable, <partitionName, partitionRange>>
+     * @return mv partition name -> <base table, base partition names> mapping
+     */
+    public abstract Map<String, Map<Table, Set<String>>> generateMvRefMap(Map<String, PCell> mvRangeMap,
+                                                                          Map<Table, Map<String, PCell>> baseRangeMap);
     /**
      * To solve multi partition columns' problem of external table, record the mv partition name to all the same
      * partition names map here.
