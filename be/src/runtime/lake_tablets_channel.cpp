@@ -349,6 +349,24 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             // Do NOT return
             break;
         }
+        // back pressure OlapTableSink when load memory is full
+        size_t wait_cnt = 0;
+        while (_mem_tracker->limit_exceeded() ||
+               (_mem_tracker->parent() != nullptr && _mem_tracker->parent()->limit_exceeded())) {
+            auto t1 = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count() > request.timeout_ms() ||
+                wait_cnt > 10) {
+                LOG(INFO) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                          << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
+                          << "ms because load memory is full";
+                break;
+            }
+            bthread_usleep(100000); // 100ms
+            wait_memtable_flush_time_us +=
+                    std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1)
+                            .count();
+            wait_cnt++;
+        }
         dw->write(chunk, row_indexes + from, size, [&](const Status& st) {
             context->update_status(st);
             count_down_latch.count_down();
