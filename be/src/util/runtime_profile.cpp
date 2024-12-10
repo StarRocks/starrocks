@@ -786,9 +786,16 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
 
         TCounter counter;
         counter.__set_name(iter.first);
-        counter.__set_value(iter.second.first->value());
-        counter.__set_type(iter.second.first->type());
-        counter.__set_strategy(iter.second.first->strategy());
+        auto& iter_counter = iter.second.first;
+        counter.__set_value(iter_counter->value());
+        counter.__set_type(iter_counter->type());
+        counter.__set_strategy(iter_counter->strategy());
+        if (iter_counter->_min_value.has_value()) {
+            counter.__set_min_value(iter_counter->_min_value.value());
+        }
+        if (iter_counter->_max_value.has_value()) {
+            counter.__set_max_value(iter_counter->_max_value.value());
+        }
         node.counters.push_back(counter);
     }
 
@@ -962,19 +969,11 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                 }
 
                 if (!counter->skip_min_max()) {
-                    auto* min_counter = profile->get_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name));
-                    if (min_counter != nullptr) {
-                        already_merged = true;
-                        if (min_counter->value() < min_value) {
-                            min_value = min_counter->value();
-                        }
+                    if (counter->_min_value.has_value()) {
+                        min_value = counter->_min_value.value();
                     }
-                    auto* max_counter = profile->get_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MAX, name));
-                    if (max_counter != nullptr) {
-                        already_merged = true;
-                        if (max_counter->value() > max_value) {
-                            max_value = max_counter->value();
-                        }
+                    if (counter->_max_value.has_value()) {
+                        max_value = counter->_max_value.value();
                     }
                 }
 
@@ -1005,14 +1004,8 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                 merged_counter->set(merged_value);
 
                 if (!merged_counter->skip_min_max()) {
-                    auto* min_counter =
-                            merged_profile->add_child_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name),
-                                                              type, merged_counter->strategy(), name);
-                    auto* max_counter =
-                            merged_profile->add_child_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MAX, name),
-                                                              type, merged_counter->strategy(), name);
-                    min_counter->set(min_value);
-                    max_counter->set(max_value);
+                    merged_counter->_max_value.emplace(max_value);
+                    merged_counter->_min_value.emplace(min_value);
                 }
             }
         }

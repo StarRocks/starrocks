@@ -40,6 +40,7 @@
 #include <atomic>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <thread>
 #include <unordered_set>
 #include <utility>
@@ -212,6 +213,8 @@ public:
         std::atomic<int64_t> _value;
         const TUnit::type _type;
         const TCounterStrategy _strategy;
+        std::optional<int64_t> _min_value;
+        std::optional<int64_t> _max_value;
     };
 
     class ConcurrentTimerCounter;
