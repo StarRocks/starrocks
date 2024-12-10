@@ -265,11 +265,10 @@ public abstract class MVTimelinessArbiter {
             return null;
         }
         Map<String, PCell> adds = diff.getAdds();
-        if (CollectionUtils.sizeIsEmpty(adds)) {
-            return mvUpdateInfo;
+        if (!CollectionUtils.sizeIsEmpty(adds)) {
+            adds.keySet().stream().forEach(mvPartitionName ->
+                    mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         }
-
-        adds.keySet().stream().forEach(mvPartitionName -> mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         return mvUpdateInfo;
     }
