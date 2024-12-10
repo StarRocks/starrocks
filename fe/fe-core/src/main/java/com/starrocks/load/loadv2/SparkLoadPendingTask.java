@@ -638,6 +638,7 @@ public class SparkLoadPendingTask extends LoadTask {
         String functionName = fn.getFnName().getFunction();
         if (!functionName.equalsIgnoreCase(FunctionSet.TO_BITMAP)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH)
+                && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH64)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_DICT)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_FROM_BINARY)) {
             throw new LoadException(msg);
