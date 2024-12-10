@@ -211,7 +211,17 @@ public class PullUpScanPredicateRule extends TransformationRule {
 
         @Override
         public Boolean visitCollectionElement(CollectionElementOperator op, Void context) {
-            return visit(op, context);
+            if (op.getUsedColumns().isEmpty()) {
+                return false;
+            }
+            if (op.getChild(1).isConstant() && visit(op.getChild(0), context)) {
+                if (!expressionMapping.containsKey(op)) {
+                    ColumnRefOperator columnRefOperator = columnRefFactory.create("element_at", op.getType(), op.isNullable());
+                    expressionMapping.put(op, columnRefOperator);
+                }
+                return true;
+            }
+            return false;
         }
 
         @Override
