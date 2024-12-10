@@ -49,8 +49,8 @@ public class Counter {
     private volatile int type;
     private volatile TCounterStrategy strategy;
     private volatile long value;
-    private volatile Optional<Long> minValue;
-    private volatile Optional<Long> maxValue;
+    private volatile Optional<Long> minValue = Optional.empty();
+    private volatile Optional<Long> maxValue = Optional.empty();
 
     public long getValue() {
         return value;

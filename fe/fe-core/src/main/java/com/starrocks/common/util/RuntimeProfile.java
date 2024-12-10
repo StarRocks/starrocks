@@ -765,7 +765,7 @@ public class RuntimeProfile {
                             }
                         }
                     }
-                    if (counter.getMinValue().isPresent()) {
+                    if (counter.getMaxValue().isPresent()) {
                         alreadyMerged = true;
                         maxValue = Math.max(counter.getMinValue().get(), maxValue);
                     } else {
@@ -805,16 +805,20 @@ public class RuntimeProfile {
                 mergedCounter.setValue(mergedValue);
 
                 if (!mergedCounter.isSkipMinMax()) {
-                    mergedCounter.setMinValue(minValue);
-                    mergedCounter.setMaxValue(maxValue);
                     Counter minCounter =
                             mergedProfile.addCounter(MERGED_INFO_PREFIX_MIN + name, type, mergedCounter.getStrategy(),
                                     name);
                     Counter maxCounter =
                             mergedProfile.addCounter(MERGED_INFO_PREFIX_MAX + name, type, mergedCounter.getStrategy(),
                                     name);
-                    minCounter.setValue(minValue);
-                    maxCounter.setValue(maxValue);
+                    if (minValue != Integer.MAX_VALUE) {
+                        mergedCounter.setMinValue(minValue);
+                        minCounter.setValue(minValue);
+                    }
+                    if (maxValue != Integer.MIN_VALUE) {
+                        mergedCounter.setMaxValue(maxValue);
+                        maxCounter.setValue(maxValue);
+                    }
                 }
             }
 

@@ -970,9 +970,11 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
 
                 if (!counter->skip_min_max()) {
                     if (counter->_min_value.has_value()) {
+                        already_merged = true;
                         min_value = counter->_min_value.value();
                     }
                     if (counter->_max_value.has_value()) {
+                        already_merged = true;
                         max_value = counter->_max_value.value();
                     }
                 }
