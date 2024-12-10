@@ -70,7 +70,6 @@ public class Daemon extends Thread {
 
     public void setStop() {
         isStopped.set(true);
-        super.interrupt();
     }
 
     public boolean isRunning() {

@@ -78,7 +78,7 @@ public class StateChangeExecutor extends Daemon {
                 LOG.error("got exception when take FE type from queue", e);
                 Thread.currentThread().interrupt();
                 Util.stdoutWithTime("got exception when take FE type from queue. " + e.getMessage());
-                return;
+                System.exit(-1);
             }
             Preconditions.checkNotNull(newType);
             FrontendNodeType feType = GlobalStateMgr.getCurrentState().getFeType();
