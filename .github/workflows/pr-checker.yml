@@ -86,7 +86,7 @@ jobs:
           if [[ "${GITHUB_HEAD_REF}" == "mergify/bp/"* && "${BACKPORT_SOURCE_PR}" != "" ]]; then
             gh pr view ${BACKPORT_SOURCE_PR} -R ${REPO} --json body -q .body > source_body.txt
             sed -ie '/Bugfix cherry-pick branch check/,$d' source_body.txt
-            cat body.txt source_body.txt > tmp_body.txt
+            cat source_body.txt > tmp_body.txt
             mv tmp_body.txt body.txt
           fi
           
