@@ -157,7 +157,12 @@ public class OptOlapPartitionPruner {
     }
 
     private static void checkScanPartitionLimit(int selectedPartitionNum) throws AnalysisException {
-        int scanOlapPartitionNumLimit = ConnectContext.get().getSessionVariable().getScanOlapPartitionNumLimit();
+        int scanOlapPartitionNumLimit = 0;
+        try {
+            scanOlapPartitionNumLimit = ConnectContext.get().getSessionVariable().getScanOlapPartitionNumLimit();
+        } catch (Exception e) {
+            LOG.warn("fail to get variable scan_olap_partition_num_limit, set default value 0, msg: {}", e.getMessage());
+        }
         if (scanOlapPartitionNumLimit > 0 && selectedPartitionNum > scanOlapPartitionNumLimit) {
             String msg = "Exceeded the limit of " + scanOlapPartitionNumLimit + " max scan olap partitions. " +
                     "Please adjust query or change limit by set session variable scan_olap_partition_num_limit.";
