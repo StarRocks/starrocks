@@ -32,7 +32,7 @@ class ColumnPredicate;
 using ColumnPredicatePtr = std::unique_ptr<ColumnPredicate>;
 using ColumnPredicatePtrs = std::vector<ColumnPredicatePtr>;
 
-struct OlapScanConjunctsManagerOptions {
+struct ScanConjunctsManagerOptions {
     // fields from olap scan node
     const std::vector<ExprContext*>* conjunct_ctxs_ptr = nullptr;
     const TupleDescriptor* tuple_desc = nullptr;
@@ -46,6 +46,7 @@ struct OlapScanConjunctsManagerOptions {
     bool scan_keys_unlimited = true;
     int32_t max_scan_key_num = 1024;
     bool enable_column_expr_predicate = false;
+    bool is_olap_scan = true;
 
     PredicateTreeParams pred_tree_params;
 };
@@ -75,7 +76,7 @@ concept BoxedExprType = std::is_same_v<E, BoxedExpr> || std::is_same_v<E, BoxedE
 template <BoxedExprType E, CompoundNodeType Type>
 class ChunkPredicateBuilder {
 public:
-    ChunkPredicateBuilder(const OlapScanConjunctsManagerOptions& opts, std::vector<E> exprs, bool is_root_builder);
+    ChunkPredicateBuilder(const ScanConjunctsManagerOptions& opts, std::vector<E> exprs, bool is_root_builder);
 
     StatusOr<bool> parse_conjuncts();
 
@@ -89,7 +90,7 @@ public:
     const UnarrivedRuntimeFilterList& unarrived_runtime_filters() { return rt_ranger_params; }
 
 private:
-    const OlapScanConjunctsManagerOptions& _opts;
+    const ScanConjunctsManagerOptions& _opts;
     const std::vector<E> _exprs;
     const bool _is_root_builder;
 
@@ -156,9 +157,9 @@ private:
     Status build_column_expr_predicates();
 };
 
-class OlapScanConjunctsManager {
+class ScanConjunctsManager {
 public:
-    explicit OlapScanConjunctsManager(OlapScanConjunctsManagerOptions&& opts);
+    explicit ScanConjunctsManager(ScanConjunctsManagerOptions&& opts);
 
     Status parse_conjuncts();
 
@@ -173,7 +174,7 @@ public:
     const UnarrivedRuntimeFilterList& unarrived_runtime_filters();
 
 private:
-    OlapScanConjunctsManagerOptions _opts;
+    ScanConjunctsManagerOptions _opts;
     ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> _root_builder;
 };
 
