@@ -101,7 +101,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
 
         // no needs to refresh the deleted partitions, because the deleted partitions are not in the mv's partition map.
         Set<String> mvToRefreshPartitionNames = Sets.newHashSet();
-        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells();
+        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells(Optional.empty());
 
         // remove ref base table's deleted partitions from `mvPartitionMap`
         mvToRefreshPartitionNames.addAll(diff.getDeletes().keySet());

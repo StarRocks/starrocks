@@ -63,6 +63,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -262,7 +263,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public Set<String> getMVPartitionsToRefreshWithForce() {
-        Map<String, PCell> mvValidListPartitionMapMap = mv.getPartitionCells();
+        Map<String, PCell> mvValidListPartitionMapMap = mv.getPartitionCells(Optional.empty());
         filterPartitionsByTTL(mvValidListPartitionMapMap, false);
         return mvValidListPartitionMapMap.keySet();
     }
@@ -348,7 +349,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                 }
             }
         } else {
-            mvListPartitionMap = mv.getPartitionCells();
+            mvListPartitionMap = mv.getPartitionCells(Optional.empty());
         }
         // filter all valid partitions by partition_retention_condition
         filterPartitionsByTTL(mvListPartitionMap, false);

@@ -3680,19 +3680,24 @@ public class OlapTable extends Table {
         this.lastCollectProfileTime = System.currentTimeMillis();
     }
 
-    public Map<String, PCell> getPartitionCells() {
+    /**
+     * Return partition name and associate partition cell with specific partition columns.
+     * If partitionColumnsOpt is empty, return partition cell with all partition columns.
+     */
+    public Map<String, PCell> getPartitionCells(Optional<List<Column>> partitionColumnsOpt) {
         PartitionInfo partitionInfo = this.getPartitionInfo();
         if (partitionInfo.isUnPartitioned()) {
             return null;
         }
         if (partitionInfo.isRangePartition()) {
+            Preconditions.checkArgument(partitionColumnsOpt.isEmpty() || partitionColumnsOpt.get().size() == 1);
             Map<String, Range<PartitionKey>> rangeMap = getRangePartitionMap();
             if (rangeMap == null) {
                 return null;
             }
             return rangeMap.entrySet().stream().collect(Collectors.toMap(x -> x.getKey(), x -> new PRangeCell(x.getValue())));
         } else if (partitionInfo.isListPartition()) {
-            Map<String, PListCell> listMap = getListPartitionItems();
+            Map<String, PListCell> listMap = getListPartitionItems(partitionColumnsOpt);
             if (listMap == null) {
                 return null;
             }

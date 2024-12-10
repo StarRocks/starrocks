@@ -30,6 +30,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -89,7 +90,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
 
         // remove ref base table's deleted partitions from `mvPartitionMap`
         // refresh ref base table's new added partitions
-        Map<String, PCell> mvPartitionNameToListMap = mv.getPartitionCells();
+        Map<String, PCell> mvPartitionNameToListMap = mv.getPartitionCells(Optional.empty());
         diff.getDeletes().keySet().forEach(mvPartitionNameToListMap::remove);
         mvPartitionNameToListMap.putAll(diff.getAdds());
 

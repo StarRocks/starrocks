@@ -30,6 +30,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -231,7 +232,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                                                     Map<Table, Map<String, PCell>> refBaseTablePartitionMap) {
         // generate the reference map between the base table and the mv
         // TODO: prune the partitions based on ttl
-        Map<String, PCell> mvPartitionNameToListMap = mv.getPartitionCells();
+        Map<String, PCell> mvPartitionNameToListMap = mv.getPartitionCells(Optional.empty());
 
         Map<String, PCell> allBasePartitionItems = collectBasePartitionCells(refBaseTablePartitionMap);
         PartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(allBasePartitionItems, mvPartitionNameToListMap);

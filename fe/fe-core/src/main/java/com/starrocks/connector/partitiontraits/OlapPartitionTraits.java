@@ -63,7 +63,7 @@ public class OlapPartitionTraits extends DefaultTraits {
 
     @Override
     public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
-        return ((OlapTable) table).getPartitionCells();
+        return ((OlapTable) table).getPartitionCells(Optional.of(partitionColumns));
     }
 
     @Override
