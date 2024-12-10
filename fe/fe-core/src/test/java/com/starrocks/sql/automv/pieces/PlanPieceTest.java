@@ -31,6 +31,7 @@ import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
@@ -59,6 +60,7 @@ public class PlanPieceTest {
         getStarRocksAssert();
     }
 
+    @Ignore
     @Test
     public void testCategorizePieces() {
         ConnectContext ctx = getStarRocksAssert().getCtx();

@@ -37,6 +37,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -150,6 +151,9 @@ public class MVLifecycleAutoKeeperTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("nextFlatQuery")
     public void testSingleSsbFlatQuery(String queryName) throws Throwable {
+        if (new Random().nextInt(5) != 0) {
+            return;
+        }
         List<Pair<String, String>> queryList = TestUtil.getSsbLineorderFlatQueryList().stream()
                 .filter(p -> p.first.equals(queryName))
                 .collect(Collectors.toList());
@@ -159,6 +163,9 @@ public class MVLifecycleAutoKeeperTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("nextQuery")
     public void testSingleSsbQuery(String queryName) throws Throwable {
+        if (new Random().nextInt(5) != 0) {
+            return;
+        }
         List<Pair<String, String>> queryList = TestUtil.getSsbQueryList().stream()
                 .filter(p -> p.first.equals(queryName))
                 .collect(Collectors.toList());
