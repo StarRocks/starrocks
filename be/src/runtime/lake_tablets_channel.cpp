@@ -354,11 +354,10 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         while (_mem_tracker->limit_exceeded() ||
                (_mem_tracker->parent() != nullptr && _mem_tracker->parent()->limit_exceeded())) {
             auto t1 = std::chrono::steady_clock::now();
-            if (std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count() > request.timeout_ms() ||
-                wait_cnt > 10) {
+            if (wait_cnt > 100) {
                 LOG(INFO) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
-                          << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
-                          << "ms because load memory is full";
+                          << " wait tablet " << tablet_id << " " << (wait_cnt * 100)
+                          << "ms because load memory is full ";
                 break;
             }
             bthread_usleep(100000); // 100ms
