@@ -196,7 +196,7 @@ public class Coordinator {
     private final boolean isBlockQuery;
     private int numReceivedRows = 0;
     private List<String> deltaUrls;
-    private Map<String, String> loadCounters;
+    private final Map<String, String> loadCounters = new HashMap<>();
     private String trackingUrl;
     private final Set<String> rejectedRecordPaths = new HashSet<>();
     // for export
@@ -246,7 +246,6 @@ public class Coordinator {
         attachInstanceProfileToFragmentProfile();
 
         deltaUrls = Lists.newArrayList();
-        loadCounters = Maps.newHashMap();
         this.connectContext = planner.getConnectContext();
 
         // for complie
@@ -715,7 +714,6 @@ public class Coordinator {
                 queryOptions.setRuntime_profile_report_interval(30);
             }
             deltaUrls = Lists.newArrayList();
-            loadCounters = Maps.newHashMap();
             List<Long> relatedBackendIds = Lists.newArrayList(coordinatorPreprocessor.getAddressToBackendID().values());
             GlobalStateMgr.getCurrentState().getLoadMgr()
                     .initJobProgress(jobId, queryId, coordinatorPreprocessor.getInstanceIds(),
