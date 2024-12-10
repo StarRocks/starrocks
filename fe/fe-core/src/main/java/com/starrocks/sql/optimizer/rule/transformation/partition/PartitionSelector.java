@@ -224,7 +224,7 @@ public class PartitionSelector {
     private static List<Long> getPartitionsByRetentionCondition(Database db,
                                                                 OlapTable olapTable,
                                                                 String ttlCondition,
-                                                                Map<String, ? extends PCell> inputCells,
+                                                                Map<String, PCell> inputCells,
                                                                 Map<Long, String> inputCellIdToNameMap,
                                                                 boolean isMockPartitionIds) {
         TableName tableName = new TableName(db.getFullName(), olapTable.getName());
@@ -252,13 +252,13 @@ public class PartitionSelector {
         if (!CollectionUtils.sizeIsEmpty(inputCells)) {
             inputCellsMap = Maps.newHashMap();
             if (isMockPartitionIds) {
-                for (Map.Entry<String, ? extends PCell> e : inputCells.entrySet()) {
+                for (Map.Entry<String, PCell> e : inputCells.entrySet()) {
                     inputCellsMap.put(initialPartitionId, e.getValue());
                     inputCellIdToNameMap.put(initialPartitionId, e.getKey());
                     initialPartitionId--;
                 }
             } else {
-                for (Map.Entry<String, ? extends PCell> e : inputCells.entrySet()) {
+                for (Map.Entry<String, PCell> e : inputCells.entrySet()) {
                     Partition partition = olapTable.getPartition(e.getKey());
                     inputCellsMap.put(partition.getId(), e.getValue());
                     inputCellIdToNameMap.put(partition.getId(), e.getKey());
@@ -272,7 +272,7 @@ public class PartitionSelector {
     private static List<String> getPartitionsByRetentionCondition(Database db,
                                                                   OlapTable olapTable,
                                                                   String ttlCondition,
-                                                                  Map<String, ? extends PCell> inputCells,
+                                                                  Map<String, PCell> inputCells,
                                                                   boolean isMockPartitionIds,
                                                                   Predicate<Pair<Set<Long>, Long>> pred) {
 
@@ -300,7 +300,7 @@ public class PartitionSelector {
     public static List<String> getReservedPartitionsByRetentionCondition(Database db,
                                                                          OlapTable olapTable,
                                                                          String ttlCondition,
-                                                                         Map<String, ? extends PCell> inputCells,
+                                                                         Map<String, PCell> inputCells,
                                                                          boolean isMockPartitionIds) {
         return getPartitionsByRetentionCondition(db, olapTable, ttlCondition, inputCells, isMockPartitionIds,
                 (pair) -> pair.first.contains(pair.second));
@@ -323,7 +323,7 @@ public class PartitionSelector {
     public static List<String> getExpiredPartitionsByRetentionCondition(Database db,
                                                                         OlapTable olapTable,
                                                                         String ttlCondition,
-                                                                        Map<String, ? extends PCell> inputCells,
+                                                                        Map<String, PCell> inputCells,
                                                                         boolean isMockPartitionIds) {
         return getPartitionsByRetentionCondition(db, olapTable, ttlCondition, inputCells, isMockPartitionIds,
                 (pair) -> !pair.first.contains(pair.second));
@@ -365,7 +365,7 @@ public class PartitionSelector {
                                                          ScalarOperator predicate,
                                                          Map<Column, ColumnRefOperator> columnRefOperatorMap,
                                                          boolean isRecyclingCondition,
-                                                         Map<Long, ? extends PCell> inputCells) {
+                                                         Map<Long, PCell> inputCells) {
         // clone it to avoid changing the original map
         Map<Long, Range<PartitionKey>> keyRangeById = Maps.newHashMap(rangePartitionInfo.getIdToRange(false));
         if (!CollectionUtils.sizeIsEmpty(inputCells)) {
@@ -428,7 +428,7 @@ public class PartitionSelector {
                                                         Expr whereExpr,
                                                         ScalarOperator scalarOperator,
                                                         Map<Expr, Integer> exprToColumnIdxes,
-                                                        Map<Long, ? extends PCell> inputCells) {
+                                                        Map<Long, PCell> inputCells) {
 
         List<Long> result = null;
         // try to prune partitions by FE's constant evaluation ability
@@ -456,7 +456,7 @@ public class PartitionSelector {
     private static List<Long> getListPartitionIdsByExprV1(OlapTable olapTable,
                                                           ListPartitionInfo listPartitionInfo,
                                                           ScalarOperator scalarOperator,
-                                                          Map<Long, ? extends PCell> inputCells) {
+                                                          Map<Long, PCell> inputCells) {
         // eval for each conjunct
         Map<ColumnRefOperator, Integer> colRefIdxMap = Maps.newHashMap();
         List<String> partitionColNames = olapTable.getPartitionColumns().stream()
@@ -526,7 +526,7 @@ public class PartitionSelector {
             }
         }
         if (!CollectionUtils.sizeIsEmpty(inputCells)) {
-            for (Map.Entry<Long, ? extends PCell> e : inputCells.entrySet()) {
+            for (Map.Entry<Long, PCell> e : inputCells.entrySet()) {
                 boolean isConstTrue = false;
                 PListCell pListCell = (PListCell) e.getValue();
                 for (List<String> values : pListCell.getPartitionItems()) {

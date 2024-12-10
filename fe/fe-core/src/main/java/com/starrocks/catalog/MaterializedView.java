@@ -1540,14 +1540,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      *  we also need to consider other ref table partitions(p0); otherwise, the mv's final result will lose data.
      */
     public boolean isCalcPotentialRefreshPartition(List<TableWithPartitions> baseChangedPartitionNames,
-                                                   Map<Table, Map<String, PCell>> refBaseTableRangePartitionMap,
+                                                   Map<Table, Map<String, PCell>> refBaseTablePartitionToCells,
                                                    Set<String> mvPartitions,
-                                                   Map<String, ? extends PCell> mvPartitionNameToRangeMap) {
+                                                   Map<String, PCell> mvPartitionToCells) {
         List<PRangeCell> mvSortedPartitionRanges =
-                TableWithPartitions.getSortedPartitionRanges(mvPartitionNameToRangeMap, mvPartitions);
+                TableWithPartitions.getSortedPartitionRanges(mvPartitionToCells, mvPartitions);
         for (TableWithPartitions baseTableWithPartition : baseChangedPartitionNames) {
             Map<String, PCell> baseRangePartitionMap =
-                    refBaseTableRangePartitionMap.get(baseTableWithPartition.getTable());
+                    refBaseTablePartitionToCells.get(baseTableWithPartition.getTable());
             List<PRangeCell> baseSortedPartitionRanges =
                     baseTableWithPartition.getSortedPartitionRanges(baseRangePartitionMap);
             for (PRangeCell basePartitionRange : baseSortedPartitionRanges) {

@@ -53,7 +53,7 @@ public class PRangeCellPlus implements Comparable<PRangeCellPlus> {
         return cell.isIntersected(o.getCell());
     }
 
-    public static List<PRangeCellPlus> toPRangeCellPlus(Map<String, ? extends PCell> rangeMap) {
+    public static List<PRangeCellPlus> toPRangeCellPlus(Map<String, PCell> rangeMap) {
         return rangeMap.entrySet().stream()
                 .map(e -> new PRangeCellPlus(e.getKey(), (PRangeCell) e.getValue()))
                 .sorted(PRangeCellPlus::compareTo)

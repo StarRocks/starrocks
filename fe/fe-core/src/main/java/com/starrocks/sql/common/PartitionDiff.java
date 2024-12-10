@@ -56,7 +56,7 @@ public class PartitionDiff {
         }
         RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
         for (PartitionDiff diff : diffList) {
-            for (Map.Entry<String, ? extends PCell> add : diff.getAdds().entrySet()) {
+            for (Map.Entry<String, PCell> add : diff.getAdds().entrySet()) {
                 Range<PartitionKey> range = ((PRangeCell) add.getValue()).getRange();
                 Map<Range<PartitionKey>, String> intersectedRange = addRanges.subRangeMap(range).asMapOfRanges();
                 // should either empty or exactly same

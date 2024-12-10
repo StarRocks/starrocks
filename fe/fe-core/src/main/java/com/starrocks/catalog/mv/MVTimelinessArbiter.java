@@ -227,8 +227,8 @@ public abstract class MVTimelinessArbiter {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public PartitionDiff getMVChangedPartitionDiff(MaterializedView mv,
-                                                   Map<Table, Map<String, PCell>> basePartitionNameToRangeMap)  {
+    public PartitionDiff getChangedPartitionDiff(MaterializedView mv,
+                                                 Map<Table, Map<String, PCell>> basePartitionNameToRangeMap)  {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         try {
             if (partitionInfo.isUnPartitioned()) {
@@ -260,7 +260,7 @@ public abstract class MVTimelinessArbiter {
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
         }
 
-        PartitionDiff diff = getMVChangedPartitionDiff(mv, refBaseTablePartitionMap);
+        PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
         if (diff == null) {
             return null;
         }

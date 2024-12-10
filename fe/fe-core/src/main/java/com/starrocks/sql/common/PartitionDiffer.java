@@ -32,7 +32,7 @@ import java.util.Set;
  */
 public abstract class PartitionDiffer {
     protected final MaterializedView mv;
-    // whether it's used for query rewrite or refresh which the difference is that query rewrite will not
+    // whether it's used for query rewrite or refresh, the difference is that query rewrite will not
     // consider partition_ttl_number and mv refresh will consider it to avoid creating too much partitions
     protected final boolean isQueryRewrite;
 

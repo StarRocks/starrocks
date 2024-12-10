@@ -40,11 +40,11 @@ public class TableWithPartitions {
         return partitionNames;
     }
 
-    public List<PRangeCell> getSortedPartitionRanges(Map<String, ? extends PCell> partitinRangeMap) {
+    public List<PRangeCell> getSortedPartitionRanges(Map<String, PCell> partitinRangeMap) {
         return getSortedPartitionRanges(partitinRangeMap, this.partitionNames);
     }
 
-    public static List<PRangeCell> getSortedPartitionRanges(Map<String, ? extends PCell> partitinRangeMap,
+    public static List<PRangeCell> getSortedPartitionRanges(Map<String, PCell> partitinRangeMap,
                                                             Set<String> partitionNames) {
         if (partitionNames == null || partitionNames.isEmpty()) {
             return Lists.newArrayList();

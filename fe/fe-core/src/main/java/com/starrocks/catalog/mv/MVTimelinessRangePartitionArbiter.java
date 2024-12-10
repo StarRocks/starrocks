@@ -93,7 +93,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), basePartitionNameToRangeMap);
 
         // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
-        PartitionDiff diff = getMVChangedPartitionDiff(mv, basePartitionNameToRangeMap);
+        PartitionDiff diff = getChangedPartitionDiff(mv, basePartitionNameToRangeMap);
         if (diff == null) {
             throw new AnalysisException(String.format("Compute partition difference of mv %s with base table failed.",
                     mv.getName()));
@@ -101,23 +101,23 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
 
         // no needs to refresh the deleted partitions, because the deleted partitions are not in the mv's partition map.
         Set<String> mvToRefreshPartitionNames = Sets.newHashSet();
-        Map<String, PCell> mvPartitionNameToRangeMap = mv.getPartitionCells();
+        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells();
 
         // remove ref base table's deleted partitions from `mvPartitionMap`
         mvToRefreshPartitionNames.addAll(diff.getDeletes().keySet());
         mvToRefreshPartitionNames.addAll(diff.getAdds().keySet());
 
-        diff.getDeletes().keySet().stream().forEach(mvPartitionNameToRangeMap::remove);
+        diff.getDeletes().keySet().stream().forEach(mvPartitionToCells::remove);
         // add all ref base table's added partitions to `mvPartitionMap`
         diff.getAdds().entrySet().stream()
-                        .forEach(e -> mvPartitionNameToRangeMap.put(e.getKey(), e.getValue()));
+                        .forEach(e -> mvPartitionToCells.put(e.getKey(), e.getValue()));
         // add mv partition name to range map into timeline info to be used if it's a sub mv of nested mv
-        mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionNameToRangeMap);
+        mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionToCells);
 
         Map<Table, Map<String, Set<String>>> baseToMvNameRef =
-                differ.generateBaseRefMap(basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
+                differ.generateBaseRefMap(basePartitionNameToRangeMap, mvPartitionToCells);
         Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
-                differ.generateMvRefMap(mvPartitionNameToRangeMap, basePartitionNameToRangeMap);
+                differ.generateMvRefMap(mvPartitionToCells, basePartitionNameToRangeMap);
         mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 
@@ -129,7 +129,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
                     .map(e -> new TableWithPartitions(e.getKey(), e.getValue()))
                     .collect(Collectors.toList());
             if (mv.isCalcPotentialRefreshPartition(baseTableWithPartitions,
-                    basePartitionNameToRangeMap, mvToRefreshPartitionNames, mvPartitionNameToRangeMap)) {
+                    basePartitionNameToRangeMap, mvToRefreshPartitionNames, mvPartitionToCells)) {
                 // because the relation of partitions between materialized view and base partition table is n: m,
                 // should calculate the candidate partitions recursively.
                 SyncPartitionUtils.calcPotentialRefreshPartition(mvToRefreshPartitionNames, baseChangedPartitionNames,

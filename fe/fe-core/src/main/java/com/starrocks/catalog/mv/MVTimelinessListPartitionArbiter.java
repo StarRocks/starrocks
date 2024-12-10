@@ -76,7 +76,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         // otherwise base table(mv) may lose partition names of the real base table changed partitions.
         collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), refBaseTablePartitionMap);
 
-        PartitionDiff diff = getMVChangedPartitionDiff(mv, refBaseTablePartitionMap);
+        PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
         if (diff == null) {
             logMVPrepare(mv, "Partitioned mv compute list diff failed");
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
