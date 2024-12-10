@@ -38,7 +38,7 @@ public class JDBCConnector implements Connector {
     private final Map<String, String> properties;
     private final String catalogName;
 
-    private ConnectorMetadata metadata;
+    private volatile ConnectorMetadata metadata;
 
     public JDBCConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -94,11 +94,15 @@ public class JDBCConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         if (metadata == null) {
-            try {
-                metadata = new JDBCMetadata(properties, catalogName);
-            } catch (StarRocksConnectorException e) {
-                LOG.error("Failed to create jdbc metadata on [catalog : {}]", catalogName, e);
-                throw e;
+            synchronized (this) {
+                if (metadata == null) {
+                    try {
+                        metadata = new JDBCMetadata(properties, catalogName);
+                    } catch (StarRocksConnectorException e) {
+                        LOG.error("Failed to create jdbc metadata on [catalog : {}]", catalogName, e);
+                        throw e;
+                    }
+                }
             }
         }
         return metadata;
