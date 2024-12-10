@@ -59,6 +59,7 @@ public class PRangeCellPlus implements Comparable<PRangeCellPlus> {
                 .sorted(PRangeCellPlus::compareTo)
                 .collect(Collectors.toList());
     }
+
     /**
      * Convert range map to list of partition range cell plus which is sorted by range cell.
      * @param rangeMap range map to be converted
@@ -77,11 +78,11 @@ public class PRangeCellPlus implements Comparable<PRangeCellPlus> {
     /**
      * Convert a range map to list of partition range cell plus which is sorted by range cell.
      */
-    public static List<PRangeCellPlus> toPRangeCellPlus(Map<String, Range<PartitionKey>> rangeMap,
+    public static List<PRangeCellPlus> toPRangeCellPlus(Map<String, PCell> rangeMap,
                                                         Expr expr) {
         return rangeMap.entrySet().stream()
                 .map(e -> {
-                    Range<PartitionKey> partitionKeyRanges = e.getValue();
+                    Range<PartitionKey> partitionKeyRanges = ((PRangeCell) e.getValue()).getRange();
                     Range<PartitionKey> convertRanges = SyncPartitionUtils.convertToDatePartitionRange(partitionKeyRanges);
                     return new PRangeCellPlus(e.getKey(), SyncPartitionUtils.transferRange(convertRanges, expr));
                 })

@@ -62,8 +62,7 @@ public class PartitionDiff {
                 // should either empty or exactly same
                 if (!intersectedRange.isEmpty()) {
                     Range<PartitionKey> existingRange = intersectedRange.keySet().iterator().next();
-                    if (intersectedRange.size() > 1 ||
-                            !existingRange.equals(add.getValue())) {
+                    if (intersectedRange.size() > 1 || !existingRange.equals(range)) {
                         throw new IllegalArgumentException(
                                 "partitions are intersected: " + existingRange + " and " + add);
                     }

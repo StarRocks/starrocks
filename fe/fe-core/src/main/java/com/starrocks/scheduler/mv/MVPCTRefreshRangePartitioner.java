@@ -117,23 +117,23 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
         // Create new added materialized views' ranges
         Map<String, PCell> adds = result.diff.getAdds();
+        Map<String, PCell> mvPartitionToCells = result.mvPartitionToCells;
         // filter partition ttl for all add ranges
         filterPartitionsByTTL(adds, true);
         Map<String, String> partitionProperties = MvUtils.getPartitionProperties(mv);
         DistributionDesc distributionDesc = MvUtils.getDistributionDesc(mv);
         addRangePartitions(db, mv, adds, partitionProperties, distributionDesc);
-        //adds.entrySet().stream().forEach(entry -> result.mvRangePartitionMap.put(entry.getKey(), (PRangeCell) entry.getValue
-        // ()));
+        adds.entrySet().stream().forEach(entry -> mvPartitionToCells.put(entry.getKey(), entry.getValue()));
         LOG.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
                 mv.getName(), adds);
 
         // used to get partitions to refresh
         Map<Table, Map<String, Set<String>>> baseToMvNameRef =
-                differ.generateBaseRefMap(result.refBaseTablePartitionMap, result.mvPartitionToCells);
+                differ.generateBaseRefMap(result.refBaseTablePartitionMap, mvPartitionToCells);
         Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
-                differ.generateMvRefMap(result.mvPartitionToCells, result.refBaseTablePartitionMap);
+                differ.generateMvRefMap(mvPartitionToCells, result.refBaseTablePartitionMap);
 
-        mvContext.setMVToCellMap(result.mvPartitionToCells);
+        mvContext.setMVToCellMap(mvPartitionToCells);
         mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);
         mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
         mvContext.setRefBaseTableToCellMap(result.refBaseTablePartitionMap);

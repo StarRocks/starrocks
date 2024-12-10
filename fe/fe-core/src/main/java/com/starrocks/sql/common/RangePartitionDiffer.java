@@ -271,7 +271,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                     // To be compatible old version, skip to rename partition name if the intersected partition is the same.
                     if (intersectedRange.size() == 1) {
                         Range<PartitionKey> existingRange = intersectedRange.keySet().iterator().next();
-                        if (existingRange.equals(add.getValue())) {
+                        if (existingRange.equals(range)) {
                             continue;
                         }
                     }
@@ -350,9 +350,13 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             // Check unaligned partitions, unaligned partitions may cause uncorrected result which is not supported for now.
             List<PartitionDiff> rangePartitionDiffList = Lists.newArrayList();
             for (Table refBaseTable : refBaseTablePartitionColumns.keySet()) {
+                Preconditions.checkArgument(rBTPartitionMap.containsKey(refBaseTable));
                 RangePartitionDiffer differ = new RangePartitionDiffer(mv, isQueryRewrite, rangeToInclude);
-                rangePartitionDiffList.add(PartitionUtil.getPartitionDiff(mvPartitionExpr,
-                        PRangeCell.toRangeMap(rBTPartitionMap.get(refBaseTable)), mvRangePartitionMap, differ));
+                Map<String, PCell> basePartitionToCells = rBTPartitionMap.get(refBaseTable);
+                Map<String, Range<PartitionKey>> basePartitionMap = PRangeCell.toRangeMap(basePartitionToCells);
+                PartitionDiff diff = PartitionUtil.getPartitionDiff(mvPartitionExpr, basePartitionMap, mvRangePartitionMap,
+                        differ);
+                rangePartitionDiffList.add(diff);
             }
             PartitionDiff.checkRangePartitionAligned(rangePartitionDiffList);
         }
@@ -444,7 +448,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             Preconditions.checkState(refBaseTablePartitionExprs.containsKey(baseTable));
             List<Expr> partitionExprs = refBaseTablePartitionExprs.get(baseTable);
             Preconditions.checkArgument(partitionExprs.size() == 1);
-            List<PRangeCellPlus> baseRanges = toPRangeCellPlus(refreshedPartitionsMap);
+            List<PRangeCellPlus> baseRanges = toPRangeCellPlus(refreshedPartitionsMap, partitionExprs.get(0));
             for (PRangeCellPlus baseRange : baseRanges) {
                 int mid = Collections.binarySearch(mvRanges, baseRange);
                 if (mid < 0) {
@@ -493,7 +497,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             Preconditions.checkState(refBaseTablePartitionExprs.containsKey(baseTable));
             List<Expr> partitionExprs = refBaseTablePartitionExprs.get(baseTable);
             Preconditions.checkArgument(partitionExprs.size() == 1);
-            List<PRangeCellPlus> baseRanges = toPRangeCellPlus(refreshedPartitionsMap);
+            List<PRangeCellPlus> baseRanges = toPRangeCellPlus(refreshedPartitionsMap, partitionExprs.get(0));
             baseRangesMap.put(entry.getKey(), baseRanges);
         }
 
