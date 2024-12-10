@@ -588,16 +588,21 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "CompressedBytesReadTotal", TUnit::BYTES, io_statistics_name);
     _compressed_bytes_read_request_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "CompressedBytesReadRequest", TUnit::BYTES, io_statistics_name);
+    // Compressed bytes write
+    _compressed_bytes_write_local_disk_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "CompressedBytesWriteLocalDisk", TUnit::BYTES, io_statistics_name);
     // IO count
     _io_count_local_disk_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "IOCountLocalDisk", TUnit::UNIT, io_statistics_name);
     _io_count_remote_counter = ADD_CHILD_COUNTER(_runtime_profile, "IOCountRemote", TUnit::UNIT, io_statistics_name);
     _io_count_total_counter = ADD_CHILD_COUNTER(_runtime_profile, "IOCountTotal", TUnit::UNIT, io_statistics_name);
     _io_count_request_counter = ADD_CHILD_COUNTER(_runtime_profile, "IOCountRequest", TUnit::UNIT, io_statistics_name);
-    // IO time
-    _io_ns_local_disk_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeLocalDisk", io_statistics_name);
+    // IO read time
+    _io_ns_read_local_disk_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeReadLocalDisk", io_statistics_name);
     _io_ns_remote_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeRemote", io_statistics_name);
     _io_ns_total_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeTotal", io_statistics_name);
+    // IO write time
+    _io_ns_write_local_disk_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeWriteLocalDisk", io_statistics_name);
     // Prefetch
     _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, io_statistics_name);
     _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", io_statistics_name);
@@ -740,14 +745,18 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_compressed_bytes_read_total_counter, _reader->stats().compressed_bytes_read);
     COUNTER_UPDATE(_compressed_bytes_read_request_counter, _reader->stats().compressed_bytes_read_request);
 
+    COUNTER_UPDATE(_compressed_bytes_write_local_disk_counter, _reader->stats().compressed_bytes_write_local_disk);
+
     COUNTER_UPDATE(_io_count_local_disk_counter, _reader->stats().io_count_local_disk);
     COUNTER_UPDATE(_io_count_remote_counter, _reader->stats().io_count_remote);
     COUNTER_UPDATE(_io_count_total_counter, _reader->stats().io_count);
     COUNTER_UPDATE(_io_count_request_counter, _reader->stats().io_count_request);
 
-    COUNTER_UPDATE(_io_ns_local_disk_timer, _reader->stats().io_ns_read_local_disk);
+    COUNTER_UPDATE(_io_ns_read_local_disk_timer, _reader->stats().io_ns_read_local_disk);
     COUNTER_UPDATE(_io_ns_remote_timer, _reader->stats().io_ns_remote);
     COUNTER_UPDATE(_io_ns_total_timer, _reader->stats().io_ns);
+
+    COUNTER_UPDATE(_io_ns_write_local_disk_timer, _reader->stats().io_ns_write_local_disk);
 
     COUNTER_UPDATE(_prefetch_hit_counter, _reader->stats().prefetch_hit_count);
     COUNTER_UPDATE(_prefetch_wait_finish_timer, _reader->stats().prefetch_wait_finish_ns);

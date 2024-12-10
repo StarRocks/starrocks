@@ -167,15 +167,19 @@ private:
     RuntimeProfile::Counter* _compressed_bytes_read_remote_counter = nullptr;
     RuntimeProfile::Counter* _compressed_bytes_read_total_counter = nullptr;
     RuntimeProfile::Counter* _compressed_bytes_read_request_counter = nullptr;
+    // Compressed bytes write
+    RuntimeProfile::Counter* _compressed_bytes_write_local_disk_counter = nullptr;
     // IO count
     RuntimeProfile::Counter* _io_count_local_disk_counter = nullptr;
     RuntimeProfile::Counter* _io_count_remote_counter = nullptr;
     RuntimeProfile::Counter* _io_count_total_counter = nullptr;
     RuntimeProfile::Counter* _io_count_request_counter = nullptr;
-    // IO time
-    RuntimeProfile::Counter* _io_ns_local_disk_timer = nullptr;
+    // IO read time
+    RuntimeProfile::Counter* _io_ns_read_local_disk_timer = nullptr;
     RuntimeProfile::Counter* _io_ns_remote_timer = nullptr;
     RuntimeProfile::Counter* _io_ns_total_timer = nullptr;
+    // IO write time
+    RuntimeProfile::Counter* _io_ns_write_local_disk_timer = nullptr;
     // Prefetch
     RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
     RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;
