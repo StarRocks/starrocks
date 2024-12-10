@@ -18,9 +18,27 @@
 #include "gutil/casts.h"
 #include "io/shared_buffered_input_stream.h"
 #include "simd/simd.h"
+#include "statistics_helper.h"
 #include "utils.h"
 
 namespace starrocks::parquet {
+
+StatusOr<bool> FixedValueColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                                 CompoundNodeType pred_relation,
+                                                                 const uint64_t rg_first_row,
+                                                                 const uint64_t rg_num_rows) const {
+    ZoneMapDetail zone_map{_fixed_value, _fixed_value, _fixed_value.is_null()};
+    auto is_satisfy = [&](const ZoneMapDetail& detail) {
+        if (pred_relation == CompoundNodeType::AND) {
+            return std::ranges::all_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        } else {
+            return predicates.empty() ||
+                   std::ranges::any_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        }
+    };
+
+    return is_satisfy(zone_map);
+}
 
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
@@ -252,6 +270,66 @@ void ScalarColumnReader::select_offset_index(const SparseRange<uint64_t>& range,
     // be compatible with PARQUET-1850
     has_dict_page |= _offset_index_ctx->check_dictionary_page(column_metadata.data_page_offset);
     _reader = std::make_unique<StoredColumnReaderWithIndex>(std::move(_reader), _offset_index_ctx.get(), has_dict_page);
+}
+
+StatusOr<bool> ScalarColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                             CompoundNodeType pred_relation,
+                                                             const uint64_t rg_first_row,
+                                                             const uint64_t rg_num_rows) const {
+    if (!get_chunk_metadata()->meta_data.__isset.statistics || get_column_parquet_field() == nullptr) {
+        // statistics is not existed, select all
+        return true;
+    }
+
+    bool has_null = true;
+    bool is_all_null = false;
+
+    if (get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
+        has_null = get_chunk_metadata()->meta_data.statistics.null_count > 0;
+        is_all_null = get_chunk_metadata()->meta_data.statistics.null_count == rg_num_rows;
+    }
+
+    std::optional<ZoneMapDetail> zone_map_detail = std::nullopt;
+
+    // used to hold min/max slice values
+    const ColumnPtr min_column = ColumnHelper::create_column(*_col_type, true);
+    const ColumnPtr max_column = ColumnHelper::create_column(*_col_type, true);
+    if (is_all_null) {
+        // if the entire column's value is null, the min/max value not existed
+        zone_map_detail = ZoneMapDetail{Datum{}, Datum{}, true};
+        zone_map_detail->set_num_rows(rg_num_rows);
+    } else {
+        std::vector<string> min_values;
+        std::vector<string> max_values;
+        Status st =
+                StatisticsHelper::get_min_max_value(_opts.file_meta_data, *_col_type, &get_chunk_metadata()->meta_data,
+                                                    get_column_parquet_field(), min_values, max_values);
+        if (st.ok()) {
+            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(min_column, min_values, *_col_type,
+                                                                       get_column_parquet_field(), _opts.timezone));
+            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(max_column, max_values, *_col_type,
+                                                                       get_column_parquet_field(), _opts.timezone));
+
+            zone_map_detail = ZoneMapDetail{min_column->get(0), max_column->get(0), has_null};
+            zone_map_detail->set_num_rows(rg_num_rows);
+        }
+    }
+
+    if (!zone_map_detail.has_value()) {
+        // ZoneMapDetail not set, means select all
+        return true;
+    }
+
+    auto is_satisfy = [&](const ZoneMapDetail& detail) {
+        if (pred_relation == CompoundNodeType::AND) {
+            return std::ranges::all_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        } else {
+            return predicates.empty() ||
+                   std::ranges::any_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        }
+    };
+
+    return is_satisfy(zone_map_detail.value());
 }
 
 } // namespace starrocks::parquet
