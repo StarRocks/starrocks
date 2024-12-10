@@ -162,16 +162,11 @@ TEST_F(ArrayFunctionsTest, array_length) {
         auto result = ArrayFunctions::array_length(nullptr, {c}).value();
         EXPECT_EQ(5, result->size());
 
-        ASSERT_FALSE(result->get(0).is_null());
-        ASSERT_TRUE(result->get(1).is_null());
-        ASSERT_FALSE(result->get(2).is_null());
-        ASSERT_FALSE(result->get(3).is_null());
-        ASSERT_FALSE(result->get(4).is_null());
-
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_EQ(1, result->get(2).get_int32());
-        EXPECT_EQ(1, result->get(3).get_int32());
-        EXPECT_EQ(2, result->get(4).get_int32());
+        EXPECT_EQ(result->get(0), Datum(0));
+        EXPECT_EQ(result->get(1), kNullDatum);
+        EXPECT_EQ(result->get(2), Datum(1));
+        EXPECT_EQ(result->get(3), Datum(1));
+        EXPECT_EQ(result->get(4), Datum(2));
     }
 
     // []
