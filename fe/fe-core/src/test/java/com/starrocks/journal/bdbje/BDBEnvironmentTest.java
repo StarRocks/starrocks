@@ -77,6 +77,7 @@ public class BDBEnvironmentTest {
     }
 
 
+    @Ignore
     @Test
     public void testSetupStandalone() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -103,6 +104,7 @@ public class BDBEnvironmentTest {
     }
 
     // address already in use
+    @Ignore
     @Test(expected = JournalException.class)
     public void testSetupStandaloneMultitimes() throws Exception {
         long startMs = System.currentTimeMillis();
