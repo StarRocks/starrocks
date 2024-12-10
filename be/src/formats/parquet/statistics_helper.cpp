@@ -303,7 +303,7 @@ Status StatisticsHelper::get_min_max_value(const FileMetaData* file_metadata, co
 }
 
 Status StatisticsHelper::get_has_nulls(const tparquet::ColumnMetaData* column_meta, std::vector<bool>& has_nulls) {
-    if(!column_meta->statistics.__isset.null_count) {
+    if (!column_meta->statistics.__isset.null_count) {
         return Status::Aborted("No null_count in column statistics");
     }
     has_nulls.emplace_back(column_meta->statistics.null_count > 0);
