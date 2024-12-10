@@ -1333,6 +1333,8 @@ public class OlapScanNode extends ScanNode {
     @Override
     public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
         if (!normalizer.isProcessingLeftNode()) {
+            // take column names of HashJoin RHS into cache digest computation
+            associateSlotIdsWithColumns(normalizer, planNode, Optional.empty());
             normalizeConjunctsNonLeft(normalizer, planNode);
             return;
         }
