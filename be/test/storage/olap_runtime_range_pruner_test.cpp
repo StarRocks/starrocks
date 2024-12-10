@@ -31,7 +31,7 @@ class OlapRuntimeRangePrunerTest : public ::testing::Test {
 public:
     void SetUp() override {
         _tablet_schema = SchemaTestHelper::gen_schema_of_dup(1, 3, 1);
-        _predicate_parser = std::make_unique<PredicateParser>(_tablet_schema);
+        _predicate_parser = std::make_unique<OlapPredicateParser>(_tablet_schema);
     }
 
     static StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> gen_runtime_filter_desc(TPlanNodeId node_id,
@@ -43,7 +43,7 @@ protected:
     RuntimeState _runtime_state;
     TPlanNodeId _node_id;
     TabletSchemaSPtr _tablet_schema;
-    std::unique_ptr<PredicateParser> _predicate_parser;
+    std::unique_ptr<OlapPredicateParser> _predicate_parser;
 };
 
 StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> OlapRuntimeRangePrunerTest::gen_runtime_filter_desc(
