@@ -3459,6 +3459,8 @@ TEST_F(FileReaderTest, TestInFilterStatitics) {
 // parquet has no null
 // filter the first row group
 TEST_F(FileReaderTest, filter_row_group_with_rf_1) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
     SlotId slot_id = 1;
     auto file = _create_file(_filter_row_group_path_1);
     uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_1);
@@ -3476,6 +3478,8 @@ TEST_F(FileReaderTest, filter_row_group_with_rf_1) {
 // parquet has no null
 // filter no group
 TEST_F(FileReaderTest, filter_row_group_with_rf_2) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
     SlotId slot_id = 1;
     auto file = _create_file(_filter_row_group_path_1);
     uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_1);
@@ -3493,6 +3497,8 @@ TEST_F(FileReaderTest, filter_row_group_with_rf_2) {
 // parquet has no null
 // filter all group
 TEST_F(FileReaderTest, filter_row_group_with_rf_3) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
     SlotId slot_id = 1;
     auto file = _create_file(_filter_row_group_path_1);
     uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_1);
@@ -3510,6 +3516,8 @@ TEST_F(FileReaderTest, filter_row_group_with_rf_3) {
 // parquet has null
 // filter no group
 TEST_F(FileReaderTest, filter_row_group_with_rf_4) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
     SlotId slot_id = 1;
     auto file = _create_file(_filter_row_group_path_2);
     uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_2);
@@ -3528,6 +3536,8 @@ TEST_F(FileReaderTest, filter_row_group_with_rf_4) {
 // partition column has no null
 // filter no group
 TEST_F(FileReaderTest, filter_row_group_with_rf_5) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
     SlotId slot_id = 3;
     auto file = _create_file(_filter_row_group_path_2);
     uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_2);
@@ -3546,6 +3556,8 @@ TEST_F(FileReaderTest, filter_row_group_with_rf_5) {
 // partition column has no null
 // filter all group
 TEST_F(FileReaderTest, filter_row_group_with_rf_6) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
     SlotId slot_id = 4;
     auto file = _create_file(_filter_row_group_path_2);
     uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_2);
@@ -3564,6 +3576,8 @@ TEST_F(FileReaderTest, filter_row_group_with_rf_6) {
 // partition column has null
 // filter no group
 TEST_F(FileReaderTest, filter_row_group_with_rf_7) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
     SlotId slot_id = 5;
     auto file = _create_file(_filter_row_group_path_2);
     uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_2);
@@ -3582,6 +3596,8 @@ TEST_F(FileReaderTest, filter_row_group_with_rf_7) {
 // column not exist
 // filter no group
 TEST_F(FileReaderTest, filter_row_group_with_rf_8) {
+    config::parquet_advance_zonemap_filter = false;
+    DeferOp defer([&]() { config::parquet_advance_zonemap_filter = true; });
     SlotId slot_id = 8;
     auto file = _create_file(_filter_row_group_path_2);
     uint64_t file_size = std::filesystem::file_size(_filter_row_group_path_2);
