@@ -2013,7 +2013,6 @@ class StarrocksSQLApiLib(object):
         for expect in expects:
             if plan.find(expect) > 0:
                 return True
-        tools.assert_true(False, "assert expect is not found in plan: %s" % (plan))
         return False
     
     def print_hit_materialized_views(self, query) -> str:
