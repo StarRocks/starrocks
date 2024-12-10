@@ -72,8 +72,9 @@ public final class RangePartitionDiffer extends PartitionDiffer {
     private final Map<Table, List<Expr>> refBaseTablePartitionExprs;
 
     public RangePartitionDiffer(MaterializedView mv,
+                                boolean isQueryRewrite,
                                 Range<PartitionKey> rangeToInclude) {
-        super(mv);
+        super(mv, isQueryRewrite);
         this.partitionInfo = mv.getPartitionInfo();
         this.partitionTTLNumber = mv.getTableProperty().getPartitionTTLNumber();
         this.partitionTTL = mv.getTableProperty().getPartitionTTL();
@@ -209,10 +210,10 @@ public final class RangePartitionDiffer extends PartitionDiffer {
 
     /**
      * Collect the ref base table's partition range map.
-     * @param mv the materialized view to compute diff
      * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>
      */
-    public static Map<Table, Map<String, PCell>> syncBaseTablePartitionInfos(MaterializedView mv) {
+    @Override
+    public Map<Table, Map<String, PCell>> syncBaseTablePartitionInfos() {
         Map<Table, List<Column>> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
         if (partitionTableAndColumn.isEmpty()) {
             return Maps.newHashMap();
@@ -316,23 +317,18 @@ public final class RangePartitionDiffer extends PartitionDiffer {
 
     /**
      * Compute the partition difference between materialized view and all ref base tables.
-     * @param mv: the materialized view to check
      * @param rangeToInclude: <partition start, partition end> pair
-     * @param isQueryRewrite: whether it's used for query rewrite or refresh which the difference is that query rewrite will not
-     *                      consider partition_ttl_number and mv refresh will consider it to avoid creating too much partitions
      * @return MvPartitionDiffResult: the result of partition difference
      */
-    public static PartitionDiffResult computeRangePartitionDiff(MaterializedView mv,
-                                                                Range<PartitionKey> rangeToInclude,
-                                                                boolean isQueryRewrite) {
-        Map<Table, Map<String, PCell>> rBTPartitionMap = syncBaseTablePartitionInfos(mv);
-        return computeRangePartitionDiff(mv, rangeToInclude, rBTPartitionMap, isQueryRewrite);
+    @Override
+    public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude) {
+        Map<Table, Map<String, PCell>> rBTPartitionMap = syncBaseTablePartitionInfos();
+        return computePartitionDiff(rangeToInclude, rBTPartitionMap);
     }
 
-    public static PartitionDiffResult computeRangePartitionDiff(MaterializedView mv,
-                                                                Range<PartitionKey> rangeToInclude,
-                                                                Map<Table, Map<String, PCell>> rBTPartitionMap,
-                                                                boolean isQueryRewrite) {
+    @Override
+    public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude,
+                                                    Map<Table, Map<String, PCell>> rBTPartitionMap) {
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
         Preconditions.checkArgument(!refBaseTablePartitionColumns.isEmpty());
         // get the materialized view's partition range map
@@ -354,7 +350,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             // Check unaligned partitions, unaligned partitions may cause uncorrected result which is not supported for now.
             List<PartitionDiff> rangePartitionDiffList = Lists.newArrayList();
             for (Table refBaseTable : refBaseTablePartitionColumns.keySet()) {
-                RangePartitionDiffer differ = new RangePartitionDiffer(mv, rangeToInclude);
+                RangePartitionDiffer differ = new RangePartitionDiffer(mv, isQueryRewrite, rangeToInclude);
                 rangePartitionDiffList.add(PartitionUtil.getPartitionDiff(mvPartitionExpr,
                         PRangeCell.toRangeMap(rBTPartitionMap.get(refBaseTable)), mvRangePartitionMap, differ));
             }
@@ -369,7 +365,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             //
             // Diff_{deletes} = P_{MV} \setminus P_{\bigcup_{baseTables}^{}} \\
             //                = \bigcap_{baseTables} P_{MV}\setminus P_{baseTable}
-            RangePartitionDiffer differ = isQueryRewrite ? null : new RangePartitionDiffer(mv, rangeToInclude);
+            RangePartitionDiffer differ = isQueryRewrite ? null : new RangePartitionDiffer(mv, false, rangeToInclude);
             PartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(mvPartitionExpr, mergedRBTPartitionKeyMap,
                     mvRangePartitionMap, differ);
             if (rangePartitionDiff == null) {

@@ -89,7 +89,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                                         Database db,
                                         MaterializedView mv) {
         super(mvContext, context, db, mv);
-        this.differ = new RangePartitionDiffer(mv, null);
+        this.differ = new RangePartitionDiffer(mv, false, null);
     }
 
     @Override
@@ -100,7 +100,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         Preconditions.checkState(partitionColumnOpt.isPresent());
         Column partitionColumn = partitionColumnOpt.get();
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
-        PartitionDiffResult result = RangePartitionDiffer.computeRangePartitionDiff(mv, rangeToInclude, false);
+        PartitionDiffResult result = differ.computePartitionDiff(rangeToInclude);
         if (result == null) {
             // TODO: throw exception?
             LOG.warn("compute range partition diff failed: mv: {}", mv.getName());

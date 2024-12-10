@@ -14,8 +14,10 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
@@ -29,12 +31,32 @@ import java.util.Set;
  * partition or list partition.
  */
 public abstract class PartitionDiffer {
-    private final MaterializedView mv;
+    protected final MaterializedView mv;
+    // whether it's used for query rewrite or refresh which the difference is that query rewrite will not
+    // consider partition_ttl_number and mv refresh will consider it to avoid creating too much partitions
+    protected final boolean isQueryRewrite;
 
-    public PartitionDiffer(MaterializedView mv) {
+    public PartitionDiffer(MaterializedView mv, boolean isQueryRewrite) {
         this.mv = mv;
+        this.isQueryRewrite = isQueryRewrite;
     }
 
+    /**
+     * Collect the ref base table's partition range map.
+     * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>
+     */
+    public abstract Map<Table, Map<String, PCell>> syncBaseTablePartitionInfos();
+
+    /**
+     * Compute the partition difference between materialized view and all ref base tables.
+     * @param rangeToInclude: <partition start, partition end> pair which is use for range differ.
+
+     * @return MvPartitionDiffResult: the result of partition difference
+     */
+    public abstract PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude);
+
+    public abstract PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude,
+                                                             Map<Table, Map<String, PCell>> rBTPartitionMap);
     /**
      * Generate the reference map between the base table and the mv.
      * @param baseRangeMap src partition list map of the base table

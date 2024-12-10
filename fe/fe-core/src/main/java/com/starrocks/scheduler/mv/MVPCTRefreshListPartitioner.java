@@ -79,7 +79,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                                        Database db,
                                        MaterializedView mv) {
         super(mvContext, context, db, mv);
-        this.differ = new ListPartitionDiffer(mv);
+        this.differ = new ListPartitionDiffer(mv, false);
     }
 
     @Override
@@ -92,7 +92,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
         PartitionDiffResult result;
         try {
-            result = ListPartitionDiffer.computeListPartitionDiff(mv, false);
+            result = differ.computePartitionDiff(null);
             if (result == null) {
                 LOG.warn("compute list partition diff failed: mv: {}", mv.getName());
                 return false;

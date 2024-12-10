@@ -27,11 +27,10 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.PartitionDiffResult;
-import com.starrocks.sql.common.RangePartitionDiffer;
+import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -57,6 +56,8 @@ public abstract class MVTimelinessArbiter {
 
     // the materialized view to check
     protected final MaterializedView mv;
+    // differ
+    protected PartitionDiffer differ;
     // whether is query rewrite or mv refresh
     protected final boolean isQueryRewrite;
 
@@ -217,25 +218,13 @@ public abstract class MVTimelinessArbiter {
         if (partitionInfo.isUnPartitioned()) {
             return null;
         }
-        if (partitionInfo.isRangePartition()) {
-            Map<Table, Map<String, PCell>> basePartitionNameToRangeMap =
-                    RangePartitionDiffer.syncBaseTablePartitionInfos(mv);
-            if (CollectionUtils.sizeIsEmpty(basePartitionNameToRangeMap)) {
-                return null;
-            }
-            return basePartitionNameToRangeMap.keySet().stream()
-                    .map(baseTable -> Maps.immutableEntry(baseTable, basePartitionNameToRangeMap.get(baseTable)))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        } else if (partitionInfo.isListPartition()) {
-            Map<Table, Map<String, PCell>> listRefBaseTablePartitionMap = Maps.newHashMap();
-            if (!ListPartitionDiffer.syncBaseTablePartitionInfos(mv, listRefBaseTablePartitionMap)) {
-                logMVPrepare(mv, "Sync base table partition infos failed");
-                return null;
-            }
-            return listRefBaseTablePartitionMap;
-        } else {
+        Map<Table, Map<String, PCell>> basePartitionNameToRangeMap = differ.syncBaseTablePartitionInfos();
+        if (CollectionUtils.sizeIsEmpty(basePartitionNameToRangeMap)) {
             return null;
         }
+        return basePartitionNameToRangeMap.keySet().stream()
+                .map(baseTable -> Maps.immutableEntry(baseTable, basePartitionNameToRangeMap.get(baseTable)))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     public PartitionDiff getMVChangedPartitionDiff(MaterializedView mv,
@@ -244,25 +233,14 @@ public abstract class MVTimelinessArbiter {
         try {
             if (partitionInfo.isUnPartitioned()) {
                 return null;
-            } else if (partitionInfo.isRangePartition()) {
-                PartitionDiffResult differ = RangePartitionDiffer.computeRangePartitionDiff(mv, null,
-                        basePartitionNameToRangeMap, isQueryRewrite);
-                if (differ == null) {
-                    logMVPrepare(mv, "Partitioned mv compute list diff failed");
-                    return null;
-                }
-                return differ.diff;
-            } else if (partitionInfo.isListPartition()) {
-                Map<String, PCell> allBasePartitionItems =
-                        ListPartitionDiffer.collectBasePartitionCells(basePartitionNameToRangeMap);
-                PartitionDiffResult result = ListPartitionDiffer.computeListPartitionDiff(mv,
-                        basePartitionNameToRangeMap, allBasePartitionItems, isQueryRewrite);
-                if (result == null) {
-                    logMVPrepare(mv, "Partitioned mv compute list diff failed");
-                    return null;
-                }
-                return result.diff;
             }
+            PartitionDiffResult result = differ.computePartitionDiff(null,
+                    basePartitionNameToRangeMap);
+            if (result == null) {
+                logMVPrepare(mv, "Partitioned mv compute list diff failed");
+                return null;
+            }
+            return result.diff;
         } catch (Exception e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
         }
