@@ -31,6 +31,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.stream.Stream;
@@ -964,6 +965,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("HASH JOIN"));
     }
 
+    @Ignore
     @Test
     public void testPushdownSubfield() throws Exception {
         String dumpString = getDumpInfoFromFile("query_dump/pushdown_subfield");

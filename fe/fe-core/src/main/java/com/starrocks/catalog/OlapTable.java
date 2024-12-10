@@ -1519,6 +1519,13 @@ public class OlapTable extends Table {
                 }
             }
             for (Partition partition : idToPartition.values()) {
+                // Compatibility code, if you roll back the version from 3.4 to 3.3,
+                // an unknown physical partition id may appear.
+                // This default partition id is actually The Partition
+                if (partition.getDefaultPhysicalPartitionId() == physicalPartitionId) {
+                    return partition;
+                }
+
                 for (PhysicalPartition subPartition : partition.getSubPartitions()) {
                     if (subPartition.getId() == physicalPartitionId) {
                         return subPartition;

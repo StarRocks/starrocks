@@ -635,6 +635,9 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
     @SerializedName(value = "dpid")
     private long defaultPhysicalPartitionId = 0;
 
+    @SerializedName(value = "dpidcopy")
+    private long defaultPhysicalPartitionIdCopy = 0;
+
     @Override
     public void gsonPostProcess() throws IOException {
         if (dataVersion == 0) {
@@ -657,36 +660,47 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
             nameToSubPartition.put(subPartition.getName(), subPartition);
         }
 
+        // Compatibility code, if you roll back the version from 3.4 to 3.3,
+        // an unknown physical partition id may appear.
+        // This default partition id is actually The Partition
         if (defaultPhysicalPartitionId != 0) {
             PhysicalPartitionImpl physicalPartition = idToSubPartition.get(defaultPhysicalPartitionId);
+            if (physicalPartition != null) {
+                idToSubPartition.remove(defaultPhysicalPartitionId);
+                nameToSubPartition.remove(physicalPartition.getName());
 
-            idToSubPartition.remove(defaultPhysicalPartitionId);
-            nameToSubPartition.remove(physicalPartition.getName());
+                this.shardGroupId = physicalPartition.getShardGroupId();
+                this.isImmutable.set(physicalPartition.isImmutable());
+                this.baseIndex = physicalPartition.getBaseIndex();
 
-            this.shardGroupId = physicalPartition.getShardGroupId();
-            this.isImmutable.set(physicalPartition.isImmutable());
-            this.baseIndex = physicalPartition.getBaseIndex();
-
-            for (MaterializedIndex materializedIndex : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                if (materializedIndex.getId() == baseIndex.getId()) {
-                    continue;
+                for (MaterializedIndex materializedIndex : physicalPartition.getMaterializedIndices(
+                        IndexExtState.VISIBLE)) {
+                    if (materializedIndex.getId() == baseIndex.getId()) {
+                        continue;
+                    }
+                    this.idToShadowIndex.put(materializedIndex.getId(), materializedIndex);
                 }
-                this.idToShadowIndex.put(materializedIndex.getId(), materializedIndex);
+
+                for (MaterializedIndex materializedIndex : physicalPartition.getMaterializedIndices(
+                        IndexExtState.SHADOW)) {
+                    this.idToShadowIndex.put(materializedIndex.getId(), materializedIndex);
+                }
+
+                this.visibleVersion = physicalPartition.getVisibleVersion();
+                this.visibleVersionTime = physicalPartition.getVisibleVersionTime();
+                this.nextVersion = physicalPartition.getNextVersion();
+                this.dataVersion = physicalPartition.getDataVersion();
+                this.nextDataVersion = physicalPartition.getNextDataVersion();
+                this.versionEpoch = physicalPartition.getVersionEpoch();
+                this.versionTxnType = physicalPartition.getVersionTxnType();
+
+                defaultPhysicalPartitionIdCopy = defaultPhysicalPartitionId;
+                defaultPhysicalPartitionId = 0;
             }
-
-            for (MaterializedIndex materializedIndex : physicalPartition.getMaterializedIndices(IndexExtState.SHADOW)) {
-                this.idToShadowIndex.put(materializedIndex.getId(), materializedIndex);
-            }
-
-            this.visibleVersion = physicalPartition.getVisibleVersion();
-            this.visibleVersionTime =  physicalPartition.getVisibleVersionTime();
-            this.nextVersion = physicalPartition.getNextVersion();
-            this.dataVersion = physicalPartition.getDataVersion();
-            this.nextDataVersion = physicalPartition.getNextDataVersion();
-            this.versionEpoch = physicalPartition.getVersionEpoch();
-            this.versionTxnType = physicalPartition.getVersionTxnType();
-
-            this.defaultPhysicalPartitionId = 0;
         }
+    }
+
+    public long getDefaultPhysicalPartitionId() {
+        return defaultPhysicalPartitionIdCopy;
     }
 }
