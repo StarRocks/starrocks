@@ -192,7 +192,7 @@ public abstract class MVTimelinessArbiter {
         for (Map.Entry<Table, Map<String, PCell>> entry : extraChangedPartitions.entrySet()) {
             Table baseTable = entry.getKey();
             Preconditions.checkState(basePartitionNameToRangeMap.containsKey(baseTable));
-            Map<String, PCell> refBaseTablePartitionRangeMap = (Map<String, PCell>) basePartitionNameToRangeMap.get(baseTable);
+            Map<String, PCell> refBaseTablePartitionRangeMap = basePartitionNameToRangeMap.get(baseTable);
             Map<String, PCell> basePartitionNameToRanges = entry.getValue();
             basePartitionNameToRanges.entrySet().forEach(e ->
                     refBaseTablePartitionRangeMap.put(e.getKey(), e.getValue()));
