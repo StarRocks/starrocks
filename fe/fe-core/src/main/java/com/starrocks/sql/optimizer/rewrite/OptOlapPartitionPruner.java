@@ -307,7 +307,7 @@ public class OptOlapPartitionPruner {
 
         List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(operator.getPredicate());
         PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
-                columnToNullPartitions, scalarOperatorList, specifyPartitionIds);
+                columnToNullPartitions, scalarOperatorList, specifyPartitionIds, listPartitionInfo);
         try {
             List<Long> prune = partitionPruner.prune();
             if (prune == null && isTemporaryPartitionPrune) {
