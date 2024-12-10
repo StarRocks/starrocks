@@ -362,6 +362,21 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
 
+    // tuple desc
+    Utils::SlotDesc slot_descs[] = {
+            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {""},
+    };
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    std::vector<ExprContext*> all_conjuncts{};
+    for (auto* expr : ctx->min_max_conjunct_ctxs) {
+        all_conjuncts.push_back(expr);
+    }
+    for (auto* expr : ctx->conjunct_ctxs_by_slot[0]) {
+        all_conjuncts.push_back(expr);
+    }
+    ParquetUTBase::setup_conjuncts_manager(all_conjuncts, tuple_desc, _runtime_state, ctx);
+
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(small_page_file));
 

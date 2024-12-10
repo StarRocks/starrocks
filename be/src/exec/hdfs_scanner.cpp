@@ -21,6 +21,8 @@
 #include "io/cache_select_input_stream.hpp"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
+#include "pipeline/fragment_context.h"
+#include "storage/predicate_parser.h"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
 
@@ -168,6 +170,23 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.split_context = _scanner_params.split_context;
     ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
+
+    if (config::parquet_advance_zonemap_filter) {
+        ScanConjunctsManagerOptions opts;
+        opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
+        opts.tuple_desc = _scanner_params.tuple_desc;
+        opts.obj_pool = _runtime_state->obj_pool();
+        opts.runtime_filters = _scanner_params.runtime_filter_collector;
+        opts.runtime_state = _runtime_state;
+        opts.enable_column_expr_predicate = true;
+        opts.is_olap_scan = false;
+        opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
+        ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+        RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
+        ConnectorPredicateParser predicate_parser{&ctx.slot_descs};
+        ASSIGN_OR_RETURN(ctx.predicate_tree,
+                         ctx.conjuncts_manager->get_predicate_tree(&predicate_parser, ctx.predicate_free_pool));
+    }
     return Status::OK();
 }
 

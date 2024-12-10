@@ -19,6 +19,7 @@
 
 #include "column/column_helper.h"
 #include "exec/connector_scan_node.h"
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -140,6 +141,9 @@ void HdfsScanNodeTest::_create_runtime_state() {
     TUniqueId id;
     _mem_tracker = std::make_shared<MemTracker>(-1, "olap scanner test");
     _runtime_state->init_mem_trackers(id);
+    pipeline::FragmentContext* fragment_context = _runtime_state->obj_pool()->add(new pipeline::FragmentContext());
+    fragment_context->set_pred_tree_params({true, true});
+    _runtime_state->set_fragment_ctx(fragment_context);
 }
 
 std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node() {

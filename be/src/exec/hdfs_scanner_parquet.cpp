@@ -18,6 +18,7 @@
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "formats/parquet/file_reader.h"
+#include "pipeline/fragment_context.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -88,6 +89,9 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     // page index
     RuntimeProfile::Counter* rows_before_page_index = nullptr;
     RuntimeProfile::Counter* page_index_timer = nullptr;
+    // filter stats
+    RuntimeProfile::Counter* total_row_groups = nullptr;
+    RuntimeProfile::Counter* filtered_row_groups = nullptr;
 
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
@@ -128,6 +132,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
             kParquetProfileSectionPrefix);
     rows_before_page_index = ADD_CHILD_COUNTER(root, "RowsBeforePageIndex", TUnit::UNIT, kParquetProfileSectionPrefix);
     page_index_timer = ADD_CHILD_TIMER(root, "PageIndexTime", kParquetProfileSectionPrefix);
+    total_row_groups = ADD_CHILD_COUNTER(root, "TotalRowGroups", TUnit::UNIT, kParquetProfileSectionPrefix);
+    filtered_row_groups = ADD_CHILD_COUNTER(root, "FilteredRowGroups", TUnit::UNIT, kParquetProfileSectionPrefix);
 
     COUNTER_UPDATE(request_bytes_read, _app_stats.request_bytes_read);
     COUNTER_UPDATE(request_bytes_read_uncompressed, _app_stats.request_bytes_read_uncompressed);
@@ -153,6 +159,12 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
     COUNTER_UPDATE(rows_before_page_index, _app_stats.rows_before_page_index);
     COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
+    COUNTER_UPDATE(total_row_groups, _app_stats.parquet_total_row_groups);
+    COUNTER_UPDATE(filtered_row_groups, _app_stats.parquet_filtered_row_groups);
+    if (_scanner_ctx.conjuncts_manager != nullptr &&
+        _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        root->add_info_string("ParquetPredicateTreeFilter", _scanner_ctx.predicate_tree.root().debug_string());
+    }
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {

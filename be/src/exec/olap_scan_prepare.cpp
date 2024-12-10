@@ -247,7 +247,7 @@ StatusOr<ExprContext*> BoxedExprContext::expr_context(ObjectPool* obj_pool, Runt
 }
 
 template <BoxedExprType E, CompoundNodeType Type>
-ChunkPredicateBuilder<E, Type>::ChunkPredicateBuilder(const OlapScanConjunctsManagerOptions& opts, std::vector<E> exprs,
+ChunkPredicateBuilder<E, Type>::ChunkPredicateBuilder(const ScanConjunctsManagerOptions& opts, std::vector<E> exprs,
                                                       bool is_root_builder)
         : _opts(opts), _exprs(std::move(exprs)), _is_root_builder(is_root_builder), _normalized_exprs(_exprs.size()) {}
 
@@ -257,7 +257,7 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
     RETURN_IF_ERROR(build_olap_filters());
 
     // Only the root builder builds scan keys.
-    if (_is_root_builder) {
+    if (_is_root_builder && _opts.is_olap_scan) {
         RETURN_IF_ERROR(build_scan_keys(_opts.scan_keys_unlimited, _opts.max_scan_key_num));
     }
 
@@ -980,14 +980,14 @@ Status ChunkPredicateBuilder<E, Type>::build_column_expr_predicates() {
 // OlapScanConjunctsManager
 // ------------------------------------------------------------------------------------
 
-OlapScanConjunctsManager::OlapScanConjunctsManager(OlapScanConjunctsManagerOptions&& opts)
+ScanConjunctsManager::ScanConjunctsManager(ScanConjunctsManagerOptions&& opts)
         : _opts(opts), _root_builder(_opts, build_expr_context_containers(*_opts.conjunct_ctxs_ptr), true) {}
 
-Status OlapScanConjunctsManager::parse_conjuncts() {
+Status ScanConjunctsManager::parse_conjuncts() {
     return _root_builder.parse_conjuncts().status();
 }
 
-Status OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status) {
+Status ScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status) {
     *status = Status::OK();
     for (const auto& ctx : conjunct_ctxs) {
         // if conjunct is constant, compute direct and set eos = true
@@ -1006,17 +1006,17 @@ Status OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprCont
     return Status::OK();
 }
 
-StatusOr<PredicateTree> OlapScanConjunctsManager::get_predicate_tree(PredicateParser* parser,
-                                                                     ColumnPredicatePtrs& col_preds_owner) {
+StatusOr<PredicateTree> ScanConjunctsManager::get_predicate_tree(PredicateParser* parser,
+                                                                 ColumnPredicatePtrs& col_preds_owner) {
     ASSIGN_OR_RETURN(auto pred_root, _root_builder.get_predicate_tree_root(parser, col_preds_owner));
     return PredicateTree::create(std::move(pred_root));
 }
 
-Status OlapScanConjunctsManager::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {
+Status ScanConjunctsManager::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {
     return _root_builder.get_key_ranges(key_ranges);
 }
 
-void OlapScanConjunctsManager::get_not_push_down_conjuncts(std::vector<ExprContext*>* predicates) {
+void ScanConjunctsManager::get_not_push_down_conjuncts(std::vector<ExprContext*>* predicates) {
     // DCHECK_EQ(_opts.conjunct_ctxs_ptr->size(), _normalized_exprs.size());
     const size_t num_preds = _opts.conjunct_ctxs_ptr->size();
     for (size_t i = 0; i < num_preds; i++) {
@@ -1026,7 +1026,7 @@ void OlapScanConjunctsManager::get_not_push_down_conjuncts(std::vector<ExprConte
     }
 }
 
-const UnarrivedRuntimeFilterList& OlapScanConjunctsManager::unarrived_runtime_filters() {
+const UnarrivedRuntimeFilterList& ScanConjunctsManager::unarrived_runtime_filters() {
     return _root_builder.unarrived_runtime_filters();
 }
 

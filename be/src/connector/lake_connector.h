@@ -88,7 +88,7 @@ private:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
-    std::unique_ptr<OlapScanConjunctsManager> _conjuncts_manager = nullptr;
+    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
 
     lake::VersionedTablet _tablet;
     TabletSchemaCSPtr _tablet_schema;
