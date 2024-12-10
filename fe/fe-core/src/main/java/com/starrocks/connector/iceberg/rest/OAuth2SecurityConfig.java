@@ -109,8 +109,11 @@ class OAuth2SecurityConfigBuilder {
         config = config.setSecurity(SecurityEnum.OAUTH2)
                 .setCredential(properties.get(OAuth2SecurityConfig.OAUTH2_CREDENTIAL))
                 .setScope(properties.get(OAuth2SecurityConfig.OAUTH2_SCOPE))
-                .setToken(properties.get(OAuth2SecurityConfig.OAUTH2_TOKEN))
-                .setServerUri(URI.create(properties.get(OAuth2SecurityConfig.SERVER_URI)));
+                .setToken(properties.get(OAuth2SecurityConfig.OAUTH2_TOKEN));
+        String serverUri = properties.get(OAuth2SecurityConfig.SERVER_URI);
+        if (serverUri != null) {
+            config = config.setServerUri(URI.create(serverUri));
+        }
 
         // check OAuth2SecurityConfig is valid
         if (!config.credentialOrTokenPresent() || !config.scopePresentOnlyWithCredential()) {
