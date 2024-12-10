@@ -94,6 +94,13 @@ struct GroupReaderParam {
 
     // used for pageIndex
     std::vector<ExprContext*> min_max_conjunct_ctxs;
+
+    // partition column
+    const std::vector<HdfsScannerContext::ColumnInfo>* partition_columns = nullptr;
+    // partition column value which read from hdfs file path
+    const std::vector<ColumnPtr>* partition_values = nullptr;
+    // not existed column
+    const std::vector<SlotDescriptor*>* not_existed_slots = nullptr;
 };
 
 class PageIndexReader;
@@ -112,6 +119,8 @@ public:
     Status prepare();
     const tparquet::ColumnChunk* get_chunk_metadata(SlotId slot_id);
     const ParquetField* get_column_parquet_field(SlotId slot_id);
+    ColumnReader* get_column_reader(SlotId slot_id);
+    uint64_t get_row_group_first_row() const { return _row_group_first_row; }
     const tparquet::RowGroup* get_row_group_metadata() const;
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,

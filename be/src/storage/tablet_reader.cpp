@@ -565,7 +565,7 @@ Status TabletReader::_init_predicates(const TabletReaderParams& params) {
 }
 
 Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
-    PredicateParser pred_parser(_tablet_schema);
+    OlapPredicateParser pred_parser(_tablet_schema);
 
     std::shared_lock header_lock(_tablet->get_header_lock());
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {

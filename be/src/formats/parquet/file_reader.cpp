@@ -44,11 +44,12 @@
 #include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
 #include "formats/parquet/column_converter.h"
-#include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/statistics_helper.h"
 #include "formats/parquet/utils.h"
+#include "formats/parquet/zone_map_filter_evaluator.h"
 #include "fs/fs.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/parquet_types.h"
@@ -305,7 +306,8 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
                         LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_min_max_chunk.";
                         continue;
                     }
-                    auto st = _get_min_max_value(slot, column_meta, field, min_values, max_values);
+                    auto st = StatisticsHelper::get_min_max_value(_file_metadata.get(), slot->type(), column_meta,
+                                                                  field, min_values, max_values);
                     if (!st.ok()) continue;
                     Filter selected(min_values.size(), 1);
                     st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctx, field,
@@ -324,19 +326,33 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
 // when doing row group filter, there maybe some error, but we'd better just ignore it instead of returning the error
 // status and lead to the query failed.
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
-    if (_filter_group_with_min_max_conjuncts(group_reader)) {
-        return true;
-    }
+    if (config::parquet_advance_zonemap_filter) {
+        auto res = _scanner_ctx->predicate_tree.visit(
+                ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader.get()});
+        if (!res.ok()) {
+            LOG(WARNING) << "filter row group failed: " << res.status().message();
+            return false;
+        }
+        if (res.value().has_value() && res.value()->span_size() == 0) {
+            // no rows selected, the whole row group can be filtered
+            return true;
+        }
+        return false;
+    } else {
+        if (_filter_group_with_min_max_conjuncts(group_reader)) {
+            return true;
+        }
 
-    if (_filter_group_with_bloom_filter_min_max_conjuncts(group_reader)) {
-        return true;
-    }
+        if (_filter_group_with_bloom_filter_min_max_conjuncts(group_reader)) {
+            return true;
+        }
 
-    if (config::parquet_statistics_process_more_filter_enable && _filter_group_with_more_filter(group_reader)) {
-        return true;
-    }
+        if (config::parquet_statistics_process_more_filter_enable && _filter_group_with_more_filter(group_reader)) {
+            return true;
+        }
 
-    return false;
+        return false;
+    }
 }
 
 Status FileReader::_read_min_max_chunk(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
@@ -381,7 +397,8 @@ Status FileReader::_read_min_max_chunk(const GroupReaderPtr& group_reader, const
                 return Status::InternalError(strings::Substitute("Can't get $0 field", slot->col_name()));
             }
 
-            RETURN_IF_ERROR(_get_min_max_value(slot, column_meta, field, min_values, max_values));
+            RETURN_IF_ERROR(StatisticsHelper::get_min_max_value(_file_metadata.get(), slot->type(), column_meta, field,
+                                                                min_values, max_values));
             RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column((*min_chunk)->columns()[i], min_values,
                                                                        slot->type(), field, ctx.timezone));
             RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column((*max_chunk)->columns()[i], max_values,
@@ -399,40 +416,6 @@ int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const
         }
     }
     return -1;
-}
-
-Status FileReader::_get_min_max_value(const SlotDescriptor* slot, const tparquet::ColumnMetaData* column_meta,
-                                      const ParquetField* field, std::vector<std::string>& min_values,
-                                      std::vector<std::string>& max_values) const {
-    // When statistics is empty, column_meta->__isset.statistics is still true,
-    // but statistics.__isset.xxx may be false, so judgment is required here.
-    bool is_set_min_max = (column_meta->statistics.__isset.max && column_meta->statistics.__isset.min) ||
-                          (column_meta->statistics.__isset.max_value && column_meta->statistics.__isset.min_value);
-    if (!is_set_min_max) {
-        return Status::Aborted("No exist min/max");
-    }
-
-    DCHECK_EQ(field->physical_type, column_meta->type);
-    auto sort_order = sort_order_of_logical_type(slot->type().type);
-
-    if (!_has_correct_min_max_stats(*column_meta, sort_order)) {
-        return Status::Aborted("The file has incorrect order");
-    }
-
-    if (column_meta->statistics.__isset.min_value) {
-        min_values.emplace_back(column_meta->statistics.min_value);
-        max_values.emplace_back(column_meta->statistics.max_value);
-    } else {
-        min_values.emplace_back(column_meta->statistics.min);
-        max_values.emplace_back(column_meta->statistics.max);
-    }
-
-    return Status::OK();
-}
-
-bool FileReader::_has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                            const SortOrder& sort_order) const {
-    return _file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
 }
 
 void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
@@ -465,6 +448,9 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.file_metadata = _file_metadata.get();
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
+    _group_reader_param.partition_columns = &fd_scanner_ctx.partition_columns;
+    _group_reader_param.partition_values = &fd_scanner_ctx.partition_values;
+    _group_reader_param.not_existed_slots = &fd_scanner_ctx.not_existed_slots;
     // for pageIndex
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
 
@@ -483,9 +469,12 @@ Status FileReader::_init_group_readers() {
                 std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
         RETURN_IF_ERROR(row_group_reader->init());
 
+        _group_reader_param.stats->parquet_total_row_groups += 1;
+
         // You should call row_group_reader->init() before _filter_group()
         if (_filter_group(row_group_reader)) {
             DLOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
+            _group_reader_param.stats->parquet_filtered_row_groups += 1;
             continue;
         }
 

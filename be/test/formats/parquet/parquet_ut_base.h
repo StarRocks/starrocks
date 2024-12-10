@@ -18,6 +18,7 @@
 
 #include "common/global_types.h"
 #include "common/object_pool.h"
+#include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Exprs_types.h"
@@ -46,6 +47,9 @@ public:
     static void create_in_predicate_date_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id,
                                                        TPrimitiveType::type type, std::set<std::string>& values,
                                                        std::vector<TExpr>* tExprs);
+
+    static void setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, TupleDescriptor* tuple_desc,
+                                        RuntimeState* runtime_state, HdfsScannerContext* params);
 };
 
 } // namespace starrocks::parquet
