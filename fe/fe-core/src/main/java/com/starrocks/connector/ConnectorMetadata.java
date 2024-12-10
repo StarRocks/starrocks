@@ -65,7 +65,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-public interface ConnectorMetadata {
+public interface ConnectorMetadata extends AutoCloseable {
     /**
      * Use connector type as a hint of table type.
      * Caveat: there are exceptions that hive connector may have non-hive(e.g. iceberg) tables.
@@ -343,6 +343,10 @@ public interface ConnectorMetadata {
     default Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
                                            ScalarOperator predicate, FileContent fileContent) {
         throw new StarRocksConnectorException("This connector doesn't support getting delete files");
+    }
+
+    @Override
+    default void close() {
     }
 }
 

@@ -58,7 +58,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
     private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
 
-    private HikariDataSource dataSource;
+    private final HikariDataSource dataSource;
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
@@ -301,5 +301,10 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     public void refreshCache(Map<String, String> properties) {
         createMetaAsyncCacheInstances(properties);
+    }
+
+    @Override
+    public void close() {
+        this.dataSource.close();
     }
 }
