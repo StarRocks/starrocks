@@ -30,13 +30,13 @@ import java.util.Map;
 public class CloudConfigurationFactoryTest {
 
     @Test
-    public void testBuildCloudConfigurationForTabular() {
+    public void testBuildCloudConfigurationForVendedCredentials() {
         Map<String, String> map = new HashMap<>();
         map.put(S3FileIOProperties.ACCESS_KEY_ID, "ak");
         map.put(S3FileIOProperties.SECRET_ACCESS_KEY, "sk");
         map.put(S3FileIOProperties.SESSION_TOKEN, "token");
         map.put(AwsClientProperties.CLIENT_REGION, "region");
-        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForTabular(map);
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
         Assert.assertNotNull(cloudConfiguration);
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         Assert.assertEquals(
