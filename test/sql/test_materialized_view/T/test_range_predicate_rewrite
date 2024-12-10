@@ -116,6 +116,7 @@ PROPERTIES (
 refresh materialized view year_mv with sync mode;
 
 set materialized_view_rewrite_mode="force";
+set cbo_extract_common_plan=false;
 [UC]analyze table date_mv with sync mode;
 [UC]analyze table month_mv with sync mode;
 [UC]analyze table year_mv with sync mode;
