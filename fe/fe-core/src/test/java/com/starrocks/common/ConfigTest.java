@@ -38,6 +38,10 @@ public class ConfigTest {
         URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
         assert resource != null;
         config.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+
+        resource = getClass().getClassLoader().getResource("conf/config_mutable.properties");
+        assert resource != null;
+        config.initMutable(Paths.get(resource.toURI()).toFile().getAbsolutePath());
     }
 
     @Test
@@ -45,6 +49,43 @@ public class ConfigTest {
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("tablet_sched_slot_num_per_path", false);
         List<List<String>> configs = Config.getConfigInfo(matcher);
         Assert.assertEquals("3", configs.get(0).get(2));
+    }
+
+    @Test
+    public void testMutableConfig() throws Exception {
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
+        List<List<String>> configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("99", configs.get(0).get(2));
+
+        Config.setMutableConfig("adaptive_choose_instances_threshold", "98");
+        configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("98", configs.get(0).get(2));
+        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
+
+        // Reload from file
+        URL resource = getClass().getClassLoader().getResource("conf/config_mutable.properties");
+        config.initMutable(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+        configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("98", configs.get(0).get(2));
+        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
+    }
+
+    @Test
+    public void testDisableStoreConfig() throws Exception {
+        Config.setIsPersisted(false);
+        Config.setMutableConfig("adaptive_choose_instances_threshold", "98");
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
+        List<List<String>>  configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("98", configs.get(0).get(2));
+        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
+
+        // Reload from file
+        URL resource = getClass().getClassLoader().getResource("conf/config_mutable.properties");
+        assert resource != null;
+        config.initMutable(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+        configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("99", configs.get(0).get(2));
+        Assert.assertEquals(99, Config.adaptive_choose_instances_threshold);
     }
 
     @Test
@@ -67,6 +108,11 @@ public class ConfigTest {
         URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");
         assert resource != null;
         configForTest.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+
+        resource = getClass().getClassLoader().getResource("conf/config_mutable.properties");
+        assert resource != null;
+        configForTest.initMutable(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("schedule_slot_num_per_path_only_for_test", false);
         List<List<String>> configs = ConfigForTest.getConfigInfo(matcher);
         Assert.assertEquals(1, configs.size());
@@ -77,11 +123,11 @@ public class ConfigTest {
 
     @Test
     public void testConfigSetCompatibleWithOldName() throws Exception {
-        Config.setMutableConfig("schedule_slot_num_per_path", "4");
-        PatternMatcher matcher = PatternMatcher.createMysqlPattern("schedule_slot_num_per_path", false);
+        Config.setMutableConfig("max_scheduling_tablets", "4");
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern("max_scheduling_tablets", false);
         List<List<String>> configs = Config.getConfigInfo(matcher);
         Assert.assertEquals("4", configs.get(0).get(2));
-        Assert.assertEquals(4, Config.tablet_sched_slot_num_per_path);
+        Assert.assertEquals(4, Config.tablet_sched_max_scheduling_tablets);
     }
 
     private static class ConfigForArray extends ConfigBase {
@@ -104,6 +150,11 @@ public class ConfigTest {
         URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");
         assert resource != null;
         configForArray.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+
+        resource = getClass().getClassLoader().getResource("conf/config_mutable.properties");
+        assert resource != null;
+        configForArray.initMutable(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+
         List<List<String>> configs = ConfigForArray.getConfigInfo(null);
         Assert.assertEquals("[1, 1]", configs.get(0).get(2));
         Assert.assertEquals("short[]", configs.get(0).get(3));
