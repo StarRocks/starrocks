@@ -199,6 +199,7 @@ public class SplitScanORToUnionRule extends TransformationRule {
         return new LogicalUnionOperator(outputColumns, childOutputColumns, true);
     }
 
+<<<<<<< HEAD
     private List<OptExpression> buildUnionAllInputs(LogicalOlapScanOperator scanOperator,
                                                     List<ScalarOperator> scanPredicates) {
         List<OptExpression> inputs = Lists.newArrayList();
@@ -207,6 +208,47 @@ public class SplitScanORToUnionRule extends TransformationRule {
             LogicalOlapScanOperator scan = builder.withOperator(scanOperator)
                     .setPredicate(scanPredicate).setFromSplitOR(true).build();
             inputs.add(OptExpression.create(scan));
+=======
+    private Pair<OptExpression, List<ColumnRefOperator>> buildUnionInputs(ColumnRefFactory factory,
+                                                                          LogicalOlapScanOperator scan,
+                                                                          ScalarOperator scanPredicate,
+                                                                          List<ColumnRefOperator> outputs) {
+        Map<ColumnRefOperator, ColumnRefOperator> replaceRefs = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRefs = Maps.newHashMap();
+        Map<ColumnRefOperator, Column> refToColumns = Maps.newHashMap();
+
+        scan.getColumnMetaToColRefMap().forEach((meta, ref) -> {
+            ColumnRefOperator newRef = factory.create(ref.getName(), ref.getType(), ref.isNullable());
+            columnToRefs.put(meta, newRef);
+            refToColumns.put(newRef, meta);
+            replaceRefs.put(ref, newRef);
+        });
+
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(replaceRefs);
+        LogicalOlapScanOperator.Builder builder = LogicalOlapScanOperator.builder().withOperator(scan)
+                .setColRefToColumnMetaMap(refToColumns)
+                .setColumnMetaToColRefMap(columnToRefs)
+                .setFromSplitOR(true)
+                .setPredicate(rewriter.rewrite(scanPredicate));
+        if (scan.getPrunedPartitionPredicates() != null && !scan.getPrunedPartitionPredicates().isEmpty()) {
+            builder.setPrunedPartitionPredicates(scan.getPrunedPartitionPredicates().stream()
+                    .map(rewriter::rewrite).collect(Collectors.toList()));
+        }
+
+        if (scan.getProjection() != null) {
+            Map<ColumnRefOperator, ScalarOperator> newProjections = Maps.newHashMap();
+            scan.getProjection().getColumnRefMap().forEach((k, v) -> {
+                if (replaceRefs.containsKey(k)) {
+                    Preconditions.checkState(k.equals(v));
+                    newProjections.put(replaceRefs.get(k), replaceRefs.get(k));
+                } else {
+                    ColumnRefOperator newRef = factory.create(k.getName(), k.getType(), k.isNullable());
+                    newProjections.put(newRef, rewriter.rewrite(v));
+                    replaceRefs.put(k, newRef);
+                }
+            });
+            builder.setProjection(new Projection(newProjections));
+>>>>>>> 10eb85d3c9 ([BugFix] Fix or split to scan lose partition predicate (#53676))
         }
         return inputs;
     }

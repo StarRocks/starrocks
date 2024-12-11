@@ -84,6 +84,38 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         assertContains(getFragmentPlan(sql), "UNION");
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    void testForceSplitWithPartition() throws Exception {
+        connectContext.getSessionVariable().setSelectRatioThreshold(-1);
+        connectContext.getSessionVariable().setEnableSyncMaterializedViewRewrite(false);
+        String sql = "select * from pushdown_test where k1 >= 0 and (k3 > k4 or k3 = 1)";
+        assertContains(getFragmentPlan(sql), "UNION");
+    }
+
+    @Test
+    void testForceUnion() throws Exception {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 10; i++) {
+            sb.append(i).append(", ");
+        }
+        String sql = "select * from t0 where v1 in (" + sb + "1);";
+        connectContext.getSessionVariable().setSelectRatioThreshold(-1);
+        FilterSelectivityEvaluator.IN_CHILDREN_THRESHOLD = 5;
+        String plan = getVerboseExplain(sql);
+        FilterSelectivityEvaluator.IN_CHILDREN_THRESHOLD = 1024;
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [1, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [4: v1, BIGINT, true] | [5: v2, BIGINT, true] | [6: v3, BIGINT, true]\n" +
+                "  |      [7: v1, BIGINT, true] | [8: v2, BIGINT, true] | [9: v3, BIGINT, true]");
+        assertContains(plan, "Predicates: 4: v1 IN (0, 1, 2, 3, 4)");
+        assertContains(plan, "Predicates: 7: v1 IN (5, 6, 7, 8, 9)");
+    }
+
+>>>>>>> 10eb85d3c9 ([BugFix] Fix or split to scan lose partition predicate (#53676))
     private static Stream<Arguments> testSplitUnionSqls() {
         List<Arguments> list = Lists.newArrayList();
         String sql = "select * from orders where (O_TOTALPRICE != 1 or O_ORDERPRIORITY > 'a') " +
@@ -119,8 +151,8 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
                 "PREDICATES: 2: O_CUSTKEY IN", "PREDICATES: 2: O_CUSTKEY IN"));
         list.add(arguments);
 
-
-        sql = "select * from orders where (O_ORDERKEY < 1 and O_CLERK = 'a') or (O_COMMENT = 'c' and O_CUSTKEY <=> null)";
+        sql =
+                "select * from orders where (O_ORDERKEY < 1 and O_CLERK = 'a') or (O_COMMENT = 'c' and O_CUSTKEY <=> null)";
         arguments = Arguments.of(sql, ImmutableList.of("UNION",
                 "PREDICATES: 9: O_COMMENT = 'c', 2: O_CUSTKEY <=> NULL",
                 "PREDICATES: 1: O_ORDERKEY < 1, 7: O_CLERK = 'a', NOT ((9: O_COMMENT = 'c') AND (2: O_CUSTKEY <=> NULL))"));
@@ -155,7 +187,6 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setScanOrToUnionThreshold(50000000);
         connectContext.getSessionVariable().setSelectRatioThreshold(0.15);
     }
-
 
     private static Stream<Arguments> testNotSplitUnionSqls() {
         List<String> list = Lists.newArrayList();
