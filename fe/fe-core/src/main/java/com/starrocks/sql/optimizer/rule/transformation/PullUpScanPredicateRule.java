@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -258,6 +259,11 @@ public class PullUpScanPredicateRule extends TransformationRule {
                 }
                 return true;
             }
+            return false;
+        }
+
+        @Override
+        public Boolean visitLambdaFunctionOperator(LambdaFunctionOperator op, Void context) {
             return false;
         }
     }

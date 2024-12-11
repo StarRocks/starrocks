@@ -150,15 +150,17 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                                                  map_col->keys_column()->size()));
     }
 
-    auto res_map =
-            std::make_shared<MapColumn>(map_col->keys_column(), map_col->values_column(), input_map->offsets_column());
+    auto res_map = std::make_shared<MapColumn>(
+            map_col->keys_column(), map_col->values_column(),
+            ColumnHelper::as_column<UInt32Column>(input_map->offsets_column()->clone_shared()));
 
     if (_maybe_duplicated_keys && res_map->size() > 0) {
         res_map->remove_duplicated_keys();
     }
     // attach null info
     if (input_null_map != nullptr) {
-        return NullableColumn::create(std::move(res_map), input_null_map);
+        return NullableColumn::create(std::move(res_map),
+                                      ColumnHelper::as_column<NullColumn>(input_null_map->clone_shared()));
     }
     return res_map;
 }
