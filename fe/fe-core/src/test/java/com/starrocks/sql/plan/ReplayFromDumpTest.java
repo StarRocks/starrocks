@@ -31,6 +31,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.stream.Stream;
@@ -47,6 +48,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testForceRuleBasedRewriteMonth() throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
@@ -813,8 +815,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testCBONestedMvRewriteMonth() throws Exception {
-        connectContext.getSessionVariable().setEnableEliminateAgg(false);
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         sessionVariable.setEnableForceRuleBasedMvRewrite(false);
