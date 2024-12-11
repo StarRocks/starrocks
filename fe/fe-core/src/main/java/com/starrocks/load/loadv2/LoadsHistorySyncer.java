@@ -20,6 +20,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -83,6 +84,8 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             new TableKeeper(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME, LOADS_HISTORY_TABLE_CREATE,
                     () -> Math.max(1, Config.loads_history_retained_days));
 
+    private long syncedLoadFinishTIme = -1L;
+
     public static TableKeeper createKeeper() {
         return KEEPER;
     }
@@ -114,7 +117,12 @@ public class LoadsHistorySyncer extends FrontendDaemon {
                 firstSync = false;
                 return;
             }
-            syncData();
+
+            long latestFinishTime = GlobalStateMgr.getCurrentState().getLoadMgr().getLatestFinishTime();
+            if (syncedLoadFinishTIme < latestFinishTime) {
+                syncData();
+                syncedLoadFinishTIme = latestFinishTime;
+            }
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of LoadJobScheduler with error message {}", e.getMessage(), e);
         }
