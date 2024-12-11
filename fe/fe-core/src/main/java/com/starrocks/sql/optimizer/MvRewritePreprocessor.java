@@ -48,6 +48,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -704,8 +705,15 @@ public class MvRewritePreprocessor {
                 // refresh schema
                 MaterializedView.MvRefreshScheme mvRefreshScheme =
                         new MaterializedView.MvRefreshScheme(MaterializedView.RefreshType.SYNC);
-                MaterializedView mv = new MaterializedView(db, mvName, indexMeta, olapTable,
-                        mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                MaterializedView mv;
+                if (olapTable.isCloudNativeTable()) {
+                    mv = new LakeMaterializedView(db, mvName, indexMeta, olapTable,
+                            mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                } else {
+                    mv = new MaterializedView(db, mvName, indexMeta, olapTable,
+                            mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                }
+
                 mv.setViewDefineSql(viewDefineSql);
                 mv.setBaseIndexId(indexId);
                 relatedMvs.add(mv);
