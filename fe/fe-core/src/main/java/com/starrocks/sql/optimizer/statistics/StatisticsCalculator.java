@@ -1411,11 +1411,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computeTableFunctionNode(ExpressionContext context, List<ColumnRefOperator> outputColumns) {
         Statistics.Builder builder = Statistics.builder();
 
+        Statistics inputStatistics = context.getChildStatistics(0);
+        Map<ColumnRefOperator, ColumnStatistic> columnStats = inputStatistics.getColumnStatistics();
+
         for (ColumnRefOperator col : outputColumns) {
-            builder.addColumnStatistic(col, ColumnStatistic.unknown());
+            if (columnStats.containsKey(col)) {
+                builder.addColumnStatistic(col, columnStats.get(col));
+            } else {
+                builder.addColumnStatistic(col, ColumnStatistic.unknown());
+            }
         }
 
-        Statistics inputStatistics = context.getChildStatistics(0);
         builder.setOutputRowCount(inputStatistics.getOutputRowCount());
 
         context.setStatistics(builder.build());
