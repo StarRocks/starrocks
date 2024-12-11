@@ -21,7 +21,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
@@ -73,6 +72,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
@@ -1530,14 +1530,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      *  we also need to consider other ref table partitions(p0); otherwise, the mv's final result will lose data.
      */
     public boolean isCalcPotentialRefreshPartition(List<TableWithPartitions> baseChangedPartitionNames,
-                                                   Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap,
+                                                   Map<Table, Map<String, PCell>> refBaseTablePartitionToCells,
                                                    Set<String> mvPartitions,
-                                                   Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap) {
+                                                   Map<String, PCell> mvPartitionToCells) {
         List<PRangeCell> mvSortedPartitionRanges =
-                TableWithPartitions.getSortedPartitionRanges(mvPartitionNameToRangeMap, mvPartitions);
+                TableWithPartitions.getSortedPartitionRanges(mvPartitionToCells, mvPartitions);
         for (TableWithPartitions baseTableWithPartition : baseChangedPartitionNames) {
-            Map<String, Range<PartitionKey>> baseRangePartitionMap =
-                    refBaseTableRangePartitionMap.get(baseTableWithPartition.getTable());
+            Map<String, PCell> baseRangePartitionMap =
+                    refBaseTablePartitionToCells.get(baseTableWithPartition.getTable());
             List<PRangeCell> baseSortedPartitionRanges =
                     baseTableWithPartition.getSortedPartitionRanges(baseRangePartitionMap);
             for (PRangeCell basePartitionRange : baseSortedPartitionRanges) {
@@ -2141,4 +2141,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         return schema;
     }
+
+
 }

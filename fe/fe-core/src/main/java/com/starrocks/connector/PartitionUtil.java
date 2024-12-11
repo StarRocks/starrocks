@@ -52,8 +52,9 @@ import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PListCell;
-import com.starrocks.sql.common.RangePartitionDiff;
+import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
@@ -303,9 +304,9 @@ public class PartitionUtil {
     /**
      * NOTE: Ensure result list cell's order is the same with partitionColumns.
      */
-    public static Map<String, PListCell> getPartitionList(Table table, List<Column> partitionColumns)
+    public static Map<String, PCell> getPartitionCells(Table table, List<Column> partitionColumns)
             throws UserException {
-        return ConnectorPartitionTraits.build(table).getPartitionList(partitionColumns);
+        return ConnectorPartitionTraits.build(table).getPartitionCells(partitionColumns);
     }
 
     // check the partitionColumn exist in the partitionColumns
@@ -364,7 +365,7 @@ public class PartitionUtil {
                                                  Expr partitionExpr) throws AnalysisException {
 
         if (isListPartition) {
-            Map<String, PListCell> partitionNameWithList = getMVPartitionNameWithList(table, ImmutableList.of(partitionColumn),
+            Map<String, PCell> partitionNameWithList = getMVPartitionToCells(table, ImmutableList.of(partitionColumn),
                     partitionNames);
             return Sets.newHashSet(partitionNameWithList.keySet());
         } else {
@@ -715,11 +716,11 @@ public class PartitionUtil {
     /**
      * NOTE: Ensure output plist cell's order is the same with partitionColumns.
      */
-    public static Map<String, PListCell> getMVPartitionNameWithList(Table table,
-                                                                    List<Column> refPartitionColumns,
-                                                                    List<String> partitionNames)
+    public static Map<String, PCell> getMVPartitionToCells(Table table,
+                                                           List<Column> refPartitionColumns,
+                                                           List<String> partitionNames)
             throws AnalysisException {
-        Map<String, PListCell> partitionListMap = new LinkedHashMap<>();
+        Map<String, PCell> partitionListMap = new LinkedHashMap<>();
         List<Column> partitionColumns = getPartitionColumns(table);
 
         // Get the index of partitionColumn when table has multi partition columns.
@@ -902,10 +903,10 @@ public class PartitionUtil {
         thread.start();
     }
 
-    public static RangePartitionDiff getPartitionDiff(Expr partitionExpr,
-                                                      Map<String, Range<PartitionKey>> basePartitionMap,
-                                                      Map<String, Range<PartitionKey>> mvPartitionMap,
-                                                      RangePartitionDiffer differ) {
+    public static PartitionDiff getPartitionDiff(Expr partitionExpr,
+                                                 Map<String, Range<PartitionKey>> basePartitionMap,
+                                                 Map<String, Range<PartitionKey>> mvPartitionMap,
+                                                 RangePartitionDiffer differ) {
         if (partitionExpr instanceof SlotRef) {
             return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap, differ);
         } else if (partitionExpr instanceof FunctionCallExpr) {
