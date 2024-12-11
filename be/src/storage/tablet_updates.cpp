@@ -694,6 +694,13 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                         << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
                         << " #pending:" << _pending_commits.size();
             }
+            LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version
+                      << " txn_id: " << rowset->txn_id() << " " << rowset->rowset_id().to_string()
+                      << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id() << " #seg:" << rowset->num_segments()
+                      << " #delfile:" << rowset->num_delete_files() << " #uptfile:" << rowset->num_update_files()
+                      << " #row:" << rowset->num_rows()
+                      << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
+                      << " #pending:" << _pending_commits.size();
             _try_commit_pendings_unlocked();
             _check_for_apply();
             if (wait_time_ms > 0) {
@@ -838,11 +845,11 @@ void TabletUpdates::_try_commit_pendings_unlocked() {
                                << " #pending:" << _pending_commits.size() << " " << st.to_string();
                     return;
                 }
-                VLOG(2) << "commit rowset (pending) tablet:" << _tablet.tablet_id() << " version:" << version
-                        << " txn_id: " << rowset->txn_id() << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
-                        << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
-                        << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
-                        << " #pending:" << _pending_commits.size();
+                LOG(INFO) << "commit rowset (pending) tablet:" << _tablet.tablet_id() << " version:" << version
+                          << " txn_id: " << rowset->txn_id() << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
+                          << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
+                          << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
+                          << " #pending:" << _pending_commits.size();
                 itr = _pending_commits.erase(itr);
                 current_version = _edit_version_infos.back()->version.major_number();
             } else {
@@ -1868,6 +1875,14 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         LOG(INFO) << msg_part1 << msg_part4;
         VLOG(1) << msg_part1 << msg_part2 << msg_part3 << msg_part4;
     }
+
+    LOG(INFO) << "apply_rowset_commit finish. tablet:" << tablet_id << " version:" << version_info.version.to_string()
+              << " txn_id: " << rowset->txn_id() << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows
+              << " " << del_percent << "% rowset:" << rowset_id << " #seg:" << rowset->num_segments()
+              << " #op(upsert:" << rowset->num_rows() << " del:" << delete_op << ") #del:" << old_total_del << "+"
+              << new_del << "=" << total_del << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
+              << strings::Substitute("($0/$1/$2/$3)", t_apply - t_start, t_index - t_apply, t_delvec - t_index,
+                                     t_write - t_delvec);
     VLOG(2) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
     return apply_st;
 }
@@ -2840,7 +2855,7 @@ int64_t TabletUpdates::get_compaction_score() {
             // has too many pending tasks, skip compaction
             size_t version_count = _edit_version_infos.back()->rowsets.size() + _pending_commits.size();
             if (version_count > config::tablet_max_versions) {
-                VLOG(1) << strings::Substitute(
+                LOG(INFO) << strings::Substitute(
                         "Try to do compaction because of too many versions. tablet_id:$0 "
                         "version_count:$1 limit:$2 applied_version_idx:$3 edit_version_infos:$4 pending:$5",
                         _tablet.tablet_id(), version_count, config::tablet_max_versions, _apply_version_idx,

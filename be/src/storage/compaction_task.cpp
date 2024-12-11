@@ -36,11 +36,11 @@ CompactionTask::~CompactionTask() {
 }
 
 void CompactionTask::run() {
-    VLOG(1) << "start compaction. task_id:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id
-            << ", algorithm:" << CompactionUtils::compaction_algorithm_to_string(_task_info.algorithm)
-            << ", compaction_type:" << starrocks::to_string(_task_info.compaction_type)
-            << ", compaction_score:" << _task_info.compaction_score << ", output_version:" << _task_info.output_version
-            << ", input rowsets size:" << _input_rowsets.size();
+    LOG(INFO) << "start compaction. task_id:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id
+              << ", algorithm:" << CompactionUtils::compaction_algorithm_to_string(_task_info.algorithm)
+              << ", compaction_type:" << starrocks::to_string(_task_info.compaction_type)
+              << ", compaction_score:" << _task_info.compaction_score
+              << ", output_version:" << _task_info.output_version << ", input rowsets size:" << _input_rowsets.size();
     _task_info.start_time = UnixMillis();
     scoped_refptr<Trace> trace(new Trace);
     SCOPED_CLEANUP({

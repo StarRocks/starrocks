@@ -1,0 +1,86 @@
+{
+  "fe": [
+    {
+      "file": "fe-core/src/main/java/com/starrocks/transaction/DatabaseTransactionMgr.java",
+      "level": "info",
+      "pattern": "begin transaction"
+    },
+    {
+      "file": "fe-core/src/main/java/com/starrocks/transaction/DatabaseTransactionMgr.java",
+      "level": "info",
+      "pattern": "successfully committed"
+    },
+    {
+      "file": "fe-core/src/main/java/com/starrocks/transaction/DatabaseTransactionMgr.java",
+      "level": "info",
+      "pattern": "finish transaction"
+    },
+    {
+      "file": "fe-core/src/main/java/com/starrocks/consistency/LockChecker.java",
+      "level": "info",
+      "pattern": "slow db locks"
+    },
+    {
+      "file": "fe-core/src/main/java/com/starrocks/replication/ReplicationJob.java",
+      "level": "info",
+      "pattern": "Replication job state"
+    }
+  ],
+  "be": [
+    {
+      "file": "src/storage/lake/vertical_compaction_task.cpp",
+      "level": "INFO",
+      "pattern": "compaction finished"
+    },
+    {
+      "file": "src/storage/lake/horizontal_compaction_task.cpp",
+      "level": "INFO",
+      "pattern": "compaction finished"
+    },
+    {
+      "file": "src/storage/compaction_task.cpp",
+      "level": "INFO",
+      "pattern": "start compaction"
+    },
+    {
+      "file": "src/storage/tablet_updates.cpp",
+      "level": "INFO",
+      "pattern": "update compaction start tablet"
+    },
+    {
+      "file": "src/storage/tablet_updates.cpp",
+      "level": "INFO",
+      "pattern": "commit compaction tablet"
+    },
+    {
+      "file": "src/storage/tablet_updates.cpp",
+      "level": "INFO",
+      "pattern": "commit rowset"
+    },
+    {
+      "file": "src/storage/tablet_updates.cpp",
+      "level": "ERROR",
+      "pattern": "commit rowset"
+    },
+    {
+      "file": "src/storage/tablet_updates.cpp",
+      "level": "INFO",
+      "pattern": "apply_rowset_commit finish"
+    },
+    {
+      "file": "src/storage/txn_manager.cpp",
+      "level": "INFO",
+      "pattern": "Commit txn successfully"
+    },
+    {
+      "file": "src/agent/publish_version.cpp",
+      "level": "INFO",
+      "pattern": "Publish txn success"
+    },
+    {
+      "file": "src/storage/task/engine_clone_task.cpp",
+      "level": "INFO",
+      "pattern": "Copied tablet"
+    }
+  ]
+}
