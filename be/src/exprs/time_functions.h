@@ -805,7 +805,7 @@ public:
      * @paramType columns: [TYPE_TIME, TYPE_VARCHAR]
      * @return ColumnPtr A column holding formatted time strings.
      */
-    DEFINE_VECTORIZED_FN(format_time);
+    DEFINE_VECTORIZED_FN(time_format);
 
 private:
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime);

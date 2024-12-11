@@ -3223,7 +3223,7 @@ Status TimeFunctions::last_day_close(FunctionContext* context, FunctionContext::
 }
 
 // Format a time value according to a format string
-StatusOr<ColumnPtr> TimeFunctions::format_time(FunctionContext* context, const starrocks::Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const starrocks::Columns& columns) {
     if (columns.size() != 2) {
         return Status::InvalidArgument("FORMAT_TIME requires exactly 2 arguments");
     }

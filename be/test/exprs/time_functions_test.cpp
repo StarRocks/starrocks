@@ -3944,7 +3944,7 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
 
         // Execute format_time function
         TimeFunctions::format_prepare(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-        ColumnPtr result = TimeFunctions::format_time(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::time_format(_utils->get_fn_ctx(), columns).value();
         TimeFunctions::format_close(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
 
         // Verify result
@@ -3978,7 +3978,7 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
 
         // Execute format_time function
         TimeFunctions::format_prepare(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-        ColumnPtr result = TimeFunctions::format_time(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::time_format(_utils->get_fn_ctx(), columns).value();
         TimeFunctions::format_close(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
 
         // Verify results
