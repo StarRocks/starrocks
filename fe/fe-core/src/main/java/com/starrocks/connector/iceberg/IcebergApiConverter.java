@@ -42,6 +42,7 @@ import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
+import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ManifestEvaluator;
 import org.apache.iceberg.expressions.Projections;
@@ -419,5 +420,9 @@ public class IcebergApiConverter {
             partitionColumns.add(column);
         }
         return partitionColumns;
+    }
+
+    public static Namespace convertDbNameToNamespace(String dbName) {
+        return Namespace.of(dbName.split("\\."));
     }
 }
