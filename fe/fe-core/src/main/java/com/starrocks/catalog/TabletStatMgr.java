@@ -36,20 +36,39 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+=======
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTablet;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.TabletStatRequest;
 import com.starrocks.proto.TabletStatRequest.TabletInfo;
 import com.starrocks.proto.TabletStatResponse;
 import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -57,6 +76,10 @@ import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -96,6 +119,7 @@ public class TabletStatMgr extends FrontendDaemon {
 
         // after update replica in all backends, update index row num
         long start = System.currentTimeMillis();
+<<<<<<< HEAD
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -130,6 +154,70 @@ public class TabletStatMgr extends FrontendDaemon {
                 }
             } finally {
                 db.writeUnlock();
+=======
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+            Locker locker = new Locker();
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                long totalRowCount = 0L;
+                if (!table.isNativeTableOrMaterializedView()) {
+                    continue;
+                }
+
+                // NOTE: calculate the row first with read lock, then update the stats with write lock
+                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
+                try {
+                    OlapTable olapTable = (OlapTable) table;
+                    for (Partition partition : olapTable.getAllPartitions()) {
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            long version = physicalPartition.getVisibleVersion();
+                            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
+                                    IndexExtState.VISIBLE)) {
+                                long indexRowCount = 0L;
+                                // NOTE: can take a rather long time to iterate lots of tablets
+                                for (Tablet tablet : index.getTablets()) {
+                                    indexRowCount += tablet.getRowCount(version);
+                                } // end for tablets
+                                indexRowCountMap.put(Pair.create(physicalPartition.getId(), index.getId()),
+                                        indexRowCount);
+                                if (!olapTable.isTempPartition(partition.getId())) {
+                                    totalRowCount += indexRowCount;
+                                }
+                            } // end for indices
+                        } // end for physical partitions
+                    } // end for partitions
+                    LOG.debug("finished to set row num for table: {} in database: {}",
+                            table.getName(), db.getFullName());
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                }
+
+                // update
+                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+                try {
+                    OlapTable olapTable = (OlapTable) table;
+                    for (Partition partition : olapTable.getAllPartitions()) {
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex index :
+                                    physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                Long indexRowCount =
+                                        indexRowCountMap.get(Pair.create(physicalPartition.getId(), index.getId()));
+                                if (indexRowCount != null) {
+                                    index.setRowCount(indexRowCount);
+                                }
+                            }
+                        }
+                    }
+                    adjustStatUpdateRows(table.getId(), totalRowCount);
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         LOG.info("finished to update index row num of all databases. cost: {} ms",
@@ -141,6 +229,7 @@ public class TabletStatMgr extends FrontendDaemon {
         if (!RunMode.isSharedNothingMode()) {
             return;
         }
+<<<<<<< HEAD
         ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         long start = System.currentTimeMillis();
@@ -165,6 +254,23 @@ public class TabletStatMgr extends FrontendDaemon {
                 } else {
                     ClientPool.backendPool.invalidateObject(address, client);
                 }
+=======
+        ImmutableMap<Long, Backend> backends =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+
+        long start = System.currentTimeMillis();
+        for (Backend backend : backends.values()) {
+            try {
+                TTabletStatResult result = ThriftRPCRequestExecutor.callNoRetry(
+                        ThriftConnectionPool.backendPool,
+                        new TNetworkAddress(backend.getHost(), backend.getBePort()),
+                        BackendService.Client::get_tablet_stat);
+                LOG.debug("get tablet stat from backend: {}, num: {}", backend.getId(), result.getTablets_statsSize());
+                updateLocalTabletStat(backend.getId(), result);
+
+            } catch (Exception e) {
+                LOG.warn("task exec error. backend[{}]", backend.getId(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         LOG.info("finished to get local tablet stat of all backends. cost: {} ms",
@@ -172,7 +278,11 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private void updateLocalTabletStat(Long beId, TTabletStatResult result) {
+<<<<<<< HEAD
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (Map.Entry<Long, TTabletStat> entry : result.getTablets_stats().entrySet()) {
             if (invertedIndex.getTabletMeta(entry.getKey()) == null) {
                 // the replica is obsolete, ignore it.
@@ -199,14 +309,24 @@ public class TabletStatMgr extends FrontendDaemon {
             return;
         }
 
+<<<<<<< HEAD
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 continue;
             }
 
+<<<<<<< HEAD
             List<Table> tables = db.getTables();
+=======
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (Table table : tables) {
                 if (table.isCloudNativeTableOrMaterializedView()) {
                     updateLakeTableTabletStat(db, (OlapTable) table);
@@ -216,43 +336,74 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private void adjustStatUpdateRows(long tableId, long totalRowCount) {
+<<<<<<< HEAD
         BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+=======
+        BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (meta != null) {
             meta.setUpdateRows(totalRowCount);
         }
     }
 
     @NotNull
+<<<<<<< HEAD
     private Collection<Partition> getPartitions(@NotNull Database db, @NotNull OlapTable table) {
         db.readLock();
         try {
             return table.getPartitions();
         } finally {
             db.readUnlock();
+=======
+    private Collection<PhysicalPartition> getPartitions(@NotNull Database db, @NotNull OlapTable table) {
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            return table.getPhysicalPartitions();
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     @NotNull
     private PartitionSnapshot createPartitionSnapshot(@NotNull Database db,
                                                       @NotNull OlapTable table,
+<<<<<<< HEAD
                                                       @NotNull Partition partition) {
         String dbName = db.getFullName();
         String tableName = table.getName();
         long partitionId = partition.getId();
         db.readLock();
+=======
+                                                      @NotNull PhysicalPartition partition) {
+        String dbName = db.getFullName();
+        String tableName = table.getName();
+        long partitionId = partition.getId();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             long visibleVersion = partition.getVisibleVersion();
             long visibleVersionTime = partition.getVisibleVersionTime();
             List<Tablet> tablets = new ArrayList<>(partition.getBaseIndex().getTablets());
             return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets);
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     @Nullable
     private CollectTabletStatJob createCollectTabletStatJob(@NotNull Database db, @NotNull OlapTable table,
+<<<<<<< HEAD
                                                             @NotNull Partition partition) {
+=======
+                                                            @NotNull PhysicalPartition partition) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         PartitionSnapshot snapshot = createPartitionSnapshot(db, table, partition);
         long visibleVersionTime = snapshot.visibleVersionTime;
         snapshot.tablets.removeIf(t -> ((LakeTablet) t).getDataSizeUpdateTime() >= visibleVersionTime);
@@ -264,8 +415,13 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private void updateLakeTableTabletStat(@NotNull Database db, @NotNull OlapTable table) {
+<<<<<<< HEAD
         Collection<Partition> partitions = getPartitions(db, table);
         for (Partition partition : partitions) {
+=======
+        Collection<PhysicalPartition> partitions = getPartitions(db, table);
+        for (PhysicalPartition partition : partitions) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             CollectTabletStatJob job = createCollectTabletStatJob(db, table, partition);
             if (job == null) {
                 continue;
@@ -329,7 +485,14 @@ public class TabletStatMgr extends FrontendDaemon {
         private void sendTasks() {
             Map<ComputeNode, List<TabletInfo>> beToTabletInfos = new HashMap<>();
             for (Tablet tablet : tablets.values()) {
+<<<<<<< HEAD
                 ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
+=======
+                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                Warehouse warehouse = manager.getBackgroundWarehouse();
+                ComputeNode node = manager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (node == null) {
                     LOG.warn("Stop sending tablet stat task for partition {} because no alive node", debugName());
                     return;
@@ -351,10 +514,20 @@ public class TabletStatMgr extends FrontendDaemon {
                     LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                     Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
                     responseList.add(responseFuture);
+<<<<<<< HEAD
                     LOG.debug("Sent tablet stat collection task to node {} for partition {} of version {}. tablet count={}",
                                 node.getHost(), debugName(), version, entry.getValue().size());
                 } catch (Throwable e) {
                     LOG.warn("Fail to send tablet stat task to host {} for partition {}: {}", node.getHost(), debugName(),
+=======
+                    LOG.debug(
+                            "Sent tablet stat collection task to node {} for partition {} of version {}. tablet " +
+                                    "count={}",
+                            node.getHost(), debugName(), version, entry.getValue().size());
+                } catch (Throwable e) {
+                    LOG.warn("Fail to send tablet stat task to host {} for partition {}: {}", node.getHost(),
+                            debugName(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             e.getMessage());
                 }
             }

@@ -16,7 +16,10 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.RangePartitionInfo;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -52,10 +55,16 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
 
     private final ColumnRefSet partitionColumnSet;
 
+<<<<<<< HEAD
     public PartitionColPredicateExtractor(RangePartitionInfo rangePartitionInfo,
                                           Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList();
         Column partitionColumn = rangePartitionInfo.getPartitionColumns().get(0);
+=======
+    public PartitionColPredicateExtractor(List<Column> partitionColumns, Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
+        List<ColumnRefOperator> columnRefOperators = Lists.newArrayList();
+        Column partitionColumn = partitionColumns.get(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (ColumnRefOperator columnRefOperator : columnMetaToColRefMap.values()) {
             if (partitionColumn.getName().equals(columnRefOperator.getName())) {
                 columnRefOperators.add(columnRefOperator);
@@ -256,5 +265,8 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
         }
         return false;
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

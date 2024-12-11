@@ -15,17 +15,31 @@
 package com.starrocks.common.util;
 
 import com.starrocks.common.NoAliveBackendException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 
 public class AutoInferUtil {
+<<<<<<< HEAD
     public static int calDefaultReplicationNum() throws UserException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             return 1;
         }
 
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
+=======
+    public static int calDefaultReplicationNum() throws StarRocksException {
+        if (RunMode.isSharedDataMode()) {
+            return 1;
+        }
+
+        int defaultReplicationNum =
+                Math.min(3, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (defaultReplicationNum == 0) {
             throw new NoAliveBackendException("No alive backend");
         }

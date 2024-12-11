@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # day
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Extracts the day part of a date or datetime expression and returns a value that ranges from 1 to 31.
 

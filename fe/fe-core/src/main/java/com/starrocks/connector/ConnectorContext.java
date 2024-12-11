@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.connector;
 
 import java.util.Map;

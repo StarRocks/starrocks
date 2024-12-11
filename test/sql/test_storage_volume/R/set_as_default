@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 -- name: testSetAsDefault
+=======
+-- name: testSetAsDefault @cloud
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_default_1 type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
 -- result:
 -- !result
@@ -9,6 +13,7 @@ storage_volume_default_1	S3	false	s3://xxx	{"aws.s3.region":"us-west-2","aws.s3.
 CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_default_2 type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
 -- result:
 -- !result
+<<<<<<< HEAD
 DESC STORAGE VOLUME 'storage_volume_default_2';
 -- result:
 storage_volume_default_2	S3	false	s3://xxx	{"aws.s3.region":"us-west-2","aws.s3.use_aws_sdk_default_behavior":"true","aws.s3.endpoint":"endpoint"}	false	comment
@@ -16,6 +21,11 @@ storage_volume_default_2	S3	false	s3://xxx	{"aws.s3.region":"us-west-2","aws.s3.
 SET storage_volume_default_1 AS DEFAULT STORAGE VOLUME;
 -- result:
 E: (1064, "Unexpected exception: Storage volume 'storage_volume_default_1' is disabled")
+=======
+SET storage_volume_default_1 AS DEFAULT STORAGE VOLUME;
+-- result:
+E: (1064, "Storage volume 'storage_volume_default_1' is disabled")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 ALTER STORAGE VOLUME storage_volume_default_1 SET ("aws.s3.region"="us-west-1", "aws.s3.endpoint"="endpoint1", "enabled"="true");
 -- result:
@@ -23,6 +33,7 @@ ALTER STORAGE VOLUME storage_volume_default_1 SET ("aws.s3.region"="us-west-1", 
 SET storage_volume_default_1 AS DEFAULT STORAGE VOLUME;
 -- result:
 -- !result
+<<<<<<< HEAD
 DROP STORAGE VOLUME IF EXISTS storage_volume_default_1;
 -- result:
 E: (1064, 'Unexpected exception: default storage volume can not be removed')
@@ -31,21 +42,45 @@ SHOW STORAGE VOLUMES like 'storage_volume_default%';
 -- result:
 storage_volume_default_2
 storage_volume_default_1
+=======
+DESC STORAGE VOLUME 'storage_volume_default_1';
+-- result:
+storage_volume_default_1	S3	true	s3://xxx	{"aws.s3.region":"us-west-1","aws.s3.use_aws_sdk_default_behavior":"true","aws.s3.endpoint":"endpoint1"}	true	comment
+-- !result
+DROP STORAGE VOLUME IF EXISTS storage_volume_default_1;
+-- result:
+E: (1064, 'default storage volume can not be removed')
+-- !result
+SHOW STORAGE VOLUMES like 'storage_volume_default%';
+-- result:
+storage_volume_default_1
+storage_volume_default_2
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 SHOW STORAGE VOLUMES like 'storage_volume_default_1';
 -- result:
 storage_volume_default_1
 -- !result
+<<<<<<< HEAD
 SET storage_volume_default_2 AS DEFAULT STORAGE VOLUME;
 -- result:
 E: (1064, "Unexpected exception: Storage volume 'storage_volume_default_2' is disabled")
 -- !result
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ALTER STORAGE VOLUME storage_volume_default_2 SET ("aws.s3.region"="us-west-1", "aws.s3.endpoint"="endpoint1", "enabled"="true");
 -- result:
 -- !result
 SET storage_volume_default_2 AS DEFAULT STORAGE VOLUME;
 -- result:
 -- !result
+<<<<<<< HEAD
+=======
+DESC STORAGE VOLUME 'storage_volume_default_2';
+-- result:
+storage_volume_default_2	S3	true	s3://xxx	{"aws.s3.region":"us-west-1","aws.s3.use_aws_sdk_default_behavior":"true","aws.s3.endpoint":"endpoint1"}	true	comment
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 DROP STORAGE VOLUME IF EXISTS storage_volume_default_1;
 -- result:
 -- !result
@@ -55,4 +90,10 @@ SHOW STORAGE VOLUMES like 'storage_volume_default_1';
 DESC STORAGE VOLUME 'storage_volume_default_1';
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Unknown storage volume: storage_volume_default_1.')
+<<<<<<< HEAD
+=======
+-- !result
+SET builtin_storage_volume AS DEFAULT STORAGE VOLUME;
+-- result:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result

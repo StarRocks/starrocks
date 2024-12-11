@@ -59,6 +59,10 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     enum JoinStage {
@@ -94,7 +98,11 @@ private:
     Status _permute_right_join(size_t chunk_size);
     void _permute_left_join(const ChunkPtr& chunk, size_t probe_row_index, size_t probe_rows);
     bool _is_curr_probe_chunk_finished() const;
+<<<<<<< HEAD
     void iterate_enumerate_chunk(const ChunkPtr& chunk, std::function<void(bool, size_t, size_t)> call);
+=======
+    void iterate_enumerate_chunk(const ChunkPtr& chunk, const std::function<void(bool, size_t, size_t)>& call);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Join type check
     bool _is_left_join() const;
@@ -123,7 +131,11 @@ private:
     size_t _prev_chunk_start = 0;
     size_t _prev_chunk_size = 0;
     size_t _build_row_current = 0;
+<<<<<<< HEAD
     mutable std::vector<uint8_t> _self_build_match_flag;
+=======
+    mutable Filter _self_build_match_flag;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Probe states
     ChunkPtr _probe_chunk = nullptr;
@@ -167,7 +179,11 @@ private:
     const RowDescriptor& _left_row_desc;
     const RowDescriptor& _right_row_desc;
 
+<<<<<<< HEAD
     Buffer<SlotDescriptor*> _col_types;
+=======
+    std::vector<SlotDescriptor*> _col_types;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 

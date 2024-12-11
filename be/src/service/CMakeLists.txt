@@ -32,7 +32,11 @@ add_library(Service
 )
 
 # only build starrocks_be when TEST is off
+<<<<<<< HEAD
 if (NOT ${MAKE_TEST} STREQUAL "ON")
+=======
+if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     add_executable(starrocks_be
         starrocks_main.cpp
         )

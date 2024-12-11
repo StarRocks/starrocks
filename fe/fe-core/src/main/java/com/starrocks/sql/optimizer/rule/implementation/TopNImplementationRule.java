@@ -48,7 +48,13 @@ public class TopNImplementationRule extends ImplementationRule {
                         logicalTopN.isSplit(),
                         false,
                         logicalTopN.getPredicate(),
+<<<<<<< HEAD
                         logicalTopN.getProjection());
+=======
+                        logicalTopN.getProjection(),
+                        logicalTopN.getPartitionPreAggCall());
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Lists.newArrayList(OptExpression.create(physicalTopN, input.getInputs()));
     }
 }

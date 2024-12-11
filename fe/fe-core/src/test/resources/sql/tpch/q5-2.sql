@@ -40,7 +40,11 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                     SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
                                     EXCHANGE SHUFFLE[10]
                                         INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+<<<<<<< HEAD
                                             SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 14: O_ORDERDATE] predicate[14: O_ORDERDATE >= 1994-01-01 AND 14: O_ORDERDATE <= 1994-12-31])
+=======
+                                            SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 14: O_ORDERDATE] predicate[14: O_ORDERDATE >= 1994-01-01 AND 14: O_ORDERDATE < 1995-01-01])
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                             EXCHANGE BROADCAST
                                                 SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
                                 EXCHANGE BROADCAST

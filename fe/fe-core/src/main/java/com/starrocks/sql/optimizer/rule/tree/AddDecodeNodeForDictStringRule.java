@@ -26,7 +26,10 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -60,6 +63,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
@@ -198,8 +205,13 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return !couldApplyCtx.canDictOptBeApplied && couldApplyCtx.stopOptPropagateUpward;
         }
 
+<<<<<<< HEAD
         public static boolean isSimpleStrictPredicate(ScalarOperator operator) {
             return operator.accept(new IsSimpleStrictPredicateVisitor(), null);
+=======
+        public static boolean isSimpleStrictPredicate(ScalarOperator operator, boolean enablePushdownOrPredicate) {
+            return operator.accept(new IsSimpleStrictPredicateVisitor(enablePushdownOrPredicate), null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         private void visitProjectionBefore(OptExpression optExpression, DecodeContext context) {
@@ -355,6 +367,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (context.hasEncoded || needRewrite) {
                 if (needRewrite) {
                     PhysicalTopNOperator newTopN = rewriteTopNOperator(topN, context);
+<<<<<<< HEAD
                     OptExpression.Builder builder = OptExpression.buildWithOpAndInputs(newTopN,
                             Lists.newArrayList(newChildExpr));
                     builder.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
@@ -363,6 +376,15 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             .setCost(optExpression.getCost())
                             .setRequiredProperties(optExpression.getRequiredProperties());
 
+=======
+                    OptExpression.Builder builder = OptExpression.builder()
+                            .setOp(newTopN)
+                            .setInputs(Lists.newArrayList(newChildExpr))
+                            .setStatistics(optExpression.getStatistics())
+                            .setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
+                                    context.stringColumnIdToDictColumnIds))
+                            .setCost(optExpression.getCost());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     return visitProjectionAfter(builder.build(), context);
                 } else {
                     insertDecodeExpr(optExpression, Collections.singletonList(newChildExpr), 0, context);
@@ -483,8 +505,15 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             new PhysicalOlapScanOperator(scanOperator.getTable(), newColRefToColumnMetaMap,
                                     scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
                                     scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
+<<<<<<< HEAD
                                     scanOperator.getSelectedTabletId(), newPrunedPredicates,
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex());
+=======
+                                    scanOperator.getSelectedTabletId(), scanOperator.getHintsReplicaId(),
+                                    newPrunedPredicates,
+                                    scanOperator.getProjection(), scanOperator.isUsePkIndex(),
+                                    scanOperator.getVectorSearchOptions());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     newOlapScan.setScanOptimzeOption(scanOperator.getScanOptimzeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
@@ -492,6 +521,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     // There need to set right output columns
                     newOlapScan.setOutputColumns(newOutputColumns);
                     newOlapScan.setNeedSortedByKeyPerTablet(scanOperator.needSortedByKeyPerTablet());
+<<<<<<< HEAD
 
                     OptExpression.Builder builder = OptExpression.buildWithOpAndInputs(newOlapScan, Lists.newArrayList());
                     builder.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
@@ -500,6 +530,18 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             .setCost(optExpression.getCost())
                             .setRequiredProperties(optExpression.getRequiredProperties());
 
+=======
+                    newOlapScan.setNeedOutputChunkByBucket(scanOperator.needOutputChunkByBucket());
+                    newOlapScan.setWithoutColocateRequirement(scanOperator.isWithoutColocateRequirement());
+
+                    OptExpression.Builder builder = OptExpression.builder()
+                            .setOp(newOlapScan)
+                            .setInputs(Lists.newArrayList())
+                            .setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
+                            context.stringColumnIdToDictColumnIds))
+                            .setStatistics(optExpression.getStatistics())
+                            .setCost(optExpression.getCost());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     return visitProjectionAfter(builder.build(), context);
                 }
             }
@@ -576,7 +618,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
             return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(), operator.getOffset(), partitionByColumns,
                     operator.getPartitionLimit(), operator.getSortPhase(), operator.getTopNType(), operator.isSplit(),
+<<<<<<< HEAD
                     operator.isEnforced(), predicate, operator.getProjection());
+=======
+                    operator.isEnforced(), predicate, operator.getProjection(), ImmutableMap.of());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         private void rewriteOneScalarOperatorForProjection(ColumnRefOperator keyColumn, ScalarOperator valueOperator,
@@ -775,6 +821,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             aggOperator.getPredicate(), aggOperator.getProjection());
             newHashAggregator.setMergedLocalAgg(aggOperator.isMergedLocalAgg());
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
+<<<<<<< HEAD
+=======
+            newHashAggregator.setUsePerBucketOptmize(aggOperator.isUsePerBucketOptmize());
+            newHashAggregator.setWithoutColocateRequirement(aggOperator.isWithoutColocateRequirement());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return newHashAggregator;
         }
 
@@ -862,6 +913,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (context.hasEncoded || needRewrite) {
                 if (needRewrite && unsupportedAggs.isEmpty()) {
                     PhysicalHashAggregateOperator newAggOper = rewriteAggOperator(aggOperator, context);
+<<<<<<< HEAD
                     OptExpression.Builder builder = OptExpression.buildWithOpAndInputs(newAggOper,
                             Lists.newArrayList(newChildExpr));
                     builder.setLogicalProperty(rewriteLogicProperty(aggExpr.getLogicalProperty(),
@@ -869,6 +921,15 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             .setStatistics(aggExpr.getStatistics())
                             .setCost(aggExpr.getCost())
                             .setRequiredProperties(aggExpr.getRequiredProperties());
+=======
+                    OptExpression.Builder builder = OptExpression.builder()
+                            .setOp(newAggOper)
+                            .setInputs(Lists.newArrayList(newChildExpr))
+                            .setStatistics(aggExpr.getStatistics())
+                            .setCost(aggExpr.getCost())
+                            .setLogicalProperty(rewriteLogicProperty(aggExpr.getLogicalProperty(),
+                                    context.stringColumnIdToDictColumnIds));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     return visitProjectionAfter(builder.build(), context);
                 } else {
                     insertDecodeExpr(aggExpr, Collections.singletonList(newChildExpr), 0, context);
@@ -897,6 +958,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 if (exchangeOperator.couldApplyStringDict(context.getEncodedStringCols())) {
                     PhysicalDistributionOperator newExchangeOper = rewriteDistribution(exchangeOperator, context);
 
+<<<<<<< HEAD
                     OptExpression.Builder builder = OptExpression.buildWithOpAndInputs(newExchangeOper,
                             Lists.newArrayList(newChildExpr));
                     builder.setLogicalProperty(rewriteLogicProperty(exchangeExpr.getLogicalProperty(),
@@ -905,6 +967,15 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             .setCost(exchangeExpr.getCost())
                             .setRequiredProperties(exchangeExpr.getRequiredProperties());
 
+=======
+                    OptExpression.Builder builder = OptExpression.builder()
+                            .setOp(newExchangeOper)
+                            .setInputs(Lists.newArrayList(newChildExpr))
+                            .setStatistics(exchangeExpr.getStatistics())
+                            .setCost(exchangeExpr.getCost())
+                            .setLogicalProperty(rewriteLogicProperty(exchangeExpr.getLogicalProperty(),
+                                    context.stringColumnIdToDictColumnIds));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     return visitProjectionAfter(builder.build(), context);
                 } else {
                     insertDecodeExpr(exchangeExpr, Collections.singletonList(newChildExpr), 0, context);
@@ -918,7 +989,12 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+<<<<<<< HEAD
         if (!ConnectContext.get().getSessionVariable().isEnableLowCardinalityOptimize()) {
+=======
+        if (!ConnectContext.get().getSessionVariable().isEnableLowCardinalityOptimize()
+                || taskContext.getOptimizerContext().getSessionVariable().isUseLowCardinalityOptimizeV2()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return root;
         }
 
@@ -926,13 +1002,22 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         for (PhysicalOlapScanOperator scanOperator : scanOperators) {
             OlapTable table = (OlapTable) scanOperator.getTable();
+<<<<<<< HEAD
             long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo)
                     .orElse(0L);
+=======
+            long version = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
+                    .max(Long::compareTo).orElse(0L);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
                 continue;
             }
+<<<<<<< HEAD
             if (table.hasForbitGlobalDict()) {
+=======
+            if (table.hasForbiddenGlobalDict()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 continue;
             }
             // skip low-cardinality optimize for temp partition
@@ -947,7 +1032,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 }
 
                 ColumnStatistic columnStatistic =
+<<<<<<< HEAD
                         GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, column.getName());
+=======
+                        GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistic(table, column.getName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 // Condition 2: the varchar column is low cardinality string column
                 if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
                         columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
@@ -956,9 +1045,17 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 }
 
                 // Condition 3: the varchar column has collected global dict
+<<<<<<< HEAD
                 if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), version)) {
                     Optional<ColumnDict> dict =
                             IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
+=======
+                Column columnObj = table.getColumn(column.getName());
+                if (columnObj != null
+                        && IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
+                    Optional<ColumnDict> dict =
+                            IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     // cache reaches capacity limit, randomly eliminate some keys
                     // then we will get an empty dictionary.
                     if (!dict.isPresent()) {
@@ -1006,6 +1103,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         }
         PhysicalDecodeOperator decodeOperator = new PhysicalDecodeOperator(ImmutableMap.copyOf(dictToStrings),
                 Maps.newHashMap(context.stringFunctions));
+<<<<<<< HEAD
         OptExpression.Builder builder = OptExpression.buildWithOpAndInputs(decodeOperator, Lists.newArrayList(childExpr));
 
         LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
@@ -1014,6 +1112,16 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 .setCost(childExpr.get(0).getCost())
                 .setRequiredProperties(childExpr.get(0).getRequiredProperties());
 
+=======
+
+        LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
+        OptExpression.Builder builder = OptExpression.builder()
+                .setOp(decodeOperator)
+                .setInputs(Lists.newArrayList(childExpr))
+                .setStatistics(childExpr.get(0).getStatistics())
+                .setCost(childExpr.get(0).getCost())
+                .setLogicalProperty(DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictIdToStringsId()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         context.clear();
         return builder.build();
     }
@@ -1200,7 +1308,14 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
     // The predicate no function all, this implementation is consistent with BE olap scan node
     private static class IsSimpleStrictPredicateVisitor extends ScalarOperatorVisitor<Boolean, Void> {
 
+<<<<<<< HEAD
         public IsSimpleStrictPredicateVisitor() {
+=======
+        private final boolean enablePushDownOrPredicate;
+
+        public IsSimpleStrictPredicateVisitor(boolean enablePushDownOrPredicate) {
+            this.enablePushDownOrPredicate = enablePushDownOrPredicate;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         @Override
@@ -1209,6 +1324,22 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+            if (!enablePushDownOrPredicate) {
+                return false;
+            }
+
+            if (!predicate.isAnd() && !predicate.isOr()) {
+                return false;
+            }
+
+            return predicate.getChildren().stream().allMatch(child -> child.accept(this, context));
+        }
+
+        @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
             if (predicate.getBinaryType() == EQ_FOR_NULL) {
                 return false;
@@ -1245,6 +1376,16 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return predicate.getChild(0).isColumnRef();
         }
 
+<<<<<<< HEAD
+=======
+        @Override
+        public Boolean visitMatchExprOperator(MatchExprOperator predicate, Void context) {
+            // match expression is always satisfy the following format:
+            // SlotRef MATCH StringLiteral which is always SimpleStrictPredicate
+            return true;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // These type predicates couldn't be pushed down to storage engine,
         // which are consistent with BE implementations.
         private boolean checkTypeCanPushDown(ScalarOperator scalarOperator) {

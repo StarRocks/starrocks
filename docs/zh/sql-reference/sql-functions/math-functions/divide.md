@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # divide
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 除法函数，返回 `x` 除以 `y` 的结果，如果 `y` 为 0，则返回null。
 

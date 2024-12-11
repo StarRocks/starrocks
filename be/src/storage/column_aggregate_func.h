@@ -15,9 +15,18 @@
 #pragma once
 
 #include "column/field.h"
+<<<<<<< HEAD
 #include "storage/column_aggregator.h"
 
 namespace starrocks {
+=======
+#include "runtime/memory/mem_hook_allocator.h"
+#include "storage/column_aggregator.h"
+
+namespace starrocks {
+
+static MemHookAllocator kDefaultColumnAggregatorAllocator = MemHookAllocator{};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class ColumnAggregatorFactory {
 public:
     static ColumnAggregatorPtr create_key_column_aggregator(const FieldPtr& field);

@@ -36,9 +36,15 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OutFileClause;
 import com.starrocks.sql.ast.QueryStatement;
+=======
+import com.starrocks.analysis.OutFileClause;
+import com.starrocks.http.HttpConnectContext;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
@@ -59,6 +65,10 @@ public class ResultSink extends DataSink {
     private TResultSinkType sinkType;
     private String brokerName;
     private TResultFileSinkOptions fileSinkOptions;
+<<<<<<< HEAD
+=======
+    private boolean isBinaryRow;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public ResultSink(PlanNodeId exchNodeId, TResultSinkType sinkType) {
         this.exchNodeId = exchNodeId;
@@ -80,6 +90,13 @@ public class ResultSink extends DataSink {
         if (fileSinkOptions != null) {
             tResultSink.setFile_options(fileSinkOptions);
         }
+<<<<<<< HEAD
+=======
+        if (ConnectContext.get() instanceof HttpConnectContext) {
+            tResultSink.setFormat(((HttpConnectContext) ConnectContext.get()).getResultSinkFormatType());
+        }
+        tResultSink.setIs_binary_row(isBinaryRow);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         result.setResult_sink(tResultSink);
         return result;
     }
@@ -130,13 +147,23 @@ public class ResultSink extends DataSink {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return true;
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean canUseRuntimeAdaptiveDop() {
         return sinkType == TResultSinkType.MYSQL_PROTOCAL || sinkType == TResultSinkType.STATISTIC ||
                 sinkType == TResultSinkType.VARIABLE;
     }
+<<<<<<< HEAD
+=======
+
+    public void setBinaryRow(boolean isBinaryRow) {
+        this.isBinaryRow = isBinaryRow;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

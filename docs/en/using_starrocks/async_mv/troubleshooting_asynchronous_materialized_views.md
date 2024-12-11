@@ -220,12 +220,21 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 
 Here we list some common problems you might encounter while working with an asynchronous materialized view, and the corresponding solutions.
 
+<<<<<<< HEAD
 ### Failed to create an asynchronous materialized view
 
 If you failed to create an asynchronous materialized view, that is, the CREATE MATERIALIZED VIEW statement cannot be executed, you can look into the following aspects:
 
 - **Check whether you have mistakenly used the  SQL  statement for synchronous materialized views.**
   
+=======
+### Materialized view building failure
+
+If you failed to create an asynchronous materialized view, that is, the CREATE MATERIALIZED VIEW statement cannot be executed, you can look into the following aspects:
+
+- **Check whether you have mistakenly used the SQL statement for synchronous materialized views.**
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   StarRocks provides two different materialized views: the synchronous materialized view and the asynchronous materialized view.
 
   The basic SQL statement used to create a synchronous materialized view is as follows:
@@ -246,6 +255,7 @@ If you failed to create an asynchronous materialized view, that is, the CREATE M
 
   In addition to the SQL statement, the main difference between the two materialized views is that asynchronous materialized views support all query syntax that StarRocks provides, but synchronous materialized views only support limited choices of aggregate functions.
 
+<<<<<<< HEAD
 - **Check whether you have specified a correct  `Partition By`  column.**
 
   When creating an asynchronous materialized view, you can specify a partitioning strategy, which allows you to refresh the materialized view on a finer granularity level.
@@ -257,12 +267,29 @@ If you failed to create an asynchronous materialized view, that is, the CREATE M
   When creating an asynchronous materialized view, you need the SELECT privileges of all objects (tables, views, materialized views) that are queried. When UDFs are used in the query, you also need the USAGE privileges of the functions.
 
 ### Materialized view fails to refresh
+=======
+- **Check whether you have specified a correct partition column.**
+
+  When creating an asynchronous materialized view, you can specify a partitioning strategy, which allows you to refresh the materialized view on a finer granularity level.
+
+  Currently, StarRocks only supports range partitioning, and only supports referencing a single column from the SELECT expression in the query statement that is used to build the materialized view. You can use the date_trunc() function to truncate the column to change the granularity level of the partitioning strategy. Please note that any other expressions are not supported.
+
+- **Check whether you have the necessary privileges to create the materialized view.**
+
+  When creating an asynchronous materialized view, you need the SELECT privileges of all objects (tables, views, materialized views) that are queried. When UDFs are used in the query, you also need the USAGE privileges of the functions.
+
+### Materialized view refresh failure
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 If the materialized view fails to refresh, that is, the state of the refresh task is not SUCCESS, you can look into the following aspects:
 
 - **Check whether you have adopted an inappropriate refresh strategy.**
 
+<<<<<<< HEAD
   By default, the materialized view refreshes immediately after it is created. However, in v2.5 and early versions, materialized view that adopts the MANUAL refresh strategy does not refresh after being created. You must refresh it manually using REFRESH MATERIALIZED VIEW.
+=======
+  By default, the materialized view refreshes immediately after it is created. However, in v2.5 and early versions, materialized views that adopt the MANUAL refresh strategy do not refresh after being created. You must refresh it manually using REFRESH MATERIALIZED VIEW.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 - **Check whether the refresh task exceeds the memory limit.**
 
@@ -271,6 +298,7 @@ If the materialized view fails to refresh, that is, the state of the refresh tas
   - Specify a partitioning strategy for the materialized view to refresh one partition each time.
   - Enable the Spill to Disk feature for the refresh task. From v3.1 onwards, StarRocks supports spilling the intermediate results to disks when refreshing a materialized view. Execute the following statement to enable Spill to Disk:
 
+<<<<<<< HEAD
     ```SQL
     SET enable_spill = true;
     ```
@@ -297,6 +325,43 @@ AS <query>;
 ALTER MATERIALIZED VIEW mv2 
     SET ('session.enable_spill' = 'true');
 ```
+=======
+  ```SQL
+  -- Define the properties when creating the materialized view.
+  CREATE MATERIALIZED VIEW mv1 
+  REFRESH ASYNC
+  PROPERTIES ( 'session.enable_spill'='true' )
+  AS <query>;
+
+  -- Add the properties to an existing materialized view.
+  ALTER MATERIALIZED VIEW mv2 SET ('session.enable_spill' = 'true');
+  ```
+
+### Materialized view refresh timeout
+
+Large materialized views may fail to refresh because the refresh task exceeds the timeout period. You can consider the following solutions to solve this problem:
+
+- **Specify a partitioning strategy for the materialized view to achieve fine-grained refresh**
+
+  As described in [Create partitioned materialized views](use_cases/create_partitioned_materialized_view.md), by partitioning the materialized view you can achieve incremental building and refresh, thus avoiding the issue of excessive resource consumption during the initial refresh.
+
+- **Set a longer timeout period**
+
+  The default timeout for materialized view refresh tasks is 5 minutes in versions earlier than v3.2 and 1 hour in v3.2 and later. If you encounter timeout exceptions, you can adjust the timeout period by using the following statement:
+
+  ```sql
+  ALTER MATERIALIZED VIEW mv2 SET ('session.query_timeout' = '4000');
+  ```
+
+- **Analyze performance bottlenecks of the materialized view refresh**
+
+  Refreshing materialized views with complex computation is time-consuming. You can analyze its performance bottlenecks by analyzing the query profile of the refresh task:
+
+  - Obtain the `query_id` corresponding to the refresh task by querying `information_schema.task_runs`.
+  - Analyze the query profile of the refresh task using the following statements:
+    - [GET_QUERY_PROFILE](../../sql-reference/sql-functions/utility-functions/get_query_profile.md): Retrive the original query profile based on `query_id`.
+    - [ANALYZE PROFILE](../../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md): Analyze the query profile on a per-fragment basis, and display it in a tree structure.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ### Materialized view state is not active
 
@@ -312,7 +377,11 @@ If setting the materialized view state to active does not take effect, you need 
 
 If you find that the refresh tasks are using excessive system resources, you can look into the following aspects:
 
+<<<<<<< HEAD
 - **Check whether you have created an oversized  materialized view****.**
+=======
+- **Check whether you have created a materialized view too large.**
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
   If you have joined too many tables that cause a significant amount of calculation, the refresh task will occupy many resources. To solve this problem, you need to assess the size of the materialized view and re-plan it.
 
@@ -320,7 +389,11 @@ If you find that the refresh tasks are using excessive system resources, you can
 
   If you adopt the fixed-interval refresh strategy, you can set a lower refresh frequency to solve the problem. If the refresh tasks are triggered by data changes in the base tables, loading data too frequently can also cause this problem. To solve this problem, you need to define a proper refresh strategy for your materialized view.
 
+<<<<<<< HEAD
 - **Check whether the  materialized view  is partitioned.**
+=======
+- **Check whether the materialized view is partitioned.**
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
   An unpartitioned materialized view can be costly to refresh because StarRocks refreshes the whole materialized view each time. To solve this problem, you need to specify a partitioning strategy for the materialized view to refresh one partition each time.
 
@@ -332,6 +405,7 @@ To stop a refresh task that occupies too many resources, you can:
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
+<<<<<<< HEAD
 - Terminate the running refresh task by using SHOW PROCESSLIST and KILL:
 
   ```SQL
@@ -346,6 +420,39 @@ To stop a refresh task that occupies too many resources, you can:
 If your materialized view fails to rewrite relevant queries, you can look into the following aspects:
 
 - **Check whether the  materialized view  and the  query  match.**
+=======
+- Terminate the running refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../../sql-reference/sql-statements/materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md):
+
+  ```SQL
+  CANCEL REFRESH MATERIALIZED VIEW mv1;
+  ```
+
+### Materialized view query rewrite failure
+
+If your materialized view fails to rewrite relevant queries, you can look into the following aspects:
+
+- **Diagnose rewrite failure using TRACE**
+
+  StarRocks provides the TRACE statement for you to diagnose materialized view rewrite failure:
+  
+    - `TRACE LOGS MV <query>`: Available in v3.2 and later, this command analyzes the detailed rewrite process and the reasons of the failure.
+    - `TRACE REASON MV <query>`: Available in v3.2.8 and later, this command provides concise reasons for rewrite failure.
+    
+    
+  ```SQL
+  MySQL > TRACE REASON MV SELECT sum(c1) FROM `glue_ice`.`iceberg_test`.`ice_test3`;
+  +----------------------------------------------------------------------------------------------------------------------+
+  | Explain String                                                                                                       |
+  +----------------------------------------------------------------------------------------------------------------------+
+  |     MV rewrite fail for mv1: Rewrite aggregate rollup sum(1: c1) failed: only column-ref is supported after rewrite  |
+  |     MV rewrite fail for mv1: Rewrite aggregate function failed, cannot get rollup function: sum(1: c1)               |
+  |     MV rewrite fail for mv1: Rewrite rollup aggregate failed: cannot rewrite aggregate functions                     |
+  +----------------------------------------------------------------------------------------------------------------------+
+  ```
+
+
+- **Check whether the materialized view and the query match.**
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
   - StarRocks matches the materialized view and the query with a structure-based matching technique rather than text-based matching. Therefore, it's not guaranteed that a query can be rewritten just because it appears similar to that of a materialized view.
   - Materialized views can only rewrite SPJG (Select/Projection/Join/Aggregation) type of queries. Queries involving window functions, nested aggregation, or join plus aggregation are not supported.
@@ -353,7 +460,11 @@ If your materialized view fails to rewrite relevant queries, you can look into t
 
   For more information on the limitations of the materialized view query rewrite, see [Query rewrite with materialized views - Limitations](use_cases/query_rewrite_with_materialized_views.md#limitations).
 
+<<<<<<< HEAD
 - **Check whether the  materialized view  state is active.**
+=======
+- **Check whether the materialized view state is active.**
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
   StarRocks checks the status of the materialized view before rewriting queries. Queries can be rewritten only when the materialized view state is active. To solve this problem, you can manually set the materialized view state to active by executing the following statement:
 
@@ -361,14 +472,22 @@ If your materialized view fails to rewrite relevant queries, you can look into t
   ALTER MATERIALIZED VIEW mv1 ACTIVE;
   ```
 
+<<<<<<< HEAD
 - **Check whether the  materialized view  meets the data  consistency  requirements.**
+=======
+- **Check whether the materialized view meets the data consistency requirements.**
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
   StarRocks checks the consistency of data in the materialized view and in the base table data. By default, queries can be rewritten only when the data in the materialized view is up-to-date. To solve this problem, you can:
 
   - Add `PROPERTIES('query_rewrite_consistency'='LOOSE')` to the materialized view to disable consistency checks.
   - Add `PROPERTIES('mv_rewrite_staleness_second'='5')` to tolerate a certain degree of data inconsistency. Queries can be rewritten if the last refresh is before this time interval, regardless of whether the data in the base tables changes.
 
+<<<<<<< HEAD
 - **Check whether the  query  statement of the  materialized view  lacks output columns.**
+=======
+- **Check whether the query statement of the materialized view lacks output columns.**
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
   To rewrite range and point queries, you must specify the columns used as the filtering predicates in the SELECT expression of the materialized view's query statement. You need to check the SELECT statement of the materialized view to ensure it includes columns referenced in the WHERE and ORDER BY clauses of the query.
 

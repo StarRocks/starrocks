@@ -18,10 +18,17 @@ package com.starrocks.connector.hive.events;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.HiveTable;
+<<<<<<< HEAD
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveCommonStats;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveTableName;
+=======
+import com.starrocks.connector.DatabaseTableName;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveCommonStats;
+import com.starrocks.connector.hive.HiveMetastoreApiConverter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.hive.Partition;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -50,7 +57,11 @@ public class AlterTableEvent extends MetastoreTableEvent {
     // true if this alter event was due to a schema change operation
     protected boolean isSchemaChange = false;
 
+<<<<<<< HEAD
     private AlterTableEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
+=======
+    private AlterTableEvent(NotificationEvent event, HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(event, cacheProcessor, catalogName);
         Preconditions.checkArgument(MetastoreEventType.ALTER_TABLE.equals(getEventType()));
         JSONAlterTableMessage alterTableMessage =
@@ -74,7 +85,11 @@ public class AlterTableEvent extends MetastoreTableEvent {
     }
 
     public static List<MetastoreEvent> getEvents(NotificationEvent event,
+<<<<<<< HEAD
                                                  CacheUpdateProcessor cacheProcessor, String catalogName) {
+=======
+                                                 HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Lists.newArrayList(new AlterTableEvent(event, cacheProcessor, catalogName));
     }
 
@@ -112,7 +127,11 @@ public class AlterTableEvent extends MetastoreTableEvent {
         if (isResourceMappingCatalog(catalogName)) {
             return true;
         } else {
+<<<<<<< HEAD
             return cache.isTablePresent(HiveTableName.of(dbName, tblName));
+=======
+            return cache.isTablePresent(DatabaseTableName.of(dbName, tblName));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 

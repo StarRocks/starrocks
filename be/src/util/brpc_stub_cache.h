@@ -41,9 +41,15 @@
 #include "common/config.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "service/brpc.h"
+=======
+#include "gen_cpp/internal_service.pb.h"
+#include "service/brpc.h"
+#include "util/internal_service_recoverable_stub.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/network_util.h"
 #include "util/spinlock.h"
 #include "util/starrocks_metrics.h"
@@ -66,7 +72,11 @@ public:
         }
     }
 
+<<<<<<< HEAD
     doris::PBackendService_Stub* get_stub(const butil::EndPoint& endpoint) {
+=======
+    std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::lock_guard<SpinLock> l(_lock);
         auto stub_pool = _stub_map.seek(endpoint);
         if (stub_pool == nullptr) {
@@ -77,6 +87,7 @@ public:
         return (*stub_pool)->get_or_create(endpoint);
     }
 
+<<<<<<< HEAD
     doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }
 
     doris::PBackendService_Stub* get_stub(const std::string& host, int port) {
@@ -91,6 +102,26 @@ public:
             }
         }
         if (str2endpoint(realhost.c_str(), port, &endpoint)) {
+=======
+    std::shared_ptr<PInternalService_RecoverableStub> get_stub(const TNetworkAddress& taddr) {
+        return get_stub(taddr.hostname, taddr.port);
+    }
+
+    std::shared_ptr<PInternalService_RecoverableStub> get_stub(const std::string& host, int port) {
+        butil::EndPoint endpoint;
+        std::string realhost;
+        std::string brpc_url;
+        realhost = host;
+        if (!is_valid_ip(host)) {
+            Status status = hostname_to_ip(host, realhost);
+            if (!status.ok()) {
+                LOG(WARNING) << "failed to get ip from host:" << status.to_string();
+                return nullptr;
+            }
+        }
+        brpc_url = get_host_port(realhost, port);
+        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG(WARNING) << "unknown endpoint, host=" << host;
             return nullptr;
         }
@@ -104,6 +135,7 @@ private:
     struct StubPool {
         StubPool() { _stubs.reserve(config::brpc_max_connections_per_server); }
 
+<<<<<<< HEAD
         ~StubPool() {
             for (auto& stub : _stubs) {
                 delete stub;
@@ -128,6 +160,14 @@ private:
                 }
                 auto stub = new doris::PBackendService_Stub(channel.release(),
                                                             google::protobuf::Service::STUB_OWNS_CHANNEL);
+=======
+        std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint) {
+            if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
+                auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint);
+                if (!stub->reset_channel().ok()) {
+                    return nullptr;
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 _stubs.push_back(stub);
                 return stub;
             }
@@ -137,7 +177,11 @@ private:
             return _stubs[_idx];
         }
 
+<<<<<<< HEAD
         std::vector<doris::PBackendService_Stub*> _stubs;
+=======
+        std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         int64_t _idx = -1;
     };
 
@@ -152,6 +196,7 @@ public:
         return &cache;
     }
 
+<<<<<<< HEAD
     StatusOr<doris::PBackendService_Stub*> get_http_stub(const TNetworkAddress& taddr) {
         butil::EndPoint endpoint;
         std::string realhost;
@@ -163,6 +208,22 @@ public:
             }
         }
         if (str2endpoint(realhost.c_str(), taddr.port, &endpoint)) {
+=======
+    StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr) {
+        butil::EndPoint endpoint;
+        std::string realhost;
+        std::string brpc_url;
+        realhost = taddr.hostname;
+        if (!is_valid_ip(taddr.hostname)) {
+            Status status = hostname_to_ip(taddr.hostname, realhost);
+            if (!status.ok()) {
+                LOG(WARNING) << "failed to get ip from host:" << status.to_string();
+                return nullptr;
+            }
+        }
+        brpc_url = get_host_port(realhost, taddr.port);
+        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return Status::RuntimeError("unknown endpoint, host = " + taddr.hostname);
         }
         // get is exist
@@ -172,6 +233,7 @@ public:
             return *stub_ptr;
         }
         // create
+<<<<<<< HEAD
         brpc::ChannelOptions options;
         options.connect_timeout_ms = config::rpc_connect_timeout_ms;
         options.protocol = "http";
@@ -184,22 +246,36 @@ public:
                                         std::to_string(taddr.port));
         }
         auto stub = new doris::PBackendService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+=======
+        auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint);
+        if (!stub->reset_channel("http").ok()) {
+            return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
+                                        std::to_string(taddr.port));
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _stub_map.insert(endpoint, stub);
         return stub;
     }
 
 private:
     HttpBrpcStubCache() { _stub_map.init(500); }
+<<<<<<< HEAD
     ~HttpBrpcStubCache() {
         for (auto& stub : _stub_map) {
             delete stub.second;
         }
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     HttpBrpcStubCache(const HttpBrpcStubCache& cache) = delete;
     HttpBrpcStubCache& operator=(const HttpBrpcStubCache& cache) = delete;
 
     SpinLock _lock;
+<<<<<<< HEAD
     butil::FlatMap<butil::EndPoint, doris::PBackendService_Stub*> _stub_map;
+=======
+    butil::FlatMap<butil::EndPoint, std::shared_ptr<PInternalService_RecoverableStub>> _stub_map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

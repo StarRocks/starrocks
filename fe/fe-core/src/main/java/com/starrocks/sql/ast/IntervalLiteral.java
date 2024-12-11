@@ -21,6 +21,10 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class IntervalLiteral extends LiteralExpr {
     private final Expr value;
     private final UnitIdentifier unitIdentifier;
@@ -45,7 +49,11 @@ public class IntervalLiteral extends LiteralExpr {
 
     @Override
     protected String toSqlImpl() {
+<<<<<<< HEAD
         return "interval " + value.toSql() + unitIdentifier;
+=======
+        return "interval " + value.toSql() + " " + unitIdentifier.toSql();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

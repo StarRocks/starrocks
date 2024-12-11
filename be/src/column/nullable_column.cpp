@@ -76,8 +76,14 @@ void NullableColumn::append_datum(const Datum& datum) {
 
 void NullableColumn::append(const Column& src, size_t offset, size_t count) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
+<<<<<<< HEAD
 
     if (src.is_nullable()) {
+=======
+    if (src.only_null()) {
+        append_nulls(count);
+    } else if (src.is_nullable()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto& c = down_cast<const NullableColumn&>(src);
 
         DCHECK_EQ(c._null_column->size(), c._data_column->size());
@@ -96,8 +102,14 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
 void NullableColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t orig_size = _null_column->size();
+<<<<<<< HEAD
 
     if (src.is_nullable()) {
+=======
+    if (src.only_null()) {
+        append_nulls(size);
+    } else if (src.is_nullable()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto& src_column = down_cast<const NullableColumn&>(src);
 
         DCHECK_EQ(src_column._null_column->size(), src_column._data_column->size());
@@ -134,7 +146,11 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
+<<<<<<< HEAD
 ColumnPtr NullableColumn::replicate(const std::vector<uint32_t>& offsets) {
+=======
+ColumnPtr NullableColumn::replicate(const Buffer<uint32_t>& offsets) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return NullableColumn::create(this->_data_column->replicate(offsets),
                                   std::dynamic_pointer_cast<NullColumn>(this->_null_column->replicate(offsets)));
 }
@@ -150,27 +166,45 @@ bool NullableColumn::append_nulls(size_t count) {
     return true;
 }
 
+<<<<<<< HEAD
 bool NullableColumn::append_strings(const Buffer<Slice>& strs) {
     if (_data_column->append_strings(strs)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+bool NullableColumn::append_strings(const Slice* data, size_t size) {
+    if (_data_column->append_strings(data, size)) {
+        null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return false;
 }
 
+<<<<<<< HEAD
 bool NullableColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
     if (_data_column->append_strings_overflow(strs, max_length)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+bool NullableColumn::append_strings_overflow(const Slice* data, size_t size, size_t max_length) {
+    if (_data_column->append_strings_overflow(data, size, max_length)) {
+        null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return false;
 }
 
+<<<<<<< HEAD
 bool NullableColumn::append_continuous_strings(const Buffer<Slice>& strs) {
     if (_data_column->append_continuous_strings(strs)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+bool NullableColumn::append_continuous_strings(const Slice* data, size_t size) {
+    if (_data_column->append_continuous_strings(data, size)) {
+        null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -211,23 +245,38 @@ void NullableColumn::update_has_null() {
     _has_null = SIMD::contain_nonzero(_null_column->get_data(), 0);
 }
 
+<<<<<<< HEAD
 Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
+=======
+void NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t replace_num = src.size();
     if (src.is_nullable()) {
         const auto& c = down_cast<const NullableColumn&>(src);
+<<<<<<< HEAD
         RETURN_IF_ERROR(_null_column->update_rows(*c._null_column, indexes));
         RETURN_IF_ERROR(_data_column->update_rows(*c._data_column, indexes));
+=======
+        _null_column->update_rows(*c._null_column, indexes);
+        _data_column->update_rows(*c._data_column, indexes);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // update rows may convert between null and not null, so we need count every times
         update_has_null();
     } else {
         auto new_null_column = NullColumn::create();
         new_null_column->get_data().insert(new_null_column->get_data().end(), replace_num, 0);
+<<<<<<< HEAD
         RETURN_IF_ERROR(_null_column->update_rows(*new_null_column.get(), indexes));
         RETURN_IF_ERROR(_data_column->update_rows(src, indexes));
     }
 
     return Status::OK();
+=======
+        _null_column->update_rows(*new_null_column.get(), indexes);
+        _data_column->update_rows(src, indexes);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 size_t NullableColumn::filter_range(const Filter& filter, size_t from, size_t to) {
@@ -410,11 +459,20 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return xor_checksum;
 }
 
+<<<<<<< HEAD
 void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     if (_has_null && _null_column->get_data()[idx]) {
         buf->push_null();
     } else {
         _data_column->put_mysql_row_buffer(buf, idx);
+=======
+void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+    if (_has_null && _null_column->get_data()[idx]) {
+        buf->push_null(is_binary_protocol);
+    } else {
+        buf->update_field_pos();
+        _data_column->put_mysql_row_buffer(buf, idx, is_binary_protocol);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -429,9 +487,13 @@ void NullableColumn::check_or_die() const {
 }
 
 StatusOr<ColumnPtr> NullableColumn::upgrade_if_overflow() {
+<<<<<<< HEAD
     if (_null_column->capacity_limit_reached()) {
         return Status::InternalError("Size of NullableColumn exceed the limit");
     }
+=======
+    RETURN_IF_ERROR(_null_column->capacity_limit_reached());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     return upgrade_helper_func(&_data_column);
 }

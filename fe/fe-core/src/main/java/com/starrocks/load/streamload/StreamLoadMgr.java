@@ -22,21 +22,40 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Config;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.memory.MemoryTrackable;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.LogBuilder;
+import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
 import com.starrocks.warehouse.WarehouseLoadStatusInfo;
@@ -60,6 +79,10 @@ public class StreamLoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
     private static final int MEMORY_JOB_SAMPLES = 10;
 
+<<<<<<< HEAD
+=======
+    // label -> streamLoadTask
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private Map<String, StreamLoadTask> idToStreamLoadTask;
 
     // Only used for sync stream load
@@ -68,7 +91,11 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     private Map<Long, Map<String, StreamLoadTask>> dbToLabelToStreamLoadTask;
 
+<<<<<<< HEAD
     private final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
+=======
+    protected final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             new WarehouseLoadInfoBuilder();
 
     private ReentrantReadWriteLock lock;
@@ -101,8 +128,20 @@ public class StreamLoadMgr implements MemoryTrackable {
         lock = new ReentrantReadWriteLock(true);
     }
 
+<<<<<<< HEAD
     public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
                               int channelNum, int channelId, TransactionResult resp) throws UserException {
+=======
+    public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
+                              int channelNum, int channelId, TransactionResult resp) throws StarRocksException {
+        beginLoadTask(dbName, tableName, label, user, clientIp, timeoutMillis, channelNum, channelId, resp,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+    }
+
+    public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
+                              int channelNum, int channelId, TransactionResult resp, long warehouseId) throws
+            StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -128,7 +167,11 @@ public class StreamLoadMgr implements MemoryTrackable {
                 task.beginTxn(channelId, channelNum, resp);
                 return;
             }
+<<<<<<< HEAD
             task = createLoadTask(db, tableName, label, timeoutMillis, channelNum, channelId);
+=======
+            task = createLoadTask(db, tableName, label, user, clientIp, timeoutMillis, channelNum, channelId, warehouseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
             addLoadTask(task);
@@ -143,15 +186,25 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     // for sync stream load task
+<<<<<<< HEAD
     public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
                               TransactionResult resp, boolean isRoutineLoad) throws UserException {
+=======
+    public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
+                              TransactionResult resp, boolean isRoutineLoad, long warehouseId) throws
+            StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
 
         writeLock();
         try {
+<<<<<<< HEAD
             task = createLoadTask(db, tableName, label, timeoutMillis, isRoutineLoad);
+=======
+            task = createLoadTask(db, tableName, label, user, clientIp, timeoutMillis, isRoutineLoad, warehouseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
@@ -163,6 +216,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     // for sync stream load
+<<<<<<< HEAD
     public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis, boolean isRoutineLoad)
             throws UserException {
         Table table;
@@ -172,11 +226,25 @@ public class StreamLoadMgr implements MemoryTrackable {
             table = db.getTable(tableName);
         } finally {
             db.readUnlock();
+=======
+    public StreamLoadTask createLoadTask(Database db, String tableName, String label, String user, String clientIp,
+                                         long timeoutMillis, boolean isRoutineLoad, long warehouseId)
+            throws StarRocksException {
+        Table table;
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            unprotectedCheckMeta(db, tableName);
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
+<<<<<<< HEAD
                 label, timeoutMillis, System.currentTimeMillis(), isRoutineLoad);
         return streamLoadTask;
     }
@@ -190,22 +258,62 @@ public class StreamLoadMgr implements MemoryTrackable {
             table = db.getTable(tableName);
         } finally {
             db.readUnlock();
+=======
+                label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
+        return streamLoadTask;
+    }
+
+    public StreamLoadTask createLoadTaskWithoutLock(Database db, String tableName, String label, String user, String clientIp,
+                                                    long timeoutMillis, boolean isRoutineLoad, long warehouseId)
+            throws StarRocksException {
+        // init stream load task
+        long id = GlobalStateMgr.getCurrentState().getNextId();
+        StreamLoadTask streamLoadTask = new StreamLoadTask(id, db,
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName),
+                label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
+        return streamLoadTask;
+    }
+
+    public StreamLoadTask createLoadTask(Database db, String tableName, String label, String user, String clientIp,
+                                         long timeoutMillis, int channelNum,
+                                         int channelId, long warehouseId) throws StarRocksException {
+        Table table;
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            unprotectedCheckMeta(db, tableName);
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
+<<<<<<< HEAD
                 label, timeoutMillis, channelNum, channelId, System.currentTimeMillis());
+=======
+                label, user, clientIp, timeoutMillis, channelNum, channelId, System.currentTimeMillis(), warehouseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return streamLoadTask;
     }
 
     public void unprotectedCheckMeta(Database db, String tblName)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (tblName == null) {
             throw new AnalysisException("Table name must be specified when calling /begin/transaction/ first time");
         }
 
+<<<<<<< HEAD
         Table table = db.getTable(tblName);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
         }
@@ -229,20 +337,51 @@ public class StreamLoadMgr implements MemoryTrackable {
                 .build());
     }
 
+<<<<<<< HEAD
     public Database checkDbName(String dbName) throws UserException {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
             throw new UserException("Database[" + dbName + "] does not exist");
+=======
+    public Database checkDbName(String dbName) throws StarRocksException {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            LOG.warn("Database {} does not exist", dbName);
+            throw new StarRocksException("Database[" + dbName + "] does not exist");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return db;
     }
 
+<<<<<<< HEAD
     // add load tasks and also add to to callback factory
+=======
+    // add load tasks and also add callback factory
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void addLoadTask(StreamLoadTask task) {
         if (task.isSyncStreamLoad()) {
             txnIdToSyncStreamLoadTasks.put(task.getTxnId(), task);
         }
+<<<<<<< HEAD
+=======
+
+        // Clear the stream load tasks manually
+        if (idToStreamLoadTask.size() > Config.stream_load_task_keep_max_num) {
+            // If enable_load_profile = true,
+            // most stream load tasks are generated through flink-cdc and routine load generally,
+            // so clearing the syncStreamLoadTask is preferred.
+            LOG.info("trigger cleanSyncStreamLoadTasks when add load task label:{}", task.getLabel());
+            cleanSyncStreamLoadTasks();
+            // The size of idToStreamLoadTask is still huge, indicates that the type of most tasks is PARALLEL,
+            // so clean all the streamLoadTasks manaully not waitting for Config.stream_load_task_keep_max_second.
+            if (idToStreamLoadTask.size() > Config.stream_load_task_keep_max_num / 2) {
+                LOG.info("trigger cleanOldStreamLoadTasks when add load task label{}", task.getLabel());
+                cleanOldStreamLoadTasks(true);
+            }
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         long dbId = task.getDBId();
         String label = task.getLabel();
         Map<String, StreamLoadTask> labelToStreamLoadTask = null;
@@ -257,28 +396,48 @@ public class StreamLoadMgr implements MemoryTrackable {
 
         // add callback before txn created, because callback will be performed on replay without txn begin
         // register txn state listener
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+=======
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers,
                                            TransactionResult resp, String dbName, String tableName)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         boolean needUnLock = true;
         readLock();
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
+<<<<<<< HEAD
                 throw new UserException("stream load task " + label + " does not exist");
+=======
+                throw new StarRocksException("stream load task " + label + " does not exist");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
 
             // check whether the database and table are consistent with the transaction,
             // for single database and single table are supported so far
             if (!task.getDBName().equals(dbName)) {
+<<<<<<< HEAD
                 throw new UserException(
                         String.format("Request table %s not equal transaction table %s", dbName, task.getDBName()));
             }
             if (!task.getTableName().equals(tableName)) {
                 throw new UserException(
+=======
+                throw new StarRocksException(
+                        String.format("Request table %s not equal transaction table %s", dbName, task.getDBName()));
+            }
+            if (!task.getTableName().equals(tableName)) {
+                throw new StarRocksException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         String.format("Request table %s not equal transaction table %s", tableName, task.getTableName()));
             }
 
@@ -297,12 +456,20 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void prepareLoadTask(String label, int channelId, HttpHeaders headers, TransactionResult resp)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         boolean needUnLock = true;
         readLock();
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
+<<<<<<< HEAD
                 throw new UserException("stream load task " + label + " does not exist");
+=======
+                throw new StarRocksException("stream load task " + label + " does not exist");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
             readUnlock();
@@ -316,12 +483,20 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void tryPrepareLoadTaskTxn(String label, TransactionResult resp)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         boolean needUnLock = true;
         readLock();
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
+<<<<<<< HEAD
                 throw new UserException("stream load task " + label + " does not exist");
+=======
+                throw new StarRocksException("stream load task " + label + " does not exist");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
             readUnlock();
@@ -337,12 +512,20 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void commitLoadTask(String label, TransactionResult resp)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         boolean needUnLock = true;
         readLock();
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
+<<<<<<< HEAD
                 throw new UserException("stream load task " + label + " does not exist");
+=======
+                throw new StarRocksException("stream load task " + label + " does not exist");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
             readUnlock();
@@ -356,12 +539,20 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void rollbackLoadTask(String label, TransactionResult resp)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         boolean needUnLock = true;
         readLock();
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
+<<<<<<< HEAD
                 throw new UserException("stream load task" + label + "does not exist");
+=======
+                throw new StarRocksException("stream load task" + label + "does not exist");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
             readUnlock();
@@ -376,8 +567,13 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     // Remove old stream load tasks from idToStreamLoadTask and dbToLabelToStreamLoadTask
     // This function is called periodically.
+<<<<<<< HEAD
     // Cancelled and Committed task will be remove after Configure.label_keep_max_second seconds
     public void cleanOldStreamLoadTasks() {
+=======
+    // Cancelled and Committed task will be removed after Config.stream_load_task_keep_max_second seconds
+    public void cleanOldStreamLoadTasks(boolean isForce) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG.debug("begin to clean old stream load tasks");
         writeLock();
         try {
@@ -385,7 +581,11 @@ public class StreamLoadMgr implements MemoryTrackable {
             long currentMs = System.currentTimeMillis();
             while (iterator.hasNext()) {
                 StreamLoadTask streamLoadTask = iterator.next().getValue();
+<<<<<<< HEAD
                 if (streamLoadTask.checkNeedRemove(currentMs)) {
+=======
+                if (streamLoadTask.checkNeedRemove(currentMs, isForce)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     unprotectedRemoveTaskFromDb(streamLoadTask);
                     iterator.remove();
                     if (streamLoadTask.isSyncStreamLoad()) {
@@ -406,6 +606,37 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // There maybe many streamLoadTasks in memory when enable_load_profile = true,
+    // StreamLoadTask which type is SyncStreamLoad should be clean up firstly
+    public void cleanSyncStreamLoadTasks() {
+        writeLock();
+        try {
+            Iterator<Map.Entry<String, StreamLoadTask>> iterator = idToStreamLoadTask.entrySet().iterator();
+            long currentMs = System.currentTimeMillis();
+            while (iterator.hasNext()) {
+                StreamLoadTask streamLoadTask = iterator.next().getValue();
+                if (streamLoadTask.isSyncStreamLoad() && streamLoadTask.isFinalState()) {
+                    unprotectedRemoveTaskFromDb(streamLoadTask);
+                    iterator.remove();
+                    txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
+                    LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, streamLoadTask.getId())
+                            .add("label", streamLoadTask.getLabel())
+                            .add("end_timestamp", streamLoadTask.endTimeMs())
+                            .add("current_timestamp", currentMs)
+                            .add("task_state", streamLoadTask.getStateName())
+                            .add("msg", "old task has been cleaned")
+                    );
+                }
+            }
+
+        } finally {
+            writeUnlock();
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private void unprotectedRemoveTaskFromDb(StreamLoadTask streamLoadTask) {
         long dbId = streamLoadTask.getDBId();
         String label = streamLoadTask.getLabel();
@@ -442,7 +673,11 @@ public class StreamLoadMgr implements MemoryTrackable {
                 }
 
                 long dbId = 0L;
+<<<<<<< HEAD
                 Database database = GlobalStateMgr.getCurrentState().getDb(dbFullName);
+=======
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (database == null) {
                     throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
                 }
@@ -474,7 +709,11 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     public Map<String, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+=======
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         readLock();
         try {
             return warehouseLoadStatusInfoBuilder.buildFromJobs(idToStreamLoadTask.values());
@@ -500,20 +739,52 @@ public class StreamLoadMgr implements MemoryTrackable {
         });
     }
 
+<<<<<<< HEAD
+=======
+    // for each label, we can have only one task
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public StreamLoadTask getTaskByLabel(String label) {
         return idToStreamLoadTask.get(label);
     }
 
+<<<<<<< HEAD
 
     // return all of stream load task named label in all of db
+=======
+    public StreamLoadTask getTaskById(long id) {
+        readLock();
+        try {
+            List<StreamLoadTask> taskList =
+                    idToStreamLoadTask.values().stream().filter(streamLoadTask -> id == streamLoadTask.getId())
+                            .collect(Collectors.toList());
+            return taskList.isEmpty() ? null : taskList.get(0);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    // return all of stream load task named label in all of db
+    // return all tasks if label is null
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<StreamLoadTask> getTaskByName(String label) {
         List<StreamLoadTask> result = Lists.newArrayList();
         readLock();
         try {
+<<<<<<< HEAD
             for (Map<String, StreamLoadTask> labelToStreamLoadTask : dbToLabelToStreamLoadTask.values()) {
                 if (labelToStreamLoadTask.containsKey(label)) {
                     result.add(labelToStreamLoadTask.get(label));
                 }
+=======
+            if (label != null) {
+                StreamLoadTask task = idToStreamLoadTask.get(label);
+                if (task != null) {
+                    result.add(task);
+                }
+            } else {
+                // return all stream load tasks
+                result.addAll(idToStreamLoadTask.values());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         } finally {
             readUnlock();
@@ -548,6 +819,14 @@ public class StreamLoadMgr implements MemoryTrackable {
         return idToStreamLoadTask.size();
     }
 
+<<<<<<< HEAD
+=======
+    // for ut
+    public Map<String, StreamLoadTask> getIdToStreamLoadTask() {
+        return idToStreamLoadTask;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static StreamLoadMgr loadStreamLoadManager(DataInput in) throws IOException {
         int size = in.readInt();
         long currentMs = System.currentTimeMillis();
@@ -557,7 +836,11 @@ public class StreamLoadMgr implements MemoryTrackable {
             StreamLoadTask loadTask = StreamLoadTask.read(in);
             loadTask.init();
             // discard expired task right away
+<<<<<<< HEAD
             if (loadTask.checkNeedRemove(currentMs)) {
+=======
+            if (loadTask.checkNeedRemove(currentMs, false)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 LOG.info("discard expired task: {}", loadTask.getLabel());
                 continue;
             }
@@ -567,10 +850,17 @@ public class StreamLoadMgr implements MemoryTrackable {
         return streamLoadManager;
     }
 
+<<<<<<< HEAD
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToStreamLoadTask.size();
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.STREAM_LOAD_MGR, numJson);
         writer.writeJson(idToStreamLoadTask.size());
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        int numJson = 1 + idToStreamLoadTask.size();
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.STREAM_LOAD_MGR, numJson);
+        writer.writeInt(idToStreamLoadTask.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (StreamLoadTask streamLoadTask : idToStreamLoadTask.values()) {
             writer.writeJson(streamLoadTask);
         }
@@ -580,6 +870,7 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long currentMs = System.currentTimeMillis();
+<<<<<<< HEAD
         int numJson = reader.readInt();
         for (int i = 0; i < numJson; ++i) {
             StreamLoadTask loadTask = reader.readJson(StreamLoadTask.class);
@@ -592,6 +883,18 @@ public class StreamLoadMgr implements MemoryTrackable {
 
             addLoadTask(loadTask);
         }
+=======
+        reader.readCollection(StreamLoadTask.class, loadTask -> {
+            loadTask.init();
+            // discard expired task right away
+            if (loadTask.checkNeedRemove(currentMs, false)) {
+                LOG.info("discard expired task: {}", loadTask.getLabel());
+                return;
+            }
+
+            addLoadTask(loadTask);
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

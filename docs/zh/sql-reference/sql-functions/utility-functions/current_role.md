@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # current_role
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 获取当前用户激活的角色。该函数从 3.0 版本开始支持。
 

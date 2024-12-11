@@ -20,8 +20,13 @@ package com.starrocks.ha;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
 
 import java.io.DataInput;
+=======
+import com.starrocks.persist.gson.GsonUtils;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -72,6 +77,7 @@ public class LeaderInfo implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
+<<<<<<< HEAD
         Text.writeString(out, ip);
         out.writeInt(httpPort);
         out.writeInt(rpcPort);
@@ -83,4 +89,8 @@ public class LeaderInfo implements Writable {
         rpcPort = in.readInt();
     }
 
+=======
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

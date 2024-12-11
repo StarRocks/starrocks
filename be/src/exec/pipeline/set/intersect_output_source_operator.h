@@ -42,7 +42,11 @@ public:
     }
 
     Status set_finished(RuntimeState* state) override {
+<<<<<<< HEAD
         _intersect_ctx->set_finished();
+=======
+        RETURN_IF_ERROR(_intersect_ctx->set_finished());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 

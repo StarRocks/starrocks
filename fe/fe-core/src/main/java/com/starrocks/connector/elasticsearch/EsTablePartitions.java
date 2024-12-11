@@ -78,12 +78,21 @@ public class EsTablePartitions {
         if (esTable.getPartitionInfo() != null) {
             if (esTable.getPartitionInfo() instanceof RangePartitionInfo) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) esTable.getPartitionInfo();
+<<<<<<< HEAD
                 partitionInfo = new RangePartitionInfo(rangePartitionInfo.getPartitionColumns());
+=======
+                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(esTable.getIdToColumn());
+                partitionInfo = new RangePartitionInfo(partitionColumns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 esTablePartitions.setPartitionInfo(partitionInfo);
                 if (LOG.isDebugEnabled()) {
                     StringBuilder sb = new StringBuilder();
                     int idx = 0;
+<<<<<<< HEAD
                     for (Column column : rangePartitionInfo.getPartitionColumns()) {
+=======
+                    for (Column column : partitionColumns) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         if (idx != 0) {
                             sb.append(", ");
                         }
@@ -112,7 +121,11 @@ public class EsTablePartitions {
             esShardPartitionsList.sort(Comparator.comparing(EsShardPartitions::getPartitionKey));
             long partitionId = 0;
             for (EsShardPartitions esShardPartitions : esShardPartitionsList) {
+<<<<<<< HEAD
                 Range<PartitionKey> range = partitionInfo.handleNewSinglePartitionDesc(
+=======
+                Range<PartitionKey> range = partitionInfo.handleNewSinglePartitionDesc(esTable.getIdToColumn(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         esShardPartitions.getPartitionDesc(), partitionId, false);
                 esTablePartitions.addPartition(esShardPartitions.getIndexName(), partitionId);
                 esShardPartitions.setPartitionId(partitionId);

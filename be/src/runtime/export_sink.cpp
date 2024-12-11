@@ -174,7 +174,11 @@ Status ExportSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     Status status = _file_builder->add_chunk(chunk);
     if (!status.ok()) {
         Status status;
+<<<<<<< HEAD
         close(state, status);
+=======
+        (void)close(state, status);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return status;
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_LineFromText, ST_LineStringFromText
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将一个 WKT（Well Known Text）转化为一个 Line 形式的内存表现形式。
 

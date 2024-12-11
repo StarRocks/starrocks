@@ -15,5 +15,9 @@
 package com.starrocks.privilege.ranger.hive;
 
 public enum HiveAccessType {
+<<<<<<< HEAD
     NONE, CREATE, ALTER, DROP, INDEX, LOCK, SELECT, UPDATE, USE, READ, WRITE, ALL, SERVICEADMIN, TEMPUDFADMIN;
+=======
+    NONE, CREATE, ALTER, DROP, INDEX, LOCK, SELECT, UPDATE, USE, READ, WRITE, ALL, SERVICEADMIN, TEMPUDFADMIN
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

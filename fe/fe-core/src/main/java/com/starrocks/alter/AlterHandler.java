@@ -39,8 +39,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
@@ -162,6 +167,10 @@ public abstract class AlterHandler extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         clearExpireFinishedOrCancelledAlterJobsV2();
+<<<<<<< HEAD
+=======
+        setInterval(Config.alter_scheduler_interval_millisecond);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -181,7 +190,11 @@ public abstract class AlterHandler extends FrontendDaemon {
      * entry function. handle alter ops
      */
     public abstract ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
+<<<<<<< HEAD
             throws UserException;
+=======
+            throws StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     /*
      * cancel alter ops

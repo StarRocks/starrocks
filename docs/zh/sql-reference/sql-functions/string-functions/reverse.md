@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # reverse
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将字符串或数组反转，返回的字符串或数组的顺序和源字符串或数组的顺序相反。
 

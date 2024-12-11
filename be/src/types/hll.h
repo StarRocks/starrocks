@@ -141,7 +141,11 @@ public:
 
     uint64_t serialize_size() const { return max_serialized_size(); }
 
+<<<<<<< HEAD
     uint64_t mem_usage() const { return max_serialized_size(); }
+=======
+    int64_t mem_usage() const { return max_serialized_size(); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // common interface
     void clear();
@@ -163,9 +167,12 @@ private:
 private:
     void _convert_explicit_to_register();
 
+<<<<<<< HEAD
     // absorb other registers into this registers
     void _merge_registers(uint8_t* other_registers);
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // update one hash value into this registers
     void _update_registers(uint64_t hash_value) {
         // Use the lower bits to index into the number of streams and then

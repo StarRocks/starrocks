@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # microseconds_add
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Adds a time interval to a date value. The time interval is in microseconds.
 

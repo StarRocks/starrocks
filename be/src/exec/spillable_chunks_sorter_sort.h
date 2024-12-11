@@ -46,8 +46,18 @@ private:
 
     Status _get_result_from_spiller(ChunkPtr* chunk, bool* eos);
 
+<<<<<<< HEAD
     size_t _process_staging_unsorted_chunk_idx = 0;
     // used in spill
     size_t _process_sorted_chunk_idx = 0;
+=======
+    // used in spill
+    // index for _staging_unsorted_chunk_idx
+    size_t _process_staging_unsorted_chunk_idx = 0;
+    // index for _sorted_chunk_idx
+    size_t _process_sorted_chunk_idx = 0;
+    // index for _early_materialized_chunks
+    size_t _process_early_materialized_chunks_idx = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 } // namespace starrocks

@@ -38,10 +38,17 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.7</jacoco.version>
+<<<<<<< HEAD
         <iceberg.version>1.4.2</iceberg.version>
         <awsv2.version>2.17.257</awsv2.version>
         <paimon.version>0.6.0-incubating</paimon.version>
         <staros.version>3.1.10</staros.version>
+=======
+        <iceberg.version>1.6.0</iceberg.version>
+        <paimon.version>0.8.2</paimon.version>
+        <delta-kernel.version>4.0.0rc1</delta-kernel.version>
+        <staros.version>3.4-rc1</staros.version>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <python>python</python>
     </properties>
 
@@ -108,10 +115,17 @@ under the License.
             <artifactId>commons-cli</artifactId>
         </dependency>
 
+<<<<<<< HEAD
         <!-- https://mvnrepository.com/artifact/commons-net/commons-net -->
         <dependency>
             <groupId>commons-net</groupId>
             <artifactId>commons-net</artifactId>
+=======
+        <!-- https://mvnrepository.com/artifact/com.github.seancfoley/ipaddress -->
+        <dependency>
+            <groupId>com.github.seancfoley</groupId>
+            <artifactId>ipaddress</artifactId>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/commons-codec/commons-codec -->
@@ -138,6 +152,14 @@ under the License.
             <artifactId>commons-pool2</artifactId>
         </dependency>
 
+<<<<<<< HEAD
+=======
+        <dependency>
+            <groupId>org.apache.kudu</groupId>
+            <artifactId>kudu-client</artifactId>
+        </dependency>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
         <dependency>
             <groupId>commons-validator</groupId>
@@ -200,9 +222,50 @@ under the License.
         <dependency>
             <groupId>com.baidu</groupId>
             <artifactId>jprotobuf</artifactId>
+<<<<<<< HEAD
             <classifier>jar-with-dependencies</classifier>
         </dependency>
 
+=======
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.auto.value</groupId>
+                    <artifactId>auto-value</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!--Include velocity because we are already using it-->
+        <!-- https://mvnrepository.com/artifact/org.apache.velocity/velocity-engine-core -->
+        <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity-engine-core</artifactId>
+            <version>2.3</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
+        <dependency>
+            <groupId>com.baidu</groupId>
+            <artifactId>jprotobuf</artifactId>
+            <classifier>jar-with-dependencies</classifier>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-precompile-plugin -->
+        <dependency>
+            <groupId>com.baidu</groupId>
+            <artifactId>jprotobuf-precompile-plugin</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.maven</groupId>
+                    <artifactId>maven-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.plexus</groupId>
+                    <artifactId>plexus-utils</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-common -->
         <dependency>
             <groupId>com.baidu</groupId>
@@ -300,6 +363,7 @@ under the License.
         </dependency>
 
         <dependency>
+<<<<<<< HEAD
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bundle</artifactId>
             <version>${awsv2.version}</version>
@@ -313,16 +377,49 @@ under the License.
                 <exclusion>
                     <artifactId>utils</artifactId>
                     <groupId>software.amazon.awssdk</groupId>
+=======
+            <groupId>de.javakaffee</groupId>
+            <artifactId>kryo-serializers</artifactId>
+            <version>0.45</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.esotericsoftware</groupId>
+                    <artifactId>kryo</artifactId>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 </exclusion>
             </exclusions>
         </dependency>
 
         <dependency>
             <groupId>io.delta</groupId>
+<<<<<<< HEAD
             <artifactId>delta-standalone_2.12</artifactId>
             <version>0.5.0</version>
         </dependency>
 
+=======
+            <artifactId>delta-kernel-api</artifactId>
+            <version>${delta-kernel.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.delta</groupId>
+            <artifactId>delta-kernel-defaults</artifactId>
+            <version>${delta-kernel.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-runtime</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <!-- https://mvnrepository.com/artifact/org.apache.thrift/libthrift -->
         <dependency>
             <groupId>org.apache.thrift</groupId>
@@ -357,6 +454,14 @@ under the License.
             <artifactId>log4j-slf4j-impl</artifactId>
         </dependency>
 
+<<<<<<< HEAD
+=======
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-layout-template-json</artifactId>
+        </dependency>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-1.2-api -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
@@ -367,6 +472,10 @@ under the License.
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>
+<<<<<<< HEAD
+=======
+            <version>4.1.115.Final</version>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
@@ -480,6 +589,13 @@ under the License.
                     <artifactId>hadoop-client</artifactId>
                 </exclusion>
                 <exclusion>
+<<<<<<< HEAD
+=======
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-api</artifactId>
+                </exclusion>
+                <exclusion>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     <artifactId>zookeeper</artifactId>
                     <groupId>org.apache.zookeeper</groupId>
                 </exclusion>
@@ -495,6 +611,17 @@ under the License.
                     <artifactId>stream</artifactId>
                     <groupId>com.clearspring.analytics</groupId>
                 </exclusion>
+<<<<<<< HEAD
+=======
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-runtime</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-compress</artifactId>
+                </exclusion>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             </exclusions>
         </dependency>
 
@@ -515,15 +642,45 @@ under the License.
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-sql_2.12</artifactId>
+<<<<<<< HEAD
             <scope>provided</scope>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             <exclusions>
                 <exclusion>
                     <artifactId>orc-core</artifactId>
                     <groupId>org.apache.orc</groupId>
                 </exclusion>
+<<<<<<< HEAD
             </exclusions>
         </dependency>
 
+=======
+                <exclusion>
+                    <groupId>org.apache.orc</groupId>
+                    <artifactId>orc-mapreduce</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-mapreduce</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!--  https://mvnrepository.com/artifact/org.apache.spark/spark-catalyst_2.12 -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-catalyst_2.12</artifactId>
+        </dependency>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <!-- https://mvnrepository.com/artifact/com.fasterxml.uuid/java-uuid-generator -->
         <dependency>
             <groupId>com.fasterxml.uuid</groupId>
@@ -553,8 +710,23 @@ under the License.
                     <groupId>com.aliyun</groupId>
                     <artifactId>tea-util</artifactId>
                 </exclusion>
+<<<<<<< HEAD
             </exclusions>
         </dependency>
+=======
+                <exclusion>
+                    <groupId>com.aliyun</groupId>
+                    <artifactId>datalake20200710</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!--Fix CVE from aliyun dlf-->
+        <dependency>
+            <groupId>com.aliyun</groupId>
+            <artifactId>datalake20200710</artifactId>
+            <version>2.0.12</version>
+        </dependency>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         <!-- https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->
         <dependency>
@@ -600,12 +772,58 @@ under the License.
             </exclusions>
         </dependency>
 
+<<<<<<< HEAD
+=======
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client-runtime</artifactId>
+        </dependency>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aws</artifactId>
         </dependency>
 
+<<<<<<< HEAD
+=======
+        <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-aliyun</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.jdom</groupId>
+                    <artifactId>jdom2</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!--Fix CVF from hadoop-aliyun-->
+        <dependency>
+            <groupId>org.jdom</groupId>
+            <artifactId>jdom2</artifactId>
+            <version>2.0.6.1</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
+        <dependency>
+            <groupId>com.qcloud.cos</groupId>
+            <artifactId>hadoop-cos</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>chdfs_hadoop_plugin_network</artifactId>
+        </dependency>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-azure-datalake -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
@@ -661,6 +879,7 @@ under the License.
                     <artifactId>*</artifactId>
                 </exclusion>
                 <exclusion>
+<<<<<<< HEAD
                     <groupId>org.apache.hbase</groupId>
                     <artifactId>hbase-server</artifactId>
                 </exclusion>
@@ -703,6 +922,24 @@ under the License.
             </exclusions>
         </dependency>
 
+=======
+                    <groupId>org.glassfish</groupId>
+                    <artifactId>javax.el</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>zookeeper</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-io -->
+        <dependency>
+            <groupId>org.apache.hudi</groupId>
+            <artifactId>hudi-io</artifactId>
+        </dependency>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-hadoop-mr -->
         <dependency>
             <groupId>org.apache.hudi</groupId>
@@ -715,6 +952,37 @@ under the License.
             </exclusions>
         </dependency>
 
+<<<<<<< HEAD
+=======
+        <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-hadoop -->
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-hadoop</artifactId>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-avro -->
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-avro</artifactId>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-column -->
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-column</artifactId>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-common -->
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-common</artifactId>
+            <scope>compile</scope>
+        </dependency>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-bundle</artifactId>
@@ -728,6 +996,15 @@ under the License.
         </dependency>
 
         <dependency>
+<<<<<<< HEAD
+=======
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-oss</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+
+        <dependency>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             <groupId>org.xerial.snappy</groupId>
             <artifactId>snappy-java</artifactId>
             <version>1.1.10.5</version>
@@ -762,10 +1039,23 @@ under the License.
             <artifactId>opentelemetry-exporter-jaeger</artifactId>
         </dependency>
 
+<<<<<<< HEAD
         <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
+=======
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-exporter-otlp -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.mariadb.jdbc/mariadb-java-client -->
+        <dependency>
+            <groupId>org.mariadb.jdbc</groupId>
+            <artifactId>mariadb-java-client</artifactId>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
@@ -775,6 +1065,33 @@ under the License.
             <artifactId>postgresql</artifactId>
         </dependency>
 
+<<<<<<< HEAD
+=======
+        <!-- https://mvnrepository.com/artifact/com.clickhouse/clickhouse-jdbc -->
+        <!-- we need clickhouse driver for jdbc connector -->
+        <dependency>
+            <groupId>com.clickhouse</groupId>
+            <artifactId>clickhouse-jdbc</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 -->
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc10</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.oracle.database.nls/orai18n -->
+        <dependency>
+            <groupId>com.oracle.database.nls</groupId>
+            <artifactId>orai18n</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+        </dependency>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
         <dependency>
             <groupId>com.mockrunner</groupId>
@@ -825,7 +1142,60 @@ under the License.
         <dependency>
             <groupId>org.apache.ranger</groupId>
             <artifactId>ranger-plugins-common</artifactId>
+<<<<<<< HEAD
             <version>2.4.0</version>
+=======
+            <version>2.5.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.amazonaws</groupId>
+                    <artifactId>aws-java-sdk-bundle</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.elasticsearch</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.elasticsearch.client</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.eclipse.jetty</groupId>
+                    <artifactId>jetty-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>elasticsearch</artifactId>
+                    <groupId>org.elasticsearch</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>io.airlift</groupId>
+            <artifactId>concurrent</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.aliyun.odps</groupId>
+            <artifactId>odps-sdk-core</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-mapper-asl</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.aliyun.odps</groupId>
+            <artifactId>odps-sdk-table-api</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.owasp.encoder/encoder -->
+        <dependency>
+            <groupId>org.owasp.encoder</groupId>
+            <artifactId>encoder</artifactId>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         </dependency>
 
         <dependency>
@@ -840,11 +1210,88 @@ under the License.
             <artifactId>HikariCP</artifactId>
             <version>${hikaricp.version}</version>
         </dependency>
+<<<<<<< HEAD
+=======
+
+        <dependency>
+            <groupId>org.quartz-scheduler</groupId>
+            <artifactId>quartz</artifactId>
+            <version>2.3.2</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-netty-shaded</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-protobuf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-stub</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-vector</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-memory-netty</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>flight-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>flight-sql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>flight-sql-jdbc-driver</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-jdbc</artifactId>
+        </dependency>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     </dependencies>
 
     <build>
         <finalName>starrocks-fe</finalName>
         <plugins>
+<<<<<<< HEAD
+=======
+            <!-- fe proto precompile plugin-->
+            <plugin>
+                <groupId>com.baidu</groupId>
+                <artifactId>jprotobuf-precompile-plugin</artifactId>
+                <version>2.2.12</version>
+                <configuration>
+                    <filterClassPackage>com.starrocks</filterClassPackage>
+                    <generateProtoFile>true</generateProtoFile>
+                    <compileDependencies>true</compileDependencies>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>precompile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             <!-- fe ut coverage-->
             <plugin>
                 <groupId>org.jacoco</groupId>
@@ -949,7 +1396,12 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
                     <argLine>
+<<<<<<< HEAD
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar -Xmx4096m
+=======
+                        -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
+                        -Xmx4096m
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
@@ -970,13 +1422,26 @@ under the License.
                         <id>generate-sources</id>
                         <phase>generate-sources</phase>
                         <configuration>
+<<<<<<< HEAD
                             <tasks>
+=======
+                            <target>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                 <property name="ant.python" value="${python}"/>
                                 <mkdir dir="${basedir}/target/generated-sources/proto"/>
                                 <exec executable="${java.home}/bin/java">
                                     <arg value="-jar"/>
                                     <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
+<<<<<<< HEAD
+=======
+                                    <arg value="${starrocks.home}/gensrc/proto/lake_types.proto"/>
+                                </exec>
+                                <exec executable="${java.home}/bin/java">
+                                    <arg value="-jar"/>
+                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     <arg value="${starrocks.home}/gensrc/proto/internal_service.proto"/>
                                 </exec>
                                 <exec executable="${java.home}/bin/java">
@@ -995,13 +1460,21 @@ under the License.
                                     <arg value="-jar"/>
                                     <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
+<<<<<<< HEAD
                                     <arg value="${starrocks.home}/gensrc/proto/lake_types.proto"/>
+=======
+                                    <arg value="${starrocks.home}/gensrc/proto/lake_service.proto"/>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                 </exec>
                                 <exec executable="${java.home}/bin/java">
                                     <arg value="-jar"/>
                                     <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
+<<<<<<< HEAD
                                     <arg value="${starrocks.home}/gensrc/proto/lake_service.proto"/>
+=======
+                                    <arg value="${starrocks.home}/gensrc/proto/encryption.proto"/>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                 </exec>
                                 <exec executable="${ant.python}">
                                     <env key="JAVA_HOME" value="${java.home}"/>
@@ -1018,7 +1491,11 @@ under the License.
                                     <arg value="--java"/>
                                     <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                 </exec>
+<<<<<<< HEAD
                             </tasks>
+=======
+                            </target>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         </configuration>
                         <goals>
                             <goal>run</goal>

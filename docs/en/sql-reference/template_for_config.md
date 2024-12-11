@@ -5,15 +5,25 @@ unlisted: true
 
 # Template for writing FE/BE parameters and variables
 
+<<<<<<< HEAD
 > When you add, modify, or delete an FE/BE parameter or a variable in code, do remember to update the documentation. [FE configuration](https://docs.starrocks.io/docs/administration/management/FE_configuration/), [BE configuration](https://docs.starrocks.io/docs/administration/management/BE_configuration/), [System variables](https://docs.starrocks.io/docs/reference/System_variable/).
+=======
+> When you add, modify, or delete an FE/BE parameter or a variable in code, do remember to update documentation: [FE configuration](https://docs.starrocks.io/docs/administration/management/FE_configuration/), [BE configuration](https://docs.starrocks.io/docs/administration/management/BE_configuration/), [System variables](https://docs.starrocks.io/docs/reference/System_variable/).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 The parameter or variable description usually contains the following fields:
 
 - Default: *the default value of this parameter. If the default value varies in different versions, clearly specify this information.*
 - Type: *the allowed data type*
+<<<<<<< HEAD
 - Unit: *the unit*
 - Value range: *required if this parameter has a value range*
 - Is mutable: *whether this parameter can be dynamically modified*
+=======
+- Unit: *You can leave it empty if this parameter does not have a unit.*
+- Value range: *only required if this parameter has a value range*
+- Is mutable: *whether this parameter can be dynamically modified, only required for FE/BE parameters*
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Description: *the description of this parameter, including its meaning, valid values, dependency, risks, tuning method, disuse statement.*
 - Introduced in: *since which version this parameter is introduced, accurate to 3-digit version.*
 
@@ -60,3 +70,10 @@ If the default value or unit of a parameter is changed, explain why it is change
 
 - Why the parameter name is changed
 - Will there be compatibility issues? How the system deals with compatibility issues.
+<<<<<<< HEAD
+=======
+
+## Parameters invisible to users
+
+Even though a new parameter or variable is invisible to users, we still recommend that you add the description to documentation and **comment it out**. This is to shield this parameter from users but help internal users (RD and DBA) understand the meaning and usage of this parameter.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

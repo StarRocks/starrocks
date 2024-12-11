@@ -14,6 +14,10 @@
 
 #include "storage/local_primary_key_recover.h"
 
+<<<<<<< HEAD
+=======
+#include "fs/key_cache.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/chunk_helper.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
@@ -35,12 +39,21 @@ Status LocalPrimaryKeyRecover::pre_cleanup() {
 }
 
 starrocks::Schema LocalPrimaryKeyRecover::generate_pkey_schema() {
+<<<<<<< HEAD
     const starrocks::TabletSchema& tablet_schema = _tablet->tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
     for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
     return ChunkHelper::convert_schema(tablet_schema, pk_columns);
+=======
+    const TabletSchemaCSPtr tablet_schema_ptr = _tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
+    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    return ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status LocalPrimaryKeyRecover::sort_rowsets(std::vector<RowsetSharedPtr>* rowsets) {
@@ -70,7 +83,11 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
     RETURN_IF_ERROR(_tablet->updates()->get_latest_applied_version(&_latest_applied_version));
     RETURN_IF_ERROR(
             _tablet->updates()->get_apply_version_and_rowsets(&latest_applied_major_version, &rowsets, &rowset_ids));
+<<<<<<< HEAD
     DCHECK(latest_applied_major_version == _latest_applied_version.major());
+=======
+    DCHECK(latest_applied_major_version == _latest_applied_version.major_number());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Sort the rowsets in order of primary key occurrence,
     // so we can generate correct delvecs
     RETURN_IF_ERROR(sort_rowsets(&rowsets));
@@ -78,7 +95,12 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
         // NOT acquire rowset reference because tbalet already in error state, rowset reclaim should stop
         // NOT apply delvec when create segment iterator
         // 1. get iterator for each segment
+<<<<<<< HEAD
         auto res = rowset->get_segment_iterators2(pkey_schema, nullptr, latest_applied_major_version, &stats);
+=======
+        auto res = rowset->get_segment_iterators2(pkey_schema, _tablet->tablet_schema(), nullptr,
+                                                  latest_applied_major_version, &stats);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!res.ok()) {
             return res.status();
         }
@@ -90,9 +112,20 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
         std::vector<uint32_t> delidxs;
         for (int idx = 0; idx < rowset->num_delete_files(); idx++) {
             auto path = Rowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), idx);
+<<<<<<< HEAD
             ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(path));
             del_rfs.push_back(std::move(read_file));
             delidxs.push_back(rowset->rowset_meta()->get_meta_pb().delfile_idxes(idx));
+=======
+            RandomAccessFileOptions opts;
+            auto& encryption_meta = rowset->rowset_meta()->get_delfile_encryption_meta(idx);
+            if (!encryption_meta.empty()) {
+                ASSIGN_OR_RETURN(opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
+            }
+            ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, path));
+            del_rfs.push_back(std::move(read_file));
+            delidxs.push_back(rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes(idx));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         RETURN_IF_ERROR(handler(itrs, del_rfs, delidxs, rowset->rowset_meta()->get_rowset_seg_id()));
     }
@@ -111,7 +144,11 @@ Status LocalPrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& n
         new_del_vecs[idx].first = rssid;
         new_del_vecs[idx].second = std::make_shared<DelVector>();
         auto& del_ids = new_delete.second;
+<<<<<<< HEAD
         new_del_vecs[idx].second->init(_latest_applied_version.major(), del_ids.data(), del_ids.size());
+=======
+        new_del_vecs[idx].second->init(_latest_applied_version.major_number(), del_ids.data(), del_ids.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         idx++;
         LOG(INFO) << "LocalPrimaryKeyRecover finalize delvec, rssid: " << rssid << " del cnt: " << del_ids.size();
     }

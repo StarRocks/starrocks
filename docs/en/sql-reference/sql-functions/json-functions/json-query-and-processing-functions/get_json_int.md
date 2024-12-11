@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # get_json_int
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This function analyzes and gets the integer value from a specified path in json string.
 
@@ -21,7 +25,11 @@ If the format of json_string or json_path is wrong, this function will return NU
 ## Syntax
 
 ```Haskell
+<<<<<<< HEAD
 INT get_json_int(VARCHAR json_str, VARCHAR json_path)
+=======
+BIGINT get_json_int(VARCHAR json_str, VARCHAR json_path)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ```
 
 ## Examples

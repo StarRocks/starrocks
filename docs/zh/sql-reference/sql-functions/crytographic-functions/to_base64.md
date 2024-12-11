@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_base64
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将字符串 `str` 进行 Base64 编码。反向函数为 [from_base64](from_base64.md)。
 

@@ -14,9 +14,21 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "common/statusor.h"
 #include "storage/lake/tablet_metadata.h"
 
+=======
+#include <span>
+
+#include "common/statusor.h"
+#include "storage/lake/tablet_metadata.h"
+
+namespace starrocks {
+class TxnInfoPB;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 namespace starrocks::lake {
 
 class TabletManager;
@@ -26,7 +38,11 @@ class TabletManager;
 // This function does the following:
 //
 // 1. Load the base tablet metadata with id 'tablet_id' and version 'base_version'.
+<<<<<<< HEAD
 // 2. Read the transaction logs for all 'txn_ids' sequentially and apply them to the base metadata.
+=======
+// 2. Read the transaction logs for all 'txns' sequentially and apply them to the base metadata.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // 3. Save the result as a new tablet metadata with version 'new_version'.
 // 4. Update the metadata's commit timestamp to 'commit_time'.
 // 5. Persist the new metadata to the object storage.
@@ -36,30 +52,51 @@ class TabletManager;
 // - tablet_id Id of the tablet
 // - base_version Version of the base metadata
 // - new_version The new version to be published
+<<<<<<< HEAD
 // - txn_ids Transactions to apply in sequence
+=======
+// - txns Transactions to apply in sequence
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // - commit_time New commit timestamp
 //
 // Return:
 // - StatusOr containing the new published TabletMetadataPtr on success.
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
+<<<<<<< HEAD
                                             int64_t new_version, const int64_t* txn_ids, size_t txn_ids_size,
                                             int64_t commit_time);
 
 // Publish a new version of a transaction log.
 //
 // This function does the following:
+=======
+                                            int64_t new_version, std::span<const TxnInfoPB> txns);
+
+// Publish a batch new versions of transaction logs.
+//
+// For every transaction log, this function does the following:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // 1. copy the transaction log identified by 'txn_id' to a new file identified by 'log_version'
 // 2. Delete the transaction log identified by 'txn_id' in an asynchronous manner
 //
 // Parameters:
 // - tablet_mgr A pointer to the TabletManager object managing the tablet, cannot be nullptr
 // - tablet_id Id of the tablet
+<<<<<<< HEAD
 // - txn_id ID of the transactions to abort
+=======
+// - txn_infos Transactions to apply
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // - log_version Version of the new file
 //
 // Return:
 // - Returns OK if the copy was successful, asynchronous deletion does not affect the return value.
+<<<<<<< HEAD
 Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id, int64_t log_version);
+=======
+Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txn_infos,
+                           const int64_t* log_versions);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 // Aborts a transaction with the specified transaction IDs on the given tablet.
 //
@@ -72,9 +109,15 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t
 // Parameters:
 // - tablet_mgr A pointer to the TabletManager object managing the tablet, cannot be nullptr
 // - tablet_id The ID of the tablet where the transaction will be aborted.
+<<<<<<< HEAD
 // - txn_types transaction types
 //
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids, const int32_t* txn_types,
                size_t txn_size);
+=======
+// - txns A `std::span` of `TxnInfoPB` containing information of the transactions to be aborted.
+//
+void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 } // namespace starrocks::lake

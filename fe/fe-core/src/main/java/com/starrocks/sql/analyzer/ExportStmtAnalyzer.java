@@ -57,7 +57,11 @@ public class ExportStmtAnalyzer {
     }
 
 
+<<<<<<< HEAD
     static class ExportAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ExportAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
@@ -68,13 +72,25 @@ public class ExportStmtAnalyzer {
             GlobalStateMgr mgr = context.getGlobalStateMgr();
             TableName tableName = statement.getTableRef().getName();
             // make sure catalog, db, table
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(context, tableName);
             Table table = MetaUtils.getTable(context, tableName);
+=======
+            tableName.normalization(context);
+            Table table = MetaUtils.getSessionAwareTable(context, null, tableName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (table.getType() == Table.TableType.OLAP &&
                     (((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE ||
                             ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
             }
+<<<<<<< HEAD
+=======
+            if (table.isTemporaryTable()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Do not support exporting temporary table");
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             statement.setTblName(tableName);
             PartitionNames partitionNames = statement.getTableRef().getPartitionNames();
             if (partitionNames != null) {

@@ -31,17 +31,41 @@ class ClientConnection;
 // this class is a helper for jni call. easy for unit test
 class ThriftRpcHelper {
 public:
+<<<<<<< HEAD
+=======
+    template <class T>
+    using ConnectionCallBack = std::function<void(ClientConnection<T>&)>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static void setup(ExecEnv* exec_env);
 
     // for default timeout
     template <typename T>
+<<<<<<< HEAD
     static Status rpc(const std::string& ip, const int32_t port, std::function<void(ClientConnection<T>&)> callback) {
+=======
+    static Status rpc(const std::string& ip, const int32_t port, ConnectionCallBack<T> callback) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return rpc(ip, port, callback, config::thrift_rpc_timeout_ms);
     }
 
     template <typename T>
+<<<<<<< HEAD
     static Status rpc(const std::string& ip, const int32_t port, std::function<void(ClientConnection<T>&)> callback,
                       int timeout_ms);
+=======
+    static Status rpc(const TNetworkAddress& endpoint, ConnectionCallBack<T> callback, int timeout_ms,
+                      int retry_times = 2) {
+        return rpc(endpoint.hostname, endpoint.port, callback, timeout_ms, retry_times);
+    }
+
+    template <typename T>
+    static Status rpc(const std::string& ip, const int32_t port, ConnectionCallBack<T> callback, int timeout_ms,
+                      int retry_times = 2);
+
+    template <typename T>
+    static Status rpc_impl(const ConnectionCallBack<T>& callback, ClientConnection<T>& client,
+                           const TNetworkAddress& address) noexcept;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     static ExecEnv* _s_exec_env;

@@ -34,6 +34,10 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Before
     public void setUp() {
+<<<<<<< HEAD
+=======
+        super.setUp();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         tpcdsStats = getTPCDSTableStats();
     }
 

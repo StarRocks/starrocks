@@ -27,6 +27,10 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -54,10 +58,21 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_FILE_SCAN);
     public static final PruneHDFSScanColumnRule PAIMON_SCAN =
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_PAIMON_SCAN);
+<<<<<<< HEAD
+=======
+    public static final PruneHDFSScanColumnRule ODPS_SCAN =
+            new PruneHDFSScanColumnRule(OperatorType.LOGICAL_ODPS_SCAN);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static final PruneHDFSScanColumnRule TABLE_FUNCTION_TABLE_SCAN =
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN);
 
+<<<<<<< HEAD
+=======
+    public static final PruneHDFSScanColumnRule ICEBERG_METADATA_SCAN =
+            new PruneHDFSScanColumnRule(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public PruneHDFSScanColumnRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PRUNE_OLAP_SCAN_COLUMNS, Pattern.create(logicalOperatorType));
     }
@@ -140,6 +155,18 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                                 scanOperator.getPredicate());
                 newScanOperator.getScanOptimzeOption().setCanUseAnyColumn(canUseAnyColumn);
                 newScanOperator.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
+<<<<<<< HEAD
+=======
+                newScanOperator.setTableVersionRange(scanOperator.getTableVersionRange());
+
+                if (newScanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
+                    LogicalIcebergScanOperator newIcebergScanOp = (LogicalIcebergScanOperator) newScanOperator;
+                    newIcebergScanOp.setMORParam(((LogicalIcebergScanOperator) scanOperator).getMORParam());
+                    newIcebergScanOp.setTableFullMORParams(((LogicalIcebergScanOperator) scanOperator).
+                            getTableFullMORParams());
+                }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } catch (Exception e) {
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
@@ -158,13 +185,21 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                         collect(Collectors.toList());
         partitionColumns.retainAll(scanColumns);
         if (partitionColumns.stream().map(Column::getType).anyMatch(this::notSupportedPartitionColumnType)) {
+<<<<<<< HEAD
             throw new StarRocksPlannerException("Table partition by float/decimal datatype is not supported",
+=======
+            throw new StarRocksPlannerException("Table partition by float/double/decimal datatype is not supported",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     ErrorType.UNSUPPORTED);
         }
     }
 
     private boolean notSupportedPartitionColumnType(Type type) {
+<<<<<<< HEAD
         return type.isFloat() || type.isDecimalOfAnyVersion();
+=======
+        return type.isFloat() || type.isDouble() || type.isDecimalOfAnyVersion();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private boolean containsMaterializedColumn(LogicalScanOperator scanOperator, Set<ColumnRefOperator> scanColumns) {

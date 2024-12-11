@@ -193,7 +193,11 @@ public class MockedRemoteFileSystem extends FileSystem {
 
     @Override
     public boolean rename(Path path, Path path1) throws IOException {
+<<<<<<< HEAD
         throw new UnsupportedOperationException();
+=======
+        return false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -218,7 +222,11 @@ public class MockedRemoteFileSystem extends FileSystem {
 
     @Override
     public boolean mkdirs(Path path, FsPermission fsPermission) {
+<<<<<<< HEAD
         throw new UnsupportedOperationException();
+=======
+        return false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

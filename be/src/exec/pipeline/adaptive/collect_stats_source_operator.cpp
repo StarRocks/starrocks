@@ -14,6 +14,10 @@
 
 #include "exec/pipeline/adaptive/collect_stats_source_operator.h"
 
+<<<<<<< HEAD
+=======
+#include "event.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/utils.h"
 #include "exec/pipeline/pipeline.h"
@@ -58,7 +62,13 @@ Status CollectStatsSourceOperator::set_finished(RuntimeState* state) {
 /// CollectStatsSourceOperatorFactory.
 CollectStatsSourceOperatorFactory::CollectStatsSourceOperatorFactory(int32_t id, int32_t plan_node_id,
                                                                      CollectStatsContextPtr ctx)
+<<<<<<< HEAD
         : SourceOperatorFactory(id, "collect_stats_source", plan_node_id), _ctx(std::move(ctx)) {}
+=======
+        : SourceOperatorFactory(id, "collect_stats_source", plan_node_id), _ctx(std::move(ctx)) {
+    set_adaptive_blocking_event(_ctx->blocking_event());
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Status CollectStatsSourceOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
@@ -76,10 +86,14 @@ OperatorPtr CollectStatsSourceOperatorFactory::create(int32_t degree_of_parallel
     return std::make_shared<CollectStatsSourceOperator>(this, _id, _plan_node_id, driver_sequence, _ctx.get());
 }
 
+<<<<<<< HEAD
 SourceOperatorFactory::AdaptiveState CollectStatsSourceOperatorFactory::adaptive_state() const {
     if (_ctx->is_downstream_ready()) {
         return SourceOperatorFactory::AdaptiveState::ACTIVE;
     }
+=======
+SourceOperatorFactory::AdaptiveState CollectStatsSourceOperatorFactory::adaptive_initial_state() const {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return SourceOperatorFactory::AdaptiveState::INACTIVE;
 }
 
@@ -89,10 +103,13 @@ SourceOperatorFactory::AdaptiveState CollectStatsSourceOperatorFactory::adaptive
 ///   - DOP >= DOP of dependent pipelines.
 ///   - DOP <= CollectStatsSinkOperatorFactory::degree_of_parallelism.
 void CollectStatsSourceOperatorFactory::adjust_dop() {
+<<<<<<< HEAD
     if (!is_adaptive_group_active()) {
         return;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_has_adjusted_dop) {
         return;
     }
@@ -129,6 +146,12 @@ void CollectStatsSourceOperatorFactory::adjust_dop() {
     if (max_output_amplification_factor > 0 && max_output_amplification_factor < max_amp_factor) {
         max_amp_factor = max_output_amplification_factor;
     }
+<<<<<<< HEAD
+=======
+    if (_state->is_cancelled()) {
+        max_amp_factor = 1;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     size_t amp_factor = 1;
     if (max_amp_factor != 1) {
         for (const auto& dependent_pipeline : dependent_pipelines) {

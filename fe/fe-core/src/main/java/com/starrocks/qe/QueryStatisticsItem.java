@@ -26,6 +26,10 @@ import java.util.List;
 
 public final class QueryStatisticsItem {
 
+<<<<<<< HEAD
+=======
+    private final String customQueryId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final String queryId;
     private final String user;
     private final String sql;
@@ -36,8 +40,16 @@ public final class QueryStatisticsItem {
     // root query profile
     private final RuntimeProfile queryProfile;
     private final TUniqueId executionId;
+<<<<<<< HEAD
 
     private QueryStatisticsItem(Builder builder) {
+=======
+    private final String warehouseName;
+    private final String resourceGroupName;
+
+    private QueryStatisticsItem(Builder builder) {
+        this.customQueryId = builder.customQueryId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.queryId = builder.queryId;
         this.user = builder.user;
         this.sql = builder.sql;
@@ -47,6 +59,11 @@ public final class QueryStatisticsItem {
         this.fragmentInstanceInfos = builder.fragmentInstanceInfos;
         this.queryProfile = builder.queryProfile;
         this.executionId = builder.executionId;
+<<<<<<< HEAD
+=======
+        this.warehouseName = builder.warehouseName;
+        this.resourceGroupName = builder.resourceGroupName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public String getDb() {
@@ -74,6 +91,13 @@ public final class QueryStatisticsItem {
         return currentTime - queryStartTime;
     }
 
+<<<<<<< HEAD
+=======
+    public String getCustomQueryId() {
+        return customQueryId;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getQueryId() {
         return queryId;
     }
@@ -90,7 +114,20 @@ public final class QueryStatisticsItem {
         return executionId;
     }
 
+<<<<<<< HEAD
     public static final class Builder {
+=======
+    public String getWarehouseName() {
+        return warehouseName;
+    }
+
+    public String getResourceGroupName() {
+        return resourceGroupName;
+    }
+
+    public static final class Builder {
+        private String customQueryId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         private String queryId;
         private String db;
         private String user;
@@ -100,11 +137,24 @@ public final class QueryStatisticsItem {
         private List<FragmentInstanceInfo> fragmentInstanceInfos;
         private RuntimeProfile queryProfile;
         private TUniqueId executionId;
+<<<<<<< HEAD
+=======
+        private String warehouseName;
+        private String resourceGroupName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         public Builder() {
             fragmentInstanceInfos = Lists.newArrayList();
         }
 
+<<<<<<< HEAD
+=======
+        public Builder customQueryId(String customQueryId) {
+            this.customQueryId = customQueryId;
+            return this;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Builder queryId(String queryId) {
             this.queryId = queryId;
             return this;
@@ -150,12 +200,32 @@ public final class QueryStatisticsItem {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public Builder warehouseName(String warehouseName) {
+            this.warehouseName = warehouseName;
+            return this;
+        }
+
+        public Builder resourceGroupName(String resourceGroupName) {
+            this.resourceGroupName = resourceGroupName;
+            return this;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public QueryStatisticsItem build() {
             initDefaultValue(this);
             return new QueryStatisticsItem(this);
         }
 
         private void initDefaultValue(Builder builder) {
+<<<<<<< HEAD
+=======
+            if (customQueryId == null) {
+                builder.customQueryId = "";
+            }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (queryId == null) {
                 builder.queryId = "0";
             }

@@ -13,7 +13,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`) BUCKETS 6
 PROPERTIES(
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "storage_format" = "default"
 );
 DROP TABLE if exists t1;
@@ -30,7 +33,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`) BUCKETS 6
 PROPERTIES(
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "storage_format" = "default"
 );
 DROP TABLE if exists t2;
@@ -47,7 +53,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`) BUCKETS 6
 PROPERTIES(
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "storage_format" = "default"
 );
 INSERT INTO t0

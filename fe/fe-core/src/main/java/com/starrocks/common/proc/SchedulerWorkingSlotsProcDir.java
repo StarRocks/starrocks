@@ -74,7 +74,11 @@ public class SchedulerWorkingSlotsProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid backend id format: " + beIdStr);
         }
 
+<<<<<<< HEAD
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+=======
+        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (backend == null) {
             throw new AnalysisException("Backend[" + backendId + "] does not exist.");
         }

@@ -168,7 +168,11 @@ inline string JoinStrings(const CONTAINER& components, const StringPiece& delim)
 template <class CONTAINER, typename FUNC>
 string JoinMapped(const CONTAINER& components, const FUNC& functor, const StringPiece& delim) {
     string result;
+<<<<<<< HEAD
     for (typename CONTAINER::const_iterator iter = components.begin(); iter != components.end(); iter++) {
+=======
+    for (auto iter = components.begin(); iter != components.end(); iter++) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (iter != components.begin()) {
             result.append(delim.data(), delim.size());
         }

@@ -25,6 +25,10 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+<<<<<<< HEAD
+=======
+#include "fs/fs_s3.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "io/s3_input_stream.h"
 #include "testutil/assert.h"
 
@@ -66,7 +70,11 @@ void S3OutputStreamTest::TearDownTestCase() {
 }
 
 void init_s3client() {
+<<<<<<< HEAD
     Aws::Client::ClientConfiguration config;
+=======
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     config.endpointOverride = config::object_storage_endpoint;
     const char* ak = config::object_storage_access_key_id.c_str();
     const char* sk = config::object_storage_secret_access_key.c_str();
@@ -137,7 +145,11 @@ TEST_F(S3OutputStreamTest, test_multipart_upload) {
     const char* kObjectName = "test_multipart_upload";
     delete_object(kObjectName);
     S3OutputStream os(g_s3client, kBucketName, kObjectName, 12, /*5MB=*/5 * 1024 * 1024);
+<<<<<<< HEAD
     S3InputStream is(g_s3client, kBucketName, kObjectName);
+=======
+    S3InputStream is(g_s3client, kBucketName, kObjectName, /*5MB=*/5 * 1024 * 1024);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::string s1("first line of multipart upload\n");
     std::string s2("second line of multipart upload\n");

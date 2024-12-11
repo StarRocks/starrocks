@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_string
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将 JSON 类型转化为 JSON 字符串。
 

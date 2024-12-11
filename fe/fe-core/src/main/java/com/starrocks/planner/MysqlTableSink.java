@@ -53,8 +53,13 @@ public class MysqlTableSink extends DataSink {
         port = Integer.parseInt(mysqlTable.getPort());
         user = mysqlTable.getUserName();
         passwd = mysqlTable.getPasswd();
+<<<<<<< HEAD
         db = mysqlTable.getMysqlDatabaseName();
         tbl = mysqlTable.getMysqlTableName();
+=======
+        db = mysqlTable.getCatalogDBName();
+        tbl = mysqlTable.getCatalogTableName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -82,9 +87,12 @@ public class MysqlTableSink extends DataSink {
     public DataPartition getOutputPartition() {
         return null;
     }
+<<<<<<< HEAD
 
     @Override
     public boolean canUsePipeLine() {
         return true;
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

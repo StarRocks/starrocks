@@ -14,12 +14,20 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Maps;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
+<<<<<<< HEAD
+=======
+import java.util.Collection;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -33,11 +41,19 @@ public class Statistics {
     // Table row count in FE depends on BE reporting，but FE may not get report from BE which just started，
     // this causes the table row count stored in FE to be inaccurate.
     private final boolean tableRowCountMayInaccurate;
+<<<<<<< HEAD
+=======
+    private final Collection<ColumnRefOperator> shadowColumns;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private Statistics(Builder builder) {
         this.outputRowCount = builder.outputRowCount;
         this.columnStatistics = builder.columnStatistics;
         this.tableRowCountMayInaccurate = builder.tableRowCountMayInaccurate;
+<<<<<<< HEAD
+=======
+        this.shadowColumns = builder.shadowColumns;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public double getOutputRowCount() {
@@ -48,6 +64,12 @@ public class Statistics {
         double totalSize = 0;
         boolean nonEmpty = false;
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+<<<<<<< HEAD
+=======
+            if (shadowColumns.contains(entry.getKey())) {
+                continue;
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (outputColumns.contains(entry.getKey().getId())) {
                 if (!entry.getValue().isUnknown()) {
                     totalSize += entry.getValue().getAverageRowSize();
@@ -64,16 +86,33 @@ public class Statistics {
     }
 
     public double getComputeSize() {
+<<<<<<< HEAD
         // Make it at least 1 byte, otherwise the cost model would propagate estimate error
         double totalSize = 0;
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+=======
+        return getAvgRowSize() * outputRowCount;
+    }
+
+    public double getAvgRowSize() {
+        // Make it at least 1 byte, otherwise the cost model would propagate estimate error
+        double totalSize = 0;
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+            if (shadowColumns.contains(entry.getKey())) {
+                continue;
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!entry.getValue().isUnknown()) {
                 totalSize += entry.getValue().getAverageRowSize();
             } else {
                 totalSize += entry.getKey().getType().getTypeSize();
             }
         }
+<<<<<<< HEAD
         return Math.max(totalSize, 1.0) * outputRowCount;
+=======
+        return Math.max(totalSize, 1.0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public ColumnStatistic getColumnStatistic(ColumnRefOperator column) {
@@ -132,7 +171,15 @@ public class Statistics {
     }
 
     public static Builder buildFrom(Statistics other) {
+<<<<<<< HEAD
         return new Builder(other.getOutputRowCount(), other.columnStatistics, other.tableRowCountMayInaccurate);
+=======
+        return new Builder(
+                other.getOutputRowCount(),
+                other.columnStatistics,
+                other.tableRowCountMayInaccurate,
+                other.shadowColumns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static Builder builder() {
@@ -143,16 +190,35 @@ public class Statistics {
         private double outputRowCount;
         private final Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
         private boolean tableRowCountMayInaccurate;
+<<<<<<< HEAD
+=======
+        // columns not used to compute costs
+        // which is used by mv rewrite to make the cost accurate
+        private Collection<ColumnRefOperator> shadowColumns;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         public Builder() {
             this(NaN, new HashMap<>(), false);
         }
 
         private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
+<<<<<<< HEAD
                         boolean tableRowCountMayInaccurate) {
             this.outputRowCount = outputRowCount;
             this.columnStatistics = new HashMap<>(columnStatistics);
             this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
+=======
+                        boolean tableRowCountMayInaccurate, Collection<ColumnRefOperator> shadowColumns) {
+            this.outputRowCount = outputRowCount;
+            this.columnStatistics = new HashMap<>(columnStatistics);
+            this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
+            this.shadowColumns = shadowColumns;
+        }
+
+        private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
+                        boolean tableRowCountMayInaccurate) {
+            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, Lists.newArrayList());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         public Builder setOutputRowCount(double outputRowCount) {
@@ -169,11 +235,25 @@ public class Statistics {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public double getOutputRowCount() {
+            return outputRowCount;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Builder setTableRowCountMayInaccurate(boolean tableRowCountMayInaccurate) {
             this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public boolean getTableRowCountMayInaccurate() {
+            return tableRowCountMayInaccurate;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Builder addColumnStatistic(ColumnRefOperator column, ColumnStatistic statistic) {
             this.columnStatistics.put(column, statistic);
             return this;
@@ -188,15 +268,31 @@ public class Statistics {
             return this.columnStatistics.get(columnRefOperator);
         }
 
+<<<<<<< HEAD
         public Builder addColumnStatisticsFromOtherStatistic(Statistics statistics, ColumnRefSet hintRefs) {
             statistics.getColumnStatistics().forEach((k, v) -> {
                 if (hintRefs.contains(k.getId())) {
                     this.columnStatistics.put(k, v);
+=======
+        public Builder addColumnStatisticsFromOtherStatistic(Statistics statistics, ColumnRefSet hintRefs, boolean withHist) {
+            statistics.getColumnStatistics().forEach((k, v) -> {
+                if (hintRefs.contains(k.getId())) {
+                    this.columnStatistics.put(k, withHist ? v : ColumnStatistic.buildFrom(v).setHistogram(null).build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             });
             return this;
         }
 
+<<<<<<< HEAD
+=======
+
+        public Builder setShadowColumns(Collection<ColumnRefOperator> shadowColumns) {
+            this.shadowColumns = shadowColumns;
+            return this;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Statistics build() {
             return new Statistics(this);
         }

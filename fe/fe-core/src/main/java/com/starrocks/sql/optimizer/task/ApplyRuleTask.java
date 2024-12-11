@@ -12,25 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+=======
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceInfo;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.Rule;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 
@@ -48,7 +62,10 @@ import java.util.List;
  */
 
 public class ApplyRuleTask extends OptimizerTask {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(Optimizer.class);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final GroupExpression groupExpression;
     private final Rule rule;
     private final boolean isExplore;
@@ -77,16 +94,34 @@ public class ApplyRuleTask extends OptimizerTask {
         OptExpression extractExpr = binder.next();
         List<OptExpression> newExpressions = Lists.newArrayList();
         List<OptExpression> extractExpressions = Lists.newArrayList();
+<<<<<<< HEAD
         SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
         while (extractExpr != null) {
+=======
+        while (extractExpr != null) {
+            // Check if the rule has exhausted or not to avoid optimization time exceeding the limit.:
+            // 1. binder.next() may be infinite loop if something is wrong.
+            // 2. rule.transform() may cost a lot of time.
+            if (rule.exhausted(context.getOptimizerContext())) {
+                OptimizerTraceUtil.logRuleExhausted(context.getOptimizerContext(), rule);
+                break;
+            }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!rule.check(extractExpr, context.getOptimizerContext())) {
                 extractExpr = binder.next();
                 continue;
             }
             extractExpressions.add(extractExpr);
+<<<<<<< HEAD
 
             List<OptExpression> targetExpressions;
             try {
+=======
+            List<OptExpression> targetExpressions;
+            OptimizerTraceUtil.logApplyRuleBefore(context.getOptimizerContext(), rule, extractExpr);
+            try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
             } catch (StarRocksPlannerException e) {
                 if (e.getType() == ErrorType.RULE_EXHAUSTED) {
@@ -95,6 +130,7 @@ public class ApplyRuleTask extends OptimizerTask {
                     throw e;
                 }
             }
+<<<<<<< HEAD
             if (rule.exhausted(context.getOptimizerContext())) {
                 OptimizerTraceUtil.log(ConnectContext.get(), "rule exhausted %s", rule);
                 break;
@@ -104,6 +140,11 @@ public class ApplyRuleTask extends OptimizerTask {
 
             OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
             OptimizerTraceUtil.logApplyRule(sessionVariable, traceInfo, rule, extractExpr, targetExpressions);
+=======
+
+            newExpressions.addAll(targetExpressions);
+            OptimizerTraceUtil.logApplyRuleAfter(targetExpressions);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             extractExpr = binder.next();
         }
@@ -119,12 +160,22 @@ public class ApplyRuleTask extends OptimizerTask {
             }
 
             GroupExpression newGroupExpression = result.second;
+<<<<<<< HEAD
             if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
+=======
+
+            // Add this rule into `appliedRules` to mark rules which have already been applied.
+            {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 // new bitset should derive old bitset's info to track the lineage of applied rules.
                 newGroupExpression.mergeAppliedRules(groupExpression.getAppliedRuleMasks());
                 // new bitset add new rule which it's derived from.
                 newGroupExpression.addNewAppliedRule(rule);
             }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (newGroupExpression.getOp().isLogical()) {
                 // For logic newGroupExpression, optimize it
                 pushTask(new OptimizeExpressionTask(context, newGroupExpression, isExplore));

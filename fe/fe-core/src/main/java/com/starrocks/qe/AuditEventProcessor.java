@@ -73,7 +73,11 @@ public class AuditEventProcessor {
         try {
             eventQueue.put(auditEvent);
         } catch (InterruptedException e) {
+<<<<<<< HEAD
             LOG.debug("encounter exception when handle audit event, ignore", e);
+=======
+            LOG.warn("encounter exception when handle audit event, ignore", e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -96,7 +100,11 @@ public class AuditEventProcessor {
                         continue;
                     }
                 } catch (InterruptedException e) {
+<<<<<<< HEAD
                     LOG.debug("encounter exception when getting audit event from queue, ignore", e);
+=======
+                    LOG.warn("encounter exception when getting audit event from queue, ignore", e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     continue;
                 }
 
@@ -107,7 +115,11 @@ public class AuditEventProcessor {
                         }
                     }
                 } catch (Exception e) {
+<<<<<<< HEAD
                     LOG.debug("encounter exception when processing audit event.", e);
+=======
+                    LOG.warn("encounter exception when processing audit event.", e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         }

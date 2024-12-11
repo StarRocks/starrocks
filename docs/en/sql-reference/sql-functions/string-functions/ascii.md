@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ascii
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This function returns the ascii value of the leftmost character of a given string.
 

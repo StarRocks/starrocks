@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     ps_partkey,
@@ -26,6 +27,8 @@ group by
     )
 order by
     value desc ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:1: PS_PARTKEY | 21: sum
@@ -81,7 +84,10 @@ rollup: partsupp
 tabletRatio=10/10
 cardinality=80000000
 avgRowSize=28.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -134,7 +140,10 @@ rollup: partsupp
 tabletRatio=10/10
 cardinality=80000000
 avgRowSize=20.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -162,7 +171,10 @@ rollup: supplier
 tabletRatio=1/1
 cardinality=1000000
 avgRowSize=8.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 5
 OUTPUT EXPRS:
@@ -184,7 +196,10 @@ rollup: nation
 tabletRatio=1/1
 cardinality=1
 avgRowSize=29.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 6
 OUTPUT EXPRS:
@@ -212,7 +227,10 @@ rollup: supplier
 tabletRatio=1/1
 cardinality=1000000
 avgRowSize=8.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 7
 OUTPUT EXPRS:
@@ -234,6 +252,9 @@ rollup: nation
 tabletRatio=1/1
 cardinality=1
 avgRowSize=29.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [end]
 

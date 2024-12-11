@@ -103,6 +103,11 @@ struct ResultFileOptions {
 };
 
 // write result to file
+<<<<<<< HEAD
+=======
+// used in no-pipeline or file_sink_operator
+// won't used in result_sink_operator
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class FileResultWriter final : public ResultWriter {
 public:
     FileResultWriter(const ResultFileOptions* file_option, const std::vector<ExprContext*>& output_expr_ctxs,

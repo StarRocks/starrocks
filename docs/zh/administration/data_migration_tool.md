@@ -114,7 +114,11 @@ SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
 
 #### BE 参数
 
+<<<<<<< HEAD
 以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](../administration/management/BE_configuration.md#配置-be-动态参数)。
+=======
+以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](../administration/management/BE_configuration.md)。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 | **参数名**          | **默认值** | **单位** | **描述**                                                     |
 | ------------------- | ---------- | -------- | ------------------------------------------------------------ |

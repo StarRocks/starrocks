@@ -19,6 +19,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TStatisticData;
 import org.junit.Assert;
@@ -31,15 +35,26 @@ public class StatisticExecutorTest extends PlanTestBase {
     @Test
     public void testEmpty() throws Exception {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable olapTable = (OlapTable) db.getTable("t0");
 
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), olapTable.getId(), null,
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), olapTable.getId(), null,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
 
+<<<<<<< HEAD
         Assert.assertThrows(IllegalStateException.class,
+=======
+        Assert.assertThrows(SemanticException.class,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 () -> statisticExecutor.queryStatisticSync(
                         StatisticUtils.buildConnectContext(), db.getId(), olapTable.getId(), Lists.newArrayList("foo", "bar")));
     }
@@ -47,15 +62,25 @@ public class StatisticExecutorTest extends PlanTestBase {
     @Test
     public void testDroppedDB() throws Exception {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), 10003, null,
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), 1000, null,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
 
         List<TStatisticData> stats = statisticExecutor.queryStatisticSync(
+<<<<<<< HEAD
                 StatisticUtils.buildConnectContext(), null, 10003L, Lists.newArrayList("foo", "bar"));
+=======
+                StatisticUtils.buildConnectContext(), null, 1000L, Lists.newArrayList("foo", "bar"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(0, stats.size());
     }
 }

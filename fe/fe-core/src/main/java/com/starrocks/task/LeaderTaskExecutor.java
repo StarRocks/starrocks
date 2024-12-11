@@ -114,6 +114,17 @@ public class LeaderTaskExecutor {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public int getCorePoolSize() {
+        return executor.getCorePoolSize();
+    }
+
+    public void setPoolSize(int poolSize) {
+        ThreadPoolManager.setFixedThreadPoolSize(executor, poolSize);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private class TaskChecker implements Runnable {
         @Override
         public void run() {

@@ -109,6 +109,7 @@ Status ClientCacheHelper::reopen_client(const client_factory& factory_method, vo
 
     if (_metrics_enabled) {
         _opened_clients->increment(-1);
+<<<<<<< HEAD
         _used_clients->increment(-1);
     }
 
@@ -116,6 +117,16 @@ Status ClientCacheHelper::reopen_client(const client_factory& factory_method, vo
 
     if (_metrics_enabled) {
         _used_clients->increment(1);
+=======
+    }
+
+    Status status = create_client(make_network_address(ipaddress, port), factory_method, client_key, timeout_ms);
+    if (!status.ok()) {
+        if (_metrics_enabled) {
+            _used_clients->increment(-1);
+        }
+        return status;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     _client_map[*client_key]->set_send_timeout(timeout_ms);

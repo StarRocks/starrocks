@@ -15,7 +15,11 @@
 package com.starrocks.sql.optimizer.operator.pattern;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableList;
+=======
+import com.google.common.collect.ImmutableSet;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -28,7 +32,11 @@ import java.util.List;
  * Pattern is used in rules as a placeholder for group
  */
 public class Pattern {
+<<<<<<< HEAD
     public static final ImmutableList<OperatorType> ALL_SCAN_TYPES = ImmutableList.<OperatorType>builder()
+=======
+    public static final ImmutableSet<OperatorType> ALL_SCAN_TYPES = ImmutableSet.<OperatorType>builder()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .add(OperatorType.LOGICAL_OLAP_SCAN)
             .add(OperatorType.LOGICAL_HIVE_SCAN)
             .add(OperatorType.LOGICAL_ICEBERG_SCAN)
@@ -40,6 +48,11 @@ public class Pattern {
             .add(OperatorType.LOGICAL_META_SCAN)
             .add(OperatorType.LOGICAL_JDBC_SCAN)
             .add(OperatorType.LOGICAL_BINLOG_SCAN)
+<<<<<<< HEAD
+=======
+            .add(OperatorType.LOGICAL_VIEW_SCAN)
+            .add(OperatorType.LOGICAL_PAIMON_SCAN)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .build();
 
     private final OperatorType opType;

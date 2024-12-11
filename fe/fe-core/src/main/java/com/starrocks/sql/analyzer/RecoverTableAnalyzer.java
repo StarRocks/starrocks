@@ -17,12 +17,19 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.RecoverTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class RecoverTableAnalyzer {
 
     public static void analyze(RecoverTableStmt statement, ConnectContext context) {
         TableName tableName = statement.getTableNameObject();
+<<<<<<< HEAD
         MetaUtils.normalizationTableName(context, tableName);
+=======
+        tableName.normalization(context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

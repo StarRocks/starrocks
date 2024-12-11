@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # unix_timestamp
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a DATE or DATETIME value into a UNIX timestamp.
 

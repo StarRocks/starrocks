@@ -15,6 +15,10 @@
 #pragma once
 
 #include <cassert>
+<<<<<<< HEAD
+=======
+#include <cstdint>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <cstring>
 #include <iostream>
 #include <string_view>

@@ -53,10 +53,18 @@ protected:
         auto _page_cache_mem_tracker = std::make_unique<MemTracker>();
         static const int kNumShardBits = 5;
         static const int kNumShards = 1 << kNumShardBits;
+<<<<<<< HEAD
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), kNumShards * 100000);
     }
 
     void TearDown() override { StoragePageCache::release_global_cache(); }
+=======
+        StoragePageCache::release_global_cache();
+        StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), kNumShards * 100000);
+    }
+
+    void TearDown() override { StoragePageCache::instance()->prune(); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class TestMetricsVisitor : public MetricsVisitor {
@@ -327,6 +335,28 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("segment_flush", instance);
     assert_threadpool_metrics_register("update_apply", instance);
     assert_threadpool_metrics_register("pk_index_compaction", instance);
+<<<<<<< HEAD
+=======
+    assert_threadpool_metrics_register("drop", instance);
+    assert_threadpool_metrics_register("create_tablet", instance);
+    assert_threadpool_metrics_register("alter_tablet", instance);
+    assert_threadpool_metrics_register("clear_transaction", instance);
+    assert_threadpool_metrics_register("storage_medium_migrate", instance);
+    assert_threadpool_metrics_register("check_consistency", instance);
+    assert_threadpool_metrics_register("manual_compaction", instance);
+    assert_threadpool_metrics_register("compaction_control", instance);
+    assert_threadpool_metrics_register("update_schema", instance);
+    assert_threadpool_metrics_register("upload", instance);
+    assert_threadpool_metrics_register("download", instance);
+    assert_threadpool_metrics_register("make_snapshot", instance);
+    assert_threadpool_metrics_register("release_snapshot", instance);
+    assert_threadpool_metrics_register("move_dir", instance);
+    assert_threadpool_metrics_register("update_tablet_meta_info", instance);
+    assert_threadpool_metrics_register("drop_auto_increment_map_dir", instance);
+    assert_threadpool_metrics_register("clone", instance);
+    assert_threadpool_metrics_register("remote_snapshot", instance);
+    assert_threadpool_metrics_register("replicate_snapshot", instance);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_wait_memtable_duration_us"));

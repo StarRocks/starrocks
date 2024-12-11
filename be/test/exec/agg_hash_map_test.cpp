@@ -200,7 +200,11 @@ public:
         return col;
     };
 
+<<<<<<< HEAD
     void CheckNotFounds(const std::vector<uint8_t>& not_founds, const std::vector<uint8_t>& exp_datas) {
+=======
+    void CheckNotFounds(const Filter& not_founds, const std::vector<uint8_t>& exp_datas) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         DCHECK_EQ(not_founds.size(), exp_datas.size());
         for (auto i = 0; i < not_founds.size(); i++) {
             VLOG_ROW << "i:" << i << ", not_found:" << (int)not_founds[i] << ", expect:" << (int)exp_datas[i];
@@ -219,7 +223,12 @@ public:
         TestAggHashMapKey key(chunk_size, &statis);
         Buffer<AggDataPtr> agg_states(chunk_size);
         MemPool pool;
+<<<<<<< HEAD
         std::vector<uint8_t> not_founds;
+=======
+        Filter not_founds;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // For fixed size key, need set key's fixed size
         if constexpr (std::is_same_v<TestAggHashMapKey,
                                      AggHashMapWithSerializedKeyFixedSize<FixedSize16SliceAggHashMap<PhmapSeed1>>>) {

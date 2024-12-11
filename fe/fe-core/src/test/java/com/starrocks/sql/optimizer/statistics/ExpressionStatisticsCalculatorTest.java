@@ -20,6 +20,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.sql.optimizer.Utils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -523,6 +528,57 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testWeek() {
+        ColumnRefOperator left = new ColumnRefOperator(0, Type.DATETIME, "left", true);
+        ColumnRefOperator right = new ColumnRefOperator(1, Type.INT, "right", true);
+        double min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2021-09-01", DateUtils.DATE_FORMATTER_UNIX));
+        double max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-07-01", DateUtils.DATE_FORMATTER_UNIX));
+        ColumnStatistic leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
+        ColumnStatistic rightStatistic = new ColumnStatistic(1, 1, 0, 1, 1);
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        CallOperator week = new CallOperator(FunctionSet.WEEK, Type.INT, Lists.newArrayList(left, right));
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(45, columnStatistic.getDistinctValuesCount(), 0.1);
+
+        min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-01-20", DateUtils.DATE_FORMATTER_UNIX));
+        max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-08-01", DateUtils.DATE_FORMATTER_UNIX));
+        leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
+        builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(29, columnStatistic.getDistinctValuesCount(), 0.1);
+
+        min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-01-20", DateUtils.DATE_FORMATTER_UNIX));
+        max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2023-08-01", DateUtils.DATE_FORMATTER_UNIX));
+        leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
+        builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(54, columnStatistic.getDistinctValuesCount(), 0.1);
+
+        min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-01-20", DateUtils.DATE_FORMATTER_UNIX));
+        max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2023-08-01", DateUtils.DATE_FORMATTER_UNIX));
+        leftStatistic = new ColumnStatistic(min, max, 0, 0, 2);
+        builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.1);
+
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testCastOperator() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.INT, "id", true);
         CastOperator callOperator = new CastOperator(Type.VARCHAR, columnRefOperator);

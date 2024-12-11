@@ -115,7 +115,11 @@ if (NOT MSVC)
 endif ()
 message(STATUS "compiler ${CMAKE_CXX_COMPILER_ID} version ${CMAKE_CXX_COMPILER_VERSION}")
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+<<<<<<< HEAD
   set (CMAKE_CXX_STANDARD 17)
+=======
+  set (CMAKE_CXX_STANDARD 20)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   set (WARN_FLAGS "-Weverything -Wno-c++98-compat -Wno-missing-prototypes")
   set (WARN_FLAGS "${WARN_FLAGS} -Wno-c++98-compat-pedantic -Wno-padded")
   set (WARN_FLAGS "${WARN_FLAGS} -Wno-covered-switch-default")
@@ -138,7 +142,11 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
       CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.7")
     set (CXX11_FLAGS "-std=c++0x")
   else ()
+<<<<<<< HEAD
     set (CMAKE_CXX_STANDARD 17)
+=======
+    set (CMAKE_CXX_STANDARD 20)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   endif ()
 elseif (MSVC)
   add_definitions (-D_SCL_SECURE_NO_WARNINGS)

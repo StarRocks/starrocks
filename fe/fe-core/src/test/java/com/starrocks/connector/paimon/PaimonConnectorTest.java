@@ -25,7 +25,11 @@ import mockit.Mocked;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.options.Options;
+<<<<<<< HEAD
 import org.apache.paimon.table.AbstractFileStoreTable;
+=======
+import org.apache.paimon.table.FileStoreTable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.IntType;
 import org.junit.Assert;
@@ -85,7 +89,11 @@ public class PaimonConnectorTest {
 
     @Test
     public void testCreatePaimonTable(@Mocked Catalog paimonNativeCatalog,
+<<<<<<< HEAD
                                       @Mocked AbstractFileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
+=======
+                                      @Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Map<String, String> properties = new HashMap<>();
         properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
         properties.put("paimon.catalog.type", "filesystem");
@@ -109,11 +117,18 @@ public class PaimonConnectorTest {
 
         ConnectorMetadata metadata = connector.getMetadata();
         Assert.assertTrue(metadata instanceof PaimonMetadata);
+<<<<<<< HEAD
         PaimonMetadata paimonMetadata = (PaimonMetadata) metadata;
         com.starrocks.catalog.Table table = paimonMetadata.getTable("db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
         Assert.assertEquals("db1", paimonTable.getDbName());
         Assert.assertEquals("tbl1", paimonTable.getTableName());
+=======
+        com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
+        PaimonTable paimonTable = (PaimonTable) table;
+        Assert.assertEquals("db1", paimonTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", paimonTable.getCatalogTableName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());

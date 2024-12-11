@@ -16,12 +16,21 @@
 
 #include <atomic>
 #include <boost/algorithm/string.hpp>
+<<<<<<< HEAD
 #include <utility>
 
 #include "column/chunk.h"
 #include "exec/mor_processor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+=======
+
+#include "exec/olap_scan_prepare.h"
+#include "exec/pipeline/scan/morsel.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "exprs/runtime_filter_bank.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "fs/fs.h"
 #include "io/cache_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
@@ -33,6 +42,16 @@ namespace starrocks {
 
 class RuntimeFilterProbeCollector;
 
+<<<<<<< HEAD
+=======
+struct HdfsSplitContext : public pipeline::ScanSplitContext {
+    size_t split_start = 0;
+    size_t split_end = 0;
+    virtual std::unique_ptr<HdfsSplitContext> clone() = 0;
+};
+using HdfsSplitContextPtr = std::unique_ptr<HdfsSplitContext>;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t rows_read = 0;
@@ -56,18 +75,51 @@ struct HdfsScanStats {
     int64_t page_read_ns = 0;
     // reader init
     int64_t footer_read_ns = 0;
+<<<<<<< HEAD
+=======
+    int64_t footer_cache_read_ns = 0;
+    int64_t footer_cache_read_count = 0;
+    int64_t footer_cache_write_count = 0;
+    int64_t footer_cache_write_bytes = 0;
+    int64_t footer_cache_write_fail_count = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t column_reader_init_ns = 0;
     // dict filter
     int64_t group_chunk_read_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
+<<<<<<< HEAD
 
+=======
+    // io coalesce
+    int64_t group_active_lazy_coalesce_together = 0;
+    int64_t group_active_lazy_coalesce_seperately = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // page statistics
     bool has_page_statistics = false;
     // page skip
     int64_t page_skip = 0;
+<<<<<<< HEAD
 
     std::vector<int64_t> orc_stripe_sizes;
+=======
+    // page index
+    int64_t rows_before_page_index = 0;
+    int64_t page_index_ns = 0;
+    int64_t parquet_total_row_groups = 0;
+    int64_t parquet_filtered_row_groups = 0;
+
+    // late materialize round-by-round
+    int64_t group_min_round_cost = 0;
+
+    // orc stripe information
+    std::vector<int64_t> orc_stripe_sizes{};
+    int64_t orc_total_tiny_stripe_size = 0;
+
+    // io coalesce
+    int64_t orc_stripe_active_lazy_coalesce_together = 0;
+    int64_t orc_stripe_active_lazy_coalesce_seperately = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
@@ -83,6 +135,10 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* late_materialize_skip_rows_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* scan_ranges_size = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
@@ -90,6 +146,7 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* column_read_timer = nullptr;
     RuntimeProfile::Counter* column_convert_timer = nullptr;
 
+<<<<<<< HEAD
     RuntimeProfile::Counter* block_cache_read_counter = nullptr;
     RuntimeProfile::Counter* block_cache_read_bytes = nullptr;
     RuntimeProfile::Counter* block_cache_read_timer = nullptr;
@@ -100,6 +157,24 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* block_cache_write_fail_bytes = nullptr;
     RuntimeProfile::Counter* block_cache_read_block_buffer_counter = nullptr;
     RuntimeProfile::Counter* block_cache_read_block_buffer_bytes = nullptr;
+=======
+    RuntimeProfile::Counter* datacache_read_counter = nullptr;
+    RuntimeProfile::Counter* datacache_read_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_mem_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_disk_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_timer = nullptr;
+    RuntimeProfile::Counter* datacache_skip_write_counter = nullptr;
+    RuntimeProfile::Counter* datacache_skip_write_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_skip_read_counter = nullptr;
+    RuntimeProfile::Counter* datacache_skip_read_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_write_counter = nullptr;
+    RuntimeProfile::Counter* datacache_write_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_write_timer = nullptr;
+    RuntimeProfile::Counter* datacache_write_fail_counter = nullptr;
+    RuntimeProfile::Counter* datacache_write_fail_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_block_buffer_counter = nullptr;
+    RuntimeProfile::Counter* datacache_read_block_buffer_bytes = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
@@ -119,17 +194,33 @@ struct HdfsScanProfile {
 
 struct HdfsScannerParams {
     // one file split (parition_id, file_path, file_length, offset, length, file_format)
+<<<<<<< HEAD
     std::vector<const THdfsScanRange*> scan_ranges;
+=======
+    const THdfsScanRange* scan_range = nullptr;
+
+    bool enable_split_tasks = false;
+    const HdfsSplitContext* split_context = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
+<<<<<<< HEAD
     // all conjuncts except `conjunct_ctxs_by_slot`
     std::vector<ExprContext*> conjunct_ctxs;
     std::unordered_set<SlotId> slots_in_conjunct;
     // slot used by conjunct_ctxs
     std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
     bool eval_conjunct_ctxs = true;
+=======
+    std::vector<ExprContext*> all_conjunct_ctxs;
+    // all conjuncts except `conjunct_ctxs_by_slot`, like compound predicates
+    std::vector<ExprContext*> scanner_conjunct_ctxs;
+    std::unordered_set<SlotId> slots_in_conjunct;
+    // slot used by conjunct_ctxs
+    std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // conjunct ctxs grouped by slot.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
@@ -141,8 +232,11 @@ struct HdfsScannerParams {
     // The file size. -1 means unknown.
     int64_t file_size = -1;
 
+<<<<<<< HEAD
     int64_t modification_time = 0;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file
@@ -158,6 +252,14 @@ struct HdfsScannerParams {
     // partition conjunct, used to generate partition columns
     std::vector<ExprContext*> partition_values;
 
+<<<<<<< HEAD
+=======
+    std::vector<SlotDescriptor*> extended_col_slots;
+    std::vector<int> extended_col_index_in_chunk;
+    std::vector<int> index_in_extended_columns;
+    std::vector<ExprContext*> extended_col_values;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // min max conjunct for filter row group or page
     // should clone in scanner
     std::vector<ExprContext*> min_max_conjunct_ctxs;
@@ -170,24 +272,41 @@ struct HdfsScannerParams {
 
     HdfsScanProfile* profile = nullptr;
 
+<<<<<<< HEAD
     std::atomic<int32_t>* open_limit;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::vector<const TIcebergDeleteFile*> deletes;
 
     const TIcebergSchema* iceberg_schema = nullptr;
 
+<<<<<<< HEAD
     const TIcebergSchema* iceberg_equal_delete_schema = nullptr;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
     bool use_block_cache = false;
     bool enable_populate_block_cache = false;
+=======
+    bool is_lazy_materialization_slot(SlotId slot_id) const;
+
+    std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file = nullptr;
+
+    DataCacheOptions datacache_options{};
+    bool use_file_metacache = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool orc_use_column_names = false;
+<<<<<<< HEAD
     MORParams mor_params;
+=======
+
+    int64_t connector_max_split_size = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 struct HdfsScannerContext {
@@ -200,11 +319,24 @@ struct HdfsScannerContext {
             return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
         }
         const std::string& name() const { return slot_desc->col_name(); }
+<<<<<<< HEAD
+=======
+        int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
+        const std::string& col_physical_name() const { return slot_desc->col_physical_name(); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const SlotId slot_id() const { return slot_desc->id(); }
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
 
+<<<<<<< HEAD
     const TupleDescriptor* tuple_desc = nullptr;
+=======
+    std::string formatted_name(const std::string& name) {
+        return case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+    }
+
+    std::vector<SlotDescriptor*> slot_descs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
     // materialized column read from parquet file
@@ -216,8 +348,23 @@ struct HdfsScannerContext {
     // partition column value which read from hdfs file path
     std::vector<ColumnPtr> partition_values;
 
+<<<<<<< HEAD
     // scan ranges
     std::vector<const THdfsScanRange*> scan_ranges;
+=======
+    // extended column
+    std::vector<ColumnInfo> extended_columns;
+
+    std::vector<ColumnPtr> extended_values;
+
+    // scan range
+    const THdfsScanRange* scan_range = nullptr;
+    bool enable_split_tasks = false;
+    const HdfsSplitContext* split_context = nullptr;
+    std::vector<HdfsSplitContextPtr> split_tasks;
+    bool has_split_tasks = false;
+    size_t estimated_mem_usage_per_split_task = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -238,6 +385,13 @@ struct HdfsScannerContext {
 
     bool can_use_min_max_count_opt = false;
 
+<<<<<<< HEAD
+=======
+    bool return_count_column = false;
+
+    bool use_file_metacache = false;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string timezone;
 
     const TIcebergSchema* iceberg_schema = nullptr;
@@ -246,21 +400,46 @@ struct HdfsScannerContext {
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
 
+<<<<<<< HEAD
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
     void update_materialized_columns(const std::unordered_set<std::string>& names);
 
+=======
+    int64_t connector_max_split_size = 0;
+
+    // update none_existed_slot
+    // update conjunct
+    void update_with_none_existed_slot(SlotDescriptor* slot);
+
+    // update materialized column against data file.
+    // and to update not_existed slots and conjuncts.
+    // and to update `conjunct_ctxs_by_slot` field.
+    Status update_materialized_columns(const std::unordered_set<std::string>& names);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // "not existed columns" are materialized columns not found in file
     // this usually happens when use changes schema. for example
     // user create table with 3 fields A, B, C, and there is one file F1
     // but user change schema and add one field like D.
     // when user select(A, B, C, D), then D is the non-existed column in file F1.
+<<<<<<< HEAD
     void append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+=======
+    Status append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // If there is no partition column in the chunk，append partition column to chunk，
     // otherwise update partition column in chunk
     void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+<<<<<<< HEAD
+=======
+    void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,
+                                          const std::vector<ColumnPtr>& values);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
@@ -268,6 +447,7 @@ struct HdfsScannerContext {
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
 
     // other helper functions.
+<<<<<<< HEAD
     void update_partition_column_of_chunk(ChunkPtr* chunk, size_t row_count);
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
@@ -279,30 +459,68 @@ inline bool atomic_cas(std::atomic_bool* lvalue, std::atomic_bool* rvalue, bool 
     if (res) *rvalue = expect;
     return res;
 }
+=======
+    bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
+    Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
+
+    void merge_split_tasks();
+
+    // used for parquet zone map filter only
+    std::unique_ptr<ScanConjunctsManager> conjuncts_manager = nullptr;
+    std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
+    PredicateTree predicate_tree;
+};
+
+struct OpenFileOptions {
+    FileSystem* fs = nullptr;
+    std::string path;
+    int64_t file_size = -1;
+    HdfsScanStats* fs_stats = nullptr;
+    HdfsScanStats* app_stats = nullptr;
+
+    // for datacache
+    DataCacheOptions datacache_options;
+
+    // for compressed text file
+    CompressionTypePB compression_type = CompressionTypePB::NO_COMPRESSION;
+};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 class HdfsScanner {
 public:
     HdfsScanner() = default;
     virtual ~HdfsScanner() = default;
 
+<<<<<<< HEAD
     Status open(RuntimeState* runtime_state);
     void close(RuntimeState* runtime_state) noexcept;
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
     void finalize();
+=======
+    Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
+    Status open(RuntimeState* runtime_state);
+    Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
+    void close() noexcept;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     int64_t num_bytes_read() const { return _app_stats.bytes_read; }
     int64_t raw_rows_read() const { return _app_stats.raw_rows_read; }
     int64_t num_rows_read() const { return _app_stats.rows_read; }
     int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
     int64_t io_time_spent() const { return _app_stats.io_ns; }
+<<<<<<< HEAD
     int64_t estimated_mem_usage() const;
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
+=======
+    virtual int64_t estimated_mem_usage() const;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void update_counter();
 
     RuntimeState* runtime_state() { return _runtime_state; }
 
+<<<<<<< HEAD
     int32_t open_limit() { return _scanner_params.open_limit->load(std::memory_order_relaxed); }
 
     bool is_open() { return _opened; }
@@ -323,11 +541,14 @@ public:
 
     bool has_pending_token() { return _pending_token; }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     virtual Status do_open(RuntimeState* runtime_state) = 0;
     virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
+<<<<<<< HEAD
     virtual bool is_jni_scanner() { return false; }
 
     void enter_pending_queue();
@@ -336,12 +557,26 @@ public:
 
 protected:
     Status open_random_access_file();
+=======
+    virtual Status reinterpret_status(const Status& st);
+    void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
+    bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
+
+    static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
+            std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
+
+protected:
+    Status open_random_access_file();
+    static CompressionTypePB get_compression_type_from_path(const std::string& filename);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
 
 private:
     bool _opened = false;
     std::atomic<bool> _closed = false;
+<<<<<<< HEAD
     bool _keep_priority = false;
     Status _build_scanner_context();
     MonotonicStopWatch _pending_queue_sw;
@@ -351,6 +586,12 @@ private:
 protected:
     std::atomic_bool _pending_token = false;
 
+=======
+    Status _build_scanner_context();
+    void update_hdfs_counter(HdfsScanProfile* profile);
+
+protected:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     HdfsScannerContext _scanner_ctx;
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
@@ -362,7 +603,10 @@ protected:
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
+<<<<<<< HEAD
     std::shared_ptr<DefaultMORProcessor> _mor_processor;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

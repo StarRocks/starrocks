@@ -13,7 +13,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 6
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -327,4 +330,8 @@ select sum(c2),  'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on
 
 select sum(c0), count(distinct c2, c3) from skew_agg where c0 = 480816 and c1 = 2 group by c4;
 
+<<<<<<< HEAD
 select count(distinct 1, 2), count(distinct 1), count(distinct null), group_concat(distinct 'a', 'b'), count(distinct c2) from skew_agg;
+=======
+select count(distinct 1, 2), count(distinct 1), count(distinct null), group_concat(distinct 'a', 'b'), count(distinct c2) from skew_agg;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

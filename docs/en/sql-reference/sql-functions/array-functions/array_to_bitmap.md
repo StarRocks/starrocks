@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_to_bitmap
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts an array into BITMAP values. This function is supported from v2.3.
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # datediff
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Calculates the difference between two date values (`expr1 - expr2`) and returns a result in days. `expr1` and `expr2` are valid DATE or DATETIME expressions.
 

@@ -62,6 +62,10 @@ public class JobsProcDir implements ProcDirInterface {
     private static final String ROLLUP = "rollup";
     private static final String SCHEMA_CHANGE = "schema_change";
     private static final String EXPORT = "export";
+<<<<<<< HEAD
+=======
+    private static final String OPTIMIZE = "optimize";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private GlobalStateMgr globalStateMgr;
     private Database db;
@@ -91,6 +95,11 @@ public class JobsProcDir implements ProcDirInterface {
             return new RollupProcDir(globalStateMgr.getRollupHandler(), db);
         } else if (jobTypeName.equals(SCHEMA_CHANGE)) {
             return new SchemaChangeProcDir(globalStateMgr.getSchemaChangeHandler(), db);
+<<<<<<< HEAD
+=======
+        } else if (jobTypeName.equals(OPTIMIZE)) {
+            return new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(), db);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else if (jobTypeName.equals(EXPORT)) {
             return new ExportProcNode(globalStateMgr.getExportMgr(), db);
         } else {

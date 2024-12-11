@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_intersect
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Aggregation function, used to calculate the bitmap intersection after grouping. Common usage scenarios, such as calculating user retention rate.
 

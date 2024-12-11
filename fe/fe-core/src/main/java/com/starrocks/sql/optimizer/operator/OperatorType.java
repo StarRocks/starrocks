@@ -25,15 +25,29 @@ public enum OperatorType {
     LOGICAL_HIVE_SCAN,
     LOGICAL_FILE_SCAN,
     LOGICAL_ICEBERG_SCAN,
+<<<<<<< HEAD
     LOGICAL_HUDI_SCAN,
     LOGICAL_DELTALAKE_SCAN,
     LOGICAL_PAIMON_SCAN,
+=======
+    LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN,
+    LOGICAL_HUDI_SCAN,
+    LOGICAL_DELTALAKE_SCAN,
+    LOGICAL_PAIMON_SCAN,
+    LOGICAL_ODPS_SCAN,
+    LOGICAL_ICEBERG_METADATA_SCAN,
+    LOGICAL_KUDU_SCAN,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     LOGICAL_SCHEMA_SCAN,
     LOGICAL_MYSQL_SCAN,
     LOGICAL_ES_SCAN,
     LOGICAL_META_SCAN,
     LOGICAL_JDBC_SCAN,
     LOGICAL_BINLOG_SCAN,
+<<<<<<< HEAD
+=======
+    LOGICAL_VIEW_SCAN,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     LOGICAL_TABLE_FUNCTION_TABLE_SCAN,
     LOGICAL_JOIN,
     LOGICAL_AGGR,
@@ -66,9 +80,19 @@ public enum OperatorType {
     PHYSICAL_HIVE_SCAN,
     PHYSICAL_FILE_SCAN,
     PHYSICAL_ICEBERG_SCAN,
+<<<<<<< HEAD
     PHYSICAL_HUDI_SCAN,
     PHYSICAL_DELTALAKE_SCAN,
     PHYSICAL_PAIMON_SCAN,
+=======
+    PHYSICAL_ICEBERG_EQUALITY_DELETE_SCAN,
+    PHYSICAL_HUDI_SCAN,
+    PHYSICAL_DELTALAKE_SCAN,
+    PHYSICAL_PAIMON_SCAN,
+    PHYSICAL_ODPS_SCAN,
+    PHYSICAL_ICEBERG_METADATA_SCAN,
+    PHYSICAL_KUDU_SCAN,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     PHYSICAL_SCHEMA_SCAN,
     PHYSICAL_MYSQL_SCAN,
     PHYSICAL_META_SCAN,
@@ -139,4 +163,9 @@ public enum OperatorType {
     //  /  \
     // table table
     PATTERN_MULTIJOIN,
+<<<<<<< HEAD
+=======
+    DICTIONARY_GET,
+    MATCH_EXPR
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

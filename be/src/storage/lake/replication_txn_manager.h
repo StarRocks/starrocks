@@ -15,6 +15,10 @@
 #pragma once
 
 #include "common/status.h"
+<<<<<<< HEAD
+=======
+#include "fs/encryption.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/macros.h"
 #include "storage/lake/tablet_metadata.h"
@@ -48,9 +52,15 @@ private:
     Status replicate_remote_snapshot(const TReplicateSnapshotRequest& request, const TSnapshotInfo& src_snapshot_info,
                                      const TabletMetadataPtr& tablet_metadata);
 
+<<<<<<< HEAD
     static Status convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
                                       TxnLogPB::OpWrite* op_write,
                                       std::unordered_map<std::string, std::string>* segment_filename_map);
+=======
+    static Status convert_rowset_meta(
+            const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,
+            std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>* segment_filename_map);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     static Status convert_delete_predicate_pb(DeletePredicatePB* delete_predicate);
 

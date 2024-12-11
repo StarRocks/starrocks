@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
@@ -29,14 +32,23 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Objects;
 import java.util.Set;
 
 public class PhysicalTopNOperator extends PhysicalOperator {
+<<<<<<< HEAD
     private final long offset;
     private final List<ColumnRefOperator> partitionByColumns;
     private final long partitionLimit;
@@ -44,6 +56,23 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     private final TopNType topNType;
     private final boolean isSplit;
     private final boolean isEnforced;
+=======
+    private long offset;
+    private List<ColumnRefOperator> partitionByColumns;
+    private long partitionLimit;
+    private SortPhase sortPhase;
+    private TopNType topNType;
+    private boolean isSplit;
+    private boolean isEnforced;
+
+    // only set when rank <=1 with preAgg optimization is triggered, otherwise it's empty!
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
+    private Map<ColumnRefOperator, CallOperator> preAggCall;
+
+    private PhysicalTopNOperator() {
+        super(OperatorType.PHYSICAL_TOPN);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // If limit is -1, means global sort
     public PhysicalTopNOperator(OrderSpec spec, long limit, long offset,
@@ -54,7 +83,12 @@ public class PhysicalTopNOperator extends PhysicalOperator {
                                 boolean isSplit,
                                 boolean isEnforced,
                                 ScalarOperator predicate,
+<<<<<<< HEAD
                                 Projection projection) {
+=======
+                                Projection projection,
+                                Map<ColumnRefOperator, CallOperator> analyticCall) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(OperatorType.PHYSICAL_TOPN, spec);
         this.limit = limit;
         this.offset = offset;
@@ -66,6 +100,10 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         this.isEnforced = isEnforced;
         this.predicate = predicate;
         this.projection = projection;
+<<<<<<< HEAD
+=======
+        this.preAggCall = analyticCall;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {
@@ -96,6 +134,13 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return isEnforced;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<ColumnRefOperator, CallOperator> getPreAggCall() {
+        return preAggCall;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();
@@ -105,12 +150,26 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         for (Ordering ordering : orderSpec.getOrderDescs()) {
             entryList.add(new ColumnOutputInfo(ordering.getColumnRef(), ordering.getColumnRef()));
         }
+<<<<<<< HEAD
+=======
+
+        if (preAggCall != null) {
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : preAggCall.entrySet()) {
+                entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+            }
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return new RowOutputInfo(entryList);
     }
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(super.hashCode(), orderSpec, offset, sortPhase, topNType, isSplit);
+=======
+        return Objects.hash(super.hashCode(), orderSpec, offset, sortPhase, topNType, isSplit, isEnforced);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -128,7 +187,12 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return partitionLimit == that.partitionLimit && offset == that.offset && isSplit == that.isSplit &&
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
                 Objects.equals(orderSpec, that.orderSpec) &&
+<<<<<<< HEAD
                 sortPhase == that.sortPhase && topNType == that.topNType;
+=======
+                Objects.equals(preAggCall, that.preAggCall) &&
+                sortPhase == that.sortPhase && topNType == that.topNType && isEnforced == that.isEnforced;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -158,4 +222,36 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    public static PhysicalTopNOperator.Builder builder() {
+        return new PhysicalTopNOperator.Builder();
+    }
+
+    public static class Builder extends PhysicalOperator.Builder<PhysicalTopNOperator, PhysicalTopNOperator.Builder> {
+        @Override
+        protected PhysicalTopNOperator newInstance() {
+            return new PhysicalTopNOperator();
+        }
+
+        @Override
+        public PhysicalTopNOperator.Builder withOperator(PhysicalTopNOperator operator) {
+            super.withOperator(operator);
+            builder.offset = operator.offset;
+            builder.partitionByColumns = operator.partitionByColumns;
+            builder.partitionLimit = operator.partitionLimit;
+            builder.sortPhase = operator.sortPhase;
+            builder.topNType = operator.topNType;
+            builder.isSplit = operator.isSplit;
+            builder.isEnforced = operator.isEnforced;
+            return this;
+        }
+
+        public Builder setPartitionByColumns(
+                List<ColumnRefOperator> partitionByColumns) {
+            builder.partitionByColumns = partitionByColumns;
+            return this;
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

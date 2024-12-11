@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # named_struct
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Creates a struct with the specified field names and values.
 

@@ -59,7 +59,11 @@ MySQLDataSource::MySQLDataSource(const MySQLDataSourceProvider* provider, const 
         : _provider(provider) {}
 
 Status MySQLDataSource::_init_params(RuntimeState* state) {
+<<<<<<< HEAD
     VLOG(1) << "MySQLDataSource::init mysql scan params";
+=======
+    VLOG(2) << "MySQLDataSource::init mysql scan params";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     DCHECK(state != nullptr);
 
@@ -217,7 +221,11 @@ Status MySQLDataSource::open(RuntimeState* state) {
 }
 
 Status MySQLDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
+<<<<<<< HEAD
     VLOG(1) << "MySQLDataSource::GetNext";
+=======
+    VLOG(2) << "MySQLDataSource::GetNext";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     DCHECK(state != nullptr && chunk != nullptr);
 

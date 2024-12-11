@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # grouping
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。
 

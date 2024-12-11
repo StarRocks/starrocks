@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.sql.ast;
 
@@ -25,5 +26,16 @@ public class ManualRefreshSchemeDesc extends RefreshSchemeDesc {
         super(MaterializedView.RefreshType.MANUAL, pos, moment);
     }
 
+=======
+package com.starrocks.sql.ast;
+
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.sql.parser.NodePosition;
+
+public class ManualRefreshSchemeDesc extends RefreshSchemeClause {
+    public ManualRefreshSchemeDesc(MaterializedView.RefreshMoment moment, NodePosition pos) {
+        super(MaterializedView.RefreshType.MANUAL, pos, moment);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 

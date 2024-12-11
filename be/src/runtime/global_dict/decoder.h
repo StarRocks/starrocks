@@ -23,7 +23,13 @@ class GlobalDictDecoder {
 public:
     virtual ~GlobalDictDecoder() = default;
 
+<<<<<<< HEAD
     virtual Status decode(Column* in, Column* out) = 0;
+=======
+    virtual Status decode_string(Column* in, Column* out) = 0;
+
+    virtual Status decode_array(Column* in, Column* out) = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 using GlobalDictDecoderPtr = std::unique_ptr<GlobalDictDecoder>;

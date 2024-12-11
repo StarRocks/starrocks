@@ -40,58 +40,113 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
+=======
+import com.google.gson.stream.JsonReader;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.staros.starlet.StarletAgentFactory;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.UserVariableHint;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.ClientPool;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
+=======
+import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.common.io.Writable;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+<<<<<<< HEAD
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
+=======
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
+<<<<<<< HEAD
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
+=======
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.rpc.ThriftConnectionPool;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
+<<<<<<< HEAD
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
+=======
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DeleteStmt;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -109,6 +164,12 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -119,11 +180,19 @@ import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
+<<<<<<< HEAD
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.warehouse.Warehouse;
+=======
+import com.starrocks.system.BackendResourceStat;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TUniqueId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -133,6 +202,10 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+<<<<<<< HEAD
+=======
+import java.io.InputStreamReader;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.RandomAccessFile;
 import java.net.ServerSocket;
 import java.nio.channels.FileLock;
@@ -140,6 +213,10 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+<<<<<<< HEAD
+=======
+import java.util.Iterator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -158,6 +235,7 @@ public class UtFrameUtils {
     private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
 
     public static final String CREATE_STATISTICS_TABLE_STMT = "CREATE TABLE `table_statistic_v1` (\n" +
+<<<<<<< HEAD
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
             "  `column_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
             "  `db_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -178,6 +256,28 @@ public class UtFrameUtils {
             "\"replication_num\" = \"1\",\n" +
             "\"in_memory\" = \"false\"\n" +
             ");";
+=======
+                "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `column_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
+                "  `db_id` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `table_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
+                "  `db_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
+                "  `row_count` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `data_size` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `distinct_count` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `null_count` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `max` varchar(65530) NOT NULL COMMENT \"\",\n" +
+                "  `min` varchar(65530) NOT NULL COMMENT \"\",\n" +
+                "  `update_time` datetime NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`table_id`, `column_name`, `db_id`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`table_id`, `column_name`, `db_id`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Help to create a mocked ConnectContext.
     public static ConnectContext createDefaultCtx() {
@@ -188,16 +288,28 @@ public class UtFrameUtils {
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
+<<<<<<< HEAD
+=======
+        ctx.setSessionId(UUIDUtil.genUUID());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return ctx;
     }
 
     // Parse an origin stmt . Return a StatementBase instance.
     public static StatementBase parseStmtWithNewParser(String originStmt, ConnectContext ctx)
+<<<<<<< HEAD
             throws Exception {
         StatementBase statementBase;
         try {
             statementBase =
                     com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+=======
+                throws Exception {
+        StatementBase statementBase;
+        try {
+            statementBase =
+                        com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
         } catch (ParsingException | SemanticException e) {
             System.err.println("parse failed: " + e.getMessage());
@@ -212,11 +324,19 @@ public class UtFrameUtils {
     }
 
     public static StatementBase parseStmtWithNewParserNotIncludeAnalyzer(String originStmt, ConnectContext ctx)
+<<<<<<< HEAD
             throws Exception {
         StatementBase statementBase;
         try {
             statementBase =
                     com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+=======
+                throws Exception {
+        StatementBase statementBase;
+        try {
+            statementBase =
+                        com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } catch (ParsingException e) {
             if (e.getMessage() == null) {
                 throw e;
@@ -273,8 +393,13 @@ public class UtFrameUtils {
             return;
         }
         try {
+<<<<<<< HEAD
             ClientPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
+=======
+            ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB, runMode);
 
@@ -282,10 +407,18 @@ public class UtFrameUtils {
 
             // sleep to wait first heartbeat
             int retry = 0;
+<<<<<<< HEAD
             while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
                     retry++ < 600) {
                 Thread.sleep(100);
             }
+=======
+            while (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001).getBePort() == -1 &&
+                        retry++ < 600) {
+                Thread.sleep(100);
+            }
+            FeConstants.enableUnitStatistics = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             CREATED_MIN_CLUSTER.set(true);
         } catch (Exception e) {
             e.printStackTrace();
@@ -303,6 +436,7 @@ public class UtFrameUtils {
         createMinStarRocksCluster(startBdb, runMode);
     }
 
+<<<<<<< HEAD
     public static Backend addMockBackend(int backendId) throws Exception {
         return addMockBackend(backendId, "127.0.0.1");
     }
@@ -312,6 +446,30 @@ public class UtFrameUtils {
         MockedBackend backend = new MockedBackend(host);
 
         // add be
+=======
+    public static Backend addMockBackend(int backendId, String host, int beThriftPort) throws Exception {
+        // start be
+        MockedBackend backend = new MockedBackend(host, beThriftPort);
+        // add be
+        return addMockBackend(backend, backendId);
+    }
+
+    public static Backend addMockBackend(int backendId) throws Exception {
+        // start be
+        MockedBackend backend = new MockedBackend("127.0.0.1");
+        // add be
+        return addMockBackend(backend, backendId);
+    }
+
+    public static ComputeNode addMockComputeNode(int backendId) throws Exception {
+        // start be
+        MockedBackend backend = new MockedBackend("127.0.108.1");
+        // add be
+        return addMockComputeNode(backend, backendId);
+    }
+
+    private static Backend addMockBackend(MockedBackend backend, int backendId) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
         DiskInfo diskInfo1 = new DiskInfo(backendId + "/path1");
@@ -325,6 +483,7 @@ public class UtFrameUtils {
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
         be.setStarletPort(backend.getStarletPort());
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
@@ -332,10 +491,19 @@ public class UtFrameUtils {
             long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             String workerAddress = backend.getHost() + ":" + starletPort;
             GlobalStateMgr.getCurrentStarOSAgent().addWorker(be.getId(), workerAddress, workerGroupId);
+=======
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be);
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = backend.getStarletPort();
+            String workerAddress = backend.getHost() + ":" + starletPort;
+            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), workerAddress,
+                        StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return be;
     }
 
+<<<<<<< HEAD
     public static ComputeNode addMockComputeNode(int backendId) throws Exception {
         // start be
         MockedBackend backend = new MockedBackend("127.0.108.1");
@@ -343,6 +511,8 @@ public class UtFrameUtils {
         return addMockComputeNode(backend, backendId);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static ComputeNode addMockComputeNode(MockedBackend backend, int backendId) {
         ComputeNode cn = new ComputeNode(backendId, backend.getHost(), backend.getHeartBeatPort());
         cn.setAlive(true);
@@ -354,10 +524,16 @@ public class UtFrameUtils {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
+<<<<<<< HEAD
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
             long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             String workerAddress = backend.getHost() + ":" + starletPort;
             GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(cn.getId(), workerAddress, workerGroupId);
+=======
+            String workerAddress = backend.getHost() + ":" + starletPort;
+            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(cn.getId(), workerAddress,
+                        StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return cn;
     }
@@ -371,7 +547,11 @@ public class UtFrameUtils {
     }
 
     public static void dropMockBackend(int backendId) throws DdlException {
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentSystemInfo().dropBackend(backendId);
+=======
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backendId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static int findValidPort() {
@@ -429,7 +609,11 @@ public class UtFrameUtils {
         }
 
         Assert.assertEquals("Some fragments do not belong to the fragment tree",
+<<<<<<< HEAD
                 plan.getFragments().size(), visitedFragments.size());
+=======
+                    plan.getFragments().size(), visitedFragments.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     /*
@@ -437,11 +621,19 @@ public class UtFrameUtils {
      */
     public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext,
                                                                                     String sql)
+<<<<<<< HEAD
             throws DdlException, CloneNotSupportedException {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
 
         List<StatementBase> statements =
                 com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
+=======
+                throws DdlException, CloneNotSupportedException {
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+
+        List<StatementBase> statements =
+                    com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         connectContext.getDumpInfo().setOriginStmt(sql);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);
@@ -457,13 +649,29 @@ public class UtFrameUtils {
             CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
             return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
         } finally {
+<<<<<<< HEAD
             // before returning we have to restore session variable.
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             clearQueryScopeHintContext(connectContext, oldSessionVariable);
         }
     }
 
+<<<<<<< HEAD
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
+=======
+    private interface GetPlanHook<R> {
+        R apply(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) throws Exception;
+    }
+
+    private static <R> R buildPlan(ConnectContext connectContext, String originStmt,
+                                   GetPlanHook<R> returnedSupplier) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+        // connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        connectContext.setThreadLocalInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (connectContext.getSessionVariable().getEnableQueryDump()) {
             connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
             connectContext.getDumpInfo().setOriginStmt(originStmt);
@@ -471,7 +679,11 @@ public class UtFrameUtils {
         originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
+<<<<<<< HEAD
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Parser")) {
+=======
+        try (Timer ignored = Tracers.watchScope("Parser")) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             statements = SqlParser.parse(originStmt, connectContext.getSessionVariable());
         }
         if (connectContext.getDumpInfo() != null) {
@@ -481,26 +693,137 @@ public class UtFrameUtils {
         StatementBase statementBase = statements.get(0);
 
         try {
+<<<<<<< HEAD
             // update session variable by adding optional hints.
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (statementBase.isExistQueryScopeHint()) {
                 processQueryScopeHint(statementBase, connectContext);
             }
 
             ExecPlan execPlan;
+<<<<<<< HEAD
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Planner")) {
+=======
+            try (Timer ignored = Tracers.watchScope("Planner")) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 execPlan = StatementPlanner.plan(statementBase, connectContext);
             }
 
             testView(connectContext, originStmt, statementBase);
 
             validatePlanConnectedness(execPlan);
+<<<<<<< HEAD
             return new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()), execPlan);
         } finally {
             // before returning we have to restore session variable.
+=======
+            return returnedSupplier.apply(connectContext, statementBase, execPlan);
+        } finally {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             clearQueryScopeHintContext(connectContext, oldSessionVariable);
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static String getFragmentPlan(ConnectContext connectContext, String sql, String traceModule) {
+        try {
+            Pair<String, Pair<ExecPlan, String>> result =
+                        UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
+            Pair<ExecPlan, String> execPlanWithQuery = result.second;
+            String traceLog = execPlanWithQuery.second;
+            if (!Strings.isNullOrEmpty(traceLog)) {
+                System.out.println(traceLog);
+            }
+            return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+            return null;
+        }
+    }
+
+    public static Pair<String, Pair<ExecPlan, String>> getFragmentPlanWithTrace(
+                ConnectContext connectContext, String sql, String module) throws Exception {
+        if (Strings.isNullOrEmpty(module)) {
+            Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, "");
+            return Pair.create(planPair.first, planAndTrace);
+        } else {
+            Tracers.register(connectContext);
+            Tracers.init(connectContext, Tracers.Mode.LOGS, module);
+            try {
+                Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+                String pr = Tracers.printLogs();
+                Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, pr);
+                return Pair.create(planPair.first, planAndTrace);
+            } catch (Exception e) {
+                throw e;
+            } finally {
+                String pr = Tracers.printLogs();
+                if (!Strings.isNullOrEmpty(pr)) {
+                    System.out.println(pr);
+                }
+                Tracers.close();
+            }
+        }
+    }
+
+    public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
+                throws Exception {
+        return buildPlan(connectContext, originStmt,
+                    (context, statementBase, execPlan) -> new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()),
+                                execPlan));
+    }
+
+    public static DefaultCoordinator startScheduling(ConnectContext connectContext, String originStmt) throws Exception {
+        return buildPlan(connectContext, originStmt,
+                    (context, statementBase, execPlan) -> {
+                        DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
+
+                        scheduler.exec();
+
+                        return scheduler;
+                    });
+    }
+
+    public static Pair<String, DefaultCoordinator> getPlanAndStartScheduling(ConnectContext connectContext, String originStmt)
+                throws Exception {
+        return buildPlan(connectContext, originStmt,
+                    (context, statementBase, execPlan) -> {
+                        DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
+
+                        scheduler.execWithoutDeploy();
+                        String plan = scheduler.getSchedulerExplain();
+
+                        return Pair.create(plan, scheduler);
+                    });
+    }
+
+    public static DefaultCoordinator getScheduler(ConnectContext connectContext, String originStmt) throws Exception {
+        return buildPlan(connectContext, originStmt, UtFrameUtils::createScheduler);
+    }
+
+    private static DefaultCoordinator createScheduler(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) {
+        context.setExecutionId(new TUniqueId(1, 2));
+        DefaultCoordinator scheduler;
+        if (statementBase instanceof DmlStmt) {
+            if (statementBase instanceof InsertStmt) {
+                scheduler = new DefaultCoordinator.Factory().createInsertScheduler(context,
+                            execPlan.getFragments(), execPlan.getScanNodes(),
+                            execPlan.getDescTbl().toThrift());
+            } else {
+                throw new RuntimeException("can only handle insert DML");
+            }
+        } else {
+            scheduler = new DefaultCoordinator.Factory().createQueryScheduler(context,
+                        execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+        }
+
+        return scheduler;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static String printPhysicalPlan(OptExpression execPlan) {
         return LogicalPlanPrinter.print(execPlan, isPrintPlanTableNames());
     }
@@ -510,6 +833,7 @@ public class UtFrameUtils {
     }
 
     private static void testView(ConnectContext connectContext, String originStmt, StatementBase statementBase)
+<<<<<<< HEAD
             throws Exception {
         if (statementBase instanceof QueryStatement && !connectContext.getDatabase().isEmpty() &&
                 !statementBase.isExplain()) {
@@ -526,6 +850,27 @@ public class UtFrameUtils {
                 } catch (Exception e) {
                     System.out.println("invalid view def: " + createTableStmt.getInlineViewDef()
                             + "\nError msg:"  + e.getMessage());
+=======
+                throws Exception {
+        if (!FeConstants.unitTestView) {
+            return;
+        }
+        if (statementBase instanceof QueryStatement && !connectContext.getDatabase().isEmpty() &&
+                    !statementBase.isExplain()) {
+            String viewName = "view" + INDEX.getAndIncrement();
+            String createView = "create view " + viewName + " as " + originStmt;
+            CreateViewStmt createTableStmt;
+            try (Timer ignored = Tracers.watchScope("Test View")) {
+                createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
+                try {
+                    StatementBase viewStatement =
+                                SqlParser.parse(createTableStmt.getInlineViewDef(),
+                                            connectContext.getSessionVariable().getSqlMode()).get(0);
+                    com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
+                } catch (Exception e) {
+                    System.out.println("invalid view def: " + createTableStmt.getInlineViewDef()
+                                + "\nError msg:" + e.getMessage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     throw e;
                 }
             } catch (SemanticException | AnalysisException e) {
@@ -547,8 +892,13 @@ public class UtFrameUtils {
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
         StatementBase statementBase =
+<<<<<<< HEAD
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
                         .get(0);
+=======
+                    com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
+                                .get(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Preconditions.checkState(statementBase instanceof QueryStatement);
         return ConnectProcessor.computeStatementDigest(statementBase);
     }
@@ -558,7 +908,11 @@ public class UtFrameUtils {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         if (!starRocksAssert.databaseExist("_statistics_")) {
             starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
+<<<<<<< HEAD
                     .useDatabase(StatsConstants.STATISTICS_DB_NAME);
+=======
+                        .useDatabase(StatsConstants.STATISTICS_DB_NAME);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             starRocksAssert.withTable(CREATE_STATISTICS_TABLE_STMT);
         }
         // prepare dump mock environment
@@ -574,17 +928,29 @@ public class UtFrameUtils {
         // mock replay external table info
         if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
             ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentState().getLocalMetastore(),
                     GlobalStateMgr.getCurrentState().getConnectorMgr(),
                     GlobalStateMgr.getCurrentState().getResourceMgr(),
                     replayDumpInfo.getHmsTableMap(),
                     replayDumpInfo.getTableStatisticsMap());
+=======
+                        GlobalStateMgr.getCurrentState().getLocalMetastore(),
+                        GlobalStateMgr.getCurrentState().getConnectorMgr(),
+                        GlobalStateMgr.getCurrentState().getResourceMgr(),
+                        replayDumpInfo.getHmsTableMap(),
+                        replayDumpInfo.getTableStatisticsMap());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             GlobalStateMgr.getCurrentState().setMetadataMgr(replayMetadataMgr);
         }
 
         // create table
         int backendId = 10002;
+<<<<<<< HEAD
         int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+=======
+        int backendIdSize = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (int i = 1; i < backendIdSize; ++i) {
             UtFrameUtils.dropMockBackend(backendId++);
         }
@@ -595,11 +961,19 @@ public class UtFrameUtils {
         for (int i = 1; i < beNumToAdd; ++i) {
             //UtFrameUtils.addMockBackend(backendId++);
             String host = String.format("127.0.0.%s", i + 1);
+<<<<<<< HEAD
             UtFrameUtils.addMockBackend(backendId++, host);
         }
 
         Set<String> dbSet = replayDumpInfo.getCreateTableStmtMap().keySet().stream().map(key -> key.split("\\.")[0])
                 .collect(Collectors.toSet());
+=======
+            UtFrameUtils.addMockBackend(backendId++, host, 9060);
+        }
+
+        Set<String> dbSet = replayDumpInfo.getCreateTableStmtMap().keySet().stream().map(key -> key.split("\\.")[0])
+                    .collect(Collectors.toSet());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         dbSet.forEach(db -> {
             if (starRocksAssert.databaseExist(db)) {
                 try {
@@ -613,10 +987,21 @@ public class UtFrameUtils {
             if (entry.getValue().contains("CREATE MATERIALIZED VIEW")) {
                 continue;
             }
+<<<<<<< HEAD
             String dbName = entry.getKey().split("\\.")[0];
             if (!starRocksAssert.databaseExist(dbName)) {
                 starRocksAssert.withDatabase(dbName);
             }
+=======
+            String[] nameParts = entry.getKey().split("\\.");
+            String dbName = nameParts.length == 2 ? nameParts[0] : connectContext.getDatabase();
+            if (!starRocksAssert.databaseExist(dbName)) {
+                starRocksAssert.withDatabase(dbName);
+            }
+            String tableName = nameParts.length == 2 ? nameParts[1] : nameParts[0];
+            String dropTable = String.format("drop table if exists `%s`.`%s`;", dbName, tableName);
+            connectContext.executeSql(dropTable);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             starRocksAssert.useDatabase(dbName);
             starRocksAssert.withTable(entry.getValue());
         }
@@ -624,6 +1009,7 @@ public class UtFrameUtils {
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
             String normalizedViewName = entry.getKey();
             String[] nameParts = normalizedViewName.split("\\.");
+<<<<<<< HEAD
             String dbName = nameParts[0];
             if (!starRocksAssert.databaseExist(dbName)) {
                 starRocksAssert.withDatabase(dbName);
@@ -632,6 +1018,18 @@ public class UtFrameUtils {
             starRocksAssert.useDatabase(dbName);
             String createView = String.format("create view `%s`.`%s` as %s",
                     dbName, viewName, replayDumpInfo.getCreateViewStmtMap().get(normalizedViewName));
+=======
+            String dbName = nameParts.length == 2 ? nameParts[0] : connectContext.getDatabase();
+            if (!starRocksAssert.databaseExist(dbName)) {
+                starRocksAssert.withDatabase(dbName);
+            }
+            String viewName = nameParts.length == 2 ? nameParts[1] : nameParts[0];
+            starRocksAssert.useDatabase(dbName);
+            String dropView = String.format("drop view if exists `%s`.`%s`;", dbName, viewName);
+            connectContext.executeSql(dropView);
+            String createView = String.format("create view `%s`.`%s` as %s",
+                        dbName, viewName, replayDumpInfo.getCreateViewStmtMap().get(normalizedViewName));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             starRocksAssert.withView(createView);
         }
         // create materialized views
@@ -639,25 +1037,47 @@ public class UtFrameUtils {
             if (!entry.getValue().contains("CREATE MATERIALIZED VIEW")) {
                 continue;
             }
+<<<<<<< HEAD
             String dbName = entry.getKey().split("\\.")[0];
             if (!starRocksAssert.databaseExist(dbName)) {
                 starRocksAssert.withDatabase(dbName);
             }
+=======
+            String[] nameParts = entry.getKey().split("\\.");
+            String dbName = nameParts.length == 2 ? nameParts[0] : connectContext.getDatabase();
+            if (!starRocksAssert.databaseExist(dbName)) {
+                starRocksAssert.withDatabase(dbName);
+            }
+            String mvName = nameParts.length == 2 ? nameParts[1] : nameParts[0];
+            String dropMv = String.format("drop materialized view if exists `%s`.`%s`;", dbName, mvName);
+            connectContext.executeSql(dropMv);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             starRocksAssert.useDatabase(dbName);
             starRocksAssert.withAsyncMvAndRefresh(entry.getValue());
         }
 
         // mock be core stat
         for (Map.Entry<Long, Integer> entry : replayDumpInfo.getNumOfHardwareCoresPerBe().entrySet()) {
+<<<<<<< HEAD
             BackendCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
         }
         BackendCoreStat.setCachedAvgNumOfHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
+=======
+            BackendResourceStat.getInstance().setNumHardwareCoresOfBe(entry.getKey(), entry.getValue());
+        }
+        BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
+<<<<<<< HEAD
             OlapTable replayTable = (OlapTable) GlobalStateMgr.getCurrentState().getDb("" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
+=======
+            OlapTable replayTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+                        .getTable(entry.getKey().split("\\.")[1]);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
                 setPartitionStatistics(replayTable, partitionEntry.getKey(), partitionEntry.getValue());
@@ -665,6 +1085,7 @@ public class UtFrameUtils {
         }
         // mock table column statistics
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : replayDumpInfo.getTableStatisticsMap()
+<<<<<<< HEAD
                 .entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
             Table replayTable = GlobalStateMgr.getCurrentState().getDb("" + dbName)
@@ -673,6 +1094,16 @@ public class UtFrameUtils {
                 GlobalStateMgr.getCurrentStatisticStorage()
                         .addColumnStatistic(replayTable, columnStatisticEntry.getKey(),
                                 columnStatisticEntry.getValue());
+=======
+                    .entrySet()) {
+            String dbName = entry.getKey().split("\\.")[0];
+            Table replayTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+                        .getTable(entry.getKey().split("\\.")[1]);
+            for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
+                GlobalStateMgr.getCurrentState().getStatisticStorage()
+                            .addColumnStatistic(replayTable, columnStatisticEntry.getKey(),
+                                        columnStatisticEntry.getValue());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         return replaySql;
@@ -680,7 +1111,11 @@ public class UtFrameUtils {
 
     private static void tearMockEnv() {
         int backendId = 10002;
+<<<<<<< HEAD
         int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+=======
+        int backendIdSize = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (int i = 1; i < backendIdSize; ++i) {
             try {
                 UtFrameUtils.dropMockBackend(backendId++);
@@ -694,9 +1129,15 @@ public class UtFrameUtils {
                                                   ColumnRefFactory columnRefFactory,
                                                   QueryStatement statement) {
         LogicalPlan logicalPlan;
+<<<<<<< HEAD
         try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Transformer")) {
             logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                     .transform((statement).getQueryRelation());
+=======
+        try (Timer t = Tracers.watchScope("Transformer")) {
+            logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                        .transform((statement).getQueryRelation());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         }
         return logicalPlan;
@@ -707,7 +1148,11 @@ public class UtFrameUtils {
                                                       LogicalPlan logicalPlan,
                                                       OptimizerConfig optimizerConfig) {
         OptExpression optimizedPlan;
+<<<<<<< HEAD
         try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Optimizer")) {
+=======
+        try (Timer t = Tracers.watchScope("Optimizer")) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Optimizer optimizer = null;
             if (optimizerConfig != null) {
                 optimizer = new Optimizer(optimizerConfig);
@@ -715,11 +1160,19 @@ public class UtFrameUtils {
                 optimizer = new Optimizer();
             }
             optimizedPlan = optimizer.optimize(
+<<<<<<< HEAD
                     connectContext,
                     logicalPlan.getRoot(),
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
+=======
+                        connectContext,
+                        logicalPlan.getRoot(),
+                        new PhysicalPropertySet(),
+                        new ColumnRefSet(logicalPlan.getOutputColumn()),
+                        columnRefFactory);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return optimizedPlan;
     }
@@ -731,7 +1184,11 @@ public class UtFrameUtils {
     }
 
     private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext)
+<<<<<<< HEAD
             throws Exception {
+=======
+                throws Exception {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         try {
             if (statement.isExistQueryScopeHint()) {
@@ -743,6 +1200,7 @@ public class UtFrameUtils {
             OptExpression optimizedPlan = getQueryOptExpression(connectContext, columnRefFactory, logicalPlan);
 
             ExecPlan execPlan;
+<<<<<<< HEAD
             try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Builder")) {
                 execPlan = PlanFragmentBuilder
                         .createPhysicalPlan(optimizedPlan, connectContext,
@@ -750,6 +1208,14 @@ public class UtFrameUtils {
                                 TResultSinkType.MYSQL_PROTOCAL, true);
             }
 
+=======
+            try (Timer t = Tracers.watchScope("Builder")) {
+                execPlan = PlanFragmentBuilder
+                            .createPhysicalPlan(optimizedPlan, connectContext,
+                                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
+                                        TResultSinkType.MYSQL_PROTOCAL, true);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
         } finally {
             clearQueryScopeHintContext(connectContext, oldSessionVariable);
@@ -757,7 +1223,11 @@ public class UtFrameUtils {
     }
 
     private static Pair<String, ExecPlan> getInsertExecPlan(InsertStmt statement, ConnectContext connectContext) {
+<<<<<<< HEAD
         PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Planner");
+=======
+        Timer t = Tracers.watchScope("Planner");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
         t.close();
         return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
@@ -771,9 +1241,17 @@ public class UtFrameUtils {
 
     public static Pair<String, ExecPlan> replaySql(ConnectContext connectContext, String sql) throws Exception {
         StatementBase statementBase;
+<<<<<<< HEAD
         statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
         if (statementBase instanceof QueryStatement) {
             replaceTableCatalogName(statementBase);
+=======
+        try (Timer st = Tracers.watchScope("Parse")) {
+            statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+            if (statementBase instanceof QueryStatement) {
+                replaceTableCatalogName(statementBase);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
@@ -793,7 +1271,11 @@ public class UtFrameUtils {
     }
 
     public static ExecPlan getPlanFragmentFromQueryDump(ConnectContext connectContext, QueryDumpInfo dumpInfo)
+<<<<<<< HEAD
             throws Exception {
+=======
+                throws Exception {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String q = initMockEnv(connectContext, dumpInfo);
         try {
             return UtFrameUtils.getPlanAndFragment(connectContext, q).second;
@@ -809,15 +1291,25 @@ public class UtFrameUtils {
         Map<String, Database> dbs = null;
         try {
             StatementBase statementBase;
+<<<<<<< HEAD
             try (PlannerProfile.ScopedTimer st = PlannerProfile.getScopedTimer("Parse")) {
                 statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
                         connectContext.getSessionVariable()).get(0);
+=======
+            try (Timer st = Tracers.watchScope("Parse")) {
+                statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
+                            connectContext.getSessionVariable()).get(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (statementBase instanceof QueryStatement) {
                     replaceTableCatalogName(statementBase);
                 }
             }
 
+<<<<<<< HEAD
             try (PlannerProfile.ScopedTimer st1 = PlannerProfile.getScopedTimer("Analyze")) {
+=======
+            try (Timer st1 = Tracers.watchScope("Analyze")) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
             }
 
@@ -844,7 +1336,11 @@ public class UtFrameUtils {
             if (tableRelation.getName().getCatalog() != null) {
                 String catalogName = tableRelation.getName().getCatalog();
                 tableRelation.getName().setCatalog(
+<<<<<<< HEAD
                         CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive"));
+=======
+                            CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
@@ -884,7 +1380,12 @@ public class UtFrameUtils {
             return;
         }
         for (Database db : dbs.values()) {
+<<<<<<< HEAD
             db.readLock();
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -894,13 +1395,21 @@ public class UtFrameUtils {
             return;
         }
         for (Database db : dbs.values()) {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            Locker locker = new Locker();
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     public static void setUpForPersistTest() {
         PseudoJournalReplayer.setUp();
+<<<<<<< HEAD
         PseudoImage.setUpImageVersion();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static void tearDownForPersisTest() {
@@ -911,6 +1420,7 @@ public class UtFrameUtils {
      * pseudo image is used to test if image is wrote correctly.
      */
     public static class PseudoImage {
+<<<<<<< HEAD
         private static AtomicBoolean isSetup = new AtomicBoolean(false);
         private DataOutputBuffer buffer;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
@@ -925,18 +1435,49 @@ public class UtFrameUtils {
         public PseudoImage() throws IOException {
             assert (isSetup.get());
             buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
+=======
+        private DataOutputBuffer buffer;
+        private ImageWriter imageWriter;
+        private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
+
+        public PseudoImage() throws IOException {
+            buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
+            imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+            imageWriter.setOutputStream(buffer);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         public DataOutputStream getDataOutputStream() {
             return buffer;
         }
 
+<<<<<<< HEAD
+=======
+        public ImageWriter getImageWriter() {
+            return imageWriter;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         /**
          * this can be called multiple times to restore from a snapshot
          */
         public DataInputStream getDataInputStream() throws IOException {
             return new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
         }
+<<<<<<< HEAD
+=======
+
+        public SRMetaBlockReader getMetaBlockReader() throws IOException {
+            JsonReader jsonReader = new JsonReader(new InputStreamReader(new ByteArrayInputStream(buffer.getData(),
+                        0, buffer.getLength())));
+            return new SRMetaBlockReaderV2(jsonReader);
+        }
+
+        public JsonReader getJsonReader() throws IOException {
+            return new JsonReader(new InputStreamReader(new ByteArrayInputStream(buffer.getData(),
+                        0, buffer.getLength())));
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     /**
@@ -945,10 +1486,17 @@ public class UtFrameUtils {
     public static class PseudoJournalReplayer {
         // master journal queue
         private static BlockingQueue<JournalTask> masterJournalQueue =
+<<<<<<< HEAD
                 new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // follower journal queue
         private static BlockingQueue<JournalTask> followerJournalQueue =
                 new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+=======
+                    new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+        // follower journal queue
+        private static BlockingQueue<JournalTask> followerJournalQueue =
+                    new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // constantly move master journal to follower and mark succeed
         private static Thread fakeJournalWriter = null;
 
@@ -992,7 +1540,11 @@ public class UtFrameUtils {
                 }
                 DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
                 DataInputStream dis =
+<<<<<<< HEAD
                         new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
+=======
+                            new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 try {
                     JournalEntity je = new JournalEntity();
                     je.readFields(dis);
@@ -1013,9 +1565,15 @@ public class UtFrameUtils {
                 DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
                 JournalEntity je = new JournalEntity();
                 try (DataInputStream dis = new DataInputStream(
+<<<<<<< HEAD
                         new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
                     je.readFields(dis);
                     EditLog.loadJournal(GlobalStateMgr.getCurrentState(), je);
+=======
+                            new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
+                    je.readFields(dis);
+                    GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), je);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     // System.out.println("replayed journal type: " + je.getOpCode());
                 } catch (JournalInconsistentException e) {
                     System.err.println("load journal failed, type: " + je.getOpCode() + " , error: " + e.getMessage());
@@ -1046,16 +1604,42 @@ public class UtFrameUtils {
         ctx.setQualifiedUser(userIdentity.getUser());
         ctx.setQueryId(UUIDUtil.genUUID());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         globalStateMgr.initAuth(true);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ctx.setGlobalStateMgr(globalStateMgr);
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
         return ctx;
     }
 
+<<<<<<< HEAD
     public static void setPartitionVersion(Partition partition, long version) {
         partition.setVisibleVersion(version, System.currentTimeMillis());
         MaterializedIndex baseIndex = partition.getBaseIndex();
+=======
+    public static boolean matchPlanWithoutId(String expect, String actual) {
+        String trimedExpect = expect.replaceAll("\\d+:\\s*", "")
+                    .replaceAll("\\[\\d+,", "[")
+                    .replaceAll("<slot \\d+>", "<slot>");
+        String trimedActual = actual.replaceAll("\\d+:\\s*", "")
+                    .replaceAll("\\[\\d+,", "[")
+                    .replaceAll("<slot \\d+>", "<slot>");
+        boolean ret = trimedActual.contains(trimedExpect);
+        if (!ret) {
+            System.out.println("trimedExpect:");
+            System.out.println(trimedExpect);
+            System.out.println("trimedActual:");
+            System.out.println(trimedActual);
+        }
+        return ret;
+    }
+
+    public static void setPartitionVersion(Partition partition, long version) {
+        partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<Tablet> tablets = baseIndex.getTablets();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
@@ -1065,6 +1649,44 @@ public class UtFrameUtils {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static void mockLogicalScanIsEmptyOutputRows(boolean expect) {
+        new MockUp<LogicalOlapScanOperator>() {
+            /**
+             * {@link LogicalOlapScanOperator#isEmptyOutputRows()}
+             */
+            @Mock
+            public boolean isEmptyOutputRows() {
+                return expect;
+            }
+        };
+    }
+
+    public static void mockTimelinessForAsyncMVTest(ConnectContext connectContext) {
+        new MockUp<MvRefreshArbiter>() {
+            /**
+             * {@link MvRefreshArbiter#getMVTimelinessUpdateInfo(MaterializedView, boolean)}
+             */
+            @Mock
+            public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
+                                                          boolean isQueryRewrite) {
+                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+            }
+        };
+
+        new MockUp<UtFrameUtils>() {
+            /**
+             * {@link UtFrameUtils#isPrintPlanTableNames()}
+             */
+            @Mock
+            boolean isPrintPlanTableNames() {
+                return true;
+            }
+        };
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static void setDefaultConfigForAsyncMVTest(ConnectContext connectContext) {
         Config.dynamic_partition_check_interval_seconds = 10;
         Config.bdbje_heartbeat_timeout_second = 60;
@@ -1088,6 +1710,19 @@ public class UtFrameUtils {
         // build a small cache for test
         Config.mv_plan_cache_max_size = 10;
 
+<<<<<<< HEAD
+=======
+        // Since Config.default_mv_refresh_partition_num is set to 1 by default, if not set to -1 in FE UTs,
+        // task run will only refresh 1 partition and will produce wrong result.
+        Config.default_mv_partition_refresh_number = -1;
+
+        // Enable mv refresh fail on filter data in test
+        Config.mv_refresh_fail_on_filter_data = true;
+
+        // Enable mv rewrite in mv refresh by default
+        Config.enable_mv_refresh_query_rewrite = true;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
 
@@ -1096,12 +1731,24 @@ public class UtFrameUtils {
             connectContext.getSessionVariable().setOptimizerExecuteTimeout(300 * 1000);
             // 300s: 5min
             connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
+<<<<<<< HEAD
             // 300s: 5min
             connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
 
             connectContext.getSessionVariable().setEnableQueryCache(false);
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
             connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+=======
+
+            connectContext.getSessionVariable().setEnableShortCircuit(false);
+            connectContext.getSessionVariable().setEnableQueryCache(false);
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+
+            // Disable text based rewrite by default.
+            connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         new MockUp<PlanTestBase>() {
@@ -1114,6 +1761,22 @@ public class UtFrameUtils {
             }
         };
 
+<<<<<<< HEAD
+=======
+        mockDML();
+    }
+
+    public static void mockQueryExecute(Runnable runnable) {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                runnable.run();
+            }
+        };
+    }
+
+    public static void mockDML() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         new MockUp<StmtExecutor>() {
             /**
              * {@link StmtExecutor#handleDMLStmt(ExecPlan, DmlStmt)}
@@ -1123,6 +1786,7 @@ public class UtFrameUtils {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
+<<<<<<< HEAD
                     Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                     OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
                     if (tbl != null) {
@@ -1131,6 +1795,24 @@ public class UtFrameUtils {
                             setPartitionVersion(partition, partition.getVisibleVersion() + 1);
                         }
                     }
+=======
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(testDb.getFullName(), tableName.getTbl()));
+                    if (tbl != null) {
+                        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
+                            Partition partition = tbl.getPartition(partitionId);
+                            setPartitionVersion(partition, partition.getDefaultPhysicalPartition().getVisibleVersion() + 1);
+                        }
+                    }
+                } else if (stmt instanceof DeleteStmt) {
+                    DeleteStmt delete = (DeleteStmt) stmt;
+                    TableName tableName = delete.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(testDb.getFullName(), tableName.getTbl()));
+                    tbl.setHasDelete();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         };
@@ -1145,18 +1827,79 @@ public class UtFrameUtils {
                     clonedSessionVariable = (SessionVariable) context.getSessionVariable().clone();
                 }
                 for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+<<<<<<< HEAD
                     VariableMgr.setSystemVariable(clonedSessionVariable,
                             new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
                 }
+=======
+                    GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                }
+            } else if (hint instanceof UserVariableHint) {
+                UserVariableHint userVariableHint = (UserVariableHint) hint;
+                for (Map.Entry<String, UserVariable> entry : userVariableHint.getUserVariables().entrySet()) {
+                    SetStmtAnalyzer.analyzeUserVariable(entry.getValue());
+                    if (entry.getValue().getEvaluatedExpression() == null) {
+                        entry.getValue().setEvaluatedExpression(new StringLiteral("MOCK_HINT_VALUE"));
+                    }
+                    userVariablesFromHint.put(entry.getKey(), entry.getValue());
+                }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
         if (clonedSessionVariable != null) {
             context.setSessionVariable(clonedSessionVariable);
         }
+<<<<<<< HEAD
+=======
+        context.getUserVariables().putAll(userVariablesFromHint);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private static void clearQueryScopeHintContext(ConnectContext context, SessionVariable sessionVariableBackup) {
         context.setSessionVariable(sessionVariableBackup);
+<<<<<<< HEAD
+=======
+        Iterator<Map.Entry<String, UserVariable>> iterator = context.getUserVariables().entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, UserVariable> entry = iterator.next();
+            if (entry.getValue().isFromHint()) {
+                iterator.remove();
+            }
+        }
+    }
+
+    /***
+     * Get the OptExpression of the query which is only optimized by rbo only.
+     */
+    public static OptExpression getQueryOptExpression(ConnectContext connectContext,
+                                                      String query) {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        QueryStatement statement = null;
+        try {
+            statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(query, connectContext);
+        } catch (Exception e) {
+            Assert.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
+        }
+        LogicalPlan logicalPlan = UtFrameUtils.getQueryLogicalPlan(connectContext, columnRefFactory, statement);
+        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+        OptExpression optExpression = UtFrameUtils.getQueryOptExpression(connectContext, columnRefFactory,
+                logicalPlan, optimizerConfig);
+        return optExpression;
+    }
+
+
+    /**
+     * Get the scan operators of the query which is only optimized by rbo only.
+     */
+    public static List<LogicalScanOperator> getQueryScanOperators(ConnectContext connectContext,
+                                                                  String query) {
+        OptExpression optExpression = getQueryOptExpression(connectContext, query);
+        Assert.assertNotNull(optExpression);
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(optExpression);
+        return scanOperators;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

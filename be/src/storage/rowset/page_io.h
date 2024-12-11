@@ -39,10 +39,17 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
+<<<<<<< HEAD
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "util/slice.h"
 
+=======
+#include "io/seekable_input_stream.h"
+#include "storage/rowset/page_handle.h"
+#include "storage/rowset/page_pointer.h"
+#include "util/slice.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 namespace starrocks {
 
 class BlockCompressionCodec;
@@ -52,7 +59,12 @@ struct OlapReaderStatistics;
 
 struct PageReadOptions {
     // block to read page
+<<<<<<< HEAD
     RandomAccessFile* read_file = nullptr;
+=======
+    //RandomAccessFile* read_file = nullptr;
+    io::SeekableInputStream* read_file = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // location of the page
     PagePointer page_pointer;
     // decompressor for page body (null means page body is not compressed)

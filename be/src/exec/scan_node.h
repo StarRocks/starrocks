@@ -86,8 +86,13 @@ public:
     StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
             const std::vector<TScanRangeParams>& scan_ranges,
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
+<<<<<<< HEAD
             int pipeline_dop, bool enable_tablet_internal_parallel,
             TTabletInternalParallelMode::type tablet_internal_parallel_mode);
+=======
+            int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
+            TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan = false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
@@ -121,6 +126,10 @@ public:
 
     virtual int io_tasks_per_scan_operator() const { return _io_tasks_per_scan_operator; }
     virtual bool always_shared_scan() const { return false; }
+<<<<<<< HEAD
+=======
+    virtual bool output_chunk_by_bucket() const { return false; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     virtual bool is_asc_hint() const { return true; }
     virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
 

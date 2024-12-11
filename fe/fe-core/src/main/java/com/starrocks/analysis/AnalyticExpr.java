@@ -109,6 +109,10 @@ public class AnalyticExpr extends Expr {
     public static String MAX = "MAX";
     public static String SUM = "SUM";
     public static String COUNT = "COUNT";
+<<<<<<< HEAD
+=======
+    public static String SESSION_NUMBER = "SESSION_NUMBER";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static String APPROX_TOP_K = "approx_top_k";
 
     // The function of HLL_UNION_AGG can't be used with a window by now.

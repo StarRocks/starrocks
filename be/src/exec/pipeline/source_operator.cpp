@@ -19,6 +19,7 @@
 
 namespace starrocks::pipeline {
 
+<<<<<<< HEAD
 void SourceOperatorFactory::add_group_dependent_pipeline(const Pipeline* dependent_op) {
     _group_leader->_group_dependent_pipelines.emplace_back(dependent_op);
 }
@@ -64,6 +65,49 @@ bool SourceOperatorFactory::is_adaptive_group_active() const {
                            [](const auto& driver) { return driver->sink_operator()->is_finished(); });
     });
     return _group_dependent_pipelines_finished;
+=======
+void SourceOperatorFactory::adjust_dop() {
+    const size_t max_parent_dop = std::accumulate(
+            _upstream_sources.begin(), _upstream_sources.end(), static_cast<size_t>(0),
+            [](size_t max_dop, const auto* parent) { return std::max(max_dop, parent->degree_of_parallelism()); });
+
+    if (max_parent_dop > 0 && max_parent_dop < _degree_of_parallelism) {
+        _degree_of_parallelism = max_parent_dop;
+    }
+}
+
+void SourceOperatorFactory::add_group_dependent_pipeline(const Pipeline* dependent_op) {
+    group_leader()->_group_dependent_pipelines.emplace_back(dependent_op);
+}
+const std::vector<const Pipeline*>& SourceOperatorFactory::group_dependent_pipelines() const {
+    return group_leader()->_group_dependent_pipelines;
+}
+
+void SourceOperatorFactory::add_upstream_source(SourceOperatorFactory* parent) {
+    _upstream_sources.emplace_back(parent);
+    if (_group_parent == this) { // Set the group parent once when adding the first upstream source.
+        _group_parent = parent->group_leader();
+    }
+}
+
+SourceOperatorFactory* SourceOperatorFactory::group_leader() const {
+    if (_group_parent != this) {
+        _group_parent = _group_parent->group_leader();
+    }
+    return _group_parent;
+}
+
+void SourceOperatorFactory::union_group(SourceOperatorFactory* other_group) {
+    auto* group_leader = this->group_leader();
+    auto* other_group_leader = other_group->group_leader();
+    if (group_leader != other_group_leader) {
+        other_group_leader->_group_parent = group_leader;
+    }
+}
+
+bool SourceOperatorFactory::is_adaptive_group_initial_active() const {
+    return group_leader()->adaptive_initial_state() == AdaptiveState::ACTIVE;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 } // namespace starrocks::pipeline

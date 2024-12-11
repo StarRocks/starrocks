@@ -52,15 +52,26 @@ import java.util.Map;
 
 public class BaseRequest {
     protected ChannelHandlerContext context;
+<<<<<<< HEAD
+=======
+    protected HttpConnectContext connectContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected HttpRequest request;
     protected Map<String, String> params = Maps.newHashMap();
 
     private boolean isAuthorized = false;
     private QueryStringDecoder decoder;
 
+<<<<<<< HEAD
     public BaseRequest(ChannelHandlerContext ctx, HttpRequest request) {
         this.context = ctx;
         this.request = request;
+=======
+    public BaseRequest(ChannelHandlerContext ctx, HttpRequest request, HttpConnectContext connectContext) {
+        this.context = ctx;
+        this.request = request;
+        this.connectContext = connectContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public ChannelHandlerContext getContext() {
@@ -168,4 +179,11 @@ public class BaseRequest {
         InetSocketAddress clientSocket = (InetSocketAddress) context.channel().remoteAddress();
         return clientSocket.getHostString();
     }
+<<<<<<< HEAD
+=======
+
+    public HttpConnectContext getConnectContext() {
+        return connectContext;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

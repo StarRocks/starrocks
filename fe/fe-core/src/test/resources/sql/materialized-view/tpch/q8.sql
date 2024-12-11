@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     o_year,
@@ -36,6 +37,8 @@ group by
     o_year
 order by
     o_year ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 TOP-N (order by [[61: year ASC NULLS FIRST]])
     TOP-N (order by [[61: year ASC NULLS FIRST]])

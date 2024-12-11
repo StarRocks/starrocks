@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
 import org.junit.After;
 import org.junit.BeforeClass;
@@ -22,6 +23,24 @@ import org.junit.Test;
 
 public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
     @BeforeClass
+=======
+import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
+import com.starrocks.planner.TpchSQL;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
+    @BeforeAll
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
@@ -29,7 +48,11 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setCboPruneShuffleColumnRate(0);
     }
 
+<<<<<<< HEAD
     @After
+=======
+    @AfterEach
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void after() {
         connectContext.getSessionVariable().setUseNthExecPlan(0);
     }
@@ -39,6 +62,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
         runFileUnitTest("enumerate-plan/three-join");
     }
 
+<<<<<<< HEAD
     @Test
     public void testTPCHQ1EnumPlan() {
         runFileUnitTest("enumerate-plan/tpch-q1");
@@ -147,6 +171,20 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
     @Test
     public void testTPCHQ22EnumPlan() {
         runFileUnitTest("enumerate-plan/tpch-q22");
+=======
+    @ParameterizedTest(name = "Tpch.{0}")
+    @MethodSource("tpchSource")
+    public void testTPCH(String name, String sql, String resultFile) {
+        runFileUnitTest(sql, resultFile);
+    }
+
+    private static Stream<Arguments> tpchSource() {
+        List<Arguments> cases = Lists.newArrayList();
+        for (Map.Entry<String, String> entry : TpchSQL.getAllSQL().entrySet()) {
+            cases.add(Arguments.of(entry.getKey(), entry.getValue(), "enumerate-plan/tpch-" + entry.getKey()));
+        }
+        return cases.stream();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test

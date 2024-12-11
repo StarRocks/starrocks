@@ -43,7 +43,10 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
 #include "gutil/walltime.h"
+<<<<<<< HEAD
 #include "testutil/assert.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/countdown_latch.h"
 #include "util/metrics.h"
 #include "util/monotime.h"
@@ -282,7 +285,11 @@ TEST_F(ThreadPoolTest, TestIncMaxThreadPool) {
     _pool->wait();
     ASSERT_EQ(0, _pool->_active_threads);
     // inc max threads to 6
+<<<<<<< HEAD
     EXPECT_OK(_pool->update_max_threads(6));
+=======
+    _pool->update_max_threads(6);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     CountDownLatch latch2(1);
     ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
     ASSERT_EQ(4, _pool->num_threads());

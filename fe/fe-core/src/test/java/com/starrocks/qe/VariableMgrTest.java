@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -45,11 +46,27 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+<<<<<<< HEAD
+=======
+import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.utframe.UtFrameUtils.PseudoImage;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -66,9 +83,14 @@ public class VariableMgrTest {
     private GlobalStateMgr globalStateMgr;
     @Mocked
     private EditLog editLog;
+<<<<<<< HEAD
     @Mocked
     private Auth auth;
 
+=======
+
+    private VariableMgr variableMgr = new VariableMgr();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Before
     public void setUp() {
         new Expectations() {
@@ -76,6 +98,7 @@ public class VariableMgrTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+<<<<<<< HEAD
 
                 editLog.logGlobalVariable((SessionVariable) any);
                 minTimes = 0;
@@ -87,6 +110,8 @@ public class VariableMgrTest {
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 minTimes = 0;
                 result = true;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 
@@ -95,21 +120,38 @@ public class VariableMgrTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws IllegalAccessException, NoSuchFieldException, UserException {
         GlobalStateMgr.getCurrentState().initAuth(false);
         SessionVariable var = VariableMgr.newSessionVariable();
+=======
+    public void testNormal() throws IllegalAccessException, NoSuchFieldException, StarRocksException {
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable var = variableMgr.newSessionVariable();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(2147483648L, var.getMaxExecMemByte());
         Assert.assertEquals(300, var.getQueryTimeoutS());
         Assert.assertEquals(false, var.isEnableProfile());
         Assert.assertEquals(32L, var.getSqlMode());
         Assert.assertEquals(true, var.isInnodbReadOnly());
 
+<<<<<<< HEAD
         List<List<String>> rows = VariableMgr.dump(SetType.SESSION, var, null);
+=======
+        List<List<String>> rows = variableMgr.dump(SetType.SESSION, var, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(rows.size() > 5);
         for (List<String> row : rows) {
             if (row.get(0).equalsIgnoreCase("exec_mem_limit")) {
@@ -126,72 +168,125 @@ public class VariableMgrTest {
         // Set global variable
         SystemVariable setVar = new SystemVariable(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999934L));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
+<<<<<<< HEAD
         VariableMgr.setSystemVariable(var, setVar, false);
         Assert.assertEquals(12999934L, var.getMaxExecMemByte());
         var = VariableMgr.newSessionVariable();
+=======
+        variableMgr.setSystemVariable(var, setVar, false);
+        Assert.assertEquals(12999934L, var.getMaxExecMemByte());
+        var = variableMgr.newSessionVariable();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(12999934L, var.getMaxExecMemByte());
 
         SystemVariable setVar2 = new SystemVariable(SetType.GLOBAL, "parallel_fragment_exec_instance_num", new IntLiteral(5L));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar2)), null);
+<<<<<<< HEAD
         VariableMgr.setSystemVariable(var, setVar2, false);
         Assert.assertEquals(5L, var.getParallelExecInstanceNum());
         var = VariableMgr.newSessionVariable();
+=======
+        variableMgr.setSystemVariable(var, setVar2, false);
+        Assert.assertEquals(5L, var.getParallelExecInstanceNum());
+        var = variableMgr.newSessionVariable();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(5L, var.getParallelExecInstanceNum());
 
         SystemVariable setVar3 = new SystemVariable(SetType.GLOBAL, "time_zone", new StringLiteral("Asia/Shanghai"));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar3)), null);
+<<<<<<< HEAD
         VariableMgr.setSystemVariable(var, setVar3, false);
         Assert.assertEquals("Asia/Shanghai", var.getTimeZone());
         var = VariableMgr.newSessionVariable();
+=======
+        variableMgr.setSystemVariable(var, setVar3, false);
+        Assert.assertEquals("Asia/Shanghai", var.getTimeZone());
+        var = variableMgr.newSessionVariable();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals("Asia/Shanghai", var.getTimeZone());
 
         setVar3 = new SystemVariable(SetType.GLOBAL, "time_zone", new StringLiteral("CST"));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar3)), null);
+<<<<<<< HEAD
         VariableMgr.setSystemVariable(var, setVar3, false);
         Assert.assertEquals("CST", var.getTimeZone());
         var = VariableMgr.newSessionVariable();
+=======
+        variableMgr.setSystemVariable(var, setVar3, false);
+        Assert.assertEquals("CST", var.getTimeZone());
+        var = variableMgr.newSessionVariable();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals("CST", var.getTimeZone());
 
         // Set session variable
         setVar = new SystemVariable(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999934L));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
+<<<<<<< HEAD
         VariableMgr.setSystemVariable(var, setVar, false);
+=======
+        variableMgr.setSystemVariable(var, setVar, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(12999934L, var.getMaxExecMemByte());
 
         // onlySessionVar
         setVar = new SystemVariable(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999935L));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
+<<<<<<< HEAD
         VariableMgr.setSystemVariable(var, setVar, true);
+=======
+        variableMgr.setSystemVariable(var, setVar, true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(12999935L, var.getMaxExecMemByte());
 
         setVar3 = new SystemVariable(SetType.SESSION, "time_zone", new StringLiteral("Asia/Jakarta"));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar3)), null);
+<<<<<<< HEAD
         VariableMgr.setSystemVariable(var, setVar3, false);
+=======
+        variableMgr.setSystemVariable(var, setVar3, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals("Asia/Jakarta", var.getTimeZone());
 
         // exec_mem_limit in expr style
         setVar = new SystemVariable(SetType.GLOBAL, "exec_mem_limit", new StringLiteral("20G"));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
+<<<<<<< HEAD
         VariableMgr.setSystemVariable(var, setVar, true);
         Assert.assertEquals(21474836480L, var.getMaxExecMemByte());
         setVar = new SystemVariable(SetType.GLOBAL, "exec_mem_limit", new StringLiteral("20m"));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
         VariableMgr.setSystemVariable(var, setVar, true);
+=======
+        variableMgr.setSystemVariable(var, setVar, true);
+        Assert.assertEquals(21474836480L, var.getMaxExecMemByte());
+        setVar = new SystemVariable(SetType.GLOBAL, "exec_mem_limit", new StringLiteral("20m"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
+        variableMgr.setSystemVariable(var, setVar, true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(20971520L, var.getMaxExecMemByte());
 
         // Get from name
         VariableExpr desc = new VariableExpr("exec_mem_limit");
+<<<<<<< HEAD
         Assert.assertEquals(var.getMaxExecMemByte() + "", VariableMgr.getValue(var, desc));
+=======
+        Assert.assertEquals(var.getMaxExecMemByte() + "", variableMgr.getValue(var, desc));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         SystemVariable setVar4 = new SystemVariable(SetType.SESSION, "sql_mode", new StringLiteral(
                 SqlModeHelper.encode("PIPES_AS_CONCAT").toString()));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar4)), null);
+<<<<<<< HEAD
         VariableMgr.setSystemVariable(var, setVar4, false);
+=======
+        variableMgr.setSystemVariable(var, setVar4, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(2L, var.getSqlMode());
 
         // Test checkTimeZoneValidAndStandardize
         SystemVariable setVar5 = new SystemVariable(SetType.GLOBAL, "time_zone", new StringLiteral("+8:00"));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar5)), null);
+<<<<<<< HEAD
         VariableMgr.setSystemVariable(var, setVar5, false);
         Assert.assertEquals("+08:00", VariableMgr.newSessionVariable().getTimeZone());
 
@@ -204,6 +299,20 @@ public class VariableMgrTest {
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar7)), null);
         VariableMgr.setSystemVariable(var, setVar7, false);
         Assert.assertEquals("-08:00", VariableMgr.newSessionVariable().getTimeZone());
+=======
+        variableMgr.setSystemVariable(var, setVar5, false);
+        Assert.assertEquals("+08:00", variableMgr.newSessionVariable().getTimeZone());
+
+        SystemVariable setVar6 = new SystemVariable(SetType.GLOBAL, "time_zone", new StringLiteral("8:00"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar6)), null);
+        variableMgr.setSystemVariable(var, setVar6, false);
+        Assert.assertEquals("+08:00", variableMgr.newSessionVariable().getTimeZone());
+
+        SystemVariable setVar7 = new SystemVariable(SetType.GLOBAL, "time_zone", new StringLiteral("-8:00"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar7)), null);
+        variableMgr.setSystemVariable(var, setVar7, false);
+        Assert.assertEquals("-08:00", variableMgr.newSessionVariable().getTimeZone());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test(expected = SemanticException.class)
@@ -261,23 +370,40 @@ public class VariableMgrTest {
 
     @Test(expected = DdlException.class)
     public void testReadOnly() throws AnalysisException, DdlException {
+<<<<<<< HEAD
         VariableExpr desc = new VariableExpr("version_comment");
         LOG.info(VariableMgr.getValue(null, desc));
 
         // Set global variable
         SystemVariable setVar = new SystemVariable(SetType.SESSION, "version_comment", null);
         VariableMgr.setSystemVariable(null, setVar, false);
+=======
+        VariableMgr variableMgr = new VariableMgr();
+        VariableExpr desc = new VariableExpr("version_comment");
+        LOG.info(variableMgr.getValue(null, desc));
+
+        // Set global variable
+        SystemVariable setVar = new SystemVariable(SetType.SESSION, "version_comment", null);
+        variableMgr.setSystemVariable(null, setVar, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.fail("No exception throws.");
     }
 
     @Test
     public void testDumpInvisible() {
+<<<<<<< HEAD
         SessionVariable sv = new SessionVariable();
         List<List<String>> vars = VariableMgr.dump(SetType.SESSION, sv, null);
+=======
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable sv = new SessionVariable();
+        List<List<String>> vars = variableMgr.dump(SetType.SESSION, sv, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertFalse(vars.toString().contains("enable_show_all_variables"));
         Assert.assertFalse(vars.toString().contains("cbo_use_correlated_join_estimate"));
 
         sv.setEnableShowAllVariables(true);
+<<<<<<< HEAD
         vars = VariableMgr.dump(SetType.SESSION, sv, null);
         Assert.assertTrue(vars.toString().contains("cbo_use_correlated_join_estimate"));
 
@@ -290,3 +416,55 @@ public class VariableMgrTest {
     }
 }
 
+=======
+        vars = variableMgr.dump(SetType.SESSION, sv, null);
+        Assert.assertTrue(vars.toString().contains("cbo_use_correlated_join_estimate"));
+
+        vars = variableMgr.dump(SetType.SESSION, null, null);
+        List<List<String>> vars1 = variableMgr.dump(SetType.GLOBAL, null, null);
+        Assert.assertTrue(vars.size() < vars1.size());
+
+        List<List<String>> vars2 = variableMgr.dump(SetType.SESSION, null, null);
+        Assert.assertTrue(vars.size() == vars2.size());
+    }
+
+    @Test
+    public void testWarehouseVar() {
+        SystemVariable systemVariable =
+                new SystemVariable(SetType.GLOBAL, SessionVariable.WAREHOUSE_NAME, new StringLiteral("warehouse_1"));
+        VariableMgr variableMgr = new VariableMgr();
+        try {
+            variableMgr.setSystemVariable(null, systemVariable, false);
+        } catch (DdlException e) {
+            Assert.assertEquals("Variable 'warehouse' is a SESSION variable and can't be used with SET GLOBAL",
+                    e.getMessage());
+        }
+    }
+
+    @Test
+    public void testImagePersist() throws Exception {
+        VariableMgr mgr = new VariableMgr();
+        GlobalVarPersistInfo info = new GlobalVarPersistInfo();
+        info.setPersistJsonString("{\"query_timeout\":100}");
+        mgr.replayGlobalVariableV2(info);
+
+        PseudoImage image = new PseudoImage();
+        mgr.save(image.getImageWriter());
+
+        VariableMgr mgr2 = new VariableMgr();
+        mgr2.load(image.getMetaBlockReader());
+
+        Assert.assertEquals(100, mgr2.getDefaultSessionVariable().getQueryTimeoutS());
+    }
+
+    @Test
+    public void testAutoCommit() throws Exception {
+        VariableExpr desc = new VariableExpr("autocommit");
+        ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
+
+        Assert.assertEquals("autocommit", desc.getName());
+        Assert.assertEquals(ScalarType.createType(PrimitiveType.BIGINT), desc.getType());
+        Assert.assertEquals((long) desc.getValue(), 1);
+    }
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_difference
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Calculates the difference between every two neighboring elements of an array by subtracting each element from its following element and returns an array that consists of the differences.
 

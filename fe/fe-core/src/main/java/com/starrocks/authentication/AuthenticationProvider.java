@@ -15,7 +15,11 @@
 
 package com.starrocks.authentication;
 
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Password;
+=======
+import com.starrocks.sql.ast.UserAuthOption;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.UserIdentity;
 
 public interface AuthenticationProvider {
@@ -24,10 +28,15 @@ public interface AuthenticationProvider {
      * valid authentication info, and initialize the UserAuthenticationInfo structure
      * used when creating a user or modifying user's authentication information
      */
+<<<<<<< HEAD
     UserAuthenticationInfo validAuthenticationInfo(
             UserIdentity userIdentity,
             String password,
             String textForAuthPlugin) throws AuthenticationException;
+=======
+    UserAuthenticationInfo analyzeAuthOption(
+            UserIdentity userIdentity, UserAuthOption userAuthOption) throws AuthenticationException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     /**
      * login authentication
@@ -38,10 +47,13 @@ public interface AuthenticationProvider {
             byte[] password,
             byte[] randomString,
             UserAuthenticationInfo authenticationInfo) throws AuthenticationException;
+<<<<<<< HEAD
 
     /**
      * upgraded from 2.x
      **/
     UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
             throws AuthenticationException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

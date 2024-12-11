@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # timediff
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回两个 DATETIME 类型值之间的差值。
 

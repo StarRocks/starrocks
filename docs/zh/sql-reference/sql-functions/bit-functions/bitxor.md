@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitxor
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回两个数值在按位 XOR 运算后的结果。
 

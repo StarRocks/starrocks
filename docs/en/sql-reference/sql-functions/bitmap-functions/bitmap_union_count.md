@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_union_count
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the union of a set of bitmap values and returns the cardinality of the union. This function is supported from v2.3.
 

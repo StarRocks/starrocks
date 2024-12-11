@@ -44,7 +44,11 @@ public class BinlogManagerTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String createTableStmtStr = "CREATE TABLE test.binlog_test(k1 int, v1 int) " +
                 "duplicate key(k1) distributed by hash(k1) buckets 2 properties('replication_num' = '1', " +
                 "'binlog_enable' = 'false', 'binlog_ttl_second' = '100', 'binlog_max_size' = '100');";
@@ -55,8 +59,14 @@ public class BinlogManagerTest {
 
     @Test
     public void testTryEnableBinlog() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("binlog_test");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_test");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         boolean result = binlogManager.tryEnableBinlog(db, table.getId(), 200L, -1L);
         Assert.assertTrue(result);
         Assert.assertEquals(1, table.getBinlogVersion());
@@ -68,18 +78,32 @@ public class BinlogManagerTest {
 
     @Test
     public void testTryDisableBinlog() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("binlog_test");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_test");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         boolean result = binlogManager.tryDisableBinlog(db, table.getId());
         Assert.assertFalse(table.isBinlogEnabled());
     }
 
     @Test
     public void testCheckAndSetBinlogAvailableVersion() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("binlog_test");
         table.setBinlogTxnId(2);
         long totalNum = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001).size();
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_test");
+        table.setBinlogTxnId(2);
+        long totalNum = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001).size();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         binlogManager.checkAndSetBinlogAvailableVersion(db, table, 1, 10002);
         Assert.assertFalse(binlogManager.isBinlogAvailable(db.getId(), table.getId()));
 

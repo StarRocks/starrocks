@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # e
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the constant e (the base of natural logarithms).
 

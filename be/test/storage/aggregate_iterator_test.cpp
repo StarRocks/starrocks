@@ -14,7 +14,11 @@
 
 #include "storage/aggregate_iterator.h"
 
+<<<<<<< HEAD
 #include "column/column_pool.h"
+=======
+#include "common/config.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gtest/gtest.h"
 #include "storage/aggregate_type.h"
 #include "storage/vector_chunk_iterator.h"
@@ -36,7 +40,11 @@ static std::vector<Datum> row(const Chunk& chunk, size_t row_id) {
 class AggregateIteratorTest : public testing::Test {
 protected:
     void SetUp() override {}
+<<<<<<< HEAD
     void TearDown() override { TEST_clear_all_columns_this_thread(); }
+=======
+    void TearDown() override {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 // NOLINTNEXTLINE
@@ -924,7 +932,11 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
         ASSERT_EQ(2, values[1]);
         ASSERT_EQ(3, values[2]);
         ASSERT_EQ(4, values[3]);
+<<<<<<< HEAD
         agg_iter->get_next(chunk.get());
+=======
+        ASSERT_FALSE(agg_iter->get_next(chunk.get()).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     {
         auto pk1 = std::vector<std::string>{"abc", "abc", "abc", "abc"};

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_suppkey,
@@ -36,6 +37,8 @@ where
 )
 order by
     s_suppkey;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment statistics]
 PLAN FRAGMENT 0(F08)
 Output Exprs:1: S_SUPPKEY | 2: S_NAME | 3: S_ADDRESS | 5: S_PHONE | 27: sum

@@ -16,6 +16,10 @@ package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.HintNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.SessionVariable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.junit.Assert;
@@ -39,7 +43,11 @@ class HintCollectorTest {
         StarRocksParser parser = new StarRocksParser(tokenStream);
         StarRocksParser.SingleStatementContext singleStatementContext =
                 parser.sqlStatements().singleStatement().get(0);
+<<<<<<< HEAD
         HintCollector collector = new HintCollector((CommonTokenStream) parser.getTokenStream());
+=======
+        HintCollector collector = new HintCollector((CommonTokenStream) parser.getTokenStream(), new SessionVariable());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         collector.collect(singleStatementContext);
         Assert.assertEquals(num, collector.getContextWithHintMap().size());
         for (List<HintNode> hintNodes : collector.getContextWithHintMap().values()) {

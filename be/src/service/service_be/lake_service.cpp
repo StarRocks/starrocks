@@ -34,7 +34,10 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h"
 #include "testutil/sync_point.h"
+<<<<<<< HEAD
 #include "util/bthreads/semaphore.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 #include "util/thread.h"
@@ -120,6 +123,7 @@ bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_ac
 bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_num_vacuum_queued_tasks, nullptr);
 bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_num_vacuum_active_tasks, nullptr);
 
+<<<<<<< HEAD
 // A class use to limit the number of tasks submitted to the thread pool.
 class ConcurrencyLimitedThreadPoolToken {
 public:
@@ -151,6 +155,11 @@ private:
     ThreadPool* _pool;
     std::shared_ptr<bthreads::CountingSemaphore<>> _sem;
 };
+=======
+std::string txn_info_string(const TxnInfoPB& info) {
+    return info.DebugString();
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 } // namespace
 
@@ -158,11 +167,19 @@ using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::Con
 
 LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr) : _env(env), _tablet_mgr(tablet_mgr) {}
 
+<<<<<<< HEAD
 LakeServiceImpl::~LakeServiceImpl() {}
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::lake::PublishVersionRequest* request,
                                       ::starrocks::lake::PublishVersionResponse* response,
+=======
+LakeServiceImpl::~LakeServiceImpl() = default;
+
+void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
+                                      const ::starrocks::PublishVersionRequest* request,
+                                      ::starrocks::PublishVersionResponse* response,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
@@ -175,8 +192,13 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         cntl->SetFailed("missing new version");
         return;
     }
+<<<<<<< HEAD
     if (request->txn_ids_size() == 0) {
         cntl->SetFailed("missing txn_ids");
+=======
+    if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
+        cntl->SetFailed("neither txn_ids nor txn_infos is set, one of them must be set");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return;
     }
     if (request->tablet_ids_size() == 0) {
@@ -188,12 +210,21 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto timeout_deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
     auto start_ts = butil::gettimeofday_us();
     auto thread_pool = publish_version_thread_pool(_env);
+<<<<<<< HEAD
+=======
+    CHECK(thread_pool != nullptr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto thread_pool_token = ConcurrencyLimitedThreadPoolToken(thread_pool, thread_pool->max_threads() * 2);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
     scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
     Trace* trace = trace_gurad.get();
+<<<<<<< HEAD
     TRACE_TO(trace, "got request. txn_id=$0 new_version=$1 #tablets=$2", request->txn_ids(0), request->new_version(),
+=======
+    TRACE_TO(trace, "got request. txn_ids=$0 base_version=$1 new_version=$2 #tablets=$3",
+             JoinInts(request->txn_ids(), ","), request->base_version(), request->new_version(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
              request->tablet_ids_size());
 
     Status::OK().to_protobuf(response->mutable_status());
@@ -208,6 +239,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             TRACE("start publish tablet $0 at thread $1", tablet_id, Thread::current_thread()->tid());
 
             auto run_ts = butil::gettimeofday_us();
+<<<<<<< HEAD
             auto base_version = request->base_version();
             auto new_version = request->new_version();
             auto txns = request->txn_ids().data();
@@ -223,23 +255,63 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             if (std::chrono::system_clock::now() < timeout_deadline) {
                 res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, txns_size,
                                             commit_time);
+=======
+            auto queuing_latency = run_ts - start_ts;
+            g_publish_tablet_version_queuing_latency << queuing_latency;
+
+            auto base_version = request->base_version();
+            auto new_version = request->new_version();
+            auto txns = std::vector<TxnInfoPB>();
+            if (request->txn_infos_size() > 0) {
+                txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
+            } else { // This is a request from older version FE
+                // Construct TxnInfoPB from other fields
+                txns.reserve(request->txn_ids_size());
+                for (auto i = 0, sz = request->txn_ids_size(); i < sz; i++) {
+                    auto& info = txns.emplace_back();
+                    info.set_txn_id(request->txn_ids(i));
+                    info.set_txn_type(TXN_NORMAL);
+                    info.set_combined_txn_log(false);
+                    info.set_commit_time(request->commit_time());
+                    info.set_force_publish(false);
+                }
+            }
+
+            TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
+            TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
+
+            StatusOr<TabletMetadataPtr> res;
+            if (std::chrono::system_clock::now() < timeout_deadline) {
+                res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                 res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
             }
             if (res.ok()) {
                 auto metadata = std::move(res).value();
+<<<<<<< HEAD
                 auto score = compaction_score(_tablet_mgr, *metadata);
+=======
+                auto score = compaction_score(_tablet_mgr, metadata);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, score});
             } else {
                 g_publish_version_failed_tasks << 1;
                 if (res.status().is_resource_busy()) {
                     VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+<<<<<<< HEAD
                             << " txn_id=" << txns[0] << " version=" << new_version;
                 } else {
                     LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
                                  << " txn_id=" << txns[0] << " version=" << new_version;
+=======
+                            << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
+                } else {
+                    LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+                                 << " txn_ids=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
@@ -253,7 +325,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
+<<<<<<< HEAD
                          << " txn_id=" << request->txn_ids()[0];
+=======
+                         << " txn_ids=" << JoinInts(request->txn_ids(), ",");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
             st.to_protobuf(response->mutable_status());
@@ -265,14 +341,24 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
     if (config::lake_enable_publish_version_trace_log && is_slow) {
+<<<<<<< HEAD
         LOG(INFO) << "Published txn " << request->txn_ids(0) << ". cost=" << cost << "us\n" << trace->DumpToString();
     } else if (is_slow) {
         LOG(INFO) << "Published txn " << request->txn_ids(0) << ". #tablets=" << request->tablet_ids_size()
                   << " cost=" << cost << "us, trace: " << trace->MetricsAsJSON();
+=======
+        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",") << ". cost=" << cost << "us\n"
+                  << trace->DumpToString();
+    } else if (is_slow) {
+        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",")
+                  << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
+                  << "us, trace: " << trace->MetricsAsJSON();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
 
+<<<<<<< HEAD
 void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* controller,
                                           const ::starrocks::lake::PublishLogVersionRequest* request,
                                           ::starrocks::lake::PublishLogVersionResponse* response,
@@ -307,6 +393,27 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
                 g_publish_version_failed_tasks << 1;
                 LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
                              << " txn_id=" << txn_id << " version=" << version;
+=======
+void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
+                                                       std::span<const TxnInfoPB> txn_infos,
+                                                       const int64_t* log_versions,
+                                                       ::starrocks::PublishLogVersionResponse* response) {
+    auto txn_size = txn_infos.size();
+    auto thread_pool = publish_version_thread_pool(_env);
+    auto latch = BThreadCountDownLatch(tablet_size);
+    bthread::Mutex response_mtx;
+
+    for (int i = 0; i < tablet_size; i++) {
+        auto tablet_id = tablet_ids[i];
+        auto task = [&, tablet_id]() {
+            DeferOp defer([&] { latch.count_down(); });
+            auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_infos, log_versions);
+            if (!st.ok()) {
+                g_publish_version_failed_tasks << 1;
+                LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
+                             << " txns=" << JoinMapped(txn_infos, txn_info_string, ",")
+                             << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }
@@ -315,7 +422,13 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
         auto st = thread_pool->submit_func(task);
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
+<<<<<<< HEAD
             LOG(WARNING) << "Fail to submit publish log version task: " << st;
+=======
+            LOG(WARNING) << "Fail to submit publish log version task: " << st << " tablet_id=" << tablet_id
+                         << " txns=" << JoinMapped(txn_infos, txn_info_string, ",")
+                         << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
             latch.count_down();
@@ -324,6 +437,7 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
 
     latch.wait();
 }
+<<<<<<< HEAD
 
 void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
                                 const ::starrocks::lake::AbortTxnRequest* request,
@@ -339,6 +453,99 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
         for (auto txn_id : request->txn_ids()) {
             load_mgr->abort_txn(txn_id);
         }
+=======
+void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* controller,
+                                          const ::starrocks::PublishLogVersionRequest* request,
+                                          ::starrocks::PublishLogVersionResponse* response,
+                                          ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+    if (!request->has_txn_id() && !request->has_txn_info()) {
+        cntl->SetFailed("missing txn_id and txn_info");
+        return;
+    }
+    if (!request->has_version()) {
+        cntl->SetFailed("missing version");
+        return;
+    }
+
+    auto tablet_ids = request->tablet_ids().data();
+    auto version = int64_t{request->version()};
+    if (!request->has_txn_info()) {
+        DCHECK(request->has_txn_id());
+        auto txn_info = TxnInfoPB();
+        txn_info.set_txn_id(request->txn_id());
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_combined_txn_log(false);
+        auto txn_infos = std::span<const TxnInfoPB>(&txn_info, 1);
+        _submit_publish_log_version_task(tablet_ids, request->tablet_ids_size(), txn_infos, &version, response);
+    } else {
+        auto txn_infos = std::span<const TxnInfoPB>(&request->txn_info(), 1);
+        _submit_publish_log_version_task(tablet_ids, request->tablet_ids_size(), txn_infos, &version, response);
+    }
+}
+
+void LakeServiceImpl::publish_log_version_batch(::google::protobuf::RpcController* controller,
+                                                const ::starrocks::PublishLogVersionBatchRequest* request,
+                                                ::starrocks::PublishLogVersionResponse* response,
+                                                ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+    if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
+        cntl->SetFailed("neither txn_ids nor txn_infos is set, one of them must be set");
+        return;
+    }
+    if (request->versions_size() == 0) {
+        cntl->SetFailed("missing versions");
+        return;
+    }
+
+    auto txn_infos = std::vector<TxnInfoPB>{};
+    auto tablet_ids = request->tablet_ids().data();
+    auto versions = request->versions().data();
+    if (request->txn_infos_size() == 0) {
+        DCHECK_EQ(request->txn_ids_size(), request->versions_size());
+        txn_infos.reserve(request->txn_ids_size());
+        for (auto txn_id : request->txn_ids()) {
+            auto& txn_info = txn_infos.emplace_back();
+            txn_info.set_txn_id(txn_id);
+            txn_info.set_combined_txn_log(false);
+            txn_info.set_txn_type(TXN_NORMAL);
+        }
+    } else {
+        txn_infos.insert(txn_infos.begin(), request->txn_infos().begin(), request->txn_infos().end());
+    }
+
+    _submit_publish_log_version_task(tablet_ids, request->tablet_ids_size(), txn_infos, versions, response);
+}
+
+void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
+                                const ::starrocks::AbortTxnRequest* request, ::starrocks::AbortTxnResponse* response,
+                                ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    (void)controller;
+
+    LOG(INFO) << "Aborting transactions. request=" << request->DebugString();
+
+    // Cancel active tasks.
+    if (LoadChannelMgr* load_mgr = _env->load_channel_mgr(); load_mgr != nullptr) {
+        for (auto& txn_id : request->txn_ids()) { // For request sent by and older version FE
+            load_mgr->abort_txn(txn_id);
+        }
+        for (auto& txn_info : request->txn_infos()) { // For request sent by a new version FE
+            load_mgr->abort_txn(txn_info.txn_id());
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     if (!request->has_skip_cleanup() || request->skip_cleanup()) {
@@ -349,11 +556,30 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {
         DeferOp defer([&] { latch.count_down(); });
+<<<<<<< HEAD
         auto txn_ids = request->txn_ids().data();
         auto txn_types = request->txn_types_size() > 0 ? request->txn_types().data() : nullptr;
         auto txn_size = request->txn_ids_size();
         for (auto tablet_id : request->tablet_ids()) {
             lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_types, txn_size);
+=======
+        std::vector<TxnInfoPB> txn_infos;
+        if (request->txn_infos_size() > 0) {
+            txn_infos.insert(txn_infos.begin(), request->txn_infos().begin(), request->txn_infos().end());
+        } else {
+            // Construct TxnInfoPB from txn_id and txn_type
+            txn_infos.reserve(request->txn_ids_size());
+            auto has_txn_type = request->txn_types_size() == request->txn_ids_size();
+            for (int i = 0, sz = request->txn_ids_size(); i < sz; i++) {
+                auto& info = txn_infos.emplace_back();
+                info.set_txn_id(request->txn_ids(i));
+                info.set_txn_type(has_txn_type ? request->txn_types(i) : TXN_NORMAL);
+                info.set_combined_txn_log(false);
+            }
+        }
+        for (auto tablet_id : request->tablet_ids()) {
+            lake::abort_txn(_tablet_mgr, tablet_id, txn_infos);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     };
     auto st = thread_pool->submit_func(task);
@@ -366,9 +592,14 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
 }
 
 void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controller,
+<<<<<<< HEAD
                                     const ::starrocks::lake::DeleteTabletRequest* request,
                                     ::starrocks::lake::DeleteTabletResponse* response,
                                     ::google::protobuf::Closure* done) {
+=======
+                                    const ::starrocks::DeleteTabletRequest* request,
+                                    ::starrocks::DeleteTabletResponse* response, ::google::protobuf::Closure* done) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -401,6 +632,48 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
     }
 }
 
+<<<<<<< HEAD
+=======
+void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controller,
+                                     const ::starrocks::DeleteTxnLogRequest* request,
+                                     ::starrocks::DeleteTxnLogResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+
+    if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
+        cntl->SetFailed("neither txn_ids nor txn_infos is set, one of them must be set");
+        return;
+    }
+
+    auto thread_pool = vacuum_thread_pool(_env);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("vacuum thread pool is null when delete txn log");
+        return;
+    }
+
+    auto latch = BThreadCountDownLatch(1);
+    auto st = thread_pool->submit_func([&]() {
+        DeferOp defer([&] { latch.count_down(); });
+        lake::delete_txn_log(_tablet_mgr, *request, response);
+    });
+
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to submit vacuum task: " << st;
+        st.to_protobuf(response->mutable_status());
+        latch.count_down();
+    } else {
+        Status::OK().to_protobuf(response->mutable_status());
+    }
+
+    latch.wait();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 namespace drop_table_helper {
 static bthread::Mutex g_mutex;
 static std::unordered_set<std::string> g_paths;
@@ -425,8 +698,13 @@ void remove_path(const std::string& path) {
 }; // namespace drop_table_helper
 
 void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
+<<<<<<< HEAD
                                  const ::starrocks::lake::DropTableRequest* request,
                                  ::starrocks::lake::DropTableResponse* response, ::google::protobuf::Closure* done) {
+=======
+                                 const ::starrocks::DropTableRequest* request, ::starrocks::DropTableResponse* response,
+                                 ::google::protobuf::Closure* done) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -485,8 +763,13 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
 }
 
 void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
+<<<<<<< HEAD
                                   const ::starrocks::lake::DeleteDataRequest* request,
                                   ::starrocks::lake::DeleteDataResponse* response, ::google::protobuf::Closure* done) {
+=======
+                                  const ::starrocks::DeleteDataRequest* request,
+                                  ::starrocks::DeleteDataResponse* response, ::google::protobuf::Closure* done) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -538,9 +821,14 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
 }
 
 void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* controller,
+<<<<<<< HEAD
                                        const ::starrocks::lake::TabletStatRequest* request,
                                        ::starrocks::lake::TabletStatResponse* response,
                                        ::google::protobuf::Closure* done) {
+=======
+                                       const ::starrocks::TabletStatRequest* request,
+                                       ::starrocks::TabletStatResponse* response, ::google::protobuf::Closure* done) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -572,8 +860,12 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                 return;
             }
 
+<<<<<<< HEAD
             auto location = _tablet_mgr->tablet_metadata_location(tablet_id, version);
             auto tablet_metadata = _tablet_mgr->get_tablet_metadata(location, /*fll_cache=*/false);
+=======
+            auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!tablet_metadata.ok()) {
                 LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id << ", version: " << version
                              << ", error: " << tablet_metadata.status();
@@ -607,6 +899,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
 }
 
 void LakeServiceImpl::lock_tablet_metadata(::google::protobuf::RpcController* controller,
+<<<<<<< HEAD
                                            const ::starrocks::lake::LockTabletMetadataRequest* request,
                                            ::starrocks::lake::LockTabletMetadataResponse* response,
                                            ::google::protobuf::Closure* done) {
@@ -709,6 +1002,28 @@ void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* 
 void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* controller,
                                        const ::starrocks::lake::UploadSnapshotsRequest* request,
                                        ::starrocks::lake::UploadSnapshotsResponse* response,
+=======
+                                           const ::starrocks::LockTabletMetadataRequest* request,
+                                           ::starrocks::LockTabletMetadataResponse* response,
+                                           ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+    cntl->SetFailed("does not support lock_tablet_metadata anymore");
+}
+
+void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* controller,
+                                             const ::starrocks::UnlockTabletMetadataRequest* request,
+                                             ::starrocks::UnlockTabletMetadataResponse* response,
+                                             ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+    cntl->SetFailed("does not support unlock_tablet_metadata anymore");
+}
+
+void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* controller,
+                                       const ::starrocks::UploadSnapshotsRequest* request,
+                                       ::starrocks::UploadSnapshotsResponse* response,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                        ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
@@ -731,15 +1046,24 @@ void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* contro
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit upload snapshots task: " << st;
+<<<<<<< HEAD
         cntl->SetFailed(st.get_error_msg());
+=======
+        cntl->SetFailed(std::string(st.message()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         latch.count_down();
     }
     latch.wait();
 }
 
 void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* controller,
+<<<<<<< HEAD
                                         const ::starrocks::lake::RestoreSnapshotsRequest* request,
                                         ::starrocks::lake::RestoreSnapshotsResponse* response,
+=======
+                                        const ::starrocks::RestoreSnapshotsRequest* request,
+                                        ::starrocks::RestoreSnapshotsResponse* response,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                         ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
@@ -762,15 +1086,24 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit restore snapshots task: " << st;
+<<<<<<< HEAD
         cntl->SetFailed(st.get_error_msg());
+=======
+        cntl->SetFailed(std::string(st.message()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         latch.count_down();
     }
     latch.wait();
 }
 
+<<<<<<< HEAD
 void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
                               const ::starrocks::lake::CompactRequest* request,
                               ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) {
+=======
+void LakeServiceImpl::compact(::google::protobuf::RpcController* controller, const ::starrocks::CompactRequest* request,
+                              ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -791,8 +1124,13 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
 }
 
 void LakeServiceImpl::abort_compaction(::google::protobuf::RpcController* controller,
+<<<<<<< HEAD
                                        const ::starrocks::lake::AbortCompactionRequest* request,
                                        ::starrocks::lake::AbortCompactionResponse* response,
+=======
+                                       const ::starrocks::AbortCompactionRequest* request,
+                                       ::starrocks::AbortCompactionResponse* response,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                        ::google::protobuf::Closure* done) {
     TEST_SYNC_POINT("LakeServiceImpl::abort_compaction:enter");
 
@@ -810,9 +1148,14 @@ void LakeServiceImpl::abort_compaction(::google::protobuf::RpcController* contro
     st.to_protobuf(response->mutable_status());
 }
 
+<<<<<<< HEAD
 void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
                              const ::starrocks::lake::VacuumRequest* request,
                              ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) {
+=======
+void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, const ::starrocks::VacuumRequest* request,
+                             ::starrocks::VacuumResponse* response, ::google::protobuf::Closure* done) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static bthread::Mutex s_mtx;
     static std::unordered_set<int64_t> s_vacuuming_partitions;
 
@@ -858,8 +1201,13 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
 }
 
 void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
+<<<<<<< HEAD
                                   const ::starrocks::lake::VacuumFullRequest* request,
                                   ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) {
+=======
+                                  const ::starrocks::VacuumFullRequest* request,
+                                  ::starrocks::VacuumFullResponse* response, ::google::protobuf::Closure* done) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
     auto thread_pool = vacuum_thread_pool(_env);

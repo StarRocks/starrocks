@@ -20,7 +20,11 @@
 namespace starrocks {
 
 AgentStatus report_task(const TReportRequest& request, TMasterResult* result) {
+<<<<<<< HEAD
     MasterServerClient client(ExecEnv::GetInstance()->frontend_client_cache());
+=======
+    MasterServerClient client;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return client.report(request, result);
 }
 

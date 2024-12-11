@@ -20,7 +20,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.connector.ObjectStorageUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -69,7 +72,11 @@ public class HiveRemoteFileIO implements RemoteFileIO {
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey, boolean expandWildCards) {
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
+<<<<<<< HEAD
         String path = ObjectStorageUtils.formatObjectStoragePath(pathKey.getPath());
+=======
+        String path = pathKey.getPath();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
         try {
             URI uri = new Path(path).toUri();
@@ -106,8 +113,12 @@ public class HiveRemoteFileIO implements RemoteFileIO {
                     BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                     List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
                     RemoteFileDesc fileDesc = new RemoteFileDesc(fileName, "", locatedFileStatus.getLen(),
+<<<<<<< HEAD
                             locatedFileStatus.getModificationTime(), ImmutableList.copyOf(fileBlockDescs),
                             ImmutableList.of());
+=======
+                            locatedFileStatus.getModificationTime(), ImmutableList.copyOf(fileBlockDescs));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (expandWildCards) {
                         fileDesc.setFullPath(locatedFileStatus.getPath().toString());
                     }
@@ -237,4 +248,26 @@ public class HiveRemoteFileIO implements RemoteFileIO {
     public void setFileSystem(FileSystem fs) {
         this.fileSystem = fs;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public FileStatus[] getFileStatus(Path... files) throws IOException {
+        if (files == null || files.length <= 0) {
+            return null;
+        }
+        FileSystem fileSystem;
+        if (!FeConstants.runningUnitTest) {
+            fileSystem = FileSystem.get(files[0].toUri(), configuration);
+        } else {
+            fileSystem = this.fileSystem;
+        }
+        List<FileStatus> fileStatuses = Lists.newArrayList();
+        for (Path file : files) {
+            FileStatus fileStatus = fileSystem.getFileStatus(file);
+            fileStatuses.add(fileStatus);
+        }
+        return fileStatuses.toArray(new FileStatus[0]);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # reverse
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Reverses a string or array. Returns a string or array with the characters in the string or array elements in reverse order.
 

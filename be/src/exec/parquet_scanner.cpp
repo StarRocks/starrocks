@@ -77,17 +77,32 @@ Status ParquetScanner::initialize_src_chunk(ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
     _pool.clear();
     (*chunk) = std::make_shared<Chunk>();
+<<<<<<< HEAD
     size_t column_pos = 0;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _chunk_filter.clear();
     for (auto i = 0; i < _num_of_columns_from_file; ++i) {
         SlotDescriptor* slot_desc = _src_slot_descriptors[i];
         if (slot_desc == nullptr) {
             continue;
         }
+<<<<<<< HEAD
         auto* array = _batch->column(column_pos++).get();
         ColumnPtr column;
         RETURN_IF_ERROR(new_column(array->type().get(), slot_desc, &column, _conv_funcs[i].get(), &_cast_exprs[i],
                                    _pool, _strict_mode));
+=======
+        ColumnPtr column;
+        auto array_ptr = _batch->GetColumnByName(slot_desc->col_name());
+        if (array_ptr == nullptr) {
+            _cast_exprs[i] = _pool.add(new ColumnRef(slot_desc));
+            column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        } else {
+            RETURN_IF_ERROR(new_column(array_ptr->type().get(), slot_desc, &column, _conv_funcs[i].get(),
+                                       &_cast_exprs[i], _pool, _strict_mode));
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         column->reserve(_max_chunk_size);
         (*chunk)->append_column(column, slot_desc->id());
     }
@@ -98,7 +113,10 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_counter->fill_ns);
     size_t num_elements =
             std::min<size_t>((_max_chunk_size - _chunk_start_idx), (_batch->num_rows() - _batch_start_idx));
+<<<<<<< HEAD
     size_t column_pos = 0;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _chunk_filter.resize(_chunk_filter.size() + num_elements, 1);
     for (auto i = 0; i < _num_of_columns_from_file; ++i) {
         SlotDescriptor* slot_desc = _src_slot_descriptors[i];
@@ -106,6 +124,7 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
             continue;
         }
         _conv_ctx.current_slot = slot_desc;
+<<<<<<< HEAD
         auto* array = _batch->column(column_pos++).get();
         auto& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
         // for timestamp type, _state->timezone which is specified by user. convert function
@@ -118,6 +137,16 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
         }
         RETURN_IF_ERROR(convert_array_to_column(_conv_funcs[i].get(), num_elements, array, column, _batch_start_idx,
                                                 _chunk_start_idx, &_chunk_filter, &_conv_ctx));
+=======
+        auto& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        auto array_ptr = _batch->GetColumnByName(slot_desc->col_name());
+        if (array_ptr == nullptr) {
+            (void)column->append_nulls(_batch->num_rows());
+        } else {
+            RETURN_IF_ERROR(convert_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
+                                                    _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx));
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     _chunk_start_idx += num_elements;
@@ -321,6 +350,18 @@ Status ParquetScanner::convert_array_to_column(ConvertFuncTree* conv_func, size_
                                                const arrow::Array* array, const ColumnPtr& column,
                                                size_t batch_start_idx, size_t chunk_start_idx, Filter* chunk_filter,
                                                ArrowConvertContext* conv_ctx) {
+<<<<<<< HEAD
+=======
+    // for timestamp type, state->timezone which is specified by user. convert function
+    // obtains timezone from array. thus timezone in array should be rectified to
+    // state->timezone.
+    if (array->type_id() == ArrowTypeId::TIMESTAMP) {
+        auto* timestamp_type = down_cast<arrow::TimestampType*>(array->type().get());
+        auto& mutable_timezone = (std::string&)timestamp_type->timezone();
+        mutable_timezone = conv_ctx->state->timezone();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     uint8_t* null_data;
     Column* data_column;
     if (column->is_nullable()) {
@@ -459,6 +500,12 @@ Status ParquetScanner::open_next_reader() {
         auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter);
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
                                                                   range_desc.start_offset, range_desc.size);
+<<<<<<< HEAD
+=======
+        if (_scan_range.params.__isset.flexible_column_mapping && _scan_range.params.flexible_column_mapping) {
+            parquet_reader->set_invalid_as_null(true);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _next_file++;
         int64_t file_size;
         RETURN_IF_ERROR(parquet_reader->size(&file_size));

@@ -189,7 +189,11 @@ TEST(ObjectColumnTest, HLL_test_reset_column) {
     c->append(HyperLogLog());
     c->append(HyperLogLog());
     c->append(HyperLogLog());
+<<<<<<< HEAD
     const std::vector<HyperLogLog*>& data = c->get_data();
+=======
+    const auto& data = c->get_data();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_EQ(3, data.size());
     c->set_delete_state(DEL_PARTIAL_SATISFIED);
 
@@ -251,7 +255,11 @@ TEST(ObjectColumnTest, Percentile_test_swap_column) {
     ASSERT_TRUE(column1->is_object());
 
     std::vector<uint32_t> idx = {1};
+<<<<<<< HEAD
     ASSERT_TRUE(column->update_rows(*column1.get(), idx.data()).ok());
+=======
+    column->update_rows(*column1.get(), idx.data());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
     ASSERT_EQ(1, percentile->get_object(0)->quantile(1));

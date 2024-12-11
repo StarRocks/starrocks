@@ -36,12 +36,21 @@ package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.NetUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.leader.MetaHelper;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
@@ -57,14 +66,31 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.io.OutputStream;
 
 public class MetaService {
     private static final int TIMEOUT_SECOND = 10;
+=======
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+public class MetaService {
+    private static final Logger LOG = LogManager.getLogger(MetaService.class);
+
+    public static final int DOWNLOAD_TIMEOUT_SECOND = 10;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static class ImageAction extends MetaBaseAction {
         private static final String VERSION = "version";
         private static final String SUBDIR = "subdir";
+<<<<<<< HEAD
+=======
+        private static final String IMAGE_FORMAT_VERSION = "image_format_version";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         public ImageAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
@@ -85,6 +111,7 @@ public class MetaService {
             }
 
             String subDirStr = request.getSingleParameter(SUBDIR);
+<<<<<<< HEAD
             File realDir = null;
             if (Strings.isNullOrEmpty(subDirStr)) {
                 realDir = imageDir;
@@ -92,6 +119,20 @@ public class MetaService {
                 realDir = new File(imageDir.getAbsolutePath() + subDirStr);
             }
 
+=======
+            if (Strings.isNullOrEmpty(subDirStr)) {
+                subDirStr = "";
+            }
+
+            ImageFormatVersion imageFormatVersion = ImageFormatVersion.v1;
+            String imageFormatStr = request.getSingleParameter(IMAGE_FORMAT_VERSION);
+            if (!Strings.isNullOrEmpty(imageFormatStr)) {
+                imageFormatVersion = ImageFormatVersion.valueOf(imageFormatStr);
+            }
+
+            File realDir = new File(getRealImageDir(imageDir.getAbsolutePath(), subDirStr, imageFormatVersion));
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             long version = checkLongParam(versionStr);
             if (version < 0) {
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -104,7 +145,22 @@ public class MetaService {
                 return;
             }
 
+<<<<<<< HEAD
             writeFileResponse(request, response, imageFile);
+=======
+            String checksum = null;
+            if (imageFormatVersion == ImageFormatVersion.v2) {
+                File checksumFile = Storage.getChecksumFile(realDir, version);
+                if (checksumFile.exists()) {
+                    try {
+                        checksum = new String(Files.readAllBytes(Path.of(checksumFile.getAbsolutePath())));
+                    } catch (IOException e) {
+                        LOG.warn("get checksum from file {} failed", checksumFile.getAbsoluteFile(), e);
+                    }
+                }
+            }
+            writeFileResponse(request, response, imageFile, checksum);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -132,9 +188,15 @@ public class MetaService {
             }
 
             try {
+<<<<<<< HEAD
                 Storage currentStorageInfo = new Storage(realDir.getAbsolutePath());
                 StorageInfo storageInfo = new StorageInfo(currentStorageInfo.getClusterID(),
                         currentStorageInfo.getImageJournalId());
+=======
+                ImageLoader imageLoader = new ImageLoader(realDir.getAbsolutePath());
+                StorageInfo storageInfo = new StorageInfo(imageLoader.getImageJournalId(),
+                        imageLoader.getImageFormatVersion());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                 response.setContentType("application/json");
                 Gson gson = new Gson();
@@ -163,7 +225,11 @@ public class MetaService {
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
             File versionFile = new File(imageDir, Storage.VERSION_FILE);
+<<<<<<< HEAD
             writeFileResponse(request, response, versionFile);
+=======
+            writeFileResponse(request, response, versionFile, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -174,6 +240,10 @@ public class MetaService {
         private static final String PORT = "port";
         private static final String SUBDIR = "subdir";
         private static final String FOR_GLOBAL_STATE = "for_global_state";
+<<<<<<< HEAD
+=======
+        private static final String IMAGE_FORMAT_VERSION = "image_format_version";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         public PutAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
@@ -237,6 +307,7 @@ public class MetaService {
                 return;
             }
 
+<<<<<<< HEAD
             String url = "http://" + machine + ":" + portStr
                     + "/image?version=" + versionStr + "&subdir=" + subDirStr;
             String filename = Storage.IMAGE + "." + versionStr;
@@ -247,6 +318,29 @@ public class MetaService {
                 OutputStream out = MetaHelper.getOutputStream(filename, dir);
                 MetaHelper.getRemoteFile(url, TIMEOUT_SECOND * 1000, out);
                 MetaHelper.complete(filename, dir);
+=======
+            String formatStr = request.getSingleParameter(IMAGE_FORMAT_VERSION);
+            ImageFormatVersion imageFormatVersion = ImageFormatVersion.v1;
+            if (!Strings.isNullOrEmpty(formatStr)) {
+                imageFormatVersion = ImageFormatVersion.valueOf(formatStr);
+            }
+
+            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(machine, Integer.parseInt(portStr)) + 
+                    "/image?version=" + versionStr
+                    + "&subdir=" + subDirStr
+                    + "&image_format_version=" + imageFormatVersion;
+            String filename = Storage.IMAGE + "." + versionStr;
+
+            String realDir = getRealImageDir(GlobalStateMgr.getCurrentState().getImageDir(),
+                    subDirStr, imageFormatVersion);
+            File dir = new File(realDir);
+            try {
+                if (Files.exists(Path.of(realDir + "/" + filename))) {
+                    LOG.info("image file : {} version: {} already exists, ignore", filename, imageFormatVersion);
+                } else {
+                    MetaHelper.downloadImageFile(url, DOWNLOAD_TIMEOUT_SECOND * 1000, versionStr, dir);
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 writeResponse(request, response);
             } catch (FileNotFoundException e) {
                 LOG.warn("file not found. file: {}", filename, e);
@@ -273,6 +367,17 @@ public class MetaService {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static String getRealImageDir(String imageMetaDir, String subDir, ImageFormatVersion imageFormatVersion) {
+        if (imageFormatVersion == ImageFormatVersion.v1) {
+            return imageMetaDir + subDir;
+        } else {
+            return imageMetaDir + subDir + "/" + imageFormatVersion;
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static class JournalIdAction extends MetaBaseAction {
         private static final String PREFIX = "prefix";
 
@@ -316,11 +421,23 @@ public class MetaService {
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
             String host = request.getSingleParameter(HOST);
+<<<<<<< HEAD
+=======
+            try {
+                host = URLDecoder.decode(host, StandardCharsets.UTF_8.toString());
+            } catch (UnsupportedEncodingException e) {
+                throw new RuntimeException(e);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             String portString = request.getSingleParameter(PORT);
 
             if (!Strings.isNullOrEmpty(host) && !Strings.isNullOrEmpty(portString)) {
                 int port = Integer.parseInt(portString);
+<<<<<<< HEAD
                 Frontend fe = GlobalStateMgr.getCurrentState().checkFeExist(host, port);
+=======
+                Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().checkFeExist(host, port);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (fe == null) {
                     response.updateHeader("role", FrontendNodeType.UNKNOWN.name());
                 } else {
@@ -360,10 +477,16 @@ public class MetaService {
         public void executeGet(BaseRequest request, BaseResponse response) {
             try {
                 Storage storage = new Storage(imageDir.getAbsolutePath());
+<<<<<<< HEAD
                 response.updateHeader(MetaBaseAction.CLUSTER_ID, Integer.toString(storage.getClusterID()));
                 response.updateHeader(MetaBaseAction.TOKEN, storage.getToken());
             } catch (IOException e) {
                 LOG.error(e);
+=======
+                response.updateHeader(MetaBaseAction.TOKEN, storage.getToken());
+            } catch (IOException e) {
+                LOG.error(e.getMessage(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             writeResponse(request, response);
         }

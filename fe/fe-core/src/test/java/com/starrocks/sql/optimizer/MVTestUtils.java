@@ -15,6 +15,10 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.alter.AlterJobV2;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -22,11 +26,19 @@ import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class MVTestUtils {
     private static final Logger LOG = LogManager.getLogger(MVTestUtils.class);
 
+<<<<<<< HEAD
     public static void waitingRollupJobV2Finish() throws Exception {
+=======
+    public static void waitingRollupJobV2Finish() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // waiting alterJobV2 finish
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         //Assert.assertEquals(1, alterJobs.size());
@@ -41,12 +53,29 @@ public class MVTestUtils {
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
             }
         }
+<<<<<<< HEAD
     }
 
     public static void waitForSchemaChangeAlterJobFinish() throws Exception {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             while (!alterJobV2.getJobState().isFinalState()) {
+=======
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            Assert.assertEquals(String.format("AlterJobV2 %s should be ROLLUP state at the end",
+                            GsonUtils.GSON.toJson(alterJobV2)),
+                    AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        }
+    }
+
+    public static void waitForSchemaChangeAlterJobFinish() {
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            while (!alterJobV2.getJobState().isFinalState()) {
+                if (alterJobV2.getType() != AlterJobV2.JobType.SCHEMA_CHANGE) {
+                    continue;
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 LOG.info(
                         "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
@@ -55,4 +84,29 @@ public class MVTestUtils {
             Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
     }
+<<<<<<< HEAD
+=======
+
+    public static Optional<AlterJobV2> findAlterJobV2(long dbId,
+                                                      long tableId) {
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        return alterJobs.values().stream()
+                .filter(job -> job.getDbId() == dbId && job.getTableId() == tableId)
+                .findFirst();
+    }
+
+    public static boolean waitForSchemaChangeAlterJobFinish(AlterJobV2 alterJobV2) {
+        while (!alterJobV2.getJobState().isFinalState()) {
+            if (alterJobV2.getType() != AlterJobV2.JobType.SCHEMA_CHANGE) {
+                return false;
+            }
+            LOG.info(
+                    "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
+        }
+        System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        return true;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -16,6 +16,7 @@
 #include "formats/parquet/file_writer.h"
 
 #include <arrow/buffer.h>
+<<<<<<< HEAD
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
 #include <parquet/arrow/writer.h>
@@ -30,10 +31,34 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
+=======
+#include <arrow/io/type_fwd.h>
+#include <arrow/util/string_builder.h>
+#include <fmt/core.h>
+#include <glog/logging.h>
+#include <parquet/exception.h>
+#include <parquet/metadata.h>
+#include <parquet/type_fwd.h>
+#include <runtime/current_thread.h>
+
+#include <ostream>
+
+#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "formats/parquet/utils.h"
+#include "runtime/runtime_state.h"
+#include "types/logical_type.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
+<<<<<<< HEAD
+=======
+#include "util/stopwatch.hpp"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::parquet {
 
@@ -103,6 +128,50 @@ arrow::Status ParquetOutputStream::Close() {
     return arrow::Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+AsyncParquetOutputStream::AsyncParquetOutputStream(io::AsyncFlushOutputStream* stream) : _stream(stream) {
+    set_mode(arrow::io::FileMode::WRITE);
+}
+
+arrow::Status AsyncParquetOutputStream::Write(const std::shared_ptr<arrow::Buffer>& data) {
+    arrow::Status st = Write(data->data(), data->size());
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to write data to output stream, err msg: " << st.message();
+    }
+    return st;
+}
+
+arrow::Status AsyncParquetOutputStream::Write(const void* data, int64_t nbytes) {
+    if (_is_closed) {
+        return arrow::Status::IOError("The output stream is closed but there are still inputs");
+    }
+
+    auto status = _stream->write(static_cast<const uint8_t*>(data), nbytes);
+    if (!status.ok()) {
+        return arrow::Status::IOError(status.message());
+    }
+    return arrow::Status::OK();
+}
+
+arrow::Result<int64_t> AsyncParquetOutputStream::Tell() const {
+    return _stream->tell();
+}
+
+arrow::Status AsyncParquetOutputStream::Close() {
+    if (_is_closed) {
+        return arrow::Status::OK();
+    }
+    _is_closed = true;
+    Status st = _stream->close();
+    if (!st.ok()) {
+        LOG(WARNING) << "close parquet output stream failed: " << st;
+        return arrow::Status::IOError(st.to_string());
+    }
+    return arrow::Status::OK();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 StatusOr<::parquet::Compression::type> ParquetBuildHelper::convert_compression_type(
         const TCompressionType::type& compression_type) {
     auto codec = ::parquet::Compression::UNCOMPRESSED;
@@ -171,6 +240,10 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
             ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
 }
 
+<<<<<<< HEAD
+=======
+// for UT only
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper::make_schema(
         const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
         const std::vector<FileColumnId>& file_column_ids) {
@@ -190,7 +263,11 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
 StatusOr<std::shared_ptr<::parquet::WriterProperties>> ParquetBuildHelper::make_properties(
         const ParquetBuilderOptions& options) {
     ::parquet::WriterProperties::Builder builder;
+<<<<<<< HEAD
     builder.version(::parquet::ParquetVersion::PARQUET_2_0);
+=======
+    builder.version(::parquet::ParquetVersion::PARQUET_2_6);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     options.use_dict ? builder.enable_dictionary() : builder.disable_dictionary();
     ASSIGN_OR_RETURN(auto compression_codec,
                      parquet::ParquetBuildHelper::convert_compression_type(options.compression_type));
@@ -250,10 +327,15 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                                                       ::parquet::Type::INT32, -1, file_column_id.field_id);
     }
     case TYPE_DATETIME: {
+<<<<<<< HEAD
         // TODO(letian-jiang): set isAdjustedToUTC to true, and normalize datetime values
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type,
                 ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MILLIS),
+=======
+        return ::parquet::schema::PrimitiveNode::Make(
+                name, rep_type, ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MICROS),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ::parquet::Type::INT64, -1, file_column_id.field_id);
     }
     case TYPE_DECIMAL32: {
@@ -270,7 +352,12 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
     case TYPE_DECIMAL128: {
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
+<<<<<<< HEAD
                 ::parquet::Type::FIXED_LEN_BYTE_ARRAY, 16, file_column_id.field_id);
+=======
+                ::parquet::Type::FIXED_LEN_BYTE_ARRAY,
+                ParquetUtils::decimal_precision_to_byte_count(type_desc.precision), file_column_id.field_id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     case TYPE_STRUCT: {
         DCHECK(type_desc.children.size() == type_desc.field_names.size());
@@ -304,6 +391,14 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
         return ::parquet::schema::GroupNode::Make(name, rep_type, {key_value}, ::parquet::LogicalType::Map(),
                                                   file_column_id.field_id);
     }
+<<<<<<< HEAD
+=======
+    case TYPE_TIME: {
+        return ::parquet::schema::PrimitiveNode::Make(
+                name, rep_type, ::parquet::LogicalType::Time(false, ::parquet::LogicalType::TimeUnit::MICROS),
+                ::parquet::Type::INT64, -1, file_column_id.field_id);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     default: {
         return arrow::Status::TypeError(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));
     }
@@ -313,8 +408,14 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
+<<<<<<< HEAD
                                const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size)
         : _properties(std::move(properties)), _schema(std::move(schema)), _max_file_size(max_file_size) {
+=======
+                               const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size,
+                               RuntimeState* state)
+        : _properties(std::move(properties)), _schema(std::move(schema)), _max_file_size(max_file_size), _state(state) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
     _type_descs.reserve(output_expr_ctxs.size());
     for (auto expr : output_expr_ctxs) {
@@ -329,8 +430,16 @@ FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
+<<<<<<< HEAD
                                std::vector<TypeDescriptor> type_descs)
         : _properties(std::move(properties)), _schema(std::move(schema)), _type_descs(std::move(type_descs)) {
+=======
+                               std::vector<TypeDescriptor> type_descs, RuntimeState* state)
+        : _properties(std::move(properties)),
+          _schema(std::move(schema)),
+          _type_descs(std::move(type_descs)),
+          _state(state) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
     _eval_func = [](Chunk* chunk, size_t col_idx) { return chunk->get_column_by_index(col_idx); };
 }
@@ -347,7 +456,11 @@ void FileWriterBase::_generate_chunk_writer() {
     DCHECK(_writer != nullptr);
     if (_chunk_writer == nullptr) {
         auto rg_writer = _writer->AppendBufferedRowGroup();
+<<<<<<< HEAD
         _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func);
+=======
+        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func, _state->timezone());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -440,6 +553,7 @@ AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, st
                                  std::shared_ptr<::parquet::WriterProperties> properties,
                                  std::shared_ptr<::parquet::schema::GroupNode> schema,
                                  const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
+<<<<<<< HEAD
                                  RuntimeProfile* parent_profile, int64_t max_file_size)
         : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
                          max_file_size),
@@ -447,6 +561,16 @@ AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, st
           _partition_location(std::move(partition_location)),
           _executor_pool(executor_pool),
           _parent_profile(parent_profile) {
+=======
+                                 RuntimeProfile* parent_profile, int64_t max_file_size, RuntimeState* state)
+        : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
+                         max_file_size, state),
+          _file_location(std::move(file_location)),
+          _partition_location(std::move(partition_location)),
+          _executor_pool(executor_pool),
+          _parent_profile(parent_profile),
+          _state(state) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _io_timer = ADD_TIMER(_parent_profile, "FileWriterIoTimer");
 }
 
@@ -457,9 +581,21 @@ Status AsyncFileWriter::_flush_row_group() {
     }
 
     bool ok = _executor_pool->try_offer([&]() {
+<<<<<<< HEAD
         SCOPED_TIMER(_io_timer);
         if (_chunk_writer != nullptr) {
             _chunk_writer->close();
+=======
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_state->instance_mem_tracker());
+        SCOPED_TIMER(_io_timer);
+        if (_chunk_writer != nullptr) {
+            try {
+                _chunk_writer->close();
+            } catch (const ::parquet::ParquetStatusException& e) {
+                LOG(WARNING) << "flush row group error: " << e.what();
+                set_io_status(Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what())));
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             _chunk_writer = nullptr;
         }
         {
@@ -486,22 +622,46 @@ Status AsyncFileWriter::_flush_row_group() {
 Status AsyncFileWriter::close(RuntimeState* state,
                               const std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)>& cb) {
     bool ret = _executor_pool->try_offer([&, state, cb]() {
+<<<<<<< HEAD
+=======
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_state->instance_mem_tracker());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         SCOPED_TIMER(_io_timer);
         {
             auto lock = std::unique_lock(_m);
             _cv.wait(lock, [&] { return !_rg_writer_closing; });
         }
+<<<<<<< HEAD
         _writer->Close();
+=======
+
+        DeferOp defer([&]() {
+            // set closed to true anyway
+            _closed.store(true);
+        });
+        try {
+            _writer->Close();
+        } catch (const ::parquet::ParquetStatusException& e) {
+            LOG(WARNING) << "close writer error: " << e.what();
+            set_io_status(Status::IOError(fmt::format("{}: {}", "close writer error", e.what())));
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _chunk_writer = nullptr;
         _file_metadata = _writer->metadata();
         auto st = _outstream->Close();
         if (!st.ok()) {
+<<<<<<< HEAD
             return Status::InternalError("Close outstream failed");
+=======
+            LOG(WARNING) << "close output stream error: " << st.message();
+            set_io_status(Status::IOError(fmt::format("{}: {}", "close output stream error", st.message())));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         if (cb != nullptr) {
             cb(this, state);
         }
+<<<<<<< HEAD
         _closed.store(true);
         return Status::OK();
     });
@@ -510,6 +670,15 @@ Status AsyncFileWriter::close(RuntimeState* state,
         return Status::OK();
     }
     return Status::InternalError("Submit close file error");
+=======
+    });
+
+    if (!ret) {
+        return Status::InternalError("Submit close file task error");
+    }
+
+    return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 } // namespace starrocks::parquet

@@ -36,7 +36,10 @@ public class ShowProcesslistStmt extends ShowStmt {
                     .addColumn(new Column("State", ScalarType.createVarchar(64)))
                     .addColumn(new Column("Info", ScalarType.createVarchar(32 * 1024)))
                     .addColumn(new Column("IsPending", ScalarType.createVarchar(16)))
+<<<<<<< HEAD
                     .addColumn(new Column("Warehouse", ScalarType.createVarchar(20)))
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .build();
     private final boolean isShowFull;
     private final String forUser;

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     o_orderpriority,
@@ -20,6 +21,8 @@ group by
     o_orderpriority
 order by
     o_orderpriority ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 TOP-N (order by [[6: o_orderpriority ASC NULLS FIRST]])
     TOP-N (order by [[6: o_orderpriority ASC NULLS FIRST]])

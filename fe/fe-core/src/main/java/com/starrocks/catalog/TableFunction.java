@@ -18,7 +18,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.analysis.FunctionName;
+=======
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -31,6 +39,10 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Vector;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 
 /**
@@ -48,12 +60,41 @@ public class TableFunction extends Function {
     private String symbolName = "";
 
     // only used for serialization
+<<<<<<< HEAD
     protected TableFunction() {
     }
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
                          List<Type> tableFnReturnTypes) {
         this(fnName, defaultColumnNames, argTypes, tableFnReturnTypes, false);
+=======
+
+    // not serialized
+    private boolean isLeftJoin = false;
+
+    protected TableFunction() {
+    }
+
+    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames, List<Type> argTypes,
+                         List<Type> tableFnReturnTypes, Vector<Pair<String, Expr>> defaultArgExpr) {
+        this(fnName, argNames, defaultColumnNames, argTypes, tableFnReturnTypes, defaultArgExpr, false);
+    }
+
+    public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
+                         List<Type> tableFnReturnTypes) {
+        this(fnName, null, defaultColumnNames, argTypes, tableFnReturnTypes, null, false);
+    }
+
+    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames,
+                         List<Type> argTypes, List<Type> tableFnReturnTypes, Vector<Pair<String, Expr>> defaultArgExpr,
+                         boolean varArgs) {
+        super(fnName, argTypes, Type.INVALID, varArgs);
+        this.tableFnReturnTypes = tableFnReturnTypes;
+        this.defaultColumnNames = defaultColumnNames;
+        setArgNames(argNames);
+        setDefaultNamedArgs(defaultArgExpr);
+        setBinaryType(TFunctionBinaryType.BUILTIN);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
@@ -61,7 +102,10 @@ public class TableFunction extends Function {
         super(fnName, argTypes, Type.INVALID, varArgs);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setBinaryType(TFunctionBinaryType.BUILTIN);
     }
 
@@ -92,6 +136,7 @@ public class TableFunction extends Function {
         functionSet.addBuiltin(funcUnnestBitmap);
 
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
+<<<<<<< HEAD
             // generate_series with default step size: 1
             TableFunction func = new TableFunction(new FunctionName("generate_series"),
                     Lists.newArrayList("generate_series"),
@@ -104,6 +149,20 @@ public class TableFunction extends Function {
                     Lists.newArrayList("generate_series"),
                     Lists.newArrayList(type, type, type),
                     Lists.newArrayList(type));
+=======
+            // set default arguments' const expressions in order
+            Vector<Pair<String, Expr>> defaultArgs = new Vector<>();
+            try {
+                defaultArgs.add(new Pair("step", LiteralExpr.create("1", type)));
+            } catch (AnalysisException ex) { //ignored
+            }
+            // for both named arguments and positional arguments
+            TableFunction func = new TableFunction(new FunctionName("generate_series"),
+                    Lists.newArrayList("start", "end", "step"),
+                    Lists.newArrayList("generate_series"),
+                    Lists.newArrayList(type, type, type),
+                    Lists.newArrayList(type), defaultArgs);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             functionSet.addBuiltin(func);
         }
 
@@ -126,6 +185,13 @@ public class TableFunction extends Function {
         this.symbolName = symbolName;
     }
 
+<<<<<<< HEAD
+=======
+    public void setIsLeftJoin(boolean isLeftJoin) {
+        this.isLeftJoin = isLeftJoin;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public void write(DataOutput output) throws IOException {
         // 1. type
@@ -150,6 +216,10 @@ public class TableFunction extends Function {
         TTableFunction tableFn = new TTableFunction();
         tableFn.setSymbol(symbolName);
         tableFn.setRet_types(tableFnReturnTypes.stream().map(Type::toThrift).collect(Collectors.toList()));
+<<<<<<< HEAD
+=======
+        tableFn.setIs_left_join(isLeftJoin);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         fn.setTable_fn(tableFn);
         return fn;
     }

@@ -18,9 +18,15 @@ package com.starrocks.connector.hive.events;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.HivePartitionName;
 import com.starrocks.connector.hive.HiveTableName;
+=======
+import com.starrocks.connector.DatabaseTableName;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+import com.starrocks.connector.hive.HivePartitionName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -53,7 +59,11 @@ public class MetastoreEventFactory implements EventFactory {
      * It is convenient for creating batch tasks to parallel processing.
      */
     @Override
+<<<<<<< HEAD
     public List<MetastoreEvent> get(NotificationEvent event, CacheUpdateProcessor cacheProcessor,
+=======
+    public List<MetastoreEvent> get(NotificationEvent event, HiveCacheUpdateProcessor cacheProcessor,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     String catalogName) {
         Preconditions.checkNotNull(event.getEventType());
         MetastoreEventType metastoreEventType = MetastoreEventType.from(event.getEventType());
@@ -77,7 +87,11 @@ public class MetastoreEventFactory implements EventFactory {
     }
 
     List<MetastoreEvent> getFilteredEvents(List<NotificationEvent> events,
+<<<<<<< HEAD
                                            CacheUpdateProcessor cacheProcessor, String catalogName) {
+=======
+                                           HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<MetastoreEvent> metastoreEvents = Lists.newArrayList();
 
         // Currently, the hive external table needs to be manually created in StarRocks to map with the hms table.
@@ -93,7 +107,11 @@ public class MetastoreEventFactory implements EventFactory {
                     continue;
                 }
             } else {
+<<<<<<< HEAD
                 if (!cacheProcessor.isTablePresent(HiveTableName.of(dbName, tableName))) {
+=======
+                if (!cacheProcessor.isTablePresent(DatabaseTableName.of(dbName, tableName))) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     LOG.warn("Table is null on catalog [{}], table [{}.{}]. Skipping notification event {}",
                             catalogName, event.getDbName(), event.getTableName(), event);
                     continue;

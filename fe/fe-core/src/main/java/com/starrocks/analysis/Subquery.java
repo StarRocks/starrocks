@@ -91,6 +91,13 @@ public class Subquery extends Expr {
 
     @Override
     public boolean equals(Object o) {
+<<<<<<< HEAD
+=======
+        if (this == o) {
+            return true;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!super.equals(o)) {
             return false;
         }
@@ -98,7 +105,11 @@ public class Subquery extends Expr {
         if (((Subquery) o).getQueryStatement() == null) {
             return false;
         } else {
+<<<<<<< HEAD
             return o.equals(queryStatement);
+=======
+            return ((Subquery) o).getQueryStatement().equals(queryStatement);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 

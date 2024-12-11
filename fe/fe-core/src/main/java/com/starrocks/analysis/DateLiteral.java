@@ -36,6 +36,10 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.PrimitiveType;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ScalarType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
@@ -161,6 +165,13 @@ public class DateLiteral extends LiteralExpr {
         return new DateLiteral(type, false);
     }
 
+<<<<<<< HEAD
+=======
+    public static DateLiteral createMaxValue(Type type) {
+        return new DateLiteral(type, true);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private void init(String s, Type type) throws AnalysisException {
         try {
             Preconditions.checkArgument(type.isDateType());
@@ -452,4 +463,51 @@ public class DateLiteral extends LiteralExpr {
         }
         return true;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public void parseMysqlParam(ByteBuffer data) {
+        int len = getParamLen(data);
+        if (type.getPrimitiveType() == PrimitiveType.DATE) {
+            if (len >= 4) {
+                year = (int) data.getChar();
+                month = (int) data.get();
+                day = (int) data.get();
+                hour = 0;
+                minute = 0;
+                second = 0;
+                microsecond = 0;
+            } else {
+                copy(MIN_DATE);
+            }
+            return;
+        }
+        if (type.getPrimitiveType() == PrimitiveType.DATETIME) {
+            if (len >= 4) {
+                year = (int) data.getChar();
+                month = (int) data.get();
+                day = (int) data.get();
+                microsecond = 0;
+                if (len > 4) {
+                    hour = (int) data.get();
+                    minute = (int) data.get();
+                    second = (int) data.get();
+                } else {
+                    hour = 0;
+                    minute = 0;
+                    second = 0;
+                    microsecond = 0;
+                }
+                if (len > 7) {
+                    microsecond = data.getInt();
+                    // choose the highest scale to keep microsecond value
+                    type = ScalarType.createDecimalV2Type(6);
+                }
+            } else {
+                copy(MIN_DATETIME);
+            }
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

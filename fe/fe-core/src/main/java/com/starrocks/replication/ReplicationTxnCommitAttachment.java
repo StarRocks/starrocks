@@ -20,7 +20,10 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
@@ -33,25 +36,46 @@ public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("partitionVersions")
     private Map<Long, Long> partitionVersions; // The version of partitions
 
+<<<<<<< HEAD
+=======
+    @SerializedName("partitionVersionEpochs")
+    private Map<Long, Long> partitionVersionEpochs; // The version epoch of partitions
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ReplicationTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.REPLICATION);
     }
 
+<<<<<<< HEAD
     public ReplicationTxnCommitAttachment(Map<Long, Long> partitionVersions) {
         super(TransactionState.LoadJobSourceType.REPLICATION);
         this.partitionVersions = partitionVersions;
+=======
+    public ReplicationTxnCommitAttachment(Map<Long, Long> partitionVersions, Map<Long, Long> partitionVersionEpochs) {
+        super(TransactionState.LoadJobSourceType.REPLICATION);
+        this.partitionVersions = partitionVersions;
+        this.partitionVersionEpochs = partitionVersionEpochs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public Map<Long, Long> getPartitionVersions() {
         return partitionVersions;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<Long, Long> getPartitionVersionEpochs() {
+        return partitionVersionEpochs;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
         String s = GsonUtils.GSON.toJson(this);
         Text.writeString(out, s);
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
@@ -60,4 +84,6 @@ public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
                 ReplicationTxnCommitAttachment.class);
         this.partitionVersions = insertTxnCommitAttachment.getPartitionVersions();
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

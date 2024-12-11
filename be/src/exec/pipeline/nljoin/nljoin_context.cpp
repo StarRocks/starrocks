@@ -31,6 +31,7 @@
 
 namespace starrocks::pipeline {
 
+<<<<<<< HEAD
 void NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
     if (build_chunk == nullptr || build_chunk->is_empty()) {
         return;
@@ -41,14 +42,32 @@ void NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
 
 Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk,
                                                           spill::IOTaskExecutor& executor) {
+=======
+Status NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
+    if (build_chunk == nullptr || build_chunk->is_empty()) {
+        return Status::OK();
+    }
+    _num_rows += build_chunk->num_rows();
+    RETURN_IF_ERROR(_accumulator.push(std::move(build_chunk)));
+    return Status::OK();
+}
+
+Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (build_chunk == nullptr || build_chunk->is_empty()) {
         return Status::OK();
     }
 
     _num_rows += build_chunk->num_rows();
+<<<<<<< HEAD
     _accumulator.push(std::move(build_chunk));
     if (auto chunk = _accumulator.pull()) {
         RETURN_IF_ERROR(_spiller->spill(state, chunk, executor, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+=======
+    RETURN_IF_ERROR(_accumulator.push(std::move(build_chunk)));
+    if (auto chunk = _accumulator.pull()) {
+        RETURN_IF_ERROR(_spiller->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     return Status::OK();
@@ -67,16 +86,26 @@ void NJJoinBuildInputChannel::close() {
     _spiller.reset();
 }
 
+<<<<<<< HEAD
 Status SpillableNLJoinChunkStream::prefetch(RuntimeState* state, spill::IOTaskExecutor& executor) {
     return _reader->trigger_restore(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+=======
+Status SpillableNLJoinChunkStream::prefetch(RuntimeState* state) {
+    return _reader->trigger_restore(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 bool SpillableNLJoinChunkStream::has_output() {
     return _reader && _reader->has_output_data();
 }
 
+<<<<<<< HEAD
 StatusOr<ChunkPtr> SpillableNLJoinChunkStream::get_next(RuntimeState* state, spill::IOTaskExecutor& executor) {
     return _reader->restore(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+=======
+StatusOr<ChunkPtr> SpillableNLJoinChunkStream::get_next(RuntimeState* state) {
+    return _reader->restore(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* dummy_spiller) {
@@ -94,7 +123,11 @@ Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* du
 
     stream = spill::SpillInputStream::union_all(spilled_input_streams);
     _reader = std::make_shared<spill::SpillerReader>(dummy_spiller);
+<<<<<<< HEAD
     RETURN_IF_ERROR(_reader->set_stream(std::move(stream)));
+=======
+    _reader->set_stream(std::move(stream));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     return Status::OK();
 }
@@ -188,7 +221,11 @@ void NLJoinContext::_notify_runtime_filter_collector(RuntimeState* state) {
                            std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{}, RuntimeBloomFilterList{}));
 }
 
+<<<<<<< HEAD
 bool NLJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags) {
+=======
+bool NLJoinContext::finish_probe(int32_t driver_seq, const Filter& build_match_flags) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::lock_guard guard(_join_stage_mutex);
 
     ++_num_post_probers;
@@ -210,14 +247,23 @@ bool NLJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_t>&
     return is_last;
 }
 
+<<<<<<< HEAD
 const std::vector<uint8_t> NLJoinContext::get_shared_build_match_flag() const {
+=======
+const Filter NLJoinContext::get_shared_build_match_flag() const {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DCHECK_EQ(_num_post_probers, _num_left_probers) << "all probers should share their states";
     std::lock_guard guard(_join_stage_mutex);
     return _shared_build_match_flag;
 }
 
+<<<<<<< HEAD
 void NLJoinContext::append_build_chunk(int32_t sinker_id, const ChunkPtr& chunk) {
     _input_channel[sinker_id]->add_chunk(chunk);
+=======
+Status NLJoinContext::append_build_chunk(int32_t sinker_id, const ChunkPtr& chunk) {
+    return _input_channel[sinker_id]->add_chunk(chunk);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 size_t NLJoinContext::channel_num_rows(int32_t sinker_id) {
@@ -254,7 +300,11 @@ Status NLJoinContext::finish_one_right_sinker(int32_t sinker_id, RuntimeState* s
 Status NLJoinContext::finish_one_left_prober(RuntimeState* state) {
     if (_num_left_probers == _num_finished_left_probers.fetch_add(1) + 1) {
         // All the probers have finished, so the builders can be short-circuited.
+<<<<<<< HEAD
         set_finished();
+=======
+        RETURN_IF_ERROR(set_finished());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return Status::OK();
 }

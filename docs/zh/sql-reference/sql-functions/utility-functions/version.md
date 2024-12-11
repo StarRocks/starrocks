@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # version
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回当前 MySQL 数据库的版本。可以使用 `current_version` 函数查询 StarRocks 当前的版本。
 

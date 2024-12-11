@@ -28,6 +28,10 @@ ACCESS: 'ACCESS';
 ACTIVE: 'ACTIVE';
 ADD: 'ADD';
 ADMIN: 'ADMIN';
+<<<<<<< HEAD
+=======
+ADVISOR: 'ADVISOR';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 AFTER: 'AFTER';
 AGGREGATE: 'AGGREGATE';
 ALL: 'ALL';
@@ -56,14 +60,26 @@ BIGINT: 'BIGINT';
 BINARY: 'BINARY';
 BITMAP: 'BITMAP';
 BITMAP_UNION: 'BITMAP_UNION';
+<<<<<<< HEAD
+=======
+BLACKHOLE: 'BLACKHOLE';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 BLACKLIST: 'BLACKLIST';
 BODY: 'BODY';
 BOOLEAN: 'BOOLEAN';
 BOTH: 'BOTH';
+<<<<<<< HEAD
+=======
+BRANCH: 'BRANCH';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 BROKER: 'BROKER';
 BUCKETS: 'BUCKETS';
 BUILTIN: 'BUILTIN';
 BY: 'BY';
+<<<<<<< HEAD
+=======
+CACHE: 'CACHE';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 CANCEL: 'CANCEL';
 CASE: 'CASE';
 CAST: 'CAST';
@@ -76,6 +92,10 @@ CHARACTER: 'CHARACTER';
 CHARSET: 'CHARSET';
 CHECK: 'CHECK';
 CLEAN: 'CLEAN';
+<<<<<<< HEAD
+=======
+CLEAR: 'CLEAR';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 CLUSTER : 'CLUSTER';
 CLUSTERS : 'CLUSTERS';
 COLLATE: 'COLLATE';
@@ -106,11 +126,20 @@ CURRENT_TIME: 'CURRENT_TIME';
 CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 CURRENT_USER: 'CURRENT_USER';
 DATA: 'DATA';
+<<<<<<< HEAD
+=======
+DATACACHE: 'DATACACHE';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 DATABASE: 'DATABASE';
 DATABASES: 'DATABASES';
 DATE: 'DATE';
 DATETIME: 'DATETIME';
 DAY: 'DAY';
+<<<<<<< HEAD
+=======
+DAYS: 'DAYS';
+DEALLOCATE : 'DEALLOCATE';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 DECIMAL: 'DECIMAL';
 DECIMALV2: 'DECIMALV2';
 DECIMAL32: 'DECIMAL32';
@@ -121,9 +150,18 @@ DEFAULT: 'DEFAULT';
 DELETE: 'DELETE';
 DENSE_RANK: 'DENSE_RANK';
 DEFERRED: 'DEFERRED';
+<<<<<<< HEAD
 NTILE: 'NTILE';
 DESC: 'DESC';
 DESCRIBE: 'DESCRIBE';
+=======
+DICTIONARY: 'DICTIONARY';
+DICTIONARY_GET: 'DICTIONARY_GET';
+NTILE: 'NTILE';
+DESC: 'DESC';
+DESCRIBE: 'DESCRIBE';
+DISABLE: 'DISABLE';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 DISTINCT: 'DISTINCT';
 DISTRIBUTED: 'DISTRIBUTED';
 DISTRIBUTION: 'DISTRIBUTION';
@@ -133,6 +171,10 @@ DUAL: 'DUAL';
 DUPLICATE: 'DUPLICATE';
 DYNAMIC: 'DYNAMIC';
 ELSE: 'ELSE';
+<<<<<<< HEAD
+=======
+ENABLE: 'ENABLE';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ENCLOSE: 'ENCLOSE';
 END: 'END';
 ENGINE: 'ENGINE';
@@ -148,6 +190,11 @@ EXPORT: 'EXPORT';
 EXTERNAL: 'EXTERNAL';
 EXTRACT: 'EXTRACT';
 EVERY: 'EVERY';
+<<<<<<< HEAD
+=======
+FAILPOINT: 'FAILPOINT';
+FAILPOINTS: 'FAILPOINTS';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 FALSE: 'FALSE';
 FIELDS: 'FIELDS';
 FILE: 'FILE';
@@ -186,6 +233,10 @@ HLL: 'HLL';
 HLL_UNION: 'HLL_UNION';
 HOST: 'HOST';
 HOUR: 'HOUR';
+<<<<<<< HEAD
+=======
+HOURS: 'HOURS';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 HUB: 'HUB';
 IDENTIFIED: 'IDENTIFIED';
 IF: 'IF';
@@ -210,6 +261,10 @@ INTERMEDIATE: 'INTERMEDIATE';
 INTERSECT: 'INTERSECT';
 INTERVAL: 'INTERVAL';
 INTO: 'INTO';
+<<<<<<< HEAD
+=======
+GIN: 'GIN';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 OVERWRITE: 'OVERWRITE';
 IS: 'IS';
 ISOLATION: 'ISOLATION';
@@ -238,12 +293,20 @@ LOCALTIME: 'LOCALTIME';
 LOCALTIMESTAMP: 'LOCALTIMESTAMP';
 LOCATION: 'LOCATION';
 LOCATIONS: 'LOCATIONS';
+<<<<<<< HEAD
+=======
+LOGS: 'LOGS';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 LOGICAL: 'LOGICAL';
 MANUAL: 'MANUAL';
 MAP: 'MAP';
 MAPPING: 'MAPPING';
 MAPPINGS: 'MAPPINGS';
 MASKING: 'MASKING';
+<<<<<<< HEAD
+=======
+MATCH: 'MATCH';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 MATERIALIZED: 'MATERIALIZED';
 MAX: 'MAX';
 MAXVALUE: 'MAXVALUE';
@@ -252,6 +315,10 @@ MICROSECOND: 'MICROSECOND';
 MILLISECOND: 'MILLISECOND';
 MIN: 'MIN';
 MINUTE: 'MINUTE';
+<<<<<<< HEAD
+=======
+MINUTES: 'MINUTES';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 MINUS: 'MINUS';
 META: 'META';
 MOD: 'MOD';
@@ -261,6 +328,10 @@ MONTH: 'MONTH';
 NAME: 'NAME';
 NAMES: 'NAMES';
 NEGATIVE: 'NEGATIVE';
+<<<<<<< HEAD
+=======
+NGRAMBF: 'NGRAMBF';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 NO: 'NO';
 NODE: 'NODE';
 NODES: 'NODES';
@@ -277,6 +348,10 @@ ON: 'ON';
 ONLY: 'ONLY';
 OPEN: 'OPEN';
 OPERATE: 'OPERATE';
+<<<<<<< HEAD
+=======
+OPTIMIZE: 'OPTIMIZE';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 OPTIMIZER: 'OPTIMIZER';
 OPTION: 'OPTION';
 OR: 'OR';
@@ -284,6 +359,10 @@ ORDER: 'ORDER';
 OUTER: 'OUTER';
 OUTFILE: 'OUTFILE';
 OVER: 'OVER';
+<<<<<<< HEAD
+=======
+PARAMETER: '?';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 PARTITION: 'PARTITION';
 PARTITIONS: 'PARTITIONS';
 PASSWORD: 'PASSWORD';
@@ -293,6 +372,7 @@ PENDING: 'PENDING';
 PERCENT_RANK: 'PERCENT_RANK';
 PERCENTILE: 'PERCENTILE';
 PERCENTILE_UNION: 'PERCENTILE_UNION';
+<<<<<<< HEAD
 PLUGIN: 'PLUGIN';
 PLUGINS: 'PLUGINS';
 POLICY: 'POLICY';
@@ -300,6 +380,22 @@ POLICIES: 'POLICIES';
 PRECEDING: 'PRECEDING';
 PRIMARY: 'PRIMARY';
 PRIVILEGES: 'PRIVILEGES';
+=======
+PLAN: 'PLAN';
+PLUGIN: 'PLUGIN';
+PLUGINS: 'PLUGINS';
+PIPE: 'PIPE';
+PIPES: 'PIPES';
+PIVOT: 'PIVOT';
+POLICY: 'POLICY';
+POLICIES: 'POLICIES';
+PRECEDING: 'PRECEDING';
+PREPARE: 'PREPARE';
+PRIMARY: 'PRIMARY';
+PRIORITY: 'PRIORITY';
+PRIVILEGES: 'PRIVILEGES';
+PROBABILITY: 'PROBABILITY';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 PROC: 'PROC';
 PROCEDURE: 'PROCEDURE';
 PROCESSLIST: 'PROCESSLIST';
@@ -317,6 +413,10 @@ RANDOM: 'RANDOM';
 RANGE: 'RANGE';
 RANK: 'RANK';
 READ: 'READ';
+<<<<<<< HEAD
+=======
+REASON: 'REASON';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 RECOVER: 'RECOVER';
 REFRESH: 'REFRESH';
 REWRITE: 'REWRITE';
@@ -335,7 +435,14 @@ RESOURCE: 'RESOURCE';
 RESOURCES: 'RESOURCES';
 RESTORE: 'RESTORE';
 RESUME: 'RESUME';
+<<<<<<< HEAD
 RETURNS: 'RETURNS';
+=======
+RETAIN: 'RETAIN';
+RETENTION: 'RETENTION';
+RETURNS: 'RETURNS';
+RETRY: 'RETRY';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 REVOKE: 'REVOKE';
 REVERT: 'REVERT';
 RIGHT: 'RIGHT';
@@ -348,8 +455,16 @@ ROUTINE: 'ROUTINE';
 ROW: 'ROW';
 ROWS: 'ROWS';
 ROW_NUMBER: 'ROW_NUMBER';
+<<<<<<< HEAD
 RUNNING: 'RUNNING';
 SAMPLE: 'SAMPLE';
+=======
+RULE: 'RULE';
+RULES: 'RULES';
+RUNNING: 'RUNNING';
+SAMPLE: 'SAMPLE';
+SCHEDULE: 'SCHEDULE';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 SCHEDULER: 'SCHEDULER';
 SCHEMA: 'SCHEMA';
 SCHEMAS: 'SCHEMAS';
@@ -368,6 +483,10 @@ SKIP_HEADER: 'SKIP_HEADER';
 SHOW: 'SHOW';
 SMALLINT: 'SMALLINT';
 SNAPSHOT: 'SNAPSHOT';
+<<<<<<< HEAD
+=======
+SNAPSHOTS: 'SNAPSHOTS';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 SQLBLACKLIST: 'SQLBLACKLIST';
 START: 'START';
 STATS: 'STATS';
@@ -389,12 +508,20 @@ TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLET: 'TABLET';
 TABLETS: 'TABLETS';
+<<<<<<< HEAD
+=======
+TAG: 'TAG';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 TASK: 'TASK';
 TEMPORARY: 'TEMPORARY';
 TERMINATED: 'TERMINATED';
 THAN: 'THAN';
 THEN: 'THEN';
 TIME: 'TIME';
+<<<<<<< HEAD
+=======
+TIMES: 'TIMES';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 TIMESTAMP: 'TIMESTAMP';
 TIMESTAMPADD: 'TIMESTAMPADD';
 TIMESTAMPDIFF: 'TIMESTAMPDIFF';
@@ -426,6 +553,10 @@ VALUES: 'VALUES';
 VARBINARY: 'VARBINARY';
 VARCHAR: 'VARCHAR';
 VARIABLES: 'VARIABLES';
+<<<<<<< HEAD
+=======
+VECTOR: 'VECTOR';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 VERBOSE: 'VERBOSE';
 VERSION: 'VERSION';
 VIEW: 'VIEW';
@@ -447,6 +578,12 @@ LOCK: 'LOCK';
 UNLOCK: 'UNLOCK';
 LOW_PRIORITY: 'LOW_PRIORITY';
 DISK: 'DISK';
+<<<<<<< HEAD
+=======
+BEFORE: 'BEFORE';
+DOUBLE_DOLLAR: '$$';
+FIELD: 'FIELD';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -455,6 +592,10 @@ LTE : '<=';
 GT  : '>';
 GTE : '>=';
 EQ_FOR_NULL: '<=>';
+<<<<<<< HEAD
+=======
+ARRAY_ELEMENT: '[*]';
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLUS_SYMBOL: '+';
 MINUS_SYMBOL: '-';
@@ -557,3 +698,10 @@ DOTDOTDOT: '...';
 WS
     : [ \r\n\t\u3000]+ -> channel(HIDDEN)
     ;
+<<<<<<< HEAD
+=======
+
+ATTACHMENT
+    : DOUBLE_DOLLAR .*? DOUBLE_DOLLAR
+    ;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

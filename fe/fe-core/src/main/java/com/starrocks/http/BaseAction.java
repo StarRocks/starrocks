@@ -42,15 +42,24 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+<<<<<<< HEAD
+=======
+import io.netty.channel.ChannelHandlerContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import io.netty.channel.ChannelProgressiveFuture;
 import io.netty.channel.ChannelProgressiveFutureListener;
 import io.netty.channel.DefaultFileRegion;
@@ -101,7 +110,11 @@ public abstract class BaseAction implements IAction {
     }
 
     @Override
+<<<<<<< HEAD
     public void handleRequest(BaseRequest request) throws Exception {
+=======
+    public void handleRequest(BaseRequest request) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);
@@ -113,10 +126,19 @@ public abstract class BaseAction implements IAction {
             } else {
                 writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
             }
+<<<<<<< HEAD
         }
     }
 
     public abstract void execute(BaseRequest request, BaseResponse response) throws DdlException;
+=======
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    public abstract void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     protected void writeResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status) {
         // if (HttpHeaders.is100ContinueExpected(request.getRequest())) {
@@ -271,6 +293,12 @@ public abstract class BaseAction implements IAction {
         }
     }
 
+<<<<<<< HEAD
+=======
+    protected void handleChannelInactive(ChannelHandlerContext ctx) {
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static class ActionAuthorizationInfo {
         public String fullUserName;
         public String remoteIp;
@@ -293,6 +321,7 @@ public abstract class BaseAction implements IAction {
         }
     }
 
+<<<<<<< HEAD
     // For new RBAC privilege framework
     protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType... systemActions) {
         for (PrivilegeType systemAction : systemActions) {
@@ -300,6 +329,8 @@ public abstract class BaseAction implements IAction {
         }
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
     // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
     protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws AccessDeniedException {
@@ -309,6 +340,7 @@ public abstract class BaseAction implements IAction {
                     userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
                     (userOwnedRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&
                             userOwnedRoles.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
+<<<<<<< HEAD
                 throw new AccessDeniedException(
                         "Access denied; you need own root role or own db_admin and user_admin roles for this " +
                                 "operation");
@@ -323,6 +355,15 @@ public abstract class BaseAction implements IAction {
         Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, tbl, privType);
     }
 
+=======
+                throw new AccessDeniedException();
+            }
+        } catch (PrivilegeException e) {
+            throw new AccessDeniedException();
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // return currentUserIdentity from StarRocks auth
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
             throws AccessDeniedException {

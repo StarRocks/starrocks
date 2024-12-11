@@ -47,7 +47,11 @@ public class TriggerActionTest extends StarRocksHttpTestCase {
         MetricRepo.init();
         ExecuteEnv.setup();
         FeConstants.runningUnitTest = true;
+<<<<<<< HEAD
         Config.dynamic_partition_enable = true;
+=======
+        Config.dynamic_partition_enable = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Config.enable_strict_storage_medium_check = false;
         UtFrameUtils.createMinStarRocksCluster();
         try {

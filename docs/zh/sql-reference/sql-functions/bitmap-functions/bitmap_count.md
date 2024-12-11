@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_count
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 统计 bitmap 中不重复值的个数。
 

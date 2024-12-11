@@ -33,8 +33,13 @@ public:
 
     ~PathTrie() {
         if (_root_value != nullptr) {
+<<<<<<< HEAD
             _allocator.destroy(_root_value);
             _allocator.deallocate(_root_value, 1);
+=======
+            traits_alloc::destroy(_allocator, _root_value);
+            traits_alloc::deallocate(_allocator, _root_value, 1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -48,8 +53,13 @@ public:
 
         TrieNode(const std::string& key, const T& value, std::string wildcard)
                 : _value(nullptr), _wildcard(std::move(wildcard)) {
+<<<<<<< HEAD
             _value = _allocator.allocate(1);
             _allocator.construct(_value, value);
+=======
+            _value = traits_alloc::allocate(_allocator, 1);
+            traits_alloc::construct(_allocator, _value, value);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (is_named_wildcard(key)) {
                 _named_wildcard = extract_template(key);
             }
@@ -61,8 +71,13 @@ public:
                 iter.second = nullptr;
             }
             if (_value != nullptr) {
+<<<<<<< HEAD
                 _allocator.destroy(_value);
                 _allocator.deallocate(_value, 1);
+=======
+                traits_alloc::destroy(_allocator, _value);
+                traits_alloc::deallocate(_allocator, _value, 1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
@@ -103,8 +118,13 @@ public:
                 }
                 if (index == path.size() - 1) {
                     if (node->_value == nullptr) {
+<<<<<<< HEAD
                         node->_value = _allocator.allocate(1);
                         _allocator.construct(node->_value, value);
+=======
+                        node->_value = traits_alloc::allocate(_allocator, 1);
+                        traits_alloc::construct(_allocator, node->_value, value);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         return true;
                     }
                     // Already register by other path
@@ -145,7 +165,11 @@ public:
                 if (node->_value == nullptr) {
                     return false;
                 }
+<<<<<<< HEAD
                 _allocator.construct(value, *node->_value);
+=======
+                traits_alloc::construct(_allocator, value, *node->_value);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return true;
             }
 
@@ -198,6 +222,10 @@ public:
         std::string _named_wildcard;
         std::map<std::string, TrieNode*> _children;
         std::allocator<T> _allocator;
+<<<<<<< HEAD
+=======
+        using traits_alloc = std::allocator_traits<decltype(_allocator)>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     };
 
     bool insert(const std::string& path, const T& value) {
@@ -205,8 +233,13 @@ public:
         split(path, &path_array);
         if (path_array.empty()) {
             if (_root_value == nullptr) {
+<<<<<<< HEAD
                 _root_value = _allocator.allocate(1);
                 _allocator.construct(_root_value, value);
+=======
+                _root_value = traits_alloc::allocate(_allocator, 1);
+                traits_alloc::construct(_allocator, _root_value, value);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return true;
             } else {
                 return false;
@@ -226,7 +259,11 @@ public:
             if (_root_value == nullptr) {
                 return false;
             } else {
+<<<<<<< HEAD
                 _allocator.construct(value, *_root_value);
+=======
+                traits_alloc::construct(_allocator, value, *_root_value);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return true;
             }
         }
@@ -236,7 +273,11 @@ public:
             if (_root_value == nullptr) {
                 return false;
             } else {
+<<<<<<< HEAD
                 _allocator.construct(value, *_root_value);
+=======
+                traits_alloc::construct(_allocator, value, *_root_value);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return true;
             }
         }
@@ -269,6 +310,10 @@ private:
     T* _root_value;
     char _separator{'/'};
     std::allocator<T> _allocator;
+<<<<<<< HEAD
+=======
+    using traits_alloc = std::allocator_traits<decltype(_allocator)>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

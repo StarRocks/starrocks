@@ -23,6 +23,10 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.http.rest.RestBaseResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.privilege.AccessDeniedException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -52,7 +56,11 @@ public class GlobalDictMetaService {
 
         @Override
         public void executeWithoutPassword(BaseRequest request, BaseResponse response)
+<<<<<<< HEAD
                 throws DdlException {
+=======
+                throws DdlException, AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (redirectToLeader(request, response)) {
                 return;
             }
@@ -97,8 +105,13 @@ public class GlobalDictMetaService {
                     return;
                 }
                 boolean isEnable = Boolean.parseBoolean(enableParam.trim());
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState()
                         .setHasForbitGlobalDict(dbName, tableName, isEnable);
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .setHasForbiddenGlobalDict(dbName, tableName, isEnable);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 response.appendContent(new RestBaseResult("apply success").toJson());
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
@@ -108,4 +121,8 @@ public class GlobalDictMetaService {
             sendResult(request, response);
         }
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

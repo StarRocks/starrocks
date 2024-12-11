@@ -45,6 +45,10 @@ public abstract class AgentTask {
 
     protected long dbId;
     protected long tableId;
+<<<<<<< HEAD
+=======
+    // physical partition id
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected long partitionId;
     protected long indexId;
     protected long tabletId;

@@ -34,22 +34,29 @@
 
 package com.starrocks.cluster;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.LinkDbInfo;
 import com.starrocks.system.SystemInfoService;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -77,6 +84,16 @@ public class Cluster implements Writable {
 
     // lock to perform atomic operations
     private ReentrantLock lock = new ReentrantLock(true);
+=======
+
+// Now Cluster don't have read interface, in order to be back compatible.
+// We will remove the persistent format later.
+
+@Deprecated // Can be deleted after version 3.3
+public class Cluster implements Writable {
+    private Long id;
+    private String name;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private Cluster() {
         // for persist
@@ -87,6 +104,7 @@ public class Cluster implements Writable {
         this.id = id;
     }
 
+<<<<<<< HEAD
     private void lock() {
         this.lock.lock();
     }
@@ -95,10 +113,13 @@ public class Cluster implements Writable {
         this.lock.unlock();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Long getId() {
         return id;
     }
 
+<<<<<<< HEAD
     public void addDb(String name, long id) {
         if (Strings.isNullOrEmpty(name)) {
             return;
@@ -128,10 +149,13 @@ public class Cluster implements Writable {
         return backendIdSet == null || backendIdSet.isEmpty();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isDefaultCluster() {
         return SystemInfoService.DEFAULT_CLUSTER.equalsIgnoreCase(name);
     }
 
+<<<<<<< HEAD
     public List<Long> getComputeNodeIdList() {
         return Lists.newArrayList(computeNodeIdSet);
     }
@@ -160,6 +184,8 @@ public class Cluster implements Writable {
         backendIdSet.remove((Long) removedBackendId);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static Cluster read(DataInput in) throws IOException {
         Cluster cluster = new Cluster();
         cluster.readFields(in);
@@ -171,6 +197,7 @@ public class Cluster implements Writable {
         out.writeLong(id);
         Text.writeString(out, name);
 
+<<<<<<< HEAD
         out.writeLong(backendIdSet.size());
         for (Long id : backendIdSet) {
             out.writeLong(id);
@@ -220,11 +247,28 @@ public class Cluster implements Writable {
             out.writeLong(infoMap.getKey());
             infoMap.getValue().write(out);
         }
+=======
+        // backendIdSet: Set<Long>
+        out.writeLong(0);
+
+        // dbNames: Set<String>
+        out.writeInt(0);
+
+        // dbIds: Set<Long>
+        out.writeInt(0);
+
+        // linkDbNames: ConcurrentHashMap<String, LinkDbInfo>
+        out.writeInt(0);
+
+        // linkDbIds: ConcurrentHashMap<Long, LinkDbInfo>
+        out.writeInt(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void readFields(DataInput in) throws IOException {
         id = in.readLong();
         name = Text.readString(in);
+<<<<<<< HEAD
         Long len = in.readLong();
         while (len-- > 0) {
             Long id = in.readLong();
@@ -254,6 +298,41 @@ public class Cluster implements Writable {
             final LinkDbInfo value = new LinkDbInfo();
             value.readFields(in);
             linkDbIds.put(key, value);
+=======
+
+        // backendIdSet: Set<Long>
+        long len = in.readLong();
+        while (len-- > 0) {
+            in.readLong();
+        }
+
+        // dbNames: Set<String>
+        int count = in.readInt();
+        while (count-- > 0) {
+            Text.readString(in);
+        }
+
+        // dbIds: Set<Long>
+        count = in.readInt();
+        while (count-- > 0) {
+            in.readLong();
+        }
+
+        // linkDbNames: ConcurrentHashMap<String, LinkDbInfo>
+        count = in.readInt();
+        while (count-- > 0) {
+            Text.readString(in);
+            final LinkDbInfo value = new LinkDbInfo();
+            value.readFields(in);
+        }
+
+        // linkDbIds: ConcurrentHashMap<Long, LinkDbInfo>
+        count = in.readInt();
+        while (count-- > 0) {
+            in.readLong();
+            final LinkDbInfo value = new LinkDbInfo();
+            value.readFields(in);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 }

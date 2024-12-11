@@ -36,25 +36,46 @@ package com.starrocks.rpc;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
+<<<<<<< HEAD
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+=======
+import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
+import com.starrocks.proto.PMVMaintenanceTaskResult;
+import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
+<<<<<<< HEAD
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
+=======
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
@@ -76,12 +97,19 @@ public class BackendServiceClient {
         return BackendServiceClient.SingletonHolder.INSTANCE;
     }
 
+<<<<<<< HEAD
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
             TNetworkAddress address, TExecPlanFragmentParams tRequest)
             throws TException, RpcException {
         final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
         pRequest.setRequest(tRequest);
         try {
+=======
+    private Future<PExecPlanFragmentResult> sendPlanFragmentAsync(TNetworkAddress address, PExecPlanFragmentRequest pRequest)
+            throws RpcException {
+        Tracers.count(Tracers.Module.SCHEDULER, "DeployDataSize", pRequest.serializedRequest.length);
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployAsyncSendTime")) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             final PBackendService service = BrpcProxy.getBackendService(address);
             return service.execPlanFragmentAsync(pRequest);
         } catch (NoSuchElementException e) {
@@ -106,6 +134,7 @@ public class BackendServiceClient {
         }
     }
 
+<<<<<<< HEAD
     public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
             TNetworkAddress address, TExecBatchPlanFragmentsParams tRequest)
             throws TException, RpcException {
@@ -138,6 +167,24 @@ public class BackendServiceClient {
 
         Preconditions.checkState(resultFuture != null);
         return resultFuture;
+=======
+    public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
+            TNetworkAddress address, byte[] request, String protocol)
+            throws TException, RpcException {
+        final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
+        pRequest.setAttachmentProtocol(protocol);
+        pRequest.setRequest(request);
+        return sendPlanFragmentAsync(address, pRequest);
+    }
+
+    public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
+            TNetworkAddress address, TExecPlanFragmentParams tRequest, String protocol)
+            throws TException, RpcException {
+        final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
+        pRequest.setAttachmentProtocol(protocol);
+        pRequest.setRequest(tRequest, protocol);
+        return sendPlanFragmentAsync(address, pRequest);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(
@@ -292,6 +339,43 @@ public class BackendServiceClient {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(
+            TNetworkAddress address, PUpdateFailPointStatusRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.updateFailPointStatusAsync(request);
+        } catch (Throwable e) {
+            LOG.warn("update failpoint status exception, address={}:{}",
+                    address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+    public Future<PListFailPointResponse> listFailPointAsync(
+            TNetworkAddress address, PListFailPointRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.listFailPointAsync(request);
+        } catch (Throwable e) {
+            LOG.warn("list failpoint exception, address={}:{}", address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+    public Future<PProcessDictionaryCacheResult> processDictionaryCache(
+            TNetworkAddress address, PProcessDictionaryCacheRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.processDictionaryCache(request);
+        } catch (Throwable e) {
+            LOG.warn("failed to execute processDictionaryCache, address={}:{}", address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static class SingletonHolder {
         private static final BackendServiceClient INSTANCE = new BackendServiceClient();
     }

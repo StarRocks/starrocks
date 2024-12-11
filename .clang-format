@@ -13,7 +13,10 @@ PointerAlignment: Left
 ReflowComments: false
 SortUsingDeclarations: false
 SpacesBeforeTrailingComments: 1
+<<<<<<< HEAD
 AllowShortFunctionsOnASingleLine: Inline
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ---
 Language: Java
 BasedOnStyle: Google
@@ -29,3 +32,9 @@ PointerAlignment: Left
 ReflowComments: false
 SortUsingDeclarations: false
 SpacesBeforeTrailingComments: 1
+<<<<<<< HEAD
+=======
+---
+Language: Proto
+BasedOnStyle: Google
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

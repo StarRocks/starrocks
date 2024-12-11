@@ -131,7 +131,11 @@ public:
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
+<<<<<<< HEAD
         writer_context.tablet_schema = &tablet->tablet_schema();
+=======
+        writer_context.tablet_schema = tablet->thread_safe_get_tablet_schema();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -143,7 +147,11 @@ public:
         if (empty) {
             return *writer->build();
         }
+<<<<<<< HEAD
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+=======
+        auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (int64_t key : keys) {
@@ -181,7 +189,11 @@ protected:
     int64_t _tablet_id = 20003;
     int64_t _src_tablet_id = 20004;
     int32_t _schema_hash = 368169781;
+<<<<<<< HEAD
     int64_t _version = 1;
+=======
+    int64_t _version = 2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t _src_version = 10;
 };
 

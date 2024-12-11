@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # covar_samp
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the sample covariance of two expressions. This function is supported from v2.5.10. It can also be used as a window function.
 

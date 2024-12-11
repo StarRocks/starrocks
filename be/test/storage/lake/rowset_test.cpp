@@ -132,7 +132,12 @@ TEST_F(LakeRowsetTest, test_load_segments) {
     }
 
     // fill data cache: false, fill metadata cache: true
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto segments2, rowset->segments(false, true));
+=======
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = true};
+    ASSIGN_OR_ABORT(auto segments2, rowset->segments(lake_io_opts));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_EQ(2, segments2.size());
     for (const auto& seg : segments2) {
         auto segment = cache->lookup_segment(seg->file_name());
@@ -153,7 +158,11 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
     auto sample_segment = segments[0];
     std::string path = sample_segment->file_name();
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(path));
+<<<<<<< HEAD
     auto schema = _tablet_schema;
+=======
+    auto schema = sample_segment->tablet_schema_share_ptr();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // create a dummy segment with the same path to cache ahead in metacache,
     // the later segment open operation will not update the mem_usage due to instance mismatch.
@@ -169,7 +178,12 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
 
         auto mirror_segment =
                 std::make_shared<Segment>(fs, FileInfo{path}, sample_segment->id(), schema, _tablet_mgr.get());
+<<<<<<< HEAD
         auto st = mirror_segment->open(nullptr, nullptr, true);
+=======
+        LakeIOOptions lake_io_opts{.fill_data_cache = true};
+        auto st = mirror_segment->open(nullptr, nullptr, lake_io_opts);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         EXPECT_TRUE(st.ok());
         auto sz2 = cache->memory_usage();
         // no memory_usage change, because the instance in metacache is different from this mirror_segment
@@ -187,7 +201,12 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
         auto sz1 = cache->memory_usage();
         auto ssz1 = mirror_segment->mem_usage();
 
+<<<<<<< HEAD
         auto st = mirror_segment->open(nullptr, nullptr, true);
+=======
+        LakeIOOptions lake_io_opts{.fill_data_cache = true};
+        auto st = mirror_segment->open(nullptr, nullptr, lake_io_opts);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         EXPECT_TRUE(st.ok());
         auto sz2 = cache->memory_usage();
         auto ssz2 = mirror_segment->mem_usage();
@@ -197,4 +216,47 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
     }
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(LakeRowsetTest, test_add_partial_compaction_segments_info) {
+    create_rowsets_for_testing();
+
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* compaction_segment_limit */);
+    ASSERT_TRUE(rs->partial_segments_compaction());
+
+    ASSIGN_OR_ABORT(auto segments, rs->segments(false));
+
+    TxnLogPB_OpCompaction op_compaction;
+    uint64_t num_rows = 0;
+    uint64_t data_size = 0;
+    EXPECT_EQ(op_compaction.output_rowset().segments_size(), 0);
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+
+    // prepare writer
+    {
+        std::vector<int> k1{40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51};
+        std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(k1.data(), k1.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        Chunk chunk0({c0, c1}, _schema);
+
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->finish());
+        ASSERT_EQ(1, writer->files().size());
+    }
+
+    EXPECT_TRUE(rs->add_partial_compaction_segments_info(&op_compaction, writer.get(), num_rows, data_size).ok());
+    EXPECT_EQ(op_compaction.output_rowset().segments_size(), 2);
+    EXPECT_TRUE(num_rows > 0);
+    EXPECT_TRUE(data_size > 0);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::lake

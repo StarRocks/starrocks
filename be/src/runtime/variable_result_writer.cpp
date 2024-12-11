@@ -28,7 +28,11 @@ namespace starrocks {
 VariableResultWriter::VariableResultWriter(BufferControlBlock* sinker,
                                            const std::vector<ExprContext*>& output_expr_ctxs,
                                            starrocks::RuntimeProfile* parent_profile)
+<<<<<<< HEAD
         : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
+=======
+        : BufferControlResultWriter(sinker, parent_profile), _output_expr_ctxs(output_expr_ctxs) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 VariableResultWriter::~VariableResultWriter() = default;
 
@@ -40,6 +44,7 @@ Status VariableResultWriter::init(RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void VariableResultWriter::_init_profile() {
     _total_timer = ADD_TIMER(_parent_profile, "TotalSendTime");
     _serialize_timer = ADD_CHILD_TIMER(_parent_profile, "SerializeTime", "TotalSendTime");
@@ -48,6 +53,10 @@ void VariableResultWriter::_init_profile() {
 
 Status VariableResultWriter::append_chunk(Chunk* chunk) {
     SCOPED_TIMER(_total_timer);
+=======
+Status VariableResultWriter::append_chunk(Chunk* chunk) {
+    SCOPED_TIMER(_append_chunk_timer);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok() || process_status.value() == nullptr) {
         return process_status.status();
@@ -66,7 +75,11 @@ Status VariableResultWriter::append_chunk(Chunk* chunk) {
 }
 
 StatusOr<TFetchDataResultPtrs> VariableResultWriter::process_chunk(Chunk* chunk) {
+<<<<<<< HEAD
     SCOPED_TIMER(_total_timer);
+=======
+    SCOPED_TIMER(_append_chunk_timer);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TFetchDataResultPtrs results;
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok()) {
@@ -78,6 +91,7 @@ StatusOr<TFetchDataResultPtrs> VariableResultWriter::process_chunk(Chunk* chunk)
     return results;
 }
 
+<<<<<<< HEAD
 StatusOr<bool> VariableResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
     size_t num_rows = 0;
     for (auto& result : results) {
@@ -97,6 +111,8 @@ StatusOr<bool> VariableResultWriter::try_add_batch(TFetchDataResultPtrs& results
     return status;
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 StatusOr<TFetchDataResultPtr> VariableResultWriter::_process_chunk(Chunk* chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return nullptr;
@@ -135,9 +151,12 @@ StatusOr<TFetchDataResultPtr> VariableResultWriter::_process_chunk(Chunk* chunk)
     return result;
 }
 
+<<<<<<< HEAD
 Status VariableResultWriter::close() {
     COUNTER_SET(_sent_rows_counter, _written_rows);
     return Status::OK();
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

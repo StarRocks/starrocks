@@ -22,11 +22,19 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
@@ -46,15 +54,27 @@ import mockit.Mocked;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
+=======
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import static org.junit.Assert.assertEquals;
 
 public class DistributionPrunerRuleTest {
 
     @Test
+<<<<<<< HEAD
     public void transform(@Mocked OlapTable olapTable, @Mocked Partition partition, @Mocked MaterializedIndex index,
+=======
+    public void transform(@Mocked OlapTable olapTable, @Mocked Partition partition, @Mocked PhysicalPartition physicalPartition,
+                          @Mocked MaterializedIndex index,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                           @Mocked HashDistributionInfo distributionInfo) {
         List<Long> tabletIds = Lists.newArrayListWithExpectedSize(300);
         for (long i = 0; i < 300; i++) {
@@ -68,6 +88,16 @@ public class DistributionPrunerRuleTest {
                 new Column("channel", Type.CHAR, false),
                 new Column("shop_type", Type.CHAR, false)
         );
+<<<<<<< HEAD
+=======
+        List<ColumnId> columnNames = columns.stream()
+                .map(column -> ColumnId.create(column.getName()))
+                .collect(Collectors.toList());
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        for (Column column : columns) {
+            idToColumn.put(column.getColumnId(), column);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // filters
         PartitionColumnFilter dealDateFilter = new PartitionColumnFilter();
@@ -146,7 +176,12 @@ public class DistributionPrunerRuleTest {
                         inPredicateOperator2, inPredicateOperator3, inPredicateOperator4);
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate,
+<<<<<<< HEAD
                         1, Lists.newArrayList(1L), null, false, Lists.newArrayList(), Lists.newArrayList(), false);
+=======
+                        1, Lists.newArrayList(1L), null, false, Lists.newArrayList(), Lists.newArrayList(), null,
+                        false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         operator.setPredicate(predicate);
 
         new Expectations() {
@@ -154,7 +189,17 @@ public class DistributionPrunerRuleTest {
                 olapTable.getPartition(anyLong);
                 result = partition;
 
+<<<<<<< HEAD
                 partition.getIndex(anyLong);
+=======
+                olapTable.getIdToColumn();
+                result = idToColumn;
+
+                partition.getSubPartitions();
+                result = Arrays.asList(physicalPartition);
+
+                physicalPartition.getIndex(anyLong);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 result = index;
 
                 partition.getDistributionInfo();
@@ -164,7 +209,11 @@ public class DistributionPrunerRuleTest {
                 result = tabletIds;
 
                 distributionInfo.getDistributionColumns();
+<<<<<<< HEAD
                 result = columns;
+=======
+                result = columnNames;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                 distributionInfo.getType();
                 result = DistributionInfo.DistributionInfoType.HASH;

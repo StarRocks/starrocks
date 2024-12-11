@@ -33,6 +33,10 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         return 0;
     }
     auto writer = static_cast<DeltaWriter*>(meta);
+<<<<<<< HEAD
+=======
+    bool flush_after_write = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int num_tasks = 0;
     int64_t pending_time_ns = 0;
     MonotonicStopWatch watch;
@@ -48,6 +52,14 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         if (iter->chunk != nullptr && iter->indexes_size > 0) {
             st = writer->write(*iter->chunk, iter->indexes, 0, iter->indexes_size);
         }
+<<<<<<< HEAD
+=======
+
+        if (iter->flush_after_write) {
+            flush_after_write = true;
+            continue;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FailedRowsetInfo failed_info{.tablet_id = writer->tablet()->tablet_id(),
                                      .replicate_token = writer->replicate_token()};
         if (st.ok() && iter->commit_after_write) {
@@ -77,6 +89,15 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         LOG_IF(ERROR, !st.ok()) << "Fail to write or commit. txn_id: " << writer->txn_id()
                                 << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
     }
+<<<<<<< HEAD
+=======
+    if (flush_after_write) {
+        auto st = writer->manual_flush();
+        LOG_IF(WARNING, !st.ok()) << "Fail to flush. txn_id: " << writer->txn_id()
+                                  << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
+    }
+    writer->update_task_stat(num_tasks, pending_time_ns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     StarRocksMetrics::instance()->async_delta_writer_execute_total.increment(1);
     StarRocksMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
     StarRocksMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() / 1000);
@@ -126,6 +147,21 @@ void AsyncDeltaWriter::write(const AsyncDeltaWriterRequest& req, AsyncDeltaWrite
     }
 }
 
+<<<<<<< HEAD
+=======
+void AsyncDeltaWriter::flush() {
+    Task task;
+    task.chunk = nullptr;
+    task.indexes = nullptr;
+    task.indexes_size = 0;
+    task.flush_after_write = true;
+    if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
+        LOG(WARNING) << "Fail to execution_queue_execute tablet_id: " << _writer->tablet()->tablet_id()
+                     << " ret: " << r;
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void AsyncDeltaWriter::write_segment(const AsyncDeltaWriterSegmentRequest& req) {
     auto st = _writer->segment_flush_token()->submit(_writer.get(), req.cntl, req.request, req.response, req.done);
     if (!st.ok()) {

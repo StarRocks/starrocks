@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # row
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Creates a named STRUCT or ROW value from the given values. It supports unnamed struct. You do not need to specify the field names. StarRocks automatically generates column names, such as `col1, col2,...`.
 

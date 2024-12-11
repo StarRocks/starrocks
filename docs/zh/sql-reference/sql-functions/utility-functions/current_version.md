@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # current_version
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 获取当前 StarRocks 的版本，当前为了兼容不同的客户端，提供两种语法。
 

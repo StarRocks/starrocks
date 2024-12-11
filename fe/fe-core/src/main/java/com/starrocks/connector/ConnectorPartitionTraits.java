@@ -22,9 +22,15 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+=======
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.connector.partitiontraits.CachedPartitionTraits;
@@ -33,13 +39,26 @@ import com.starrocks.connector.partitiontraits.HivePartitionTraits;
 import com.starrocks.connector.partitiontraits.HudiPartitionTraits;
 import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
 import com.starrocks.connector.partitiontraits.JDBCPartitionTraits;
+<<<<<<< HEAD
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.connector.partitiontraits.KuduPartitionTraits;
+import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
+import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
+import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.PCell;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+<<<<<<< HEAD
+=======
+import java.time.LocalDateTime;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -65,12 +84,23 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.HIVE, HivePartitionTraits::new)
                     .put(Table.TableType.HUDI, HudiPartitionTraits::new)
                     .put(Table.TableType.ICEBERG, IcebergPartitionTraits::new)
+<<<<<<< HEAD
+=======
+                    .put(Table.TableType.PAIMON, PaimonPartitionTraits::new)
+                    .put(Table.TableType.ODPS, OdpsPartitionTraits::new)
+                    .put(Table.TableType.KUDU, KuduPartitionTraits::new)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
                     .build();
 
     protected Table table;
 
+<<<<<<< HEAD
+=======
+    protected boolean queryMVRewrite = false;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static boolean isSupported(Table.TableType tableType) {
         return TRAITS_TABLE.containsKey(tableType);
     }
@@ -93,12 +123,20 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
+<<<<<<< HEAD
     public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, Table table) {
+=======
+    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, MaterializedView mv, Table table) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ConnectorPartitionTraits delegate = buildWithoutCache(table);
         if (Config.enable_mv_query_context_cache && ctx != null && ctx.getQueryMVContext() != null) {
             QueryMaterializationContext queryMVContext = ctx.getQueryMVContext();
             Cache<Object, Object> cache = queryMVContext.getMvQueryContextCache();
+<<<<<<< HEAD
             return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats());
+=======
+            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats(), mv);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             return delegate;
         }
@@ -109,9 +147,20 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
+<<<<<<< HEAD
     public static ConnectorPartitionTraits build(Table table) {
         ConnectContext ctx = ConnectContext.get();
         return buildWithCache(ctx, table);
+=======
+    public static ConnectorPartitionTraits build(MaterializedView mv, Table table) {
+        ConnectContext ctx = ConnectContext.get();
+        return buildWithCache(ctx, mv, table);
+    }
+
+    public static ConnectorPartitionTraits build(Table table) {
+        ConnectContext ctx = ConnectContext.get();
+        return buildWithCache(ctx, null, table);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private static ConnectorPartitionTraits buildWithoutCache(Table table) {
@@ -128,6 +177,12 @@ public abstract class ConnectorPartitionTraits {
         return table.getName();
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Whether this table support partition-granular refresh as ref-table
+     */
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public abstract boolean isSupportPCTRefresh();
 
     /**
@@ -135,6 +190,7 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract PartitionKey createEmptyKey();
 
+<<<<<<< HEAD
     public abstract String getDbName();
 
     public abstract PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException;
@@ -144,6 +200,21 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract boolean supportPartitionRefresh();
 
+=======
+    public String getCatalogDBName() {
+        return table.getCatalogDBName();
+    }
+
+    /**
+     * `createPartitionKeyWithType` is deprecated, use `createPartitionKey` instead.
+     * partition values should take care time zone for Iceberg table which is handled by `createPartitionKey`.
+     */
+    @Deprecated
+    public abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
+
+    public abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
+            throws AnalysisException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Get all partitions' name
      */
@@ -167,10 +238,19 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
+<<<<<<< HEAD
     public abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
+=======
+    public abstract Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException;
+
+    public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
+
+    public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<PartitionInfo> getPartitions(List<String> names) {
         throw new NotImplementedException("getPartitions is not implemented for this table type: " + table.getType());
     }
@@ -187,6 +267,7 @@ public abstract class ConnectorPartitionTraits {
                                                          MaterializedView.AsyncRefreshContext context);
 
     /**
+<<<<<<< HEAD
      * Check whether the base table's partition has changed or not.
      * </p>
      * NOTE: If the base table is materialized view, partition is overwritten each time, so we need to compare
@@ -196,5 +277,29 @@ public abstract class ConnectorPartitionTraits {
                                              MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
         return partition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
                 || partition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
+=======
+     * Get updated partitions based on updated time, return partition names if the partition is updated after the checkTime.
+     * For external table, we get partition update time from other system, there may be a time
+     * inconsistency between the two systems, so we add extraSeconds to make sure partition update
+     * time is later than check time
+     * @param checkTime the time to check
+     * @param extraSeconds partition updated time would add extraSeconds to check whether it is after checkTime
+     */
+    public abstract Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds);
+
+    /**
+     * Get the last update time of the table,
+     * For external table, we get partition update time from other system, there may be a time
+     * inconsistency between the two systems, so we add extraSeconds
+     */
+    public abstract LocalDateTime getTableLastUpdateTime(int extraSeconds);
+
+    public void setQueryMVRewrite(boolean value) {
+        queryMVRewrite = value;
+    }
+
+    public boolean isQueryMVRewrite() {
+        return queryMVRewrite;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

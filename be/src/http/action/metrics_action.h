@@ -34,13 +34,21 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <bvar/variable.h>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <string>
 
 #include "http/http_handler.h"
 
 namespace starrocks {
 
+<<<<<<< HEAD
 class Webserver;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class ExecEnv;
 class HttpRequest;
 class MetricRegistry;
@@ -59,6 +67,10 @@ public:
 private:
     MetricRegistry* _metrics;
     MockFunc _mock_func;
+<<<<<<< HEAD
+=======
+    bvar::DumpOptions _options;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

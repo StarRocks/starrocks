@@ -40,17 +40,33 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
+<<<<<<< HEAD
 import com.starrocks.catalog.LocalTablet.TabletStatus;
+=======
+import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.clone.TabletChecker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ListComparator;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -96,13 +112,21 @@ public class StatisticProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
 
         result.setNames(TITLE_NAMES);
+<<<<<<< HEAD
         List<Long> dbIds = globalStateMgr.getDbIds();
+=======
+        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIds();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (dbIds == null || dbIds.isEmpty()) {
             // empty
             return result;
         }
 
+<<<<<<< HEAD
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         int totalDbNum = 0;
         int totalTableNum = 0;
@@ -121,14 +145,23 @@ public class StatisticProcDir implements ProcDirInterface {
                 // skip information_schema database
                 continue;
             }
+<<<<<<< HEAD
             Database db = globalStateMgr.getDb(dbId);
+=======
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 continue;
             }
 
             ++totalDbNum;
             List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
+<<<<<<< HEAD
             db.readLock();
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             try {
                 int dbTableNum = 0;
                 int dbPartitionNum = 0;
@@ -136,7 +169,11 @@ public class StatisticProcDir implements ProcDirInterface {
                 int dbTabletNum = 0;
                 int dbReplicaNum = 0;
 
+<<<<<<< HEAD
                 for (Table table : db.getTables()) {
+=======
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (!table.isNativeTableOrMaterializedView()) {
                         continue;
                     }
@@ -147,6 +184,7 @@ public class StatisticProcDir implements ProcDirInterface {
                     for (Partition partition : olapTable.getAllPartitions()) {
                         short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
                         ++dbPartitionNum;
+<<<<<<< HEAD
                         for (MaterializedIndex materializedIndex : partition
                                 .getMaterializedIndices(IndexExtState.VISIBLE)) {
                             ++dbIndexNum;
@@ -179,6 +217,42 @@ public class StatisticProcDir implements ProcDirInterface {
                                 }
                             } // end for tablets
                         } // end for indices
+=======
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex materializedIndex : physicalPartition
+                                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                ++dbIndexNum;
+                                for (Tablet tablet : materializedIndex.getTablets()) {
+                                    ++dbTabletNum;
+
+                                    if (table.isCloudNativeTableOrMaterializedView()) {
+                                        continue;
+                                    }
+
+                                    LocalTablet localTablet = (LocalTablet) tablet;
+                                    dbReplicaNum += localTablet.getImmutableReplicas().size();
+                                    if (localTablet.getErrorStateReplicaNum() > 0) {
+                                        errorStateTabletIds.put(dbId, tablet.getId());
+                                    }
+
+                                    Pair<TabletHealthStatus, Priority> res = TabletChecker.getTabletHealthStatusWithPriority(
+                                            localTablet, infoService, physicalPartition.getVisibleVersion(),
+                                            replicationNum, aliveBeIdsInCluster, olapTable.getLocation());
+
+                                    // here we treat REDUNDANT as HEALTHY, for user-friendly.
+                                    if (res.first != TabletHealthStatus.HEALTHY && res.first != TabletHealthStatus.REDUNDANT
+                                            && res.first != TabletHealthStatus.COLOCATE_REDUNDANT &&
+                                            res.first != TabletHealthStatus.NEED_FURTHER_REPAIR) {
+                                        unhealthyTabletIds.put(dbId, tablet.getId());
+                                    }
+
+                                    if (!localTablet.isConsistent()) {
+                                        inconsistentTabletIds.put(dbId, tablet.getId());
+                                    }
+                                } // end for tablets
+                            } // end for indices
+                        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     } // end for partitions
                 } // end for tables
 
@@ -203,7 +277,11 @@ public class StatisticProcDir implements ProcDirInterface {
                 totalTabletNum += dbTabletNum;
                 totalReplicaNum += dbReplicaNum;
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         } // end for dbs
 
@@ -252,7 +330,11 @@ public class StatisticProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid db id format: " + dbIdStr);
         }
 
+<<<<<<< HEAD
         if (globalStateMgr.getDb(dbId) == null) {
+=======
+        if (globalStateMgr.getLocalMetastore().getDb(dbId) == null) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throw new AnalysisException("Invalid db id: " + dbIdStr);
         }
 

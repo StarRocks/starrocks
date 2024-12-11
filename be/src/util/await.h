@@ -14,6 +14,10 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <cstdint>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <functional>
 
 namespace starrocks {
@@ -54,7 +58,11 @@ public:
     // return value:
     // * true: condition is true
     // * false: condition is still false, timed out
+<<<<<<< HEAD
     bool until(condition_fun cond);
+=======
+    bool until(const condition_fun& cond);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     int64_t _timeout = 0;

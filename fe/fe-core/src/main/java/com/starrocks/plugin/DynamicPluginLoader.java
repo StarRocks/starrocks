@@ -34,7 +34,11 @@
 
 package com.starrocks.plugin;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -88,7 +92,11 @@ public class DynamicPluginLoader extends PluginLoader {
      * get Plugin .zip and read plugin.properties
      */
     @Override
+<<<<<<< HEAD
     public PluginInfo getPluginInfo() throws IOException, UserException {
+=======
+    public PluginInfo getPluginInfo() throws IOException, StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // already install
         if (pluginInfo != null) {
             return pluginInfo;
@@ -119,10 +127,17 @@ public class DynamicPluginLoader extends PluginLoader {
     /**
      * move plugin to StarRocks's PLUGIN_DIR and dynamic load the plugin class
      */
+<<<<<<< HEAD
     public void install() throws UserException, IOException {
         if (hasInstalled()) {
             String targetPath = pluginDir.toString() + "/" + pluginInfo.getName();
             throw new UserException("Plugin " + pluginInfo.getName() + " has already been installed at:" + targetPath);
+=======
+    public void install() throws StarRocksException, IOException {
+        if (hasInstalled()) {
+            String targetPath = pluginDir.toString() + "/" + pluginInfo.getName();
+            throw new StarRocksException("Plugin " + pluginInfo.getName() + " has already been installed at:" + targetPath);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         getPluginInfo();
@@ -152,10 +167,21 @@ public class DynamicPluginLoader extends PluginLoader {
     /**
      * close plugin and delete Plugin
      */
+<<<<<<< HEAD
     public void uninstall() throws IOException, UserException {
         if (plugin != null) {
             pluginUninstallValid();
             plugin.close();
+=======
+    public void uninstall() throws IOException, StarRocksException {
+        if (plugin != null) {
+            pluginUninstallValid();
+            try {
+                plugin.close();
+            } catch (Throwable t) {
+                LOG.warn("close plugin failed", t);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         if (null != installPath && Files.exists(installPath)
@@ -170,7 +196,11 @@ public class DynamicPluginLoader extends PluginLoader {
      *
      * @throws PluginException
      */
+<<<<<<< HEAD
     public void reload() throws IOException, UserException {
+=======
+    public void reload() throws IOException, StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (GlobalStateMgr.isCheckpointThread()) {
             /*
              * No need to reload the plugin when this is a checkpoint thread.
@@ -200,7 +230,11 @@ public class DynamicPluginLoader extends PluginLoader {
      * Dynamic load the plugin.
      * if closePreviousPlugin is true, we will check if there is already an instance of plugin, if yes, close it.
      */
+<<<<<<< HEAD
     Plugin dynamicLoadPlugin(boolean closePreviousPlugin) throws IOException, UserException {
+=======
+    Plugin dynamicLoadPlugin(boolean closePreviousPlugin) throws IOException, StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (closePreviousPlugin) {
             if (plugin != null) {
                 try {
@@ -223,7 +257,11 @@ public class DynamicPluginLoader extends PluginLoader {
         try  {
             pluginClass = loader.loadClass(pluginInfo.getClassName()).asSubclass(Plugin.class);
         } catch (ClassNotFoundException | NoClassDefFoundError t) {
+<<<<<<< HEAD
             throw new UserException("Could not find plugin class [" + pluginInfo.getClassName() + "]", t);
+=======
+            throw new StarRocksException("Could not find plugin class [" + pluginInfo.getClassName() + "]", t);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         return loadPluginClass(pluginClass);
@@ -271,7 +309,11 @@ public class DynamicPluginLoader extends PluginLoader {
     /**
      * move plugin's temp install directory to StarRocks's PLUGIN_DIR/plugin_name
      */
+<<<<<<< HEAD
     public void movePlugin() throws UserException, IOException {
+=======
+    public void movePlugin() throws StarRocksException, IOException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (installPath == null || !Files.exists(installPath)) {
             throw new PluginException(
                     "Install plugin " + pluginInfo.getName() + " failed, because install path doesn't "

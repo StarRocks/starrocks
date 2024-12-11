@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_agg
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将一列中的多行非 NULL 数值合并成一行 BITMAP 值，即多行转一行。
 

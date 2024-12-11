@@ -82,7 +82,11 @@ public class BackendProcNodeTest {
                 minTimes = 0;
                 result = editLog;
 
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentInvertedIndex();
+=======
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
                 result = tabletInvertedIndex;
 

@@ -19,6 +19,10 @@ import com.starrocks.common.Config;
 
 import java.util.Collection;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
@@ -35,11 +39,23 @@ public class SimpleSelector implements Selector {
 
     @Override
     @NotNull
+<<<<<<< HEAD
     public List<PartitionStatistics> select(Collection<PartitionStatistics> statistics) {
         long now = System.currentTimeMillis();
         return statistics.stream()
                 .filter(p -> p.getNextCompactionTime() <= now)
                 .filter(p -> isReadyForCompaction(p, now))
+=======
+    public List<PartitionStatisticsSnapshot> select(Collection<PartitionStatistics> statistics, Set<Long> excludeTables) {
+        long now = System.currentTimeMillis();
+        return statistics.stream()
+                .filter(p -> p.getCompactionScore() != null)
+                .filter(p -> p.getNextCompactionTime() <= now)
+                .filter(p -> !excludeTables.contains(p.getPartition().getTableId()))
+                .filter(p -> isReadyForCompaction(p, now))
+                .map(p -> {
+                    return p.getSnapshot(); })
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .collect(Collectors.toList());
     }
 

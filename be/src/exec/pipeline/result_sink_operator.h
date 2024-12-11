@@ -30,16 +30,32 @@ namespace pipeline {
 class ResultSinkOperator final : public Operator {
 public:
     ResultSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+<<<<<<< HEAD
                        TResultSinkType::type sink_type, std::vector<ExprContext*> output_expr_ctxs,
                        const std::shared_ptr<BufferControlBlock>& sender, std::atomic<int32_t>& num_sinks,
                        std::atomic<int64_t>& num_written_rows, FragmentContext* const fragment_ctx)
             : Operator(factory, id, "result_sink", plan_node_id, false, driver_sequence),
               _sink_type(sink_type),
+=======
+                       TResultSinkType::type sink_type, bool is_binary_format, TResultSinkFormatType::type format_type,
+                       std::vector<ExprContext*> output_expr_ctxs, const std::shared_ptr<BufferControlBlock>& sender,
+                       std::atomic<int32_t>& num_sinks, std::atomic<int64_t>& num_written_rows,
+                       FragmentContext* const fragment_ctx, const RowDescriptor& row_desc)
+            : Operator(factory, id, "result_sink", plan_node_id, false, driver_sequence),
+              _sink_type(sink_type),
+              _is_binary_format(is_binary_format),
+              _format_type(format_type),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
               _output_expr_ctxs(std::move(output_expr_ctxs)),
               _sender(sender),
               _num_sinkers(num_sinks),
               _num_written_rows(num_written_rows),
+<<<<<<< HEAD
               _fragment_ctx(fragment_ctx) {}
+=======
+              _fragment_ctx(fragment_ctx),
+              _row_desc(row_desc) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ~ResultSinkOperator() override = default;
 
@@ -53,7 +69,11 @@ public:
 
     bool need_input() const override;
 
+<<<<<<< HEAD
     bool is_finished() const override { return _is_finished && _fetch_data_result.empty(); }
+=======
+    bool is_finished() const override { return _is_finished; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
@@ -68,6 +88,11 @@ public:
 
 private:
     TResultSinkType::type _sink_type;
+<<<<<<< HEAD
+=======
+    bool _is_binary_format;
+    TResultSinkFormatType::type _format_type;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::vector<ExprContext*> _output_expr_ctxs;
 
     /// The following three fields are shared by all the ResultSinkOperators
@@ -77,24 +102,44 @@ private:
     std::atomic<int64_t>& _num_written_rows;
 
     std::shared_ptr<ResultWriter> _writer;
+<<<<<<< HEAD
     mutable TFetchDataResultPtrs _fetch_data_result;
 
     std::unique_ptr<RuntimeProfile> _profile = nullptr;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     mutable Status _last_error;
     bool _is_finished = false;
 
     FragmentContext* const _fragment_ctx;
+<<<<<<< HEAD
+=======
+    const RowDescriptor& _row_desc;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class ResultSinkOperatorFactory final : public OperatorFactory {
 public:
+<<<<<<< HEAD
     ResultSinkOperatorFactory(int32_t id, TResultSinkType::type sink_type, std::vector<TExpr> t_output_expr,
                               FragmentContext* const fragment_ctx)
             : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
               _sink_type(sink_type),
               _t_output_expr(std::move(t_output_expr)),
               _fragment_ctx(fragment_ctx) {}
+=======
+    ResultSinkOperatorFactory(int32_t id, TResultSinkType::type sink_type, bool is_binary_format,
+                              TResultSinkFormatType::type format_type, std::vector<TExpr> t_output_expr,
+                              FragmentContext* const fragment_ctx, const RowDescriptor& row_desc)
+            : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
+              _sink_type(sink_type),
+              _is_binary_format(is_binary_format),
+              _format_type(format_type),
+              _t_output_expr(std::move(t_output_expr)),
+              _fragment_ctx(fragment_ctx),
+              _row_desc(row_desc) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ~ResultSinkOperatorFactory() override = default;
 
@@ -105,8 +150,13 @@ public:
         // so it doesn't need memory barrier here.
         _increment_num_sinkers_no_barrier();
         return std::make_shared<ResultSinkOperator>(this, _id, _plan_node_id, driver_sequence, _sink_type,
+<<<<<<< HEAD
                                                     _output_expr_ctxs, _sender, _num_sinkers, _num_written_rows,
                                                     _fragment_ctx);
+=======
+                                                    _is_binary_format, _format_type, _output_expr_ctxs, _sender,
+                                                    _num_sinkers, _num_written_rows, _fragment_ctx, _row_desc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     Status prepare(RuntimeState* state) override;
@@ -117,6 +167,11 @@ private:
     void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
 
     TResultSinkType::type _sink_type;
+<<<<<<< HEAD
+=======
+    bool _is_binary_format;
+    TResultSinkFormatType::type _format_type;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::vector<TExpr> _t_output_expr;
     std::vector<ExprContext*> _output_expr_ctxs;
 
@@ -128,6 +183,10 @@ private:
     std::atomic<int64_t> _num_written_rows = 0;
 
     FragmentContext* const _fragment_ctx;
+<<<<<<< HEAD
+=======
+    const RowDescriptor& _row_desc;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace pipeline

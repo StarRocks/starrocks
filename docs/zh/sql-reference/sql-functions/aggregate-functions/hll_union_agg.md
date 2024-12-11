@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_union_agg
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 该函数将多个 HLL 类型数据合并成一个 HLL。
 

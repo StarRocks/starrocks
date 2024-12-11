@@ -54,18 +54,35 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+<<<<<<< HEAD
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+=======
+import com.starrocks.sql.common.AuditEncryptionChecker;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+<<<<<<< HEAD
+=======
+import org.mockito.Mockito;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.atomic.AtomicReference;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class ConnectProcessorTest extends DDLTestBase {
     private static ByteBuffer initDbPacket;
@@ -84,6 +101,10 @@ public class ConnectProcessorTest extends DDLTestBase {
 
     private static PQueryStatistics statistics = new PQueryStatistics();
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @BeforeClass
     public static void setUpClass() {
         // Init Database packet
@@ -164,6 +185,11 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         statistics.scanBytes = 0L;
         statistics.scanRows = 0L;
+<<<<<<< HEAD
+=======
+
+        Mockito.mockStatic(AuditEncryptionChecker.class);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Before
@@ -409,7 +435,10 @@ public class ConnectProcessorTest extends DDLTestBase {
         ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // Mock statement executor
         new Expectations() {
             {
@@ -469,6 +498,37 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testQueryWithCustomQueryId(@Mocked StmtExecutor executor) throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
+        ctx.getSessionVariable().setCustomQueryId("a_custom_query_id");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+
+        AtomicReference<String> customQueryId = new AtomicReference<>();
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                customQueryId.set(ctx.getCustomQueryId());
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+        processor.processOnce();
+        Assert.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        // verify customQueryId is set during query execution
+        Assert.assertEquals("a_custom_query_id", customQueryId.get());
+        // customQueryId is cleared after query finished
+        Assert.assertEquals("", ctx.getCustomQueryId());
+        Assert.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testFieldList() throws Exception {
         ConnectContext ctx = initMockContext(mockChannel(fieldListPacket), GlobalStateMgr.getCurrentState());
 
@@ -585,7 +645,12 @@ public class ConnectProcessorTest extends DDLTestBase {
                 ");";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
+<<<<<<< HEAD
         processor.addRunningQueryDetail(statementBase);
+=======
+        processor.executor = new StmtExecutor(ctx, statementBase);
+        processor.executor.addRunningQueryDetail(statementBase);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         Assert.assertFalse(Strings.isNullOrEmpty(QueryDetailQueue.getQueryDetailsAfterTime(0).get(0).getSql()));
     }

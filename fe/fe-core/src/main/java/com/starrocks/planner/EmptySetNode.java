@@ -59,7 +59,10 @@ public class EmptySetNode extends PlanNode {
     public void computeStats(Analyzer analyzer) {
         avgRowSize = 0;
         cardinality = 0;
+<<<<<<< HEAD
         numNodes = 1;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -72,11 +75,14 @@ public class EmptySetNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return true;
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean canUseRuntimeAdaptiveDop() {
         return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }

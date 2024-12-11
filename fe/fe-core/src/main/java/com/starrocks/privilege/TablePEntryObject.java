@@ -131,7 +131,11 @@ public class TablePEntryObject implements PEntryObject {
                 throw new PrivObjNotFoundException("cannot find table " +
                         tableToken + " in db " + dbToken + ", msg: " + e.getMessage());
             }
+<<<<<<< HEAD
             if (table == null || table.isView() || table.isMaterializedView()) {
+=======
+            if (table == null || table.isOlapView() || table.isMaterializedView()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 throw new PrivObjNotFoundException("cannot find table " +
                         tableToken + " in db " + dbToken);
             }
@@ -181,11 +185,19 @@ public class TablePEntryObject implements PEntryObject {
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
+<<<<<<< HEAD
             Database db = globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
             if (db == null) {
                 return false;
             }
             return globalStateMgr.getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
+=======
+            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
+            if (db == null) {
+                return false;
+            }
+            return globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         // do not validate privilege of external table
         return true;
@@ -275,8 +287,13 @@ public class TablePEntryObject implements PEntryObject {
             } else {
                 String tblName = null;
                 if (CatalogMgr.isInternalCatalog(catalogId)) {
+<<<<<<< HEAD
                     Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
                             Long.parseLong(getDatabaseUUID()), Long.parseLong(getTableUUID()));
+=======
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(Long.parseLong(getDatabaseUUID()), Long.parseLong(getTableUUID()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (table == null) {
                         throw new MetaNotFoundException("Cannot find table : " + tableUUID);
                     }

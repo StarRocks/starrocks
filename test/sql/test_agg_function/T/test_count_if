@@ -14,7 +14,10 @@ PARTITION p20220421 VALUES [("2022-04-21 00:00:00"), ("2022-04-22 00:00:00")))
 DISTRIBUTED BY HASH(`v1`) BUCKETS 4
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -44,4 +47,8 @@ select count_if(v1 >= v2), count_if(v1 >= v2 or v4 = 1), count_if(v1 >= v2 and v
 
 select count_if(true), count_if(false), count_if('') from test_count_if;
 
+<<<<<<< HEAD
 select count_if(v1 = 'a'), count(v1), count(if(v1 = 'a', 1, null)) from test_count_if;
+=======
+select count_if(v1 = 'a'), count(v1), count(if(v1 = 'a', 1, null)) from test_count_if;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -14,6 +14,11 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
+=======
+import org.apache.commons.lang3.EnumUtils;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class SessionVariableConstants {
 
     private SessionVariableConstants() {}
@@ -34,6 +39,7 @@ public class SessionVariableConstants {
 
     public static final String VARCHAR = "varchar";
 
+<<<<<<< HEAD
     public static final String ADAPTIVE_INCREASE = "adaptive_increase";
     public static final String ADAPTIVE_DECREASE = "adaptive_decrease";
 
@@ -41,6 +47,22 @@ public class SessionVariableConstants {
         LOCALITY,
         AUTO,
         ADAPTIVE_INCREASE,
+=======
+    public enum ChooseInstancesMode {
+
+        // the number of chosen instances is the same as the max number of instances from its children fragments
+        LOCALITY,
+
+        // auto increase or decrease the instances based on the processed data size
+        AUTO,
+
+        // choose more instances than the max number of instances from its children fragments
+        // if the remote fragment needs process too much data
+        ADAPTIVE_INCREASE,
+
+        // choose fewer instances than the max number of instances from its children fragments
+        // if the remote fragment doesn't need process too much data
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ADAPTIVE_DECREASE;
 
         public boolean enableIncreaseInstance() {
@@ -52,6 +74,18 @@ public class SessionVariableConstants {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public enum ComputationFragmentSchedulingPolicy {
+        
+        // only select compute node in scheduler policy (default)
+        COMPUTE_NODES_ONLY,
+
+        // both select compute node and backend in scheduler policy
+        ALL_NODES
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public enum AggregationStage {
         AUTO,
         ONE_STAGE,
@@ -59,4 +93,18 @@ public class SessionVariableConstants {
         THREE_STAGE,
         FOUR_STAGE
     }
+<<<<<<< HEAD
+=======
+
+    // default, ndv, rewrite_by_hll_bitmap
+    public enum CountDistinctImplMode {
+        DEFAULT,                // default, keeps the original count distinct implementation
+        NDV,                    // ndv, uses HyperLogLog to estimate the count distinct
+        MULTI_COUNT_DISTINCT;
+        public static String MODE_DEFAULT = DEFAULT.toString();
+        public static CountDistinctImplMode parse(String str) {
+            return EnumUtils.getEnumIgnoreCase(CountDistinctImplMode.class, str);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

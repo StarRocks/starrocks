@@ -12,13 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
+=======
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.operator.Operator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -29,12 +37,23 @@ public class PhysicalLimitOperator extends PhysicalOperator {
     private final long offset;
 
     public PhysicalLimitOperator(long offset, long limit, Projection projection) {
+<<<<<<< HEAD
         super(OperatorType.PHYSICAL_LIMIT, GatherDistributionSpec.createGatherDistributionSpec(limit));
+=======
+        super(OperatorType.PHYSICAL_LIMIT, DistributionSpec.createGatherDistributionSpec());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.offset = offset;
         this.limit = limit;
         this.projection = projection;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean hasOffset() {
+        return offset != Operator.DEFAULT_OFFSET;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public long getOffset() {
         return offset;
     }

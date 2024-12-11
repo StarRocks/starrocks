@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.scheduler;
 
+<<<<<<< HEAD
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
@@ -26,6 +27,17 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+=======
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.Table;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
@@ -33,6 +45,7 @@ import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
@@ -44,6 +57,19 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+=======
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+import org.apache.commons.lang3.StringUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -52,9 +78,15 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+=======
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class MVRefreshTestBase {
     private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
@@ -71,18 +103,29 @@ public class MVRefreshTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+<<<<<<< HEAD
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
         ConnectorPlanTestBase.mockCatalog(connectContext);
         starRocksAssert = new StarRocksAssert(connectContext);
+=======
+        UtFrameUtils.createMinStarRocksCluster();
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!starRocksAssert.databaseExist("_statistics_")) {
             StatisticsMetaManager m = new StatisticsMetaManager();
             m.createStatisticsTablesForTest();
         }
         starRocksAssert.withDatabase("test");
         starRocksAssert.useDatabase("test");
+<<<<<<< HEAD
 
         new MockUp<StmtExecutor>() {
             @Mock
@@ -114,12 +157,15 @@ public class MVRefreshTestBase {
                 replica.updateVersionInfo(version, -1, version);
             }
         }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @AfterClass
     public static void tearDown() throws Exception {
     }
 
+<<<<<<< HEAD
     public void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         new StmtExecutor(connectContext, sql).execute();
@@ -128,6 +174,21 @@ public class MVRefreshTestBase {
     protected MaterializedView getMv(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
+=======
+    public static void executeInsertSql(String sql) throws Exception {
+        executeInsertSql(connectContext, sql);
+    }
+
+    public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, statement).execute();
+    }
+
+    protected MaterializedView getMv(String dbName, String mvName) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
@@ -135,8 +196,13 @@ public class MVRefreshTestBase {
     }
 
     protected Table getTable(String dbName, String tableName) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(tableName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertNotNull(table);
         return table;
     }
@@ -144,6 +210,10 @@ public class MVRefreshTestBase {
     protected TaskRun buildMVTaskRun(MaterializedView mv, String dbName) {
         Task task = TaskBuilder.buildMvTask(mv, dbName);
         Map<String, String> testProperties = task.getProperties();
+<<<<<<< HEAD
+=======
+        testProperties.put(TaskRun.IS_TEST, "true");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         return taskRun;
     }
@@ -152,6 +222,7 @@ public class MVRefreshTestBase {
         refreshMVRange(mvName, null, null, force);
     }
 
+<<<<<<< HEAD
     public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
         Set<String> toRefreshPartitions = Sets.newHashSet();
         mv.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
@@ -160,6 +231,22 @@ public class MVRefreshTestBase {
 
     PartitionBasedMvRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
         Task task = TaskBuilder.buildMvTask(mv, dbName);
+=======
+    public static MvUpdateInfo getMvUpdateInfo(MaterializedView mv) {
+        return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+    }
+
+    public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
+        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+        Preconditions.checkState(mvUpdateInfo != null);
+        return mvUpdateInfo.getMvToRefreshPartitionNames();
+    }
+
+    protected PartitionBasedMvRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
+        Task task = TaskBuilder.buildMvTask(mv, dbName);
+        Map<String, String> testProperties = task.getProperties();
+        testProperties.put(TaskRun.IS_TEST, "true");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
@@ -184,13 +271,58 @@ public class MVRefreshTestBase {
         Map<String, String> infoStrings = profile.getInfoStrings();
         Assert.assertTrue(infoStrings.containsKey("MVQueryCacheStats"));
         String cacheStats = infoStrings.get("MVQueryCacheStats");
+<<<<<<< HEAD
         System.out.println(cacheStats);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return GsonUtils.GSON.fromJson(cacheStats,
                 QueryMaterializationContext.QueryCacheStats.class);
     }
 
+<<<<<<< HEAD
+=======
+    protected Map<Table, Set<String>> getRefTableRefreshedPartitions(PartitionBasedMvRefreshProcessor processor) {
+        Map<TableSnapshotInfo, Set<String>> baseTables = processor
+                .getRefTableRefreshPartitions(Sets.newHashSet("p20220101"));
+        Assert.assertEquals(2, baseTables.size());
+        return baseTables.entrySet().stream().collect(Collectors.toMap(x -> x.getKey().getBaseTable(), x -> x.getValue()));
+    }
+
+    protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {
+        String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    protected static ExecPlan getMVRefreshExecPlan(TaskRun taskRun) throws Exception {
+        initAndExecuteTaskRun(taskRun);
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                taskRun.getProcessor();
+        MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+        return mvTaskRunContext.getExecPlan();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
     }
+<<<<<<< HEAD
+=======
+
+    protected static void createAndRefreshMv(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assert.assertTrue(stmt instanceof CreateMaterializedViewStatement);
+        CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
+        TableName mvTableName = createMaterializedViewStatement.getTableName();
+        Assert.assertTrue(mvTableName != null);
+        String dbName = Strings.isNullOrEmpty(mvTableName.getDb()) ? "test" : mvTableName.getDb();
+        String mvName = mvTableName.getTbl();
+        starRocksAssert.withMaterializedView(sql);
+        cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

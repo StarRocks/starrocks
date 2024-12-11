@@ -37,6 +37,10 @@ package com.starrocks.catalog;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -74,7 +78,11 @@ public class ColumnTypeTest {
         Assert.assertNotSame(type.getType(), type3.getType());
     }
 
+<<<<<<< HEAD
     @Test(expected = AnalysisException.class)
+=======
+    @Test(expected = SemanticException.class)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testInvalidType() throws AnalysisException {
         TypeDef type = TypeDef.create(PrimitiveType.INVALID_TYPE);
         type.analyze(null);
@@ -101,7 +109,11 @@ public class ColumnTypeTest {
         Assert.assertNotEquals(type.getType(), type4.getType());
     }
 
+<<<<<<< HEAD
     @Test(expected = AnalysisException.class)
+=======
+    @Test(expected = SemanticException.class)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testCharInvalid() throws AnalysisException {
         TypeDef type = TypeDef.createVarchar(-1);
         type.analyze(null);
@@ -132,19 +144,31 @@ public class ColumnTypeTest {
         Assert.assertNotEquals(type.getType(), type4.getType());
     }
 
+<<<<<<< HEAD
     @Test(expected = AnalysisException.class)
+=======
+    @Test(expected = SemanticException.class)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testDecimalPreFail() throws AnalysisException {
         TypeDef type = TypeDef.createDecimal(28, 3);
         type.analyze(null);
     }
 
+<<<<<<< HEAD
     @Test(expected = AnalysisException.class)
+=======
+    @Test(expected = SemanticException.class)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testDecimalScaleFail() throws AnalysisException {
         TypeDef type = TypeDef.createDecimal(27, 10);
         type.analyze(null);
     }
 
+<<<<<<< HEAD
     @Test(expected = AnalysisException.class)
+=======
+    @Test(expected = SemanticException.class)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testDecimalScaleLargeFial() throws AnalysisException {
         TypeDef type = TypeDef.createDecimal(8, 9);
         type.analyze(null);

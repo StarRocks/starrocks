@@ -37,6 +37,10 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+<<<<<<< HEAD
+=======
+#include <utility>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <vector>
 
 #include "common/statusor.h"
@@ -46,8 +50,15 @@
 #include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
+<<<<<<< HEAD
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/segment.h"
+=======
+#include "storage/rowset/base_rowset.h"
+#include "storage/rowset/rowset_meta.h"
+#include "storage/rowset/segment.h"
+#include "storage/rowset/segment_options.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -130,15 +141,25 @@ private:
     RowsetState _rowset_state{ROWSET_UNLOADED};
 };
 
+<<<<<<< HEAD
 class Rowset : public std::enable_shared_from_this<Rowset> {
 public:
     Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
+=======
+class Rowset : public std::enable_shared_from_this<Rowset>, public BaseRowset {
+public:
+    Rowset(const TabletSchemaCSPtr&, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Rowset(const Rowset&) = delete;
     const Rowset& operator=(const Rowset&) = delete;
 
     virtual ~Rowset();
 
+<<<<<<< HEAD
     static std::shared_ptr<Rowset> create(const TabletSchema* schema, std::string rowset_path,
+=======
+    static std::shared_ptr<Rowset> create(const TabletSchemaCSPtr& schema, std::string rowset_path,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                           RowsetMetaSharedPtr rowset_meta) {
         return std::make_shared<Rowset>(schema, std::move(rowset_path), std::move(rowset_meta));
     }
@@ -147,15 +168,28 @@ public:
     //
     // May be called multiple times, subsequent calls will no-op.
     // Derived class implements the load logic by overriding the `do_load_once()` method.
+<<<<<<< HEAD
     Status load();
+=======
+    Status load() override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // reload this rowset after the underlying segment file is changed
     Status reload();
     Status reload_segment(int32_t segment_id);
+<<<<<<< HEAD
     StatusOr<int64_t> total_segment_data_size();
 
     const TabletSchema& schema() const { return *_schema; }
     void set_schema(const TabletSchema* schema) { _schema = schema; }
+=======
+    Status reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr& schema);
+    StatusOr<int64_t> total_segment_data_size();
+
+    const TabletSchema& schema_ref() const { return *_schema; }
+    const TabletSchemaCSPtr& schema() const { return _schema; }
+    void set_schema(const TabletSchemaCSPtr& schema) { _schema = schema; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const RowsetReadOptions& options);
 
@@ -172,6 +206,11 @@ public:
 
     std::vector<SegmentSharedPtr>& segments() { return _segments; }
 
+<<<<<<< HEAD
+=======
+    std::vector<SegmentSharedPtr> get_segments() override { return _segments; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // only used for updatable tablets' rowset
     // simply get iterators to iterate all rows without complex options like predicates
     // |schema| read schema
@@ -181,9 +220,17 @@ public:
     // return iterator list, an iterator for each segment,
     // if the segment is empty, put an empty pointer in list
     // caller is also responsible to call rowset's acquire/release
+<<<<<<< HEAD
     StatusOr<std::vector<ChunkIteratorPtr>> get_segment_iterators2(const Schema& schema, KVStore* meta, int64_t version,
                                                                    OlapReaderStatistics* stats,
                                                                    KVStore* dcg_meta = nullptr);
+=======
+    StatusOr<std::vector<ChunkIteratorPtr>> get_segment_iterators2(const Schema& schema,
+                                                                   const TabletSchemaCSPtr& tablet_schema,
+                                                                   KVStore* meta, int64_t version,
+                                                                   OlapReaderStatistics* stats,
+                                                                   KVStore* dcg_meta = nullptr, size_t chunk_size = 0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // only used for updatable tablets' rowset in column mode partial update
     // simply get iterators to iterate all rows without complex options like predicates
@@ -215,6 +262,7 @@ public:
     void make_commit(int64_t version, uint32_t rowset_seg_id, uint32_t max_compact_input_rowset_id);
 
     // helper class to access RowsetMeta
+<<<<<<< HEAD
     int64_t start_version() const { return rowset_meta()->version().first; }
     int64_t end_version() const { return rowset_meta()->version().second; }
     size_t data_disk_size() const { return rowset_meta()->total_disk_size(); }
@@ -224,6 +272,18 @@ public:
     size_t total_update_row_size() const { return rowset_meta()->total_update_row_size(); }
     Version version() const { return rowset_meta()->version(); }
     RowsetId rowset_id() const { return rowset_meta()->rowset_id(); }
+=======
+    int64_t start_version() const override { return rowset_meta()->version().first; }
+    int64_t end_version() const override { return rowset_meta()->version().second; }
+    size_t data_disk_size() const { return rowset_meta()->total_disk_size(); }
+    bool empty() const { return rowset_meta()->empty(); }
+    int64_t num_rows() const override { return rowset_meta()->num_rows(); }
+    int64_t num_rows_upt() const { return rowset_meta()->num_rows_upt(); }
+    size_t total_row_size() const { return rowset_meta()->total_row_size(); }
+    int64_t total_update_row_size() const { return rowset_meta()->total_update_row_size(); }
+    Version version() const { return rowset_meta()->version(); }
+    RowsetId rowset_id() const override { return rowset_meta()->rowset_id(); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string rowset_id_str() const { return rowset_meta()->rowset_id().to_string(); }
     int64_t creation_time() const { return rowset_meta()->creation_time(); }
     PUniqueId load_id() const { return rowset_meta()->load_id(); }
@@ -232,9 +292,19 @@ public:
     int64_t num_segments() const { return rowset_meta()->num_segments(); }
     uint32_t num_delete_files() const { return rowset_meta()->get_num_delete_files(); }
     uint32_t num_update_files() const { return rowset_meta()->get_num_update_files(); }
+<<<<<<< HEAD
     bool has_data_files() const { return num_segments() > 0 || num_delete_files() > 0 || num_update_files() > 0; }
     KeysType keys_type() const { return _keys_type; }
     bool is_overlapped() const { return rowset_meta()->is_segments_overlapping(); }
+=======
+    bool has_data_files() const override {
+        return num_segments() > 0 || num_delete_files() > 0 || num_update_files() > 0;
+    }
+    KeysType keys_type() const { return _keys_type; }
+    bool is_overlapped() const override { return rowset_meta()->is_segments_overlapping(); }
+
+    const TabletSchemaCSPtr tablet_schema() { return rowset_meta()->tablet_schema(); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // remove all files in this rowset
     // TODO should we rename the method to remove_files() to be more specific?
@@ -298,6 +368,13 @@ public:
 
     bool contains_version(Version version) const { return rowset_meta()->version().contains(version); }
 
+<<<<<<< HEAD
+=======
+    void set_is_compacting(bool flag) { is_compacting.store(flag); }
+
+    bool get_is_compacting() { return is_compacting.load(); }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static bool comparator(const RowsetSharedPtr& left, const RowsetSharedPtr& right) {
         return left->end_version() < right->end_version();
     }
@@ -315,7 +392,13 @@ public:
                 if (_refs_by_reader == 0 && _rowset_state_machine.rowset_state() == ROWSET_UNLOADING) {
                     // first do close, then change state
                     do_close();
+<<<<<<< HEAD
                     _rowset_state_machine.on_release();
+=======
+                    WARN_IF_ERROR(_rowset_state_machine.on_release(),
+                                  strings::Substitute("rowset state on_release error, $0",
+                                                      _rowset_state_machine.rowset_state()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
             if (_rowset_state_machine.rowset_state() == ROWSET_UNLOADED) {
@@ -359,6 +442,11 @@ public:
 
     Status verify();
 
+<<<<<<< HEAD
+=======
+    size_t segment_memory_usage();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 protected:
     friend class RowsetFactory;
 
@@ -371,10 +459,20 @@ protected:
     // release resources in this api
     void do_close();
 
+<<<<<<< HEAD
     // allow subclass to add custom logic when rowset is being published
     virtual void make_visible_extra(Version version) {}
 
     const TabletSchema* _schema;
+=======
+    // Move this item to newest item in lru cache.
+    void warmup_lrucache();
+
+    // allow subclass to add custom logic when rowset is being published
+    virtual void make_visible_extra(Version version) {}
+
+    TabletSchemaCSPtr _schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string _rowset_path;
     RowsetMetaSharedPtr _rowset_meta;
 
@@ -394,6 +492,7 @@ private:
 
     Status _copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
 
+<<<<<<< HEAD
     std::vector<SegmentSharedPtr> _segments;
 
     KeysType _keys_type;
@@ -408,4 +507,70 @@ private:
     std::shared_ptr<Rowset> _rowset;
 };
 
+=======
+    StatusOr<std::shared_ptr<Segment>> _load_segment(int32_t idx, const TabletSchemaCSPtr& schema,
+                                                     std::shared_ptr<FileSystem>& fs,
+                                                     const FooterPointerPB* partial_rowset_footer,
+                                                     size_t* foot_size_hint);
+
+    std::vector<SegmentSharedPtr> _segments;
+
+    std::atomic<bool> is_compacting{false};
+
+    KeysType _keys_type;
+};
+
+struct adopt_acquire_t {
+    explicit adopt_acquire_t() = default;
+};
+
+template <class T>
+class TReleaseGuard {
+public:
+    explicit TReleaseGuard(T rowset) : _rowset(std::move(rowset)) { _rowset->acquire(); }
+    explicit TReleaseGuard(T rowset, adopt_acquire_t) : _rowset(std::move(rowset)) {}
+    ~TReleaseGuard() {
+        if (_rowset) {
+            _rowset->release();
+        }
+    }
+
+private:
+    T _rowset;
+};
+
+template <class T>
+class TReleaseGuard<std::vector<std::vector<T>>> {
+public:
+    TReleaseGuard() = default;
+    explicit TReleaseGuard(std::vector<std::vector<T>>&& rowsets, adopt_acquire_t)
+            : _tablet_rowsets(std::move(rowsets)) {}
+
+    TReleaseGuard& operator=(TReleaseGuard&& other) noexcept {
+        std::swap(_tablet_rowsets, other._tablet_rowsets);
+        return *this;
+    }
+    ~TReleaseGuard() { reset(); }
+
+    void reset() {
+        for (auto& rowset_list : _tablet_rowsets) {
+            Rowset::release_readers(rowset_list);
+        }
+        _tablet_rowsets.clear();
+    }
+    const std::vector<std::vector<T>>& tablet_rowsets() const { return _tablet_rowsets; }
+
+    TReleaseGuard(TReleaseGuard&& other) = delete;
+    TReleaseGuard(const TReleaseGuard& other) = delete;
+    TReleaseGuard& operator=(const TReleaseGuard& other) = delete;
+
+private:
+    std::vector<std::vector<T>> _tablet_rowsets;
+};
+using RowsetReleaseGuard = TReleaseGuard<RowsetSharedPtr>;
+using MultiRowsetReleaseGuard = TReleaseGuard<std::vector<std::vector<RowsetSharedPtr>>>;
+
+using TabletSchemaSPtr = std::shared_ptr<TabletSchema>;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

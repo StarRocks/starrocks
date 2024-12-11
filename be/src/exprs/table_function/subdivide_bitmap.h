@@ -45,7 +45,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     void process_row(const std::vector<BitmapValue*>& src_bitmap_col, SrcSizeCppType batch_size, size_t row,
+=======
+    void process_row(const Buffer<BitmapValue*>& src_bitmap_col, SrcSizeCppType batch_size, size_t row,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                      Column* dst_bitmap_col, UInt32Column* dst_offset_col, uint32_t* compact_offset) const {
         auto* bitmap = src_bitmap_col[row];
 
@@ -105,6 +109,7 @@ public:
                             &compact_offset);
             }
         }
+<<<<<<< HEAD
         std::string err_msg;
         auto ret = dst_bitmap_col->capacity_limit_reached(&err_msg);
         if (ret) {
@@ -116,6 +121,18 @@ public:
         if (ret) {
             state->set_status(Status::InternalError(
                     fmt::format("Offset column generate by subdivide_bitmap reach limit, {}", err_msg)));
+=======
+        Status st = dst_bitmap_col->capacity_limit_reached();
+        if (!st.ok()) {
+            state->set_status(Status::InternalError(
+                    fmt::format("Bitmap column generate by subdivide_bitmap reach limit, {}", st.message())));
+            return {};
+        }
+        st = dst_offset_col->capacity_limit_reached();
+        if (!st.ok()) {
+            state->set_status(Status::InternalError(
+                    fmt::format("Offset column generate by subdivide_bitmap reach limit, {}", st.message())));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return {};
         }
         dst_columns.emplace_back(std::move(dst_bitmap_col));

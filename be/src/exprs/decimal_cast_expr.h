@@ -248,7 +248,11 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
         for (int i = 0; i < num_rows; ++i) {
             bool overflow = false;
             if constexpr (lt_is_boolean<NonDecimalType>) {
+<<<<<<< HEAD
                 static constexpr DecimalCppType zero = DecimalCppType(0);
+=======
+                static constexpr auto zero = DecimalCppType(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 result_data[i] = (data[i] != zero);
             } else if constexpr (lt_is_integer<NonDecimalType>) {
                 overflow = DecimalV3Cast::to_integer<DecimalCppType, NonDecimalCppType, check_overflow<overflow_mode>>(

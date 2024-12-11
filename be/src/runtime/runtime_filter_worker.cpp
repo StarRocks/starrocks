@@ -14,14 +14,26 @@
 
 #include "runtime/runtime_filter_worker.h"
 
+<<<<<<< HEAD
 #include <random>
 #include <utility>
 
+=======
+#include <cstddef>
+#include <random>
+#include <utility>
+
+#include "column/bytes.h"
+#include "common/config.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/pipeline/query_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -31,6 +43,11 @@
 #include "service/backend_options.h"
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
+<<<<<<< HEAD
+=======
+#include "util/internal_service_recoverable_stub.h"
+#include "util/metrics.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/thread.h"
 #include "util/time.h"
 
@@ -58,7 +75,11 @@ static inline std::pair<pipeline::QueryContextPtr, std::shared_ptr<MemTracker>> 
 
 static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRpcClosure* rpc_closure, int timeout_ms,
                                     int64_t http_min_size, const PTransmitRuntimeFilterParams& request) {
+<<<<<<< HEAD
     doris::PBackendService_Stub* stub = nullptr;
+=======
+    std::shared_ptr<PInternalService_RecoverableStub> stub = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool via_http = request.data().size() >= http_min_size;
     if (via_http) {
         if (auto res = HttpBrpcStubCache::getInstance()->get_http_stub(dest); res.ok()) {
@@ -86,6 +107,10 @@ void RuntimeFilterPort::add_listener(RuntimeFilterProbeDescriptor* rf_desc) {
     auto& wait_list = _listeners.find(rf_id)->second;
     wait_list.emplace_back(rf_desc);
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 std::string RuntimeFilterPort::listeners(int32_t filter_id) {
     std::stringstream ss;
     if (!_listeners.count(filter_id)) {
@@ -187,6 +212,18 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<RuntimeFilterBuildDesc
     }
 }
 
+<<<<<<< HEAD
+=======
+void RuntimeFilterPort::publish_local_colocate_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs) {
+    RuntimeState* state = _state;
+    for (auto* rf_desc : rf_descs) {
+        auto* filter = rf_desc->runtime_filter();
+        if (filter == nullptr) continue;
+        state->runtime_filter_port()->receive_runtime_filter(rf_desc->filter_id(), filter);
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const JoinRuntimeFilter* rf) {
     _state->exec_env()->add_rf_event({
             _state->query_id(),
@@ -364,6 +401,10 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         out->clear_bf();
     }
 
+<<<<<<< HEAD
+=======
+    out->set_global();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (auto it : status->filters) {
         out->concat(it.second);
     }
@@ -430,12 +471,20 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     {
         const auto it = nodes_to_frag_insts.find(local);
         if (it != nodes_to_frag_insts.end()) {
+<<<<<<< HEAD
             targets.emplace_back(make_pair(it->first, it->second));
+=======
+            targets.emplace_back(it->first, it->second);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     for (const auto& it : nodes_to_frag_insts) {
         if (it.first != local) {
+<<<<<<< HEAD
             targets.emplace_back(make_pair(it.first, it.second));
+=======
+            targets.emplace_back(it.first, it.second);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -538,6 +587,13 @@ void RuntimeFilterWorker::close() {
 void RuntimeFilterWorker::open_query(const TUniqueId& query_id, const TQueryOptions& query_options,
                                      const TRuntimeFilterParams& params, bool is_pipeline) {
     VLOG_FILE << "RuntimeFilterWorker::open_query. query_id = " << query_id << ", params = " << params;
+<<<<<<< HEAD
+=======
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop open query_id = " << query_id;
+        return;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RuntimeFilterWorkerEvent ev;
     ev.type = OPEN_QUERY;
     ev.query_id = query_id;
@@ -557,9 +613,39 @@ void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
     _queue.put(std::move(ev));
 }
 
+<<<<<<< HEAD
 void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                    const std::vector<TNetworkAddress>& addrs, int timeout_ms,
                                                    int64_t rpc_http_min_size) {
+=======
+bool RuntimeFilterWorker::_reach_queue_limit() {
+    if (config::runtime_filter_queue_limit > 0) {
+        if (_queue.get_size() > config::runtime_filter_queue_limit) {
+            LOG(WARNING) << "runtime filter worker queue size is too large(" << _queue.get_size()
+                         << "), queue limit = " << config::runtime_filter_queue_limit;
+            return true;
+        }
+    } else if (config::runtime_filter_queue_limit == 0) {
+        int64_t mem_usage = _metrics->total_rf_bytes();
+        auto tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
+        if (tracker->limit_exceeded_precheck(mem_usage)) {
+            LOG(WARNING) << "runtime filter worker queue mem-useage is too large(" << mem_usage
+                         << "), query pool consum(" << tracker->consumption() << "), limit(" << tracker->limit() << ")";
+            return true;
+        }
+    }
+    return false;
+}
+
+void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
+                                                   const std::vector<TNetworkAddress>& addrs, int timeout_ms,
+                                                   int64_t rpc_http_min_size) {
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop part runtime filter, query_id = " << params.query_id()
+                     << ", filter_id = " << params.filter_id();
+        return;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_PART_RF"});
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_PART_RF;
@@ -575,6 +661,14 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
 void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                         const std::vector<TRuntimeFilterDestination>& destinations,
                                                         int timeout_ms, int64_t rpc_http_min_size) {
+<<<<<<< HEAD
+=======
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop broadcast runtime filter, query_id = " << params.query_id()
+                     << ", filter_id = " << params.filter_id();
+        return;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_BROADCAST_RF"});
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_BROADCAST_GRF;
@@ -593,6 +687,14 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
               << ", filter_id = " << params.filter_id() << ", # probe insts = " << params.probe_finst_ids_size()
               << ", is_pipeline = " << params.is_pipeline();
 
+<<<<<<< HEAD
+=======
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop receive runtime filter, query_id = " << params.query_id()
+                     << ", filter_id = " << params.filter_id();
+        return;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RuntimeFilterWorkerEvent ev;
     if (params.is_partial()) {
         _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "RECV_PART_RF"});
@@ -610,8 +712,13 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
 }
 
 // receive total runtime filter in pipeline engine.
+<<<<<<< HEAD
 static inline Status receive_total_runtime_filter_pipeline(PTransmitRuntimeFilterParams& params,
                                                            const std::shared_ptr<JoinRuntimeFilter>& shared_rf) {
+=======
+static inline void receive_total_runtime_filter_pipeline(PTransmitRuntimeFilterParams& params,
+                                                         const std::shared_ptr<JoinRuntimeFilter>& shared_rf) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto& pb_query_id = params.query_id();
     TUniqueId query_id;
     query_id.hi = pb_query_id.hi();
@@ -629,11 +736,19 @@ static inline Status receive_total_runtime_filter_pipeline(PTransmitRuntimeFilte
     // race condition exists among rf caching, FragmentContext's registration and OperatorFactory's preparation
     query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(query_id);
     if (!query_ctx) {
+<<<<<<< HEAD
         return Status::OK();
     }
     // the query is already finished, so it is needless to cache rf.
     if (query_ctx->has_no_active_instances() || query_ctx->is_query_expired()) {
         return Status::OK();
+=======
+        return;
+    }
+    // the query is already finished, so it is needless to cache rf.
+    if (query_ctx->has_no_active_instances() || query_ctx->is_query_expired()) {
+        return;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     auto& probe_finst_ids = params.probe_finst_ids();
@@ -667,7 +782,10 @@ static inline Status receive_total_runtime_filter_pipeline(PTransmitRuntimeFilte
                                      fragment_ctx->runtime_filter_port()->listeners(params.filter_id()),
                                      print_id(finst_id))});
     }
+<<<<<<< HEAD
     return Status::OK();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterParams& request) {
@@ -681,6 +799,10 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
     if (rf == nullptr) {
         return;
     }
+<<<<<<< HEAD
+=======
+    rf->set_global();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::shared_ptr<JoinRuntimeFilter> shared_rf(rf);
     // for pipeline engine
     if (request.has_is_pipeline() && request.is_pipeline()) {
@@ -884,9 +1006,12 @@ void RuntimeFilterWorker::execute() {
             break;
         }
 
+<<<<<<< HEAD
         LOG_IF_EVERY_N(INFO, _queue.get_size() > CpuInfo::num_cores() * 10, 10)
                 << "runtime filter worker queue may be too large, size: " << _queue.get_size();
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _metrics->update_event_nums(ev.type, -1);
         switch (ev.type) {
         case RECEIVE_TOTAL_RF: {
@@ -912,7 +1037,11 @@ void RuntimeFilterWorker::execute() {
             RuntimeFilterMerger merger(_exec_env, UniqueId(ev.query_id), ev.query_options, ev.is_opened_by_pipeline);
             Status st = merger.init(ev.create_rf_merger_request);
             if (!st.ok()) {
+<<<<<<< HEAD
                 VLOG_QUERY << "open query: rf merger initialization failed. error = " << st.get_error_msg();
+=======
+                VLOG_QUERY << "open query: rf merger initialization failed. error = " << st.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             }
             _mergers.insert(std::make_pair(ev.query_id, std::move(merger)));
@@ -954,4 +1083,11 @@ void RuntimeFilterWorker::execute() {
     LOG(INFO) << "RuntimeFilterWorker going to exit.";
 }
 
+<<<<<<< HEAD
+=======
+size_t RuntimeFilterWorker::queue_size() const {
+    return _queue.get_size();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

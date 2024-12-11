@@ -530,7 +530,11 @@ GROUP BY lo_orderkey, c_name;
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                                    |
 | percentile_approx, percentile_union                    | percentile_union                                             |
 
+<<<<<<< HEAD
 没有相应 GROUP BY 列的 DISTINCT 聚合无法使用聚合上卷查询改写。但是，从 StarRocks v3.1 开始，如果聚合上卷对应 DISTINCT 聚合函数的查询没有 GROUP BY 列，但有等价的谓词，该查询也可以被相关物化视图重写，因为 StarRocks 可以将等价谓词转换为 GROUP BY 常量表达式。
+=======
+没有相应 GROUP BY 列的 DISTINCT 聚合无法使用聚合上卷查询改写。但是，从 StarRocks v3.1 开始，如果聚合上卷对应 DISTINCT 聚合函数的查询没有 GROUP BY 列，但有等价的谓词，该查询也可以被相关物化视图改写，因为 StarRocks 可以将等价谓词转换为 GROUP BY 常量表达式。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 在以下示例中，StarRocks 可以使用物化视图 `order_agg_mv1` 改写对应查询 Query：
 
@@ -553,6 +557,92 @@ SELECT
 FROM order_list WHERE order_date='2023-07-03';
 ```
 
+<<<<<<< HEAD
+=======
+### 聚合下推
+
+从 v3.3.0 版本开始，StarRocks 支持物化视图查询改写的聚合下推功能。启用此功能后，聚合函数将在查询执行期间下推至 Scan Operator，并在执行 Join Operator 之前被物化视图改写。此举可以缓解 Join 操作导致的数据膨胀，从而提高查询性能。
+
+系统默认禁用该功能。要启用此功能，必须将系统变量 `enable_materialized_view_agg_pushdown_rewrite` 设置为 `true`。
+
+假设需要加速以下基于 SSB 的查询 `SQL1`：
+
+```sql
+-- SQL1
+SELECT 
+    LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE)
+FROM lineorder l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE 
+ORDER BY LO_ORDERDATE;
+```
+
+`SQL1` 包含 `lineorder` 表内的聚合以及 `lineorder` 和 `dates` 表之间的 Join。聚合发生在 `lineorder` 内部，与 `dates` 的 Join 仅用于数据过滤。所以 `SQL1` 在逻辑上等同于以下 `SQL2`：
+
+```sql
+-- SQL2
+SELECT 
+    LO_ORDERDATE, sum(sum1), max(max1), bitmap_union_count(bitmap1)
+FROM 
+ (SELECT
+  LO_ORDERDATE,  sum(LO_REVENUE) AS sum1, max(LO_REVENUE) AS max1, bitmap_union(to_bitmap(LO_REVENUE)) AS bitmap1
+  FROM lineorder 
+  GROUP BY LO_ORDERDATE) l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE 
+ORDER BY LO_ORDERDATE;
+```
+
+`SQL2` 将聚合提前，大量减少 Join 的数据量。您可以基于 `SQL2` 的子查询创建物化视图，并启用聚合下推以改写和加速聚合：
+
+```sql
+-- 创建物化视图 mv0
+CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS
+SELECT
+  LO_ORDERDATE, 
+  sum(LO_REVENUE) AS sum1, 
+  max(LO_REVENUE) AS max1, 
+  bitmap_union(to_bitmap(LO_REVENUE)) AS bitmap1
+FROM lineorder 
+GROUP BY LO_ORDERDATE;
+
+-- 启用聚合下推
+SET enable_materialized_view_agg_pushdown_rewrite=true;
+```
+
+此时，`SQL1` 将通过物化视图进行改写和加速。改写后的查询如下：
+
+```sql
+SELECT 
+    LO_ORDERDATE, sum(sum1), max(max1), bitmap_union_count(bitmap1)
+FROM 
+ (SELECT LO_ORDERDATE, sum1, max1, bitmap1 FROM mv0) l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE
+ORDER BY LO_ORDERDATE;
+```
+
+请注意，只有部分支持聚合上卷改写的聚合函数可以下推。目前支持下推的聚合函数有：
+
+- MIN
+- MAX
+- COUNT
+- COUNT DISTINCT
+- SUM
+- BITMAP_UNION
+- HLL_UNION
+- PERCENTILE_UNION
+- BITMAP_AGG
+- ARRAY_AGG_DISTINCT
+
+:::note
+- 下推后的聚合函数需要进行上卷才能对齐原始语义。有关聚合上卷的更多说明，请参阅 [聚合上卷改写](#聚合上卷改写)。
+- 聚合下推支持基于 Bitmap 或 HLL 函数的 Count Distinct 上卷改写。
+- 聚合下推仅支持将查询中的聚合函数下推至 Join/Filter/Where Operator 之下的 Scan Operator 之上。
+- 聚合下推仅支持基于单张表构建的物化视图进行查询改写和加速。
+:::
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ### COUNT DISTINCT 改写
 
 StarRocks 支持将 COUNT DISTINCT 计算改写为 BITMAP 类型的计算，从而使用物化视图实现高性能、精确的去重。例如，创建以下物化视图：
@@ -707,6 +797,7 @@ GROUP BY lo_orderkey;
 
 如上所示，`agg_mv5` 包含来自分区 `p1` 到 `p7` 的数据，而分区 `p8` 的数据来源于 `lineorder`。最后，这两组数据使用 UNION 操作合并。
 
+<<<<<<< HEAD
 ## 基于视图构建物化视图
 
 StarRocks 支持基于视图创建物化视图。后续针对视图的查询可以被透明改写。
@@ -737,11 +828,401 @@ ON lo_custkey = c_custkey;
 ```
 
 查询改写过程中，针对 `customer_view1` 和 `lineorder_view1` 的查询会自动展开到基表，然后进行透明匹配改写。
+=======
+## 基于视图的物化视图查询改写
+
+自 v3.1.0 起，StarRocks 支持基于视图创建物化视图。如果基于视图的查询为 SPJG 类型，StarRocks 将会内联展开查询，然后进行改写。默认情况下，对视图的查询会自动展开为对视图的基表的查询，然后进行透明匹配和改写。
+
+然而，在实际场景中，数据分析师可能会基于复杂的嵌套视图进行数据建模，这些视图无法直接展开。因此，基于这些视图创建的物化视图无法改写查询。为了改进在上述情况下的能力，从 v3.3.0 开始，StarRock 优化了基于视图的物化视图查询改写逻辑。
+
+### 基本原理
+
+在先前的查询改写逻辑中，StarRocks 会将基于视图的查询展开为针对视图基表的查询。如果展开后查询的执行计划与 SPJG 模式不匹配，物化视图将无法改写查询。
+
+为了解决这个问题，StarRocks 引入了一个新的算子 - LogicalViewScanOperator，该算子用于简化执行计划树的结构，且无需展开查询，使查询执行计划树尽量满足 SPJG 模式，从而优化查询改写。
+
+以下示例展示了一个包含聚合子查询的查询，一个建立在子查询之上的视图，基于视图展开之后的查询，以及建立在视图之上的物化视图：
+
+```SQL
+-- 原始查询：
+SELECT 
+  v1.a,
+  t2.b,
+  v1.total
+FROM(
+  SELECT 
+    a,
+    sum(c) AS total
+  FROM t1
+  GROUP BY a
+) v1
+INNER JOIN t2 ON v1.a = t2.a;
+
+-- 视图：
+CREATE VIEW view_1 AS
+SELECT 
+  t1.a,
+  sum(t1.c) AS total
+FROM t1
+GROUP BY t1.a;
+    
+-- 展开后的查询
+SELECT 
+  v1.a,
+  t2.b,
+  v1.total
+FROM view_1 v1
+JOIN t2 ON v1.a = t2.a;
+    
+-- 物化视图：
+CREATE MATERIALIZED VIEW mv1
+DISTRIBUTED BY hash(a)
+REFRESH MANUAL
+AS
+SELECT 
+  v1.a,
+  t2.b,
+  v1.total
+FROM view_1 v1
+JOIN t2 ON v1.a = t2.a;
+```
+
+原始查询的执行计划如下图左侧所示。由于 JOIN 内的 LogicalAggregateOperator 与 SPJG 模式不匹配，StarRocks 不支持这种情况下的查询改写。然而，如果将子查询定义为一个视图，原始查询可以展开为针对该视图的查询。通过 LogicalViewScanOperator，StarRocks 可以将不匹配的部分转换为 SPJG 模式，从而允许改写查询。
+
+![img](../../../_assets/Rewrite-view-based.png)
+
+### 使用
+
+StarRocks 默认禁用基于视图的物化视图查询改写。
+
+要启用此功能，您必须设置以下变量：
+
+```SQL
+SET enable_view_based_mv_rewrite = true;
+```
+
+### 使用场景
+
+#### 基于单个视图的物化视图查询改写
+
+StarRocks 支持通过基于单个视图的物化视图进行查询改写，包括聚合查询。
+
+例如，您可以为 TPC-H Query 18 构建以下视图和物化视图：
+
+```SQL
+CREATE VIEW q18_view
+AS
+SELECT
+  c_name,
+  c_custkey,
+  o_orderkey,
+  o_orderdate,
+  o_totalprice,
+  sum(l_quantity)
+FROM
+  customer,
+  orders,
+  lineitem
+WHERE
+  o_orderkey IN (
+    SELECT
+      l_orderkey
+    FROM
+      lineitem
+    GROUP BY
+      l_orderkey having
+        sum(l_quantity) > 315
+  )
+  AND c_custkey = o_custkey
+  AND o_orderkey = l_orderkey
+GROUP BY
+    c_name,
+    c_custkey,
+    o_orderkey,
+    o_orderdate,
+    o_totalprice;
+
+CREATE MATERIALIZED VIEW q18_mv
+DISTRIBUTED BY hash(c_custkey, o_orderkey)
+REFRESH MANUAL
+AS
+SELECT * FROM q18_view;
+```
+
+物化视图可以改写以下两个查询：
+
+```Plain
+mysql> EXPLAIN LOGICAL SELECT * FROM q18_view;
++-------------------------------------------------------------------------------------------------------+
+| Explain String                                                                                        |
++-------------------------------------------------------------------------------------------------------+
+| - Output => [2:c_name, 1:c_custkey, 9:o_orderkey, 10:o_orderdate, 13:o_totalprice, 52:sum]            |
+|     - SCAN [q18_mv] => [1:c_custkey, 2:c_name, 52:sum, 9:o_orderkey, 10:o_orderdate, 13:o_totalprice] |
+              # highlight-start
+|             MaterializedView: true                                                                    |
+              # highlight-end
+|             Estimates: {row: 9, cpu: 486.00, memory: 0.00, network: 0.00, cost: 243.00}               |
+|             partitionRatio: 1/1, tabletRatio: 96/96                                                   |
+|             1:c_custkey := 60:c_custkey                                                               |
+|             2:c_name := 59:c_name                                                                     |
+|             52:sum := 64:sum(l_quantity)                                                              |
+|             9:o_orderkey := 61:o_orderkey                                                             |
+|             10:o_orderdate := 62:o_orderdate                                                          |
+|             13:o_totalprice := 63:o_totalprice                                                        |
++-------------------------------------------------------------------------------------------------------+
+```
+
+```Plain
+mysql> EXPLAIN LOGICAL SELECT c_name, sum(`sum(l_quantity)`) FROM q18_view GROUP BY c_name;
++-----------------------------------------------------------------------------------------------------+
+| Explain String                                                                                      |
++-----------------------------------------------------------------------------------------------------+
+| - Output => [2:c_name, 59:sum]                                                                      |
+|     - AGGREGATE(GLOBAL) [2:c_name]                                                                  |
+|             Estimates: {row: 9, cpu: 306.00, memory: 306.00, network: 0.00, cost: 1071.00}          |
+|             59:sum := sum(59:sum)                                                                   |
+|         - EXCHANGE(SHUFFLE) [2]                                                                     |
+|                 Estimates: {row: 9, cpu: 30.60, memory: 0.00, network: 30.60, cost: 306.00}         |
+|             - AGGREGATE(LOCAL) [2:c_name]                                                           |
+|                     Estimates: {row: 9, cpu: 61.20, memory: 30.60, network: 0.00, cost: 244.80}     |
+|                     59:sum := sum(52:sum)                                                           |
+|                 - SCAN [q18_mv] => [2:c_name, 52:sum]                                               |
+                          # highlight-start
+|                         MaterializedView: true                                                      |
+                          # highlight-end
+|                         Estimates: {row: 9, cpu: 306.00, memory: 0.00, network: 0.00, cost: 153.00} |
+|                         partitionRatio: 1/1, tabletRatio: 96/96                                     |
+|                         2:c_name := 60:c_name                                                       |
+|                         52:sum := 65:sum(l_quantity)                                                |
++-----------------------------------------------------------------------------------------------------+
+```
+
+#### 基于视图的物化视图改写 JOIN 查询
+
+StarRocks 支持对包含视图之间或视图与表之间的 JOIN 的查询进行改写，包括在 JOIN 上进行聚合。
+
+例如，您可以创建以下视图和物化视图：
+
+```SQL
+CREATE VIEW view_1 AS
+SELECT 
+  l_partkey,
+  l_suppkey,
+  sum(l_quantity) AS total_quantity
+FROM lineitem
+GROUP BY 
+  l_partkey,
+  l_suppkey;
+
+
+CREATE VIEW view_2 AS
+SELECT 
+  l_partkey,
+  l_suppkey,
+   sum(l_tax) AS total_tax
+FROM lineitem
+GROUP BY 
+  l_partkey,
+  l_suppkey;
+
+
+CREATE MATERIALIZED VIEW mv_1 
+DISTRIBUTED BY hash(l_partkey, l_suppkey) 
+REFRESH MANUAL AS
+SELECT 
+  v1.l_partkey,
+  v2.l_suppkey,
+  total_quantity,
+  total_tax
+FROM view_1 v1
+JOIN view_2 v2 ON v1.l_partkey = v2.l_partkey
+AND v1.l_suppkey = v2.l_suppkey;
+```
+
+物化视图可以改写以下两个查询：
+
+```Plain
+mysql>  EXPLAIN LOGICAL
+    -> SELECT v1.l_partkey,
+    ->        v2.l_suppkey,
+    ->        total_quantity,
+    ->        total_tax
+    -> FROM view_1 v1
+    -> JOIN view_2 v2 ON v1.l_partkey = v2.l_partkey
+    -> AND v1.l_suppkey = v2.l_suppkey;
++--------------------------------------------------------------------------------------------------------+
+| Explain String                                                                                         |
++--------------------------------------------------------------------------------------------------------+
+| - Output => [4:l_partkey, 25:l_suppkey, 17:sum, 37:sum]                                                |
+|     - SCAN [mv_1] => [17:sum, 4:l_partkey, 37:sum, 25:l_suppkey]                                       |
+              # highlight-start
+|             MaterializedView: true                                                                     |
+              # highlight-end
+|             Estimates: {row: 799541, cpu: 31981640.00, memory: 0.00, network: 0.00, cost: 15990820.00} |
+|             partitionRatio: 1/1, tabletRatio: 96/96                                                    |
+|             17:sum := 43:total_quantity                                                                |
+|             4:l_partkey := 41:l_partkey                                                                |
+|             37:sum := 44:total_tax                                                                     |
+|             25:l_suppkey := 42:l_suppkey                                                               |
++--------------------------------------------------------------------------------------------------------+
+```
+
+```Plain
+mysql> EXPLAIN LOGICAL
+    -> SELECT v1.l_partkey,
+    ->        sum(total_quantity),
+    ->        sum(total_tax)
+    -> FROM view_1 v1
+    -> JOIN view_2 v2 ON v1.l_partkey = v2.l_partkey
+    -> AND v1.l_suppkey = v2.l_suppkey
+    -> group by v1.l_partkey;
++--------------------------------------------------------------------------------------------------------------------+
+| Explain String                                                                                                     |
++--------------------------------------------------------------------------------------------------------------------+
+| - Output => [4:l_partkey, 41:sum, 42:sum]                                                                          |
+|     - AGGREGATE(GLOBAL) [4:l_partkey]                                                                              |
+|             Estimates: {row: 196099, cpu: 4896864.00, memory: 3921980.00, network: 0.00, cost: 29521223.20}        |
+|             41:sum := sum(41:sum)                                                                                  |
+|             42:sum := sum(42:sum)                                                                                  |
+|         - EXCHANGE(SHUFFLE) [4]                                                                                    |
+|                 Estimates: {row: 136024, cpu: 489686.40, memory: 0.00, network: 489686.40, cost: 19228831.20}      |
+|             - AGGREGATE(LOCAL) [4:l_partkey]                                                                       |
+|                     Estimates: {row: 136024, cpu: 5756695.20, memory: 489686.40, network: 0.00, cost: 18249458.40} |
+|                     41:sum := sum(17:sum)                                                                          |
+|                     42:sum := sum(37:sum)                                                                          |
+|                 - SCAN [mv_1] => [17:sum, 4:l_partkey, 37:sum]                                                     |
+                          # highlight-start
+|                         MaterializedView: true                                                                     |
+                          # highlight-end
+|                         Estimates: {row: 799541, cpu: 28783476.00, memory: 0.00, network: 0.00, cost: 14391738.00} |
+|                         partitionRatio: 1/1, tabletRatio: 96/96                                                    |
+|                         17:sum := 45:total_quantity                                                                |
+|                         4:l_partkey := 43:l_partkey                                                                |
+|                         37:sum := 46:total_tax                                                                     |
++--------------------------------------------------------------------------------------------------------------------+
+```
+
+#### 基于视图的物化视图改写外表查询
+
+您可以在 External Catalog 中的外表上构建视图，然后基于这些视图构建物化视图来改写查询。其使用方式类似于内部表。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## 基于 External Catalog 构建物化视图
 
 StarRocks 支持基于 Hive Catalog、Hudi Catalog、Iceberg Catalog 和 Paimon Catalog 的外部数据源上构建异步物化视图，并支持透明地改写查询。
 
+<<<<<<< HEAD
+=======
+## 基于文本的物化视图改写
+
+自 v3.3.0 起，StarRocks 支持基于文本的物化视图改写，极大地拓展了自身的查询改写能力。
+
+### 基本原理
+
+为实现基于文本的物化视图改写，StarRocks 将对查询（或其子查询）的抽象语法树与物化视图定义的抽象语法树进行比较。当双方匹配时，StarRocks 就可以基于物化视图改写该查询。基于文本的物化视图改写简单高效，与常规的 SPJG 类型物化视图查询改写相比限制更少。正确使用此功能可显著增强查询性能。
+
+基于文本的物化视图改写不仅支持 SPJG 类型算子，还支持 Union、Window、Order、Limit 和 CTE 等算子。
+
+### 使用
+
+StarRocks 默认启用基于文本的物化视图改写。您可以通过将变量 `enable_materialized_view_text_match_rewrite` 设置为 `false` 来手动禁用此功能。
+
+FE 配置项 `enable_materialized_view_text_based_rewrite` 用于控制是否在创建异步物化视图时构建抽象语法树。此功能默认启用。将此项设置为 `false` 将在系统级别禁用基于文本的物化视图改写。
+
+变量 `materialized_view_subuqery_text_match_max_count` 用于控制系统比对子查询是否与物化视图定义匹配的最大次数。默认值为 `4`。增加此值同时也会增加优化器的耗时。
+
+请注意，只有当物化视图满足时效性（数据一致性）要求时，才能用于基于文本的查询改写。您可以在创建物化视图时通过属性 `query_rewrite_consistency`手动设置一致性检查规则。更多信息，请参考 [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。
+
+### **使用场景**
+
+符合以下情况的查询可以被改写：
+
+- 原始查询与物化视图的定义一致。
+- 原始查询的子查询与物化视图的定义一致。
+
+与常规的 SPJG 类型物化视图查询改写相比，基于文本的物化视图改写支持更复杂的查询，例如多层聚合。
+
+:::info
+
+- 建议您将需要匹配的查询封装至原始查询的子查询中。
+- 请不要在物化视图的定义或原始查询的子查询中封装 ORDER BY 子句，否则查询将无法被改写。这是由于子查询中的 ORDER BY 子句会默认被消除。
+
+:::
+
+例如，您可以构建以下物化视图：
+
+```SQL
+CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS
+SELECT 
+  user_id, 
+  count(1) 
+FROM (
+  SELECT 
+    user_id, 
+    time, 
+    bitmap_union(to_bitmap(tag_id)) AS a
+  FROM user_tags 
+  GROUP BY 
+    user_id, 
+    time) t
+GROUP BY user_id;
+```
+
+该物化视图可以改写以下两个查询：
+
+```SQL
+SELECT 
+  user_id, 
+  count(1) 
+FROM (
+  SELECT 
+    user_id, 
+    time, 
+    bitmap_union(to_bitmap(tag_id)) AS a
+  FROM user_tags 
+  GROUP BY 
+    user_id, 
+    time) t
+GROUP BY user_id;
+SELECT count(1)
+FROM
+（
+    SELECT 
+      user_id, 
+      count(1) 
+    FROM (
+      SELECT 
+        user_id, 
+        time, 
+        bitmap_union(to_bitmap(tag_id)) AS a
+      FROM user_tags 
+      GROUP BY 
+        user_id, 
+        time) t
+    GROUP BY user_id
+）m;
+```
+
+但是该物化视图无法改写以下包含 ORDER BY 子句的查询：
+
+```SQL
+SELECT 
+  user_id, 
+  count(1) 
+FROM (
+  SELECT 
+    user_id, 
+    time, 
+    bitmap_union(to_bitmap(tag_id)) AS a
+  FROM user_tags 
+  GROUP BY 
+    user_id, 
+    time) t
+GROUP BY user_id
+ORDER BY user_id;
+```
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ## 设置物化视图查询改写
 
 您可以通过以下 Session 变量设置异步物化视图查询改写。
@@ -804,3 +1285,20 @@ StarRocks 默认开启基于 Default Catalog 创建的异步物化视图查询�
 - 如果物化视图定义语句中包含 LIMIT、ORDER BY、UNION、EXCEPT、INTERSECT、MINUS、GROUPING SETS、WITH CUBE 或 WITH ROLLUP，则无法用于改写。
 - 基于 External Catalog 的物化视图不保证查询结果强一致。
 - 基于 JDBC Catalog 表构建的异步物化视图暂不支持查询改写。
+<<<<<<< HEAD
+=======
+
+针对基于视图的物化视图查询改写，StarRocks 目前存在以下限制：
+
+- 目前，StarRocks 不支持分区 Union 改写。
+- 如果视图包含随机函数，则不支持查询改写，包括 rand()、random()、uuid() 和 sleep()。
+- 如果视图包含具有相同名称的列，则不支持查询改写。您必须为具有相同名称的列设置不同的别名。
+- 用于创建物化视图的视图必须至少包含以下数据类型之一的列：整数类型、日期类型和字符串类型。以下示例中，因为 `total_cost` 为 DOUBLE 类型的列，所以无法创建查询该视图的物化视图。
+
+  ```SQL
+  CREATE VIEW v1 
+  AS 
+  SELECT sum(cost) AS total_cost
+  FROM t1;
+  ```
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

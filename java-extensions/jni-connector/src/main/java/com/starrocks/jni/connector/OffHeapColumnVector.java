@@ -16,8 +16,19 @@ package com.starrocks.jni.connector;
 
 import com.starrocks.utils.Platform;
 
+<<<<<<< HEAD
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+=======
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 
 /**
@@ -59,6 +70,12 @@ public class OffHeapColumnVector {
 
     private OffHeapColumnVector[] childColumns;
 
+<<<<<<< HEAD
+=======
+    // Only for test，record the size of the NULL indicator
+    private int nullsLength = 0;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public OffHeapColumnVector(int capacity, ColumnType type) {
         this.capacity = capacity;
         this.type = type;
@@ -136,18 +153,45 @@ public class OffHeapColumnVector {
             this.data = Platform.reallocateMemory(data, oldCapacity * typeSize, newCapacity * typeSize);
         } else if (type.isByteStorageType()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
+<<<<<<< HEAD
             int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
             this.childColumns = new OffHeapColumnVector[1];
             this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data",
                     ColumnType.TypeValue.BYTE));
+=======
+            // Just create a new object at the first time, otherwise the data will be lost during expansion,
+            // and because the OFFSET record is continuous, the new offset address starts from 0 during the 
+            // expansion, which will cause the offset records to be negatively numbered. After being passed
+            // to BE, it becomes a non-sign number. This is a very huge number. When processing, the array 
+            // will cross the boundary, which may cause crash.
+            //
+            // The child's capacity is not expanded here because the child's appendValue function is used 
+            // to add data to it will automatically expand.
+            if (this.childColumns == null) {
+                int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
+                this.childColumns = new OffHeapColumnVector[1];
+                this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data",
+                        ColumnType.TypeValue.BYTE));
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else if (type.isArray() || type.isMap() || type.isStruct()) {
             if (type.isArray() || type.isMap()) {
                 this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             }
+<<<<<<< HEAD
             int size = type.childTypes.size();
             this.childColumns = new OffHeapColumnVector[size];
             for (int i = 0; i < size; i++) {
                 this.childColumns[i] = new OffHeapColumnVector(newCapacity, type.childTypes.get(i));
+=======
+            // Same as the above
+            if (this.childColumns == null) {
+                int size = type.childTypes.size();
+                this.childColumns = new OffHeapColumnVector[size];
+                for (int i = 0; i < size; i++) {
+                    this.childColumns[i] = new OffHeapColumnVector(newCapacity, type.childTypes.get(i));
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         } else {
             throw new RuntimeException("Unhandled type: " + type);
@@ -155,7 +199,11 @@ public class OffHeapColumnVector {
         this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
         Platform.setMemory(nulls + oldCapacity, (byte) 0, newCapacity - oldCapacity);
         capacity = newCapacity;
+<<<<<<< HEAD
 
+=======
+        this.nullsLength = capacity;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (offsetData != 0) {
             // offsetData[0] == 0 always.
             // we have to set it explicitly otherwise it's undefined value here.
@@ -207,6 +255,15 @@ public class OffHeapColumnVector {
             putArrayOffset(elementsAppended, offset, 0);
         }
 
+<<<<<<< HEAD
+=======
+        if (type.isStruct()) {
+            for (int i = 0; i < childColumns.length; i++) {
+                childColumns[i].appendValue(null);
+            }
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return elementsAppended++;
     }
 
@@ -313,6 +370,35 @@ public class OffHeapColumnVector {
         return Platform.getDouble(null, data + rowId * 8L);
     }
 
+<<<<<<< HEAD
+=======
+    public int appendDecimal(BigDecimal value) {
+        reserve(elementsAppended + 1);
+        putDecimal(elementsAppended, value);
+        return elementsAppended++;
+    }
+
+    private void putDecimal(int rowId, BigDecimal value) {
+        int typeSize = type.getPrimitiveTypeValueSize();
+        BigInteger dataValue = value.setScale(type.getScale(), RoundingMode.UNNECESSARY).unscaledValue();
+        byte[] bytes = changeByteOrder(dataValue.toByteArray());
+        byte[] newValue = new byte[typeSize];
+        if (dataValue.signum() == -1) {
+            Arrays.fill(newValue, (byte) -1);
+        }
+        System.arraycopy(bytes, 0, newValue, 0, Math.min(bytes.length, newValue.length));
+        Platform.copyMemory(newValue, Platform.BYTE_ARRAY_OFFSET, null, data + rowId * typeSize, typeSize);
+    }
+
+    public BigDecimal getDecimal(int rowId) {
+        int typeSize = type.getPrimitiveTypeValueSize();
+        byte[] bytes = new byte[typeSize];
+        Platform.copyMemory(null, data + (long) rowId * typeSize, bytes, Platform.BYTE_ARRAY_OFFSET, typeSize);
+        BigInteger value = new BigInteger(changeByteOrder(bytes));
+        return new BigDecimal(value, type.getScale());
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private void putBytes(int rowId, int count, byte[] src, int srcIndex) {
         Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, null, data + rowId, count);
     }
@@ -407,9 +493,30 @@ public class OffHeapColumnVector {
         for (int i = 0; i < childColumns.length; i++) {
             childColumns[i].appendValue(values.get(i));
         }
+<<<<<<< HEAD
         return elementsAppended++;
     }
 
+=======
+        // for nulls indicator
+        reserve(elementsAppended + 1);
+        return elementsAppended++;
+    }
+
+    public int appendDate(LocalDate v) {
+        reserve(elementsAppended + 1);
+        int date = convertToDate(v.getYear(), v.getMonthValue(), v.getDayOfMonth());
+        return appendInt(date);
+    }
+
+    public int appendDateTime(LocalDateTime v) {
+        reserve(elementsAppended + 1);
+        long datetime = convertToDateTime(v.getYear(), v.getMonthValue(), v.getDayOfMonth(), v.getHour(),
+                v.getMinute(), v.getSecond(), v.getNano() / 1000);
+        return appendLong(datetime);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void updateMeta(OffHeapColumnVector meta) {
         if (type.isUnknown()) {
             meta.appendLong(0);
@@ -435,6 +542,7 @@ public class OffHeapColumnVector {
         ColumnType.TypeValue typeValue = type.getTypeValue();
         if (o == null) {
             appendNull();
+<<<<<<< HEAD
             if (type.isStruct()) {
                 List<ColumnValue> nulls = new ArrayList<>();
                 for (int i = 0; i < type.childTypes.size(); i++) {
@@ -442,6 +550,8 @@ public class OffHeapColumnVector {
                 }
                 appendStruct(nulls);
             }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return;
         }
 
@@ -471,6 +581,7 @@ public class OffHeapColumnVector {
                 appendBinary(o.getBytes());
                 break;
             case STRING:
+<<<<<<< HEAD
             case DATE:
             case DECIMAL:
                 appendString(o.getString(typeValue));
@@ -479,6 +590,23 @@ public class OffHeapColumnVector {
             case DATETIME_MICROS:
             case DATETIME_MILLIS:
                 appendString(o.getTimestamp(typeValue));
+=======
+                appendString(o.getString(typeValue));
+                break;
+            case DATE:
+                appendDate(o.getDate());
+                break;
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                appendDecimal(o.getDecimal());
+                break;
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
+                appendDateTime(o.getDateTime(typeValue));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             case ARRAY: {
                 List<ColumnValue> values = new ArrayList<>();
@@ -557,12 +685,28 @@ public class OffHeapColumnVector {
                 sb.append("<binary>");
                 break;
             case STRING:
+<<<<<<< HEAD
             case DATE:
             case DATETIME:
             case DATETIME_MICROS:
             case DATETIME_MILLIS:
             case DECIMAL:
                 sb.append(getUTF8String(i));
+=======
+                sb.append(getUTF8String(i));
+                break;
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
+                // using long
+                sb.append(getLong(i));
+                break;
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                sb.append(getDecimal(i));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             case ARRAY: {
                 int begin = getArrayOffset(i);
@@ -641,9 +785,117 @@ public class OffHeapColumnVector {
             }
             for (OffHeapColumnVector c : childColumns) {
                 c.checkMeta(checker);
+<<<<<<< HEAD
+=======
+                if (type.isStruct()) {
+                    // For example
+                    // struct<a: null>
+                    // struct<a: null>
+                    // struct<a: null>
+                    // numNulls for struct level = 0
+                    // c.numNulls for a level = 3
+                    // numNulls must always <= c.numNulls
+                    if (numNulls <= c.numNulls && elementsAppended != c.elementsAppended) {
+                        throw new RuntimeException(
+                                "struct type check failed, root numNulls=" + numNulls + ", elementsAppended=" +
+                                elementsAppended + "; however, child " + c.type.name + " numNulls=" + c.numNulls +
+                                ", elementsAppended=" + c.elementsAppended);
+                    }
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         } else {
             checker.check(context + "#data", data);
         }
     }
+<<<<<<< HEAD
+=======
+
+    public byte[] changeByteOrder(byte[] bytes) {
+        int length = bytes.length;
+        for (int i = 0; i < length / 2; ++i) {
+            byte temp = bytes[i];
+            bytes[i] = bytes[length - 1 - i];
+            bytes[length - 1 - i] = temp;
+        }
+        return bytes;
+    }
+
+    /**
+     * logical components in be: time_types.cpp, date::from_date
+     */
+    private int convertToDate(int year, int month, int day) {
+        int century;
+        int julianDate;
+
+        if (month > 2) {
+            month += 1;
+            year += 4800;
+        } else {
+            month += 13;
+            year += 4799;
+        }
+        century = year / 100;
+        julianDate = year * 365 - 32167;
+        julianDate += year / 4 - century + century / 4;
+        julianDate += 7834 * month / 256 + day;
+
+        return julianDate;
+    }
+
+    /**
+     * logical components in be: time_types.h, timestamp::from_datetime
+     */
+    private long convertToDateTime(int year, int month, int day, int hour, int minute, int second, int microsecond) {
+        int secsPerMinute = 60;
+        int minsPerHour = 60;
+        long usecsPerSec = 1000000;
+        int timeStampBits = 40;
+        long julianDate = convertToDate(year, month, day);
+        long timestamp = (((((hour * minsPerHour) + minute) * secsPerMinute) + second) * usecsPerSec)
+                + microsecond;
+        return julianDate << timeStampBits | timestamp;
+    }
+
+    // for test only
+    public boolean checkNullsLength() {
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        switch (typeValue) {
+            case TINYINT:
+            case BOOLEAN:
+            case SHORT:
+            case INT:
+            case FLOAT:
+            case LONG:
+            case DOUBLE:
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                return nullsLength >= elementsAppended;
+            case BINARY:
+            case STRING:
+            case DATE:
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
+            case ARRAY:
+                return nullsLength >= elementsAppended && childColumns[0].checkNullsLength();
+            case MAP:
+                return nullsLength >= elementsAppended && childColumns[0].checkNullsLength()
+                        && childColumns[1].checkNullsLength();
+            case STRUCT: {
+                List<String> names = type.getChildNames();
+                for (int c = 0; c < names.size(); c++) {
+                    if (!childColumns[c].checkNullsLength()) {
+                        return false;
+                    }
+                }
+                return nullsLength >= elementsAppended;
+            }
+            default:
+                throw new RuntimeException("Unknown type value: " + typeValue);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

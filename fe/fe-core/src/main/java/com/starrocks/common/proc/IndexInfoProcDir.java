@@ -45,6 +45,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 import java.util.Set;
@@ -74,7 +79,12 @@ public class IndexInfoProcDir implements ProcDirInterface {
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             if (table.isNativeTableOrMaterializedView()) {
                 OlapTable olapTable = (OlapTable) table;
@@ -113,7 +123,11 @@ public class IndexInfoProcDir implements ProcDirInterface {
 
             return result;
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -134,7 +148,12 @@ public class IndexInfoProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid index id format: " + idxIdStr);
         }
 
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             List<Column> schema = null;
             Set<String> bfColumns = null;
@@ -144,7 +163,11 @@ public class IndexInfoProcDir implements ProcDirInterface {
                 if (schema == null) {
                     throw new AnalysisException("Index " + idxId + " does not exist");
                 }
+<<<<<<< HEAD
                 bfColumns = olapTable.getCopiedBfColumns();
+=======
+                bfColumns = olapTable.getBfColumnNames();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 schema = table.getBaseSchema();
             }
@@ -154,7 +177,11 @@ public class IndexInfoProcDir implements ProcDirInterface {
             }
             return node;
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 

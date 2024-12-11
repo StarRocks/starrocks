@@ -36,18 +36,35 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
 
     @Override
     public void doSetUp() {
+<<<<<<< HEAD
         Database db = new Database(1000 + TEST_DB_ID, SHOW_DATA_DB_NAME);
+=======
+        Database db = new Database(1000 + testDbId, SHOW_DATA_DB_NAME);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         OlapTable table = newTable("ShowDataTable");
         db.registerTableUnlocked(table);
         expectedSize = table.getDataSize();
 
         // inject our test db
+<<<<<<< HEAD
         ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getFullNameToDb();
         fullNameToDb.put(SHOW_DATA_DB_NAME, db);
+=======
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getFullNameToDb();
+        fullNameToDb.put(SHOW_DATA_DB_NAME, db);
+
+        ConcurrentHashMap<Long, Database> idToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb();
+        idToDb.put(1000 + testDbId, db);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testGetShowData() throws IOException {
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Config.http_slow_request_threshold_ms = 0;
         Request request = new Request.Builder()
                 .get()

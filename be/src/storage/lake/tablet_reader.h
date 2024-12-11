@@ -14,11 +14,21 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "runtime/mem_pool.h"
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/tablet.h"
 #include "storage/tablet_reader_params.h"
+=======
+#include "exec/pipeline/scan/morsel.h"
+#include "runtime/mem_pool.h"
+#include "storage/chunk_iterator.h"
+#include "storage/delete_predicates.h"
+#include "storage/lake/versioned_tablet.h"
+#include "storage/tablet_reader_params.h"
+#include "types_fwd.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 class OlapTuple;
@@ -30,10 +40,20 @@ struct RowSourceMask;
 class RowSourceMaskBuffer;
 class SeekRange;
 class SeekTuple;
+<<<<<<< HEAD
+=======
+class Segment;
+class TabletSchema;
+class TabletMetadataPB;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace lake {
 
 class Rowset;
+<<<<<<< HEAD
+=======
+class TabletManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;
@@ -49,10 +69,23 @@ class TabletReader final : public ChunkIterator {
     using TabletReaderParams = starrocks::TabletReaderParams;
 
 public:
+<<<<<<< HEAD
     TabletReader(Tablet tablet, int64_t version, Schema schema);
     TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets);
     TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets, bool is_key,
                  RowSourceMaskBuffer* mask_buffer);
+=======
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 bool need_split, bool could_split_physically);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 bool need_split, bool could_split_physically, std::vector<RowsetPtr> rowsets);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
+                 std::shared_ptr<const TabletSchema> tablet_schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ~TabletReader() override;
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
@@ -71,6 +104,13 @@ public:
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
 
+<<<<<<< HEAD
+=======
+    void set_tablet(std::shared_ptr<VersionedTablet> tablet) { _tablet = tablet; }
+
+    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) { split_tasks->swap(_split_tasks); }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override;
@@ -88,6 +128,10 @@ private:
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
 
     Status init_collector(const TabletReaderParams& read_params);
+<<<<<<< HEAD
+=======
+    Status init_compaction_column_paths(const TabletReaderParams& read_params);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     static Status to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                 MemPool* mempool);
@@ -99,17 +143,27 @@ private:
                                    const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
                                    MemPool* mempool);
 
+<<<<<<< HEAD
     Tablet _tablet;
     int64_t _version;
+=======
+    TabletManager* _tablet_mgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::shared_ptr<const TabletMetadataPB> _tablet_metadata;
     std::shared_ptr<const TabletSchema> _tablet_schema;
 
     // _rowsets is specified in the constructor when compaction
     bool _rowsets_inited = false;
     std::vector<RowsetPtr> _rowsets;
+<<<<<<< HEAD
     std::shared_ptr<ChunkIterator> _collect_iter;
 
     PredicateMap _pushdown_predicates;
+=======
+    std::vector<SegmentSharedPtr> _segments;
+    std::shared_ptr<ChunkIterator> _collect_iter;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;
 
@@ -124,6 +178,16 @@ private:
     bool _is_vertical_merge = false;
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+<<<<<<< HEAD
+=======
+
+    std::shared_ptr<VersionedTablet> _tablet;
+
+    // used for table internal parallel
+    bool _need_split = false;
+    bool _could_split_physically = false;
+    std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace lake

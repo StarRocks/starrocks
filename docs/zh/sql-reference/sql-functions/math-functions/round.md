@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # round, dround
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将数字四舍五入到指定的位数。
 

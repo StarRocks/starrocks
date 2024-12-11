@@ -14,9 +14,20 @@
 
 #include "formats/parquet/page_reader.h"
 
+<<<<<<< HEAD
 #include "common/config.h"
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
+=======
+#include <glog/logging.h>
+
+#include <algorithm>
+#include <ostream>
+#include <vector>
+
+#include "common/compiler_util.h"
+#include "exec/hdfs_scanner.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gutil/strings/substitute.h"
 #include "util/thrift_util.h"
 
@@ -40,7 +51,11 @@ Status PageReader::next_header() {
     }
 
     DCHECK(_num_values_read <= _num_values_total);
+<<<<<<< HEAD
     if (_num_values_read >= _num_values_total) {
+=======
+    if (_num_values_read >= _num_values_total || _next_read_page_idx >= _page_num) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG_IF(WARNING, _num_values_read > _num_values_total)
                 << "Read more values than expected, read=" << _num_values_read << ", expect=" << _num_values_total;
         return Status::EndOfFile("");
@@ -101,7 +116,14 @@ Status PageReader::next_header() {
     DCHECK(header_length > 0);
     _offset += header_length;
     _next_header_pos = _offset + _cur_header.compressed_page_size;
+<<<<<<< HEAD
     _num_values_read += _cur_header.data_page_header.num_values;
+=======
+    if (_cur_header.type == tparquet::PageType::DATA_PAGE) {
+        _num_values_read += _cur_header.data_page_header.num_values;
+        _next_read_page_idx++;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 

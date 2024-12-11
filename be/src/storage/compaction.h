@@ -86,13 +86,25 @@ protected:
     Version _output_version;
 
     RuntimeProfile _runtime_profile;
+<<<<<<< HEAD
+=======
+    // for flat json used
+    std::vector<std::unique_ptr<ColumnAccessPath>> _column_access_paths;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     // merge rows from vectorized reader and write into `_output_rs_writer`.
     // return Status::OK() and set statistics into `*stats_output`.
     // return others on error
+<<<<<<< HEAD
     Status _merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output);
     Status _merge_rowsets_vertically(size_t segment_iterator_num, Statistics* stats_output);
+=======
+    Status _merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output,
+                                       const TabletSchemaCSPtr& tablet_schema);
+    Status _merge_rowsets_vertically(size_t segment_iterator_num, Statistics* stats_output,
+                                     const TabletSchemaCSPtr& tablet_schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

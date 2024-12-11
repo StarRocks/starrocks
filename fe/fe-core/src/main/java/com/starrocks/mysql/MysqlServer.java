@@ -35,6 +35,10 @@
 package com.starrocks.mysql;
 
 import com.starrocks.common.ThreadPoolManager;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.NetUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -42,7 +46,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+<<<<<<< HEAD
 import java.net.InetSocketAddress;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.concurrent.Future;
@@ -82,7 +89,11 @@ public class MysqlServer {
         // open server socket
         try {
             serverChannel = ServerSocketChannel.open();
+<<<<<<< HEAD
             serverChannel.socket().bind(new InetSocketAddress("0.0.0.0", port), 2048);
+=======
+            serverChannel.socket().bind(NetUtils.getSockAddrBasedOnCurrIpVersion(port), 2048);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             serverChannel.configureBlocking(true);
         } catch (IOException e) {
             LOG.warn("Open MySQL network service failed.", e);

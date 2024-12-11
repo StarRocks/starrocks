@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Circle
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将一个 WKT(Well Known Text)转化为地球球面上的一个圆。
 

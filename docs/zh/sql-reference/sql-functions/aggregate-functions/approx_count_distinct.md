@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # approx_count_distinct
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回类似于 `COUNT(DISTINCT col)` 结果的近似值。
 

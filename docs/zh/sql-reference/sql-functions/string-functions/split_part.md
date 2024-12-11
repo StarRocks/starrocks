@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # split_part
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 根据分割符拆分字符串，返回指定的分割部分（从 1 开始计数）。
 

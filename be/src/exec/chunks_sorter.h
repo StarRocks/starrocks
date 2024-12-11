@@ -117,8 +117,11 @@ public:
 
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
     const SpillProcessChannelPtr& spill_channel() { return _spill_channel; }
+<<<<<<< HEAD
     auto& io_executor() { return *spill_channel()->io_executor(); }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
@@ -135,6 +138,11 @@ public:
     // Return accurate output rows of this operator
     virtual size_t get_output_rows() const = 0;
 
+<<<<<<< HEAD
+=======
+    size_t get_next_output_row() { return _next_output_row; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     virtual int64_t mem_usage() const = 0;
 
     virtual bool is_full() { return false; }

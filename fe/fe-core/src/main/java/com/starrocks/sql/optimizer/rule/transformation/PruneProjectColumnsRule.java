@@ -30,6 +30,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+<<<<<<< HEAD
+=======
+import java.util.Collections;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 
@@ -66,6 +70,14 @@ public class PruneProjectColumnsRule extends TransformationRule {
             ColumnRefOperator constCol = context.getColumnRefFactory()
                     .create("auto_fill_col", Type.TINYINT, false);
             newMap.put(constCol, ConstantOperator.createTinyInt((byte) 1));
+<<<<<<< HEAD
+=======
+        } else if (newMap.equals(projectOperator.getColumnRefMap()) && context.isShortCircuit()) {
+            // Change the requiredOutputColumns in context
+            requiredOutputColumns.union(requiredInputColumns);
+            // make sure this rule only executed once
+            return Collections.emptyList();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // Change the requiredOutputColumns in context

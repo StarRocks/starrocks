@@ -16,6 +16,10 @@
 
 #include "gen_cpp/parquet_types.h"
 #include "util/int96.h"
+<<<<<<< HEAD
+=======
+#include "util/slice.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::parquet {
 

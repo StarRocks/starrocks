@@ -64,6 +64,10 @@ public class DataProperty implements Writable {
      */
     public static final DataProperty DEFAULT_DATA_PROPERTY = new DataProperty(TStorageMedium.HDD);
     public static final long MAX_COOLDOWN_TIME_MS = 253402271999000L; // 9999-12-31 23:59:59
+<<<<<<< HEAD
+=======
+    public static final DataProperty DATA_PROPERTY_HDD = new DataProperty(TStorageMedium.HDD);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @SerializedName(value = "storageMedium")
     private TStorageMedium storageMedium;
@@ -85,7 +89,11 @@ public class DataProperty implements Writable {
 
     public static DataProperty getInferredDefaultDataProperty() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         SystemInfoService infoService = globalStateMgr.getClusterInfo();
+=======
+        SystemInfoService infoService = globalStateMgr.getNodeMgr().getClusterInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<Backend> backends = infoService.getBackends();
         Set<TStorageMedium> mediumSet = Sets.newHashSet();
         for (Backend backend : backends) {

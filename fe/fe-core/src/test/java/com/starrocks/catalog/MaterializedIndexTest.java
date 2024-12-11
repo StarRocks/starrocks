@@ -42,11 +42,14 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.LinkedList;
 import java.util.List;
 
@@ -82,6 +85,7 @@ public class MaterializedIndexTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSerialization() throws Exception {
         // 1. Write objects to file
         File file = new File("./index");
@@ -104,19 +108,31 @@ public class MaterializedIndexTest {
     }
 
     @Test
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testVisibleForTransaction() throws Exception {
         index = new MaterializedIndex(10);
         Assert.assertEquals(IndexState.NORMAL, index.getState());
         Assert.assertTrue(index.visibleForTransaction(0));
         Assert.assertTrue(index.visibleForTransaction(10));
 
+<<<<<<< HEAD
         index = new MaterializedIndex(10, IndexState.NORMAL, 10);
+=======
+        index = new MaterializedIndex(10, IndexState.NORMAL, 10,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(index.visibleForTransaction(0));
         Assert.assertTrue(index.visibleForTransaction(9));
         Assert.assertTrue(index.visibleForTransaction(10));
         Assert.assertTrue(index.visibleForTransaction(11));
 
+<<<<<<< HEAD
         index = new MaterializedIndex(10, IndexState.SHADOW, 10);
+=======
+        index = new MaterializedIndex(10, IndexState.SHADOW, 10,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertFalse(index.visibleForTransaction(0));
         Assert.assertFalse(index.visibleForTransaction(9));
         Assert.assertTrue(index.visibleForTransaction(10));

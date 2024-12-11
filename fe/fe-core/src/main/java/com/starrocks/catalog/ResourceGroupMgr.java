@@ -15,13 +15,22 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
+=======
+import com.google.common.collect.ImmutableMap;
+import com.google.gson.annotations.SerializedName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.ImageWriter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -35,10 +44,18 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.system.BackendResourceStat;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;
@@ -48,15 +65,22 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
+<<<<<<< HEAD
 import java.io.DataOutputStream;
 import java.io.EOFException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+<<<<<<< HEAD
 import java.util.Iterator;
+=======
+import java.util.HashSet;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -66,6 +90,17 @@ import java.util.stream.Collectors;
 // WorkGroupMgr is employed by GlobalStateMgr to manage WorkGroup in FE.
 public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
+<<<<<<< HEAD
+=======
+
+    private static final String EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG =
+            "the sum of %s across all resource groups cannot exceed the minimum number of CPU cores " +
+                    "available on the backends minus one [%d]";
+    public static final String SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG =
+            "'short_query' ResourceGroup cannot set 'exclusive_cpu_cores', " +
+                    "since it use 'cpu_weight' as 'exclusive_cpu_cores'";
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final Map<String, ResourceGroup> resourceGroupMap = new HashMap<>();
 
     // Record the current short_query resource group.
@@ -78,6 +113,11 @@ public class ResourceGroupMgr implements Writable {
     private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
     private final Map<Long, Long> minVersionPerBe = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+<<<<<<< HEAD
+=======
+    private int sumExclusiveCpuCores = 0;
+    private volatile boolean hasCreatedDefaultResourceGroups = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private void readLock() {
         lock.readLock().lock();
@@ -99,10 +139,17 @@ public class ResourceGroupMgr implements Writable {
         writeLock();
         try {
             ResourceGroup wg = stmt.getResourceGroup();
+<<<<<<< HEAD
             if (resourceGroupMap.containsKey(wg.getName())) {
                 // create resource_group or replace <name> ...
                 if (stmt.isReplaceIfExists()) {
                     dropResourceGroupUnlocked(wg.getName());
+=======
+            boolean needReplace = false;
+            if (resourceGroupMap.containsKey(wg.getName())) {
+                if (stmt.isReplaceIfExists()) {
+                    needReplace = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 } else if (!stmt.isIfNotExists()) {
                     throw new DdlException(String.format("RESOURCE_GROUP(%s) already exists", wg.getName()));
                 } else {
@@ -121,12 +168,41 @@ public class ResourceGroupMgr implements Writable {
                 throw new DdlException("MV Resource Group not support classifiers.");
             }
 
+<<<<<<< HEAD
             if (wg.getClassifiers() == null || wg.getClassifiers().isEmpty() &&
+=======
+            if ((wg.getClassifiers() == null || wg.getClassifiers().isEmpty()) &&
+                    !ResourceGroup.BUILTIN_WG_NAMES.contains(wg.getName()) &&
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     !wg.getResourceGroupType().equals(TWorkGroupType.WG_MV)) {
                 throw new DdlException("This type Resource Group need define classifiers.");
             }
 
+<<<<<<< HEAD
             wg.setId(GlobalStateMgr.getCurrentState().getNextId());
+=======
+            final int minCoreNum = BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe();
+            if (wg.getNormalizedExclusiveCpuCores() > 0 &&
+                    sumExclusiveCpuCores + wg.getNormalizedExclusiveCpuCores() >= minCoreNum) {
+                throw new DdlException(String.format(EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG,
+                        ResourceGroup.EXCLUSIVE_CPU_CORES, minCoreNum - 1));
+            }
+
+            if (needReplace) {
+                dropResourceGroupUnlocked(wg.getName());
+            }
+
+            wg.normalizeCpuWeight();
+
+            if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
+                wg.setId(ResourceGroup.DEFAULT_WG_ID);
+            } else if (ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME.equals(wg.getName())) {
+                wg.setId(ResourceGroup.DEFAULT_MV_WG_ID);
+            } else {
+                wg.setId(GlobalStateMgr.getCurrentState().getNextId());
+            }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             wg.setVersion(wg.getId());
             for (ResourceGroupClassifier classifier : wg.getClassifiers()) {
                 classifier.setResourceGroupId(wg.getId());
@@ -142,17 +218,29 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public List<List<String>> showResourceGroup(ShowResourceGroupStmt stmt) throws AnalysisException {
         if (stmt.getName() != null && !resourceGroupMap.containsKey(stmt.getName())) {
             ErrorReport.reportAnalysisException(ErrorCode.ERROR_NO_RG_ERROR, stmt.getName());
+=======
+    public List<List<String>> showResourceGroup(ShowResourceGroupStmt stmt) {
+        if (stmt.getName() != null && !resourceGroupMap.containsKey(stmt.getName())) {
+            ErrorReport.reportSemanticException(ErrorCode.ERROR_NO_RG_ERROR, stmt.getName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         List<List<String>> rows;
         if (stmt.getName() != null) {
+<<<<<<< HEAD
             rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showOneResourceGroup(stmt.getName());
         } else {
             rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
                     .showAllResourceGroups(ConnectContext.get(), stmt.isListAll());
+=======
+            rows = showOneResourceGroup(stmt.getName(), stmt.isVerbose());
+        } else {
+            rows = showAllResourceGroups(ConnectContext.get(), stmt.isVerbose(), stmt.isListAll());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return rows;
     }
@@ -202,33 +290,59 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public List<List<String>> showAllResourceGroups(ConnectContext ctx, Boolean isListAll) {
+=======
+    public List<List<String>> showAllResourceGroups(ConnectContext ctx, boolean verbose, boolean isListAll) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         readLock();
         try {
             List<ResourceGroup> resourceGroupList = new ArrayList<>(resourceGroupMap.values());
             if (isListAll || ConnectContext.get() == null) {
                 resourceGroupList.sort(Comparator.comparing(ResourceGroup::getName));
+<<<<<<< HEAD
                 return resourceGroupList.stream().map(ResourceGroup::show)
                         .flatMap(Collection::stream).collect(Collectors.toList());
+=======
+                return resourceGroupList.stream()
+                        .map(rg -> rg.show(verbose))
+                        .flatMap(Collection::stream)
+                        .collect(Collectors.toList());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 String user = getUnqualifiedUser(ctx);
                 List<String> activeRoles = getUnqualifiedRole(ctx);
                 String remoteIp = ctx.getRemoteIP();
+<<<<<<< HEAD
                 return resourceGroupList.stream().map(rg -> rg.showVisible(user, activeRoles, remoteIp))
                         .flatMap(Collection::stream).collect(Collectors.toList());
+=======
+                return resourceGroupList.stream()
+                        .map(rg -> rg.showVisible(user, activeRoles, remoteIp, verbose))
+                        .flatMap(Collection::stream)
+                        .collect(Collectors.toList());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         } finally {
             readUnlock();
         }
     }
 
+<<<<<<< HEAD
     public List<List<String>> showOneResourceGroup(String name) {
+=======
+    public List<List<String>> showOneResourceGroup(String name, boolean verbose) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         readLock();
         try {
             if (!resourceGroupMap.containsKey(name)) {
                 return Collections.emptyList();
             } else {
+<<<<<<< HEAD
                 return resourceGroupMap.get(name).show();
+=======
+                return resourceGroupMap.get(name).show(verbose);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         } finally {
             readUnlock();
@@ -265,6 +379,7 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public long loadResourceGroups(DataInputStream dis, long checksum) throws IOException {
         try {
             readFields(dis);
@@ -280,6 +395,8 @@ public class ResourceGroupMgr implements Writable {
         return checksum;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private void replayAddResourceGroup(ResourceGroup workgroup) {
         addResourceGroupInternal(workgroup);
         ResourceGroupOpEntry op = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, workgroup);
@@ -289,11 +406,15 @@ public class ResourceGroupMgr implements Writable {
     public ResourceGroup getResourceGroup(String name) {
         readLock();
         try {
+<<<<<<< HEAD
             if (resourceGroupMap.containsKey(name)) {
                 return resourceGroupMap.get(name);
             } else {
                 return null;
             }
+=======
+            return resourceGroupMap.getOrDefault(name, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             readUnlock();
         }
@@ -308,6 +429,7 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public ResourceGroup getResourceGroupIncludingDefault(long id) {
         ResourceGroup group = getResourceGroup(id);
         if (group != null) {
@@ -325,6 +447,8 @@ public class ResourceGroupMgr implements Writable {
         return null;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void alterResourceGroup(AlterResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
@@ -338,6 +462,10 @@ public class ResourceGroupMgr implements Writable {
                     !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
                 throw new DdlException("MV Resource Group not support classifiers.");
             }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (cmd instanceof AlterResourceGroupStmt.AddClassifiers) {
                 List<ResourceGroupClassifier> newAddedClassifiers = stmt.getNewAddedClassifiers();
                 for (ResourceGroupClassifier classifier : newAddedClassifiers) {
@@ -348,10 +476,49 @@ public class ResourceGroupMgr implements Writable {
                 wg.getClassifiers().addAll(newAddedClassifiers);
             } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
                 ResourceGroup changedProperties = stmt.getChangedProperties();
+<<<<<<< HEAD
                 Integer cpuCoreLimit = changedProperties.getCpuCoreLimit();
                 if (cpuCoreLimit != null) {
                     wg.setCpuCoreLimit(cpuCoreLimit);
                 }
+=======
+
+                Integer cpuWeight = changedProperties.getRawCpuWeight();
+                if (cpuWeight == null) {
+                    cpuWeight = wg.geNormalizedCpuWeight();
+                }
+                Integer exclusiveCpuCores = changedProperties.getExclusiveCpuCores();
+                if (exclusiveCpuCores == null) {
+                    exclusiveCpuCores = wg.getExclusiveCpuCores();
+                }
+
+                ResourceGroup.validateCpuParameters(cpuWeight, exclusiveCpuCores);
+
+                if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
+                    if (sumExclusiveCpuCores + exclusiveCpuCores - wg.getNormalizedExclusiveCpuCores() >=
+                            BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe()) {
+                        throw new DdlException(String.format(EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG,
+                                ResourceGroup.EXCLUSIVE_CPU_CORES,
+                                BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe() - 1));
+                    }
+                    if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
+                        throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);
+                    }
+                }
+                // NOTE that validate cpu parameters should be called before setting properties.
+
+                if (cpuWeight != null) {
+                    wg.setCpuWeight(cpuWeight);
+                }
+                wg.normalizeCpuWeight();
+
+                if (exclusiveCpuCores != null) {
+                    sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
+                    wg.setExclusiveCpuCores(exclusiveCpuCores);
+                    sumExclusiveCpuCores += wg.getNormalizedExclusiveCpuCores();
+                }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Integer maxCpuCores = changedProperties.getMaxCpuCores();
                 if (maxCpuCores != null) {
                     wg.setMaxCpuCores(maxCpuCores);
@@ -390,6 +557,7 @@ public class ResourceGroupMgr implements Writable {
                 TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
                 Preconditions.checkState(workGroupType == null);
             } else if (cmd instanceof AlterResourceGroupStmt.DropClassifiers) {
+<<<<<<< HEAD
                 Set<Long> classifierToDrop = stmt.getClassifiersToDrop().stream().collect(Collectors.toSet());
                 Iterator<ResourceGroupClassifier> classifierIterator = wg.getClassifiers().iterator();
                 while (classifierIterator.hasNext()) {
@@ -397,6 +565,10 @@ public class ResourceGroupMgr implements Writable {
                         classifierIterator.remove();
                     }
                 }
+=======
+                Set<Long> classifierToDrop = new HashSet<>(stmt.getClassifiersToDrop());
+                wg.getClassifiers().removeIf(classifier -> classifierToDrop.contains(classifier.getId()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 for (Long classifierId : classifierToDrop) {
                     classifierMap.remove(classifierId);
                 }
@@ -407,6 +579,10 @@ public class ResourceGroupMgr implements Writable {
                 }
                 classifierList.clear();
             }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // only when changing properties, version is required to update. because changing classifiers needs not
             // propagate to BE.
             if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
@@ -474,6 +650,10 @@ public class ResourceGroupMgr implements Writable {
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = null;
         }
+<<<<<<< HEAD
+=======
+        sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void addResourceGroupInternal(ResourceGroup wg) {
@@ -485,6 +665,13 @@ public class ResourceGroupMgr implements Writable {
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = wg;
         }
+<<<<<<< HEAD
+=======
+        sumExclusiveCpuCores += wg.getNormalizedExclusiveCpuCores();
+        if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
+            hasCreatedDefaultResourceGroups = true;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public List<TWorkGroupOp> getResourceGroupsNeedToDeliver(Long beId) {
@@ -600,15 +787,67 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void createBuiltinResourceGroupsIfNotExist() {
+        try {
+            if (hasCreatedDefaultResourceGroups) {
+                return;
+            }
+
+            // Create default resource groups only when there are BEs.
+            // Otherwise, we cannot get the number of cores of BE as `cpu_weight`.
+            if (BackendResourceStat.getInstance().getNumBes() <= 0) {
+                return;
+            }
+
+            ResourceGroup defaultWg = getResourceGroup(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
+            if (defaultWg != null) {
+                return;
+            }
+
+            final int avgCpuCores = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
+
+            Map<String, String> defaultWgProperties = ImmutableMap.of(
+                    ResourceGroup.CPU_WEIGHT, Integer.toString(avgCpuCores),
+                    ResourceGroup.MEM_LIMIT, "1.0"
+            );
+            CreateResourceGroupStmt defaultWgStmt = new CreateResourceGroupStmt(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME,
+                    true, false, Collections.emptyList(), defaultWgProperties);
+            defaultWgStmt.analyze();
+            createResourceGroup(defaultWgStmt);
+
+            Map<String, String> defaultMvWgProperties = ImmutableMap.of(
+                    ResourceGroup.CPU_WEIGHT, "1",
+                    ResourceGroup.MEM_LIMIT, "0.8",
+                    ResourceGroup.SPILL_MEM_LIMIT_THRESHOLD, "0.8"
+            );
+            CreateResourceGroupStmt defaultMvWgStmt = new CreateResourceGroupStmt(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME,
+                    true, false, Collections.emptyList(), defaultMvWgProperties);
+            defaultMvWgStmt.analyze();
+            createResourceGroup(defaultMvWgStmt);
+        } catch (Exception e) {
+            LOG.warn("failed to create builtin resource groups", e);
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static class SerializeData {
         @SerializedName("WorkGroups")
         public List<ResourceGroup> resourceGroups;
     }
 
+<<<<<<< HEAD
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int numJson = 1 + resourceGroupMap.size();
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.RESOURCE_GROUP_MGR, numJson);
         writer.writeJson(resourceGroupMap.size());
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        int numJson = 1 + resourceGroupMap.size();
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.RESOURCE_GROUP_MGR, numJson);
+        writer.writeInt(resourceGroupMap.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (ResourceGroup resourceGroup : resourceGroupMap.values()) {
             writer.writeJson(resourceGroup);
         }
@@ -617,12 +856,17 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+<<<<<<< HEAD
         int numJson = reader.readInt();
         List<ResourceGroup> resourceGroups = new ArrayList<>();
         for (int i = 0; i < numJson; ++i) {
             ResourceGroup resourceGroup = reader.readJson(ResourceGroup.class);
             resourceGroups.add(resourceGroup);
         }
+=======
+        List<ResourceGroup> resourceGroups = new ArrayList<>();
+        reader.readCollection(ResourceGroup.class, resourceGroups::add);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
         resourceGroups.forEach(this::replayAddResourceGroup);
     }

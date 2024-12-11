@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # var_samp,variance_samp
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the sample variance of an expression. Since v2.5.10, this function can also be used as a window function.
 

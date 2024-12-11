@@ -219,16 +219,26 @@ void BinaryDictPageDecoder<Type>::set_dict_decoder(PageDecoder* dict_decoder) {
 
 template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, Column* dst) {
+<<<<<<< HEAD
     SparseRange read_range;
     uint32_t begin = current_index();
     read_range.add(Range(begin, begin + *n));
+=======
+    SparseRange<> read_range;
+    uint32_t begin = current_index();
+    read_range.add(Range<>(begin, begin + *n));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *n = current_index() - begin;
     return Status::OK();
 }
 
 template <LogicalType Type>
+<<<<<<< HEAD
 Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange& range, Column* dst) {
+=======
+Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_encoding_type == PLAIN_ENCODING) {
         return _data_page_decoder->next_batch(range, dst);
     }
@@ -275,7 +285,11 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, Column* dst) {
 }
 
 template <LogicalType Type>
+<<<<<<< HEAD
 Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange& range, Column* dst) {
+=======
+Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange<>& range, Column* dst) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(range, dst);

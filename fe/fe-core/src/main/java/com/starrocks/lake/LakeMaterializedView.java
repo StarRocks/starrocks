@@ -32,13 +32,19 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.server.StorageVolumeMgr;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+<<<<<<< HEAD
 import java.io.DataOutput;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -102,6 +108,7 @@ public class LakeMaterializedView extends MaterializedView {
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         // write type first
         Text.writeString(out, type.name());
@@ -109,6 +116,8 @@ public class LakeMaterializedView extends MaterializedView {
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isDeleteRetryable() {
         return true;
     }
@@ -163,7 +172,10 @@ public class LakeMaterializedView extends MaterializedView {
         sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
 
         // storage_volume
+<<<<<<< HEAD
         StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfTable(id);
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
                 PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME).append("\" = \"").append(volume).append("\"");
@@ -184,4 +196,15 @@ public class LakeMaterializedView extends MaterializedView {
         }
         return TableType.MATERIALIZED_VIEW.name();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        if (getMaxColUniqueId() <= 0) {
+            setMaxColUniqueId(LakeTableHelper.restoreColumnUniqueId(this));
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

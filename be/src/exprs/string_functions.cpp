@@ -14,12 +14,18 @@
 
 #include "exprs/string_functions.h"
 
+<<<<<<< HEAD
 #include <hs/hs.h>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #ifdef __x86_64__
 #include <immintrin.h>
 #include <mmintrin.h>
 #endif
+<<<<<<< HEAD
 #include <re2/re2.h>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #include <algorithm>
 #include <cctype>
@@ -40,14 +46,24 @@
 #include "common/status.h"
 #include "exprs/binary_function.h"
 #include "exprs/math_functions.h"
+<<<<<<< HEAD
+=======
+#include "exprs/regexp_split.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exprs/unary_function.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
 #include "runtime/current_thread.h"
 #include "runtime/large_int_value.h"
 #include "storage/olap_define.h"
 #include "util/phmap/phmap.h"
+=======
+#include "runtime/runtime_state.h"
+#include "storage/olap_define.h"
+#include "types/large_int_value.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"
@@ -58,7 +74,11 @@ namespace starrocks {
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
+<<<<<<< HEAD
     if (UNLIKELY(col->capacity_limit_reached())) {                                   \
+=======
+    if (UNLIKELY(!col->capacity_limit_reached().ok())) {                             \
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         col->reset_column();                                                         \
         throw std::runtime_error("binary column exceed 4G in function " #func_name); \
     }
@@ -366,14 +386,22 @@ Status StringFunctions::concat_prepare(FunctionContext* context, FunctionContext
     // size of concatenation of tail columns(i.e. columns except the 1st one)
     // must not exceeds SIZE_LIMIT, otherwise the result is oversize in which
     // case NULL is returned according to mysql.
+<<<<<<< HEAD
     raw::make_room(&tail, OLAP_STRING_MAX_LENGTH);
+=======
+    raw::make_room(&tail, get_olap_string_max_length());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto* tail_begin = (uint8_t*)tail.data();
     size_t tail_off = 0;
 
     for (auto i = 1; i < num_args; ++i) {
         auto const_arg = context->get_constant_column(i);
         auto s = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_arg);
+<<<<<<< HEAD
         if (tail_off + s.size > OLAP_STRING_MAX_LENGTH) {
+=======
+        if (tail_off + s.size > get_olap_string_max_length()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             //oversize
             state->is_oversize = true;
             break;
@@ -439,10 +467,15 @@ ColumnPtr substr_const_not_null(const Columns& columns, BinaryColumn* src, Subst
         bytes.reserve(reserved);
     }
 
+<<<<<<< HEAD
     raw::RawVector<Offsets::value_type> raw_offsets;
     raw_offsets.resize(size + 1);
     raw_offsets[0] = 0;
     offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
+=======
+    raw::make_room(&offsets, size + 1);
+    offsets[0] = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     auto& src_bytes = src->get_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
@@ -489,10 +522,15 @@ ColumnPtr right_const_not_null(const Columns& columns, BinaryColumn* src, Substr
     }
 
     bytes.reserve(reserved);
+<<<<<<< HEAD
     raw::RawVector<Offsets::value_type> raw_offsets;
     raw_offsets.resize(size + 1);
     raw_offsets[0] = 0;
     offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
+=======
+    raw::make_room(&offsets, size + 1);
+    offsets[0] = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size);
     if (is_ascii) {
         // off_is_negative=true, off=-len
@@ -797,7 +835,11 @@ public:
         size_t dst_off = 0;
         for (auto i = 0; i < num_rows; ++i) {
             auto len = len_array[i];
+<<<<<<< HEAD
             if (UNLIKELY((uint32_t)len > OLAP_STRING_MAX_LENGTH)) {
+=======
+            if (UNLIKELY((uint32_t)len > get_olap_string_max_length())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 dst_offsets[i + 1] = dst_off;
                 has_null = true;
                 nulls[i] = 1;
@@ -892,11 +934,19 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         raw::make_room(&dst_offsets, num_rows + 1);
         dst_offsets[0] = 0;
         size_t reserved = static_cast<size_t>(times) * src_offsets.back();
+<<<<<<< HEAD
         if (reserved > OLAP_STRING_MAX_LENGTH * num_rows) {
             reserved = 0;
             for (int i = 0; i < num_rows; ++i) {
                 size_t slice_sz = src_offsets[i + 1] - src_offsets[i];
                 if (slice_sz * times < OLAP_STRING_MAX_LENGTH) {
+=======
+        if (reserved > get_olap_string_max_length() * num_rows) {
+            reserved = 0;
+            for (int i = 0; i < num_rows; ++i) {
+                size_t slice_sz = src_offsets[i + 1] - src_offsets[i];
+                if (slice_sz * times < get_olap_string_max_length()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     reserved += slice_sz * times;
                 }
             }
@@ -914,7 +964,11 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         }
         // if result exceed STRING_MAX_LENGTH
         // return null
+<<<<<<< HEAD
         if (s.size * times > OLAP_STRING_MAX_LENGTH) {
+=======
+        if (s.size * times > get_olap_string_max_length()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             dst_nulls[i] = 1;
             has_null = true;
             dst_offsets[i + 1] = dst_off;
@@ -968,7 +1022,11 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
         auto s = str_viewer.value(i);
         int32_t n = times_viewer.value(i);
 
+<<<<<<< HEAD
         if (s.size * n > OLAP_STRING_MAX_LENGTH) {
+=======
+        if (s.size * n > get_olap_string_max_length()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             dst_nulls[i] = 1;
             has_null = true;
             dst_offsets[i + 1] = dst_off;
@@ -1086,7 +1144,11 @@ static inline void build_translate_map(const Slice& from_str, const Slice& to_st
  * @param utf8_map the UTF-8 map.
  * @param dst the destination to store the translated chars. The caller must guarantee there is enough room.
  * @return [is_null, num_bytes].
+<<<<<<< HEAD
  * - `is_null` will be true, if the number of translated chars exceeds `OLAP_STRING_MAX_LENGTH`.
+=======
+ * - `is_null` will be true, if the number of translated chars exceeds `get_olap_string_max_length()`.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
  * - `num_bytes`: the number of translated chars.
  */
 static inline std::pair<bool, size_t> translate_string_with_utf8_map(
@@ -1104,7 +1166,11 @@ static inline std::pair<bool, size_t> translate_string_with_utf8_map(
             continue;
         }
 
+<<<<<<< HEAD
         if (num_bytes + dst_utf_char.size > OLAP_STRING_MAX_LENGTH) {
+=======
+        if (num_bytes + dst_utf_char.size > get_olap_string_max_length()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return {true, 0};
         }
         strings::memcpy_inlined(dst + num_bytes, dst_utf_char.data, dst_utf_char.size);
@@ -1230,7 +1296,11 @@ static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Col
  * @param src the source column, which may be de-wrapped from NullableColumn.
  * @param state stores the UTF-8 map.
  * @return the translated column, which may be a nullable BinaryColumn.
+<<<<<<< HEAD
  *  The row will be null, if it exceeds OLAP_STRING_MAX_LENGTH after translated.
+=======
+ *  The row will be null, if it exceeds get_olap_string_max_length() after translated.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
  */
 static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Columns& columns, BinaryColumn* src,
                                                                       const TranslateState* state) {
@@ -1269,7 +1339,11 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
         src_encoded_values.reserve(s.size);
         encode_utf8_chars(s, &src_encoded_values);
 
+<<<<<<< HEAD
         dst_bytes.resize(dst_offset + std::min<size_t>(s.size * 4, OLAP_STRING_MAX_LENGTH));
+=======
+        dst_bytes.resize(dst_offset + std::min<size_t>(s.size * 4, get_olap_string_max_length()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         uint8_t* dst_begin = dst_bytes.data() + dst_offset;
 
         const auto [is_null, num_row_bytes] = translate_string_with_utf8_map(src_encoded_values, utf8_map, dst_begin);
@@ -1297,7 +1371,11 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
  * @param columns the input columns, including `SRC_STR_INDEX`, `FROM_STR_INDEX`, `TO_STR_INDEX`.
  * @param state useless, `state` is useful only for the constant `from_string`, `to_string` for now.
  * @return the translated column, which may be a nullable BinaryColumn.
+<<<<<<< HEAD
  *  The row will be null, if it exceeds OLAP_STRING_MAX_LENGTH after translated.
+=======
+ *  The row will be null, if it exceeds get_olap_string_max_length() after translated.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
  */
 ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const TranslateState* state) {
     DCHECK(state == nullptr || !state->is_from_and_to_const);
@@ -1352,7 +1430,11 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
             src_encoded_values.reserve(src.size);
             encode_utf8_chars(src, &src_encoded_values);
 
+<<<<<<< HEAD
             dst_bytes.resize(dst_offset + std::min<size_t>(src.size * 4, OLAP_STRING_MAX_LENGTH));
+=======
+            dst_bytes.resize(dst_offset + std::min<size_t>(src.size * 4, get_olap_string_max_length()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             uint8_t* dst_begin = dst_bytes.data() + dst_offset;
 
             const auto [is_null, num_row_bytes] =
@@ -1438,7 +1520,11 @@ enum PadType { PAD_TYPE_LEFT, PAD_TYPE_RIGHT };
 template <PadType pad_type>
 static inline ColumnPtr ascii_pad_ascii_const(Columns const& columns, BinaryColumn* src, const uint8_t* fill,
                                               const size_t fill_size, const size_t len) {
+<<<<<<< HEAD
     DCHECK(0 < len && len <= OLAP_STRING_MAX_LENGTH);
+=======
+    DCHECK(0 < len && len <= get_olap_string_max_length());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DCHECK(fill_size > 0);
 
     const auto num_rows = src->size();
@@ -1548,7 +1634,11 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, BinaryColumn* src
 
         size_t dst_slice_size = s.size + fill_times * fill_size + fill_rest;
         // oversize
+<<<<<<< HEAD
         if (dst_slice_size > OLAP_STRING_MAX_LENGTH) {
+=======
+        if (dst_slice_size > get_olap_string_max_length()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             dst_nulls[i] = 1;
             has_null = true;
             dst_offsets[i + 1] = dst_off;
@@ -1586,7 +1676,11 @@ static inline ColumnPtr pad_const_not_null(const Columns& columns, BinaryColumn*
     auto fill = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[2]);
 
     // illegal length  or too-big length, return NULL
+<<<<<<< HEAD
     if (len < 0 || len > OLAP_STRING_MAX_LENGTH) {
+=======
+    if (len < 0 || len > get_olap_string_max_length()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return ColumnHelper::create_const_null_column(columns[1]->size());
     }
     // len == 0, return empty string
@@ -1658,8 +1752,13 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
         }
 
         int len = len_viewer.value(i);
+<<<<<<< HEAD
         // NULL if len < 0 || len > OLAP_STRING_MAX_LENGTH
         if ((uint32)len > OLAP_STRING_MAX_LENGTH) {
+=======
+        // NULL if len < 0 || len > get_olap_string_max_length()
+        if ((uint32)len > get_olap_string_max_length()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             has_null = true;
             dst_offsets[i + 1] = dst_off;
             dst_nulls[i] = 1;
@@ -1719,7 +1818,11 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
         const size_t dst_slice_size = str.size + fill->size * fill_times + fill_rest;
 
         // result is oversize, return NULL
+<<<<<<< HEAD
         if (dst_slice_size > OLAP_STRING_MAX_LENGTH) {
+=======
+        if (dst_slice_size > get_olap_string_max_length()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             has_null = true;
             dst_offsets[i + 1] = dst_off;
             dst_nulls[i] = 1;
@@ -2461,8 +2564,12 @@ static inline std::string unhex_4chars(Slice s) {
     }
     return ret;
 }
+<<<<<<< HEAD
 #endif
 
+=======
+#else
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 static inline char hexdigit_1char(char ch) {
     if (int value = ch - '0'; value >= 0 && value <= ('9' - '0')) {
         return value;
@@ -2500,6 +2607,10 @@ static inline std::string unhex_1char(Slice str) {
     }
     return ret;
 }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
 #ifdef __AVX2__
@@ -2583,7 +2694,11 @@ std::string StringFunctions::url_decode_func(const std::string& value) {
     if (status.ok()) {
         return ret;
     } else {
+<<<<<<< HEAD
         throw std::runtime_error(status.get_error_msg());
+=======
+        throw std::runtime_error(std::string(status.message()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -2635,7 +2750,12 @@ StatusOr<ColumnPtr> StringFunctions::ascii(FunctionContext* context, const Colum
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(get_charImpl, value) {
+<<<<<<< HEAD
     return std::string((char*)&value, 1);
+=======
+    char* p = (char*)&value;
+    return std::string(p, 1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 StatusOr<ColumnPtr> StringFunctions::get_char(FunctionContext* context, const Columns& columns) {
@@ -2676,7 +2796,11 @@ static inline ColumnPtr concat_const_not_null(Columns const& columns, BinaryColu
     for (int i = 0; i < num_rows; ++i) {
         auto s = src->get_slice(i);
         const auto dst_slice_size = s.size + tail_size;
+<<<<<<< HEAD
         if (LIKELY(dst_slice_size <= OLAP_STRING_MAX_LENGTH)) {
+=======
+        if (LIKELY(dst_slice_size <= get_olap_string_max_length())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             dst_off += dst_slice_size;
             dst_offsets[i + 1] = dst_off;
         } else {
@@ -2694,7 +2818,11 @@ static inline ColumnPtr concat_const_not_null(Columns const& columns, BinaryColu
     for (int i = 0; i < num_rows; ++i) {
         auto s = src->get_slice(i);
         const auto dst_slice_size = s.size + tail_size;
+<<<<<<< HEAD
         if (LIKELY(dst_slice_size <= OLAP_STRING_MAX_LENGTH)) {
+=======
+        if (LIKELY(dst_slice_size <= get_olap_string_max_length())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             strings::memcpy_inlined(dst_begin + dst_off, s.data, s.size);
             dst_off += s.size;
             strings::memcpy_inlined(dst_begin + dst_off, tail_begin, tail_size);
@@ -2743,7 +2871,11 @@ static inline ColumnPtr concat_not_const_small(std::vector<ColumnViewer<TYPE_VAR
         bool oversize = false;
         for (auto& view : list) {
             auto v = view.value(i);
+<<<<<<< HEAD
             if (UNLIKELY(dst_slice_len + v.size > OLAP_STRING_MAX_LENGTH)) {
+=======
+            if (UNLIKELY(dst_slice_len + v.size > get_olap_string_max_length())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 oversize = true;
                 break;
             }
@@ -2768,7 +2900,11 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
     list.reserve(columns.size());
     for (const ColumnPtr& col : columns) {
+<<<<<<< HEAD
         list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
+=======
+        list.emplace_back(col);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     const auto num_rows = columns[0]->size();
     auto dst_bytes_max_size = ColumnHelper::compute_bytes_size(columns.begin(), columns.end());
@@ -2797,7 +2933,11 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
         bool oversize = false;
         for (auto& view : list) {
             auto v = view.value(i);
+<<<<<<< HEAD
             if (UNLIKELY(dst_slice_len + v.size > OLAP_STRING_MAX_LENGTH)) {
+=======
+            if (UNLIKELY(dst_slice_len + v.size > get_olap_string_max_length())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 oversize = true;
                 break;
             }
@@ -2867,7 +3007,11 @@ ColumnPtr concat_ws_small(ColumnViewer<TYPE_VARCHAR>& sep_viewer, std::vector<Co
                 continue;
             }
             auto v = view.value(i);
+<<<<<<< HEAD
             if (UNLIKELY(dst_slice_size + v.size > OLAP_STRING_MAX_LENGTH)) {
+=======
+            if (UNLIKELY(dst_slice_size + v.size > get_olap_string_max_length())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 oversize = true;
                 break;
             }
@@ -2913,7 +3057,11 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
     const auto sep_size = ColumnHelper::compute_bytes_size(columns.begin(), columns.begin() + 1);
     const auto rest_size = ColumnHelper::compute_bytes_size(columns.begin() + 1, columns.end());
     // need extra SIZE_LIMIT bytes of space for rewinding the appended separator.
+<<<<<<< HEAD
     const auto dst_bytes_max_size = rest_size + sep_size * (column_num - 2) + OLAP_STRING_MAX_LENGTH;
+=======
+    const auto dst_bytes_max_size = rest_size + sep_size * (column_num - 2) + get_olap_string_max_length();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ColumnViewer<TYPE_VARCHAR> sep_viewer(columns[0]);
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
@@ -2921,7 +3069,11 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
     // skip only null
     for (int i = 1; i < columns.size(); ++i) {
         if (!columns[i]->only_null()) {
+<<<<<<< HEAD
             list.emplace_back(ColumnViewer<TYPE_VARCHAR>(columns[i]));
+=======
+            list.emplace_back(columns[i]);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -2955,7 +3107,11 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
             dst_slice_size += sep.size;
         }
         // return NULL for oversize
+<<<<<<< HEAD
         if (UNLIKELY(dst_slice_size > OLAP_STRING_MAX_LENGTH + sep.size)) {
+=======
+        if (UNLIKELY(dst_slice_size > get_olap_string_max_length() + sep.size)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             builder.rewind(dst_slice_size);
             builder.set_null(i);
         } else if (LIKELY(dst_slice_size > 0)) {
@@ -3030,6 +3186,7 @@ int StringFunctions::index_of(const char* source, int source_count, const char* 
     return -1;
 }
 
+<<<<<<< HEAD
 struct StringFunctionsState {
     using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<re2::RE2>, phmap::Hash<int32_t>,
                                                     phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
@@ -3085,6 +3242,8 @@ struct StringFunctionsState {
     }
 };
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 Status StringFunctions::hs_compile_and_alloc_scratch(const std::string& pattern, StringFunctionsState* state,
                                                      FunctionContext* context, const Slice& slice) {
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST,
@@ -3558,7 +3717,150 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+<<<<<<< HEAD
 static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
+=======
+static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, StringFunctionsState* state,
+                                                  const std::string& rpl_value) {
+    hs_scratch_t* scratch = nullptr;
+    hs_error_t status;
+    if ((status = hs_clone_scratch(state->scratch, &scratch) != HS_SUCCESS)) {
+        return Status::InternalError(strings::Substitute("Unable to clone scratch space. status: $0", status));
+    }
+
+    DeferOp op([&] {
+        if (scratch != nullptr) {
+            hs_error_t st;
+            if ((st = hs_free_scratch(scratch)) != HS_SUCCESS) {
+                LOG(ERROR) << "free scratch space failure. status: " << st;
+            }
+        }
+    });
+
+    MatchInfoChain match_info_chain;
+    match_info_chain.info_chain.reserve(src->size());
+
+    auto src_value_size = src->get_bytes().size();
+    const char* data = (src_value_size) ? reinterpret_cast<const char*>(src->get_bytes().data())
+                                        : &StringFunctions::_DUMMY_STRING_FOR_EMPTY_PATTERN;
+
+    auto st = hs_scan(
+            // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
+            state->database, data, src_value_size, 0, scratch,
+            [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags, void* ctx) -> int {
+                auto* value = (MatchInfoChain*)ctx;
+                if (value->info_chain.empty()) {
+                    value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
+                } else if (value->info_chain.back().from == from) {
+                    value->info_chain.back().to = to;
+                } else if (value->info_chain.back().to <= from) {
+                    value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
+                }
+                return 0;
+            },
+            &match_info_chain);
+    DCHECK(st == HS_SUCCESS || st == HS_SCAN_TERMINATED) << " status: " << st;
+
+    // filter those match that cross rows
+    const auto num_rows = src->size();
+    const auto& src_offsets = src->get_offset();
+    size_t row_index = 0;
+
+    MatchInfoChain match_info_chain_in_one_row;
+    for (const auto& info : match_info_chain.info_chain) {
+        while (row_index < num_rows && src_offsets[row_index + 1] <= info.from) {
+            row_index++;
+        }
+        if (row_index < num_rows && src_offsets[row_index + 1] >= info.to) {
+            match_info_chain_in_one_row.info_chain.emplace_back(info);
+        }
+    }
+
+    // no match in row
+    if (match_info_chain_in_one_row.info_chain.empty()) {
+        return src->clone_shared();
+    }
+
+    auto data_count = [&]() {
+        size_t res = 0;
+        size_t last_to = 0;
+        for (const auto& info : match_info_chain_in_one_row.info_chain) {
+            res += info.from - last_to;
+            last_to = info.to;
+        }
+        res += match_info_chain_in_one_row.info_chain.size() * rpl_value.size();
+        res += src_value_size - last_to;
+        return res;
+    };
+
+    auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
+    auto& dst_offsets = dst->get_offset();
+    auto& dst_bytes = dst->get_bytes();
+
+    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_bytes.reserve(data_count());
+
+    // copy data
+    char* cursor = reinterpret_cast<char*>(dst_bytes.data());
+    size_t last_to = 0;
+    for (const auto& info : match_info_chain_in_one_row.info_chain) {
+        strings::memcpy_inlined(cursor, data + last_to, info.from - last_to);
+        cursor += info.from - last_to;
+        strings::memcpy_inlined(cursor, rpl_value.data(), rpl_value.size());
+        cursor += rpl_value.size();
+        last_to = info.to;
+    }
+    strings::memcpy_inlined(cursor, data + last_to, src_value_size - last_to);
+
+    // split offset
+    size_t match_index = 0;
+    dst_offsets[0] = 0;
+    size_t match_size = match_info_chain_in_one_row.info_chain.size();
+    for (size_t i = 0; i < num_rows; i++) {
+        size_t from = src_offsets[i];
+        size_t to = src_offsets[i + 1];
+        size_t dis = to - from;
+        DCHECK(match_index == match_size || match_info_chain_in_one_row.info_chain[match_index].to > from);
+        while (match_index < match_size && match_info_chain_in_one_row.info_chain[match_index].from >= from &&
+               match_info_chain_in_one_row.info_chain[match_index].to <= to) {
+            dis -= match_info_chain_in_one_row.info_chain[match_index].to -
+                   match_info_chain_in_one_row.info_chain[match_index].from;
+            dis += rpl_value.size();
+            match_index++;
+        }
+        dst_offsets[i + 1] = dst_offsets[i] + dis;
+    }
+    DCHECK(match_index == match_size);
+    DCHECK(dst_offsets.back() == data_count());
+
+    // resize dst_bytes
+    dst_bytes.resize(dst_offsets.back());
+
+    return dst;
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan_vec(StringFunctionsState* state,
+                                                                      const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    if (columns[0]->size() == 0) {
+        return ColumnHelper::create_const_null_column(0);
+    }
+    const auto binary = ColumnHelper::get_binary_column(columns[0].get());
+    auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+    std::string rpl_value = rpl_viewer.value(0).to_string();
+    ASSIGN_OR_RETURN(auto res, hyperscan_vec_evaluate(binary, state, rpl_value));
+    if (columns[0]->is_nullable()) {
+        return NullableColumn::create(
+                std::move(res), std::static_pointer_cast<NullColumn>(
+                                        down_cast<NullableColumn*>(columns[0].get())->null_column()->clone_shared()));
+    } else if (columns[0]->is_constant()) {
+        return ConstColumn::create(std::move(res), columns[0]->size());
+    }
+    return res;
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
@@ -3636,7 +3938,15 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
 
     if (state->const_pattern) {
         if (state->use_hyperscan) {
+<<<<<<< HEAD
             return regexp_replace_use_hyperscan(state, columns);
+=======
+            if (columns[2]->is_constant() && context->state()->enable_hyperscan_vec()) {
+                return regexp_replace_use_hyperscan_vec(state, columns);
+            } else {
+                return regexp_replace_use_hyperscan(state, columns);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             re2::RE2* const_re = state->get_or_prepare_regex();
             return regexp_replace_const(const_re, columns);
@@ -3647,6 +3957,207 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
     return regexp_replace_general(context, options, columns);
 }
 
+<<<<<<< HEAD
+=======
+static StatusOr<ColumnPtr> regexp_split_const(re2::RE2* const_re, const Columns& columns, int32_t max_split = -1) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto size = ColumnHelper::is_all_const(columns) ? 1 : columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    offset_col->append(0);
+
+    NullColumnPtr nl_col;
+    if (columns[0]->is_nullable()) {
+        auto x = down_cast<NullableColumn*>(columns[0].get())->null_column();
+        nl_col = ColumnHelper::as_column<NullColumn>(x->clone_shared());
+    } else {
+        nl_col = NullColumn::create(size, 0);
+    }
+
+    const char* token_begin = nullptr;
+    const char* token_end = nullptr;
+
+    uint32_t index = 0;
+
+    RegexpSplit regexpSplit;
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row)) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto str_value = content_viewer.value(row);
+
+        regexpSplit.init(const_re, max_split);
+        regexpSplit.set(str_value.get_data(), str_value.get_data() + str_value.get_size());
+
+        while (regexpSplit.get(token_begin, token_end)) {
+            size_t token_size = token_end - token_begin;
+            str_col->append(Slice(token_begin, token_size));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(array, columns[0]->size());
+    }
+    return NullableColumn::create(array, nl_col);
+}
+
+static StatusOr<ColumnPtr> regexp_split_const_pattern(re2::RE2* const_re, const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    ColumnPtr max_split_column;
+    if (columns.size() > 2) {
+        max_split_column = columns[2];
+    } else {
+        max_split_column = ColumnHelper::create_const_column<TYPE_INT>(-1, columns[0]->size());
+    }
+    ColumnViewer<TYPE_INT> max_split_viewer(max_split_column);
+
+    auto size = ColumnHelper::is_all_const(columns) ? 1 : columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    offset_col->append(0);
+
+    NullColumnPtr nl_col;
+    if (columns[0]->is_nullable()) {
+        auto x = down_cast<NullableColumn*>(columns[0].get())->null_column();
+        nl_col = ColumnHelper::as_column<NullColumn>(x->clone_shared());
+    } else {
+        nl_col = NullColumn::create(size, 0);
+    }
+
+    const char* token_begin = nullptr;
+    const char* token_end = nullptr;
+
+    uint32_t index = 0;
+
+    RegexpSplit RegexpSplit;
+
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row)) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto max_split = max_split_viewer.value(row);
+        auto str_value = content_viewer.value(row);
+
+        RegexpSplit.init(const_re, max_split);
+        RegexpSplit.set(str_value.get_data(), str_value.get_data() + str_value.get_size());
+
+        while (RegexpSplit.get(token_begin, token_end)) {
+            size_t token_size = token_end - token_begin;
+            str_col->append(Slice(token_begin, token_size));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(array, columns[0]->size());
+    }
+    return NullableColumn::create(array, nl_col);
+}
+
+static StatusOr<ColumnPtr> regexp_split_general(FunctionContext* context, re2::RE2::Options* options,
+                                                const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    ColumnPtr max_split_column;
+    if (columns.size() > 2) {
+        max_split_column = columns[2];
+    } else {
+        max_split_column = ColumnHelper::create_const_column<TYPE_INT>(-1, columns[0]->size());
+    }
+    ColumnViewer<TYPE_INT> max_split_viewer(max_split_column);
+    auto size = columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    auto nl_col = NullColumn::create();
+    offset_col->append(0);
+    uint32_t index = 0;
+
+    const char* token_begin = nullptr;
+    const char* token_end = nullptr;
+
+    RegexpSplit regexpSplit;
+
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row) || ptn_viewer.is_null(row)) {
+            offset_col->append(index);
+            nl_col->append(1);
+            continue;
+        }
+
+        std::string ptn_value = ptn_viewer.value(row).to_string();
+        std::unique_ptr<re2::RE2> local_re;
+
+        if (ptn_value.size()) {
+            local_re = std::make_unique<re2::RE2>(ptn_value, *options);
+            if (!local_re.get()->ok()) {
+                context->set_error(strings::Substitute("Invalid regex: $0", ptn_value).c_str());
+                offset_col->append(index);
+                nl_col->append(1);
+                continue;
+            }
+        }
+
+        nl_col->append(0);
+        auto max_split = max_split_viewer.value(row);
+        auto str_value = content_viewer.value(row);
+
+        regexpSplit.init(local_re.get(), max_split);
+        regexpSplit.set(str_value.get_data(), str_value.get_data() + str_value.get_size());
+
+        while (regexpSplit.get(token_begin, token_end)) {
+            size_t token_size = token_end - token_begin;
+            str_col->append(Slice(token_begin, token_size));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+    return NullableColumn::create(array, nl_col);
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_split(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    if (state->const_pattern) {
+        re2::RE2* const_re = nullptr;
+        if (!state->pattern.empty()) {
+            const_re = state->regex.get();
+        }
+        if (columns.size() > 2) {
+            if (columns[2]->is_constant()) {
+                return regexp_split_const(const_re, columns, ColumnHelper::get_const_value<TYPE_INT>(columns[2]));
+            } else {
+                return regexp_split_const_pattern(const_re, columns);
+            }
+        } else {
+            return regexp_split_const(const_re, columns);
+        }
+    }
+
+    re2::RE2::Options* options = state->options.get();
+    return regexp_split_general(context, options, columns);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct ReplaceState {
     bool only_null{false};
 
@@ -3863,7 +4374,11 @@ Status StringFunctions::parse_url_prepare(FunctionContext* context, FunctionCont
     state->const_pattern = true;
     auto column = context->get_constant_column(1);
     auto part = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+<<<<<<< HEAD
     state->url_part.reset(new UrlParser::UrlPart);
+=======
+    state->url_part = std::make_unique<UrlParser::UrlPart>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     *(state->url_part) = UrlParser::get_url_part(StringValue::from_slice(part));
 
     if (*(state->url_part) == UrlParser::INVALID) {
@@ -3923,8 +4438,13 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+<<<<<<< HEAD
 StatusOr<ColumnPtr> StringFunctions::parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
                                                      const starrocks::Columns& columns) {
+=======
+StatusOr<ColumnPtr> StringFunctions::parse_const_urlpart(UrlParser::UrlPart* url_part, FunctionContext* context,
+                                                         const starrocks::Columns& columns) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     auto size = columns[0]->size();
@@ -3957,11 +4477,25 @@ StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context, const s
 
     if (state->const_pattern) {
         UrlParser::UrlPart* url_part = state->url_part.get();
+<<<<<<< HEAD
         return parse_url_const(url_part, context, columns);
+=======
+        return parse_const_urlpart(url_part, context, columns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     return parse_url_general(context, columns);
 }
+<<<<<<< HEAD
+=======
+
+StatusOr<ColumnPtr> StringFunctions::url_extract_host(FunctionContext* context, const starrocks::Columns& columns) {
+    UrlParser::UrlPart url_part_enum = UrlParser::HOST;
+    UrlParser::UrlPart* url_part = &url_part_enum;
+    return parse_const_urlpart(url_part, context, columns);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 static bool seek_param_key_in_query_params(const StringValue& query_params, const StringValue& param_key,
                                            std::string* param_value) {
     const StringSearch param_search(&param_key);
@@ -4166,5 +4700,16 @@ StatusOr<ColumnPtr> StringFunctions::url_extract_parameter(starrocks::FunctionCo
         return url_extract_parameter_general(columns);
     }
 }
+<<<<<<< HEAD
 
+=======
+// crc32
+DEFINE_UNARY_FN_WITH_IMPL(crc32Impl, str) {
+    return static_cast<uint32_t>(crc32_z(0L, (const unsigned char*)str.data, str.size));
+}
+
+StatusOr<ColumnPtr> StringFunctions::crc32(FunctionContext* context, const Columns& columns) {
+    return VectorizedStrictUnaryFunction<crc32Impl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(columns[0]);
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

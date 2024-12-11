@@ -10,18 +10,32 @@ sidebar_position: 30
 `Property` is set for user granularity. To set the maximum number of connections between Client and FE, use the following command.
 
 ```sql
+<<<<<<< HEAD
 SET PROPERTY [FOR 'user'] 'key' = 'value' [, 'key' = 'value']
 ```
 
 User properties include the resources assigned to the user. The properties set here are for the user, not `user_identity`. That is, if two users `jack'@'%` and `jack'@'192.%` are created by the `CREATE USER` statement, then the `SET PROPERTY` statement can work on the user `jack`, not `jack'@'%` or `jack'@'192.%`.
+=======
+ALTER USER '<username>' SET PROPERTIES ("key"="value", ...)
+```
+
+User properties include the resources assigned to the user. The properties set here are for the user, not `user_identity`. That is, if two users `jack'@'%` and `jack'@'192.%` are created by the `CREATE USER` statement, then the `ALTER USER SET PROPERTIES` statement can work on the user `jack`, not `jack'@'%` or `jack'@'192.%`.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Example 1:
 
 ```sql
+<<<<<<< HEAD
 For the user `jack`, change the maximum number of connections to 1000
 SET PROPERTY FOR 'jack' 'max_user_connections' = '1000';
 
 Check the connection limit for the root user
+=======
+-- For the user `jack`, change the maximum number of connections to 1000
+ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
+
+-- Check the connection limit for the root user
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 SHOW PROPERTY FOR 'root'; 
 ```
 

@@ -15,6 +15,10 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableList;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BasicTable;
@@ -23,6 +27,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -39,6 +44,24 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.privilege.AccessControlProvider;
+import com.starrocks.privilege.AccessController;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.PipeName;
+import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.collections4.ListUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 import java.util.Map;
@@ -46,6 +69,7 @@ import java.util.Optional;
 import java.util.Set;
 
 public class Authorizer {
+<<<<<<< HEAD
     private static final AccessControlProvider INSTANCE;
 
     static {
@@ -58,15 +82,32 @@ public class Authorizer {
 
     public static AccessControlProvider getInstance() {
         return INSTANCE;
+=======
+    private final AccessControlProvider accessControlProvider;
+
+    public Authorizer(AccessControlProvider accessControlProvider) {
+        this.accessControlProvider = accessControlProvider;
+    }
+
+    public static AccessControlProvider getInstance() {
+        return GlobalStateMgr.getCurrentState().getAuthorizer().accessControlProvider;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static void check(StatementBase statement, ConnectContext context) {
         getInstance().getPrivilegeCheckerVisitor().check(statement, context);
     }
 
+<<<<<<< HEAD
     public static void checkSystemAction(UserIdentity userIdentity, Set<Long> roleIds, PrivilegeType privilegeType) {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkSystemAction(userIdentity, roleIds, privilegeType);
+=======
+    public static void checkSystemAction(UserIdentity currentUser, Set<Long> roleIds, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkSystemAction(currentUser, roleIds, privilegeType);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static void checkUserAction(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser,
@@ -76,12 +117,22 @@ public class Authorizer {
     }
 
     public static void checkCatalogAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName,
+<<<<<<< HEAD
                                           PrivilegeType privilegeType) {
+=======
+                                          PrivilegeType privilegeType) throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkCatalogAction(currentUser, roleIds, catalogName, privilegeType);
     }
 
+<<<<<<< HEAD
     public static void checkAnyActionOnCatalog(UserIdentity currentUser, Set<Long> roleIds, String catalogName) {
+=======
+    public static void checkAnyActionOnCatalog(UserIdentity currentUser, Set<Long> roleIds, String catalogName)
+            throws AccessDeniedException {
+        //Any user has an implicit usage permission on the internal catalog
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
             getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                     .checkAnyActionOnCatalog(currentUser, roleIds, catalogName);
@@ -89,11 +140,16 @@ public class Authorizer {
     }
 
     public static void checkDbAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db,
+<<<<<<< HEAD
                                      PrivilegeType privilegeType) {
+=======
+                                     PrivilegeType privilegeType) throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(catalogName)
                 .checkDbAction(currentUser, roleIds, catalogName, db, privilegeType);
     }
 
+<<<<<<< HEAD
     public static void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db) {
         getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
     }
@@ -123,47 +179,120 @@ public class Authorizer {
 
     public static void checkTableAction(UserIdentity userIdentity, Set<Long> roleIds, TableName tableName,
                                         PrivilegeType privilegeType) {
+=======
+    public static void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
+    }
+
+    public static void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, String db, String table,
+                                        PrivilegeType privilegeType) throws AccessDeniedException {
+        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db, table);
+        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        if (tableObj.isPresent() && !tableObj.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
+            return;
+        }
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkTableAction(currentUser, roleIds,
+                        new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db, table), privilegeType);
+    }
+
+    public static void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db,
+                                        String table, PrivilegeType privilegeType) throws AccessDeniedException {
+        TableName tableName = new TableName(catalog, db, table);
+        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        if (tableObj.isPresent() && !tableObj.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
+            return;
+        }
+        getInstance().getAccessControlOrDefault(catalog).checkTableAction(currentUser, roleIds,
+                new TableName(catalog, db, table), privilegeType);
+    }
+
+    public static void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                        PrivilegeType privilegeType) throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
         if (table.isPresent() && !table.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
             return;
         }
         String catalog = tableName.getCatalog();
         getInstance().getAccessControlOrDefault(catalog)
+<<<<<<< HEAD
                 .checkTableAction(userIdentity, roleIds, tableName, privilegeType);
     }
 
     public static void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
+=======
+                .checkTableAction(currentUser, roleIds, tableName, privilegeType);
+    }
+
+    public static void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+            throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String catalog = tableName.getCatalog();
         getInstance().getAccessControlOrDefault(catalog).checkAnyActionOnTable(currentUser, roleIds, tableName);
     }
 
+<<<<<<< HEAD
     public static void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
                                        PrivilegeType privilegeType) {
+=======
+    public static void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds,
+                                         TableName tableName, String column,
+                                         PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(tableName.getCatalog()).checkColumnAction(currentUser, roleIds,
+                tableName, column, privilegeType);
+    }
+
+    public static void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                       PrivilegeType privilegeType) throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkViewAction(currentUser, roleIds, tableName, privilegeType);
     }
 
+<<<<<<< HEAD
     public static void checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
+=======
+    public static void checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+            throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnView(currentUser, roleIds, tableName);
     }
 
     public static void checkMaterializedViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+<<<<<<< HEAD
                                                    PrivilegeType privilegeType) {
+=======
+                                                   PrivilegeType privilegeType) throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkMaterializedViewAction(currentUser, roleIds, tableName, privilegeType);
     }
 
     public static void checkAnyActionOnMaterializedView(UserIdentity currentUser, Set<Long> roleIds,
+<<<<<<< HEAD
                                                         TableName tableName) {
+=======
+                                                        TableName tableName) throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnMaterializedView(currentUser, roleIds, tableName);
     }
 
     public static void checkActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+<<<<<<< HEAD
                                                     PrivilegeType privilegeType) {
         Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
         table.ifPresent(value -> doCheckTableLikeObject(currentUser, roleIds, tableName.getDb(), value, privilegeType));
+=======
+                                                    PrivilegeType privilegeType) throws AccessDeniedException {
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        if (table.isPresent()) {
+            doCheckTableLikeObject(currentUser, roleIds, tableName.getDb(), table.get(), privilegeType);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static void checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
@@ -181,16 +310,30 @@ public class Authorizer {
             case MYSQL:
             case ELASTICSEARCH:
             case HIVE:
+<<<<<<< HEAD
             case ICEBERG:
+=======
+            case HIVE_VIEW:
+            case ICEBERG:
+            case ICEBERG_VIEW:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             case HUDI:
             case JDBC:
             case DELTALAKE:
             case FILE:
             case SCHEMA:
             case PAIMON:
+<<<<<<< HEAD
                 // `privilegeType == null` meaning we don't check specified action, just any action
                 if (privilegeType == null) {
                     checkAnyActionOnTable(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+=======
+            case ODPS:
+            case KUDU:
+                // `privilegeType == null` meaning we don't check specified action, just any action
+                if (privilegeType == null) {
+                    checkAnyActionOnTable(currentUser, roleIds, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 } else {
                     checkTableAction(currentUser, roleIds, dbName, tbl.getName(), privilegeType);
                 }
@@ -214,44 +357,97 @@ public class Authorizer {
                 }
                 break;
             default:
+<<<<<<< HEAD
                 String privTypeName = privilegeType == null ? "ANY" : privilegeType.name();
                 throw new AccessDeniedException(
                         ErrorReport.reportCommon(null, ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                                 privTypeName + " ON TABLE/VIEW/MV OBJECT"));
+=======
+                throw new AccessDeniedException();
+        }
+    }
+
+    public static void checkActionForAnalyzeStatement(UserIdentity userIdentity, Set<Long> currentRoleIds,
+                                                      TableName tableName) {
+        try {
+            Authorizer.checkActionOnTableLikeObject(userIdentity, currentRoleIds,
+                    tableName, PrivilegeType.SELECT);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    tableName.getCatalog(),
+                    userIdentity, currentRoleIds,
+                    PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+        }
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        if (table.isPresent() && table.get().isTable()) {
+            try {
+                Authorizer.checkActionOnTableLikeObject(userIdentity, currentRoleIds,
+                        tableName, PrivilegeType.INSERT);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        tableName.getCatalog(),
+                        userIdentity, currentRoleIds,
+                        PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     public static void checkFunctionAction(UserIdentity currentUser, Set<Long> roleIds, Database database,
+<<<<<<< HEAD
                                            Function function,
                                            PrivilegeType privilegeType) {
+=======
+                                           Function function, PrivilegeType privilegeType) throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkFunctionAction(currentUser, roleIds, database, function, privilegeType);
     }
 
+<<<<<<< HEAD
     public static void checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String database,
                                                 Function function) {
+=======
+    public static void checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String database, Function function)
+            throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnFunction(currentUser, roleIds, database, function);
     }
 
     public static void checkGlobalFunctionAction(UserIdentity currentUser, Set<Long> roleIds, Function function,
+<<<<<<< HEAD
                                                  PrivilegeType privilegeType) {
+=======
+                                                 PrivilegeType privilegeType) throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkGlobalFunctionAction(currentUser, roleIds, function, privilegeType);
     }
 
+<<<<<<< HEAD
     public static void checkAnyActionOnGlobalFunction(UserIdentity currentUser, Set<Long> roleIds, Function function) {
+=======
+    public static void checkAnyActionOnGlobalFunction(UserIdentity currentUser, Set<Long> roleIds, Function function)
+            throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnGlobalFunction(currentUser, roleIds, function);
     }
 
+<<<<<<< HEAD
     public static void checkActionInDb(UserIdentity currentUser, Set<Long> roleIds, String db,
                                        PrivilegeType privilegeType) {
+=======
+    public static void checkActionInDb(UserIdentity currentUser, Set<Long> roleIds, String db, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkActionInDb(currentUser, roleIds, db, privilegeType);
     }
 
     /**
+<<<<<<< HEAD
      * Check whether current user has any privilege action on the db or objects(table/view/mv) in the db.
      * Currently, it's used by `show databases` or `use database`.
      */
@@ -295,35 +491,114 @@ public class Authorizer {
         if (table.isPresent() && table.get().isTable()) {
             Authorizer.checkActionOnTableLikeObject(userIdentity, currentRoleIds,
                     tableName, PrivilegeType.INSERT);
+=======
+     * A lambda function that throws AccessDeniedException
+     */
+    @FunctionalInterface
+    public interface AccessControlChecker {
+        void check() throws AccessDeniedException;
+    }
+
+    /**
+     * Check whether current user has any privilege action on the db or objects(table/view/mv) in the db.
+     * Currently, it's used by `show databases` or `use database`.
+     */
+    public static void checkAnyActionOnOrInDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
+            throws AccessDeniedException {
+        Preconditions.checkNotNull(db, "db should not null");
+        AccessController controller = getInstance().getAccessControlOrDefault(catalogName);
+
+        List<AccessControlChecker> basicCheckers = ImmutableList.of(
+                () -> controller.checkAnyActionOnDb(currentUser, roleIds, catalogName, db),
+                () -> controller.checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db)
+        );
+        List<AccessControlChecker> extraCheckers = ImmutableList.of(
+                () -> controller.checkAnyActionOnAnyView(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnAnyFunction(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnPipe(currentUser, roleIds, new PipeName("*", "*"))
+        );
+        List<AccessControlChecker> appliedCheckers = CatalogMgr.isInternalCatalog(catalogName) ?
+                ListUtils.union(basicCheckers, extraCheckers) : basicCheckers;
+
+        AccessDeniedException lastExcepton = null;
+        for (AccessControlChecker checker : appliedCheckers) {
+            try {
+                checker.check();
+                return;
+            } catch (AccessDeniedException e) {
+                lastExcepton = e;
+            }
+        }
+        if (lastExcepton != null) {
+            throw lastExcepton;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     public static void checkResourceAction(UserIdentity currentUser, Set<Long> roleIds, String name,
+<<<<<<< HEAD
                                            PrivilegeType privilegeType) {
+=======
+                                           PrivilegeType privilegeType) throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkResourceAction(currentUser, roleIds, name, privilegeType);
     }
 
+<<<<<<< HEAD
     public static void checkAnyActionOnResource(UserIdentity currentUser, Set<Long> roleIds, String name) {
+=======
+    public static void checkAnyActionOnResource(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnResource(currentUser, roleIds, name);
     }
 
     public static void checkResourceGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name,
+<<<<<<< HEAD
                                                 PrivilegeType privilegeType) {
+=======
+                                                PrivilegeType privilegeType) throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkResourceGroupAction(currentUser, roleIds, name, privilegeType);
     }
 
+<<<<<<< HEAD
     public static void checkStorageVolumeAction(UserIdentity currentUser, Set<Long> roleIds, String storageVolume,
                                                 PrivilegeType privilegeType) {
+=======
+    public static void checkPipeAction(UserIdentity currentUser, Set<Long> roleIds, PipeName name,
+                                       PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkPipeAction(currentUser, roleIds, name, privilegeType);
+    }
+
+    public static void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, PipeName name)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkAnyActionOnPipe(currentUser, roleIds, name);
+    }
+
+    public static void checkStorageVolumeAction(UserIdentity currentUser, Set<Long> roleIds, String storageVolume,
+                                                PrivilegeType privilegeType) throws AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkStorageVolumeAction(currentUser, roleIds, storageVolume, privilegeType);
     }
 
+<<<<<<< HEAD
     public static void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String name) {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnStorageVolume(currentUser, roleIds, name);
+=======
+    public static void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String storageVolume)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkAnyActionOnStorageVolume(currentUser, roleIds, storageVolume);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static void withGrantOption(UserIdentity currentUser, Set<Long> roleIds, ObjectType type, List<PrivilegeType> wants,
@@ -367,4 +642,23 @@ public class Authorizer {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    public static void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name,
+                                            PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkWarehouseAction(currentUser, roleIds, name, privilegeType);
+    }
+
+    public static void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
+        // Any user has an implicit usage permission on the default_warehouse
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(name);
+        if (warehouse.getId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                    .checkAnyActionOnWarehouse(currentUser, roleIds, name);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -3,11 +3,19 @@ displayed_sidebar: docs
 ---
 
 
+<<<<<<< HEAD
 # stddev, stddev_pop
 
 ## 功能
 
 返回 `expr` 表达式的总体标准差。
+=======
+# stddev, stddev_pop, std
+
+
+
+返回 `expr` 表达式的总体标准差。从 2.5.10 版本开始，该函数也可以用作窗口函数。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ### 语法
 
@@ -17,7 +25,11 @@ STDDEV(expr)
 
 ## 参数说明
 
+<<<<<<< HEAD
 `epxr`: 被选取的表达式。
+=======
+`expr`: 被选取的表达式。当表达式为表中一列时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## 返回值说明
 
@@ -29,10 +41,18 @@ STDDEV(expr)
 \sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \bar{x})^2}
 $$ -->
 
+<<<<<<< HEAD
 ## 示例
 
 ```plain text
 mysql> SELECT  stddev(lo_quantity), stddev_pop(lo_quantity) from lineorder;
+=======
+
+## 示例
+
+```plaintext
+mysql> SELECT stddev(lo_quantity), stddev_pop(lo_quantity) from lineorder;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 +---------------------+-------------------------+
 | stddev(lo_quantity) | stddev_pop(lo_quantity) |
 +---------------------+-------------------------+

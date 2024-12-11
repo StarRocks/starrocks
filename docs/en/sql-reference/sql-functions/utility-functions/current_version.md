@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # current_version
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the current version of StarRocks. Two syntaxes are provided for compatibility with different clients.
 

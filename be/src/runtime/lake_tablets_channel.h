@@ -20,6 +20,10 @@ namespace starrocks {
 
 class LoadChannel;
 class MemTracker;
+<<<<<<< HEAD
+=======
+class RuntimeProfile;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TabletsChannelKey;
 
 namespace lake {
@@ -27,6 +31,11 @@ class TabletManager;
 }
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
+<<<<<<< HEAD
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker);
+=======
+                                                         const TabletsChannelKey& key, MemTracker* mem_tracker,
+                                                         RuntimeProfile* parent_profile);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 } // namespace starrocks

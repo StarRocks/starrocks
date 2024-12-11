@@ -41,13 +41,26 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksHttpException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -75,7 +88,11 @@ public class TableRowCountAction extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response)
+<<<<<<< HEAD
             throws DdlException {
+=======
+            throws DdlException, AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // just allocate 2 slot for top holder map
         Map<String, Object> resultMap = new HashMap<>(4);
         String dbName = request.getSingleParameter(DB_KEY);
@@ -86,15 +103,28 @@ public class TableRowCountAction extends RestBaseAction {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "{database}/{table} must be selected");
             }
             // check privilege for select, otherwise return HTTP 401
+<<<<<<< HEAD
             checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.SELECT);
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+            Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
+                    dbName, tableName, PrivilegeType.SELECT);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                         "Database [" + dbName + "] " + "does not exists");
             }
+<<<<<<< HEAD
             db.writeLock();
             try {
                 Table table = db.getTable(tableName);
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (table == null) {
                     throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                             "Table [" + tableName + "] " + "does not exists");
@@ -109,7 +139,11 @@ public class TableRowCountAction extends RestBaseAction {
                 resultMap.put("status", 200);
                 resultMap.put("size", olapTable.proximateRowCount());
             } finally {
+<<<<<<< HEAD
                 db.writeUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         } catch (StarRocksHttpException e) {
             // status code  should conforms to HTTP semantic

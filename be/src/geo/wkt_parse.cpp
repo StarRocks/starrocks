@@ -34,7 +34,11 @@ GeoParseStatus WktParse::parse_wkt(const char* str, size_t len, GeoShape** shape
     wkt__scan_bytes(str, len, ctx.scaninfo);
 
     // parse
+<<<<<<< HEAD
     auto res = wkt_parse(&ctx);
+=======
+    auto res = wkt_parse(ctx.scaninfo, &ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     wkt_lex_destroy(ctx.scaninfo);
     if (res == 0) {
         *shape = ctx.shape;

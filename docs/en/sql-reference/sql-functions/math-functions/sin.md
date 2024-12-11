@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # sin
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the sine of `x`, where `x` is in radians.
 

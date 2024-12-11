@@ -163,7 +163,14 @@ public class TupleDescriptor {
     }
 
     public TTupleDescriptor toThrift() {
+<<<<<<< HEAD
         TTupleDescriptor ttupleDesc = new TTupleDescriptor(id.asInt(), -1, -1);
+=======
+        TTupleDescriptor ttupleDesc = new TTupleDescriptor();
+        ttupleDesc.setId(id.asInt());
+        ttupleDesc.setByteSize(-1);
+        ttupleDesc.setNumNullBytes(-1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ttupleDesc.setNumNullSlots(-1);
         if (table != null && table.getId() >= 0) {
             ttupleDesc.setTableId((int) table.getId());

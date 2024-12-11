@@ -14,7 +14,11 @@
 
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+import com.google.common.base.Strings;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -23,7 +27,10 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.common.MetaUtils;
+<<<<<<< HEAD
 import org.apache.parquet.Strings;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.Map;
 
@@ -38,16 +45,24 @@ public class CreateDbAnalyzer {
             statement.setCatalogName(catalogName);
         }
 
+<<<<<<< HEAD
         try {
             MetaUtils.checkCatalogExistAndReport(catalogName);
         } catch (AnalysisException e) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
+=======
+        MetaUtils.checkCatalogExistAndReport(catalogName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         Map<String, String> properties = statement.getProperties();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
             String volume = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+<<<<<<< HEAD
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING && !StorageVolumeMgr.LOCAL.equalsIgnoreCase(volume)) {
+=======
+            if (RunMode.isSharedNothingMode() && !StorageVolumeMgr.LOCAL.equalsIgnoreCase(volume)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Storage volume can only be 'local' in shared nothing mode");
             }

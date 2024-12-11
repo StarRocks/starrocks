@@ -14,7 +14,10 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -22,6 +25,7 @@ import java.util.Map;
 
 public abstract class HintNode implements Comparable<HintNode>, ParseNode {
 
+<<<<<<< HEAD
     protected Map<String, String> value;
 
     protected final NodePosition pos;
@@ -31,6 +35,14 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
     protected HintNode(NodePosition pos, Map<String, String> value, String hintStr) {
         this.pos = pos;
         this.value = value;
+=======
+    protected final NodePosition pos;
+
+    protected final String hintStr;
+
+    protected HintNode(NodePosition pos, String hintStr) {
+        this.pos = pos;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.hintStr = hintStr;
     }
 
@@ -38,6 +50,7 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
         return Scope.QUERY;
     }
 
+<<<<<<< HEAD
     public Map<String, String> getValue() {
         return value;
     }
@@ -50,6 +63,13 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
     @Override
     public String toSql() {
         return "";
+=======
+    public abstract Map<String, String> getValue();
+
+    @Override
+    public String toSql() {
+        return hintStr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -71,7 +91,11 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
         // the entire query
         QUERY,
         // part of a query. Like hint in select * from (select hint from tbl),
+<<<<<<< HEAD
         // we may want the hint only takes effect in the subquery in the futuer.
+=======
+        // we may want the hint only takes effect in the subquery in the future.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         CLAUSE
     }
 }

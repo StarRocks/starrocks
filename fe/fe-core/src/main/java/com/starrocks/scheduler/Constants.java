@@ -43,7 +43,13 @@ public class Constants {
     public enum TaskSource {
         CTAS,
         MV,
+<<<<<<< HEAD
         INSERT;
+=======
+        INSERT,
+        PIPE,
+        DATACACHE_SELECT;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // Whether the task source is mergeable, only MV is mergeable by default.
         public boolean isMergeable() {
@@ -83,7 +89,11 @@ public class Constants {
     // Used to determine the scheduling order of Pending TaskRun to Running TaskRun
     // The bigger the priority, the higher the priority, the default value is LOWEST
     public enum TaskRunPriority {
+<<<<<<< HEAD
         LOWEST(0), LOW(20), NORMAL(50), HIGH(80), HIGHEST(100);
+=======
+        LOWEST(0), LOW(20), NORMAL(50), HIGH(80), HIGHER(90), HIGHEST(100);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         private final int value;
 

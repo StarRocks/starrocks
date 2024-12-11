@@ -54,10 +54,14 @@ ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
           _texchange_node(tnode.exchange_node),
           _num_senders(0),
           _stream_recvr(nullptr),
+<<<<<<< HEAD
           _input_row_desc(
                   descs, tnode.exchange_node.input_row_tuples,
                   std::vector<bool>(tnode.nullable_tuples.begin(),
                                     tnode.nullable_tuples.begin() + tnode.exchange_node.input_row_tuples.size())),
+=======
+          _input_row_desc(descs, tnode.exchange_node.input_row_tuples),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
           _is_merging(tnode.exchange_node.__isset.sort_info),
           _is_parallel_merge(tnode.exchange_node.__isset.enable_parallel_merge &&
                              tnode.exchange_node.enable_parallel_merge),
@@ -247,7 +251,12 @@ void ExchangeNode::debug_string(int indentation_level, std::stringstream* out) c
 
 pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
+<<<<<<< HEAD
 
+=======
+    auto exec_group = context->find_exec_group_by_plan_node_id(_id);
+    context->set_current_execution_group(exec_group);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     OpFactories operators;
     if (!_is_merging) {
         auto* query_ctx = context->runtime_state()->query_ctx();
@@ -257,7 +266,11 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
         exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
         operators.emplace_back(exchange_source_op);
     } else {
+<<<<<<< HEAD
         if (_is_parallel_merge) {
+=======
+        if (_is_parallel_merge || _sort_exec_exprs.is_constant_lhs_ordering()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             auto exchange_merge_sort_source_operator = std::make_shared<ExchangeParallelMergeSourceOperatorFactory>(
                     context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
                     _nulls_first, _offset, _limit);

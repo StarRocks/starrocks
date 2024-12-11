@@ -68,7 +68,11 @@ public:
     Status open(RuntimeState* state) override;
 
     Status seek(const Columns& keys, StateTableResult& values) const override;
+<<<<<<< HEAD
     Status seek(const Columns& keys, const std::vector<uint8_t>& selection, StateTableResult& values) const override;
+=======
+    Status seek(const Columns& keys, const Filter& selection, StateTableResult& values) const override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Status seek(const Columns& keys, const std::vector<std::string>& projection_columns,
                 StateTableResult& values) const override;

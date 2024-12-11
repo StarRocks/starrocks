@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_approx
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the approximation of the pth percentile, where the value of p is between 0 and 1.
 

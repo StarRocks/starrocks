@@ -12,10 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.connector.hive;
 
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+=======
+package com.starrocks.connector.hive;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.THdfsFileFormat;
 import org.junit.Assert;
 import org.junit.Test;

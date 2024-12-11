@@ -60,10 +60,18 @@
 #include "runtime/runtime_filter_worker.h"
 #include "service/backend_options.h"
 #include "util/misc.h"
+<<<<<<< HEAD
+=======
+#include "util/network_util.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
 #include "util/threadpool.h"
+<<<<<<< HEAD
+=======
+#include "util/thrift_rpc_helper.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/thrift_util.h"
 #include "util/uid_util.h"
 #include "util/url_coding.h"
@@ -75,15 +83,22 @@ std::string to_load_error_http_path(const std::string& file_name) {
         return "";
     }
     std::stringstream url;
+<<<<<<< HEAD
     url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_load_error_log?"
+=======
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         << "file=" << file_name;
     return url.str();
 }
 
+<<<<<<< HEAD
 using apache::thrift::TException;
 using apache::thrift::TProcessor;
 using apache::thrift::transport::TTransportException;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class RuntimeProfile;
 
 class FragmentExecState {
@@ -102,7 +117,11 @@ public:
 
     Status execute();
 
+<<<<<<< HEAD
     Status cancel(const PPlanFragmentCancelReason& reason);
+=======
+    void cancel(const PPlanFragmentCancelReason& reason);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     TUniqueId fragment_instance_id() const { return _fragment_instance_id; }
 
@@ -207,21 +226,37 @@ Status FragmentExecState::execute() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status FragmentExecState::cancel(const PPlanFragmentCancelReason& reason) {
     std::lock_guard<std::mutex> l(_status_lock);
     RETURN_IF_ERROR(_exec_status);
+=======
+void FragmentExecState::cancel(const PPlanFragmentCancelReason& reason) {
+    std::lock_guard<std::mutex> l(_status_lock);
+    if (!_exec_status.ok()) {
+        return;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (reason == PPlanFragmentCancelReason::LIMIT_REACH) {
         _executor.set_is_report_on_cancel(false);
     }
     _executor.cancel();
+<<<<<<< HEAD
     return Status::OK();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void FragmentExecState::callback(const Status& status, RuntimeProfile* profile, bool done) {}
 
 std::string FragmentExecState::to_http_path(const std::string& file_name) {
     std::stringstream url;
+<<<<<<< HEAD
     url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_download_load?"
+=======
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_download_load?"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         << "token=" << _exec_env->token() << "&file=" << file_name;
     return url.str();
 }
@@ -234,6 +269,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     DCHECK(status.ok() || done); // if !status.ok() => done
     Status exec_status = update_status(status);
 
+<<<<<<< HEAD
     Status coord_status;
     FrontendServiceConnection coord(_exec_env->frontend_client_cache(), _coord_addr, config::thrift_rpc_timeout_ms,
                                     &coord_status);
@@ -245,6 +281,8 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         return;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TReportExecStatusParams params;
     params.protocol_version = FrontendServiceVersion::V1;
     params.__set_query_id(_query_id);
@@ -306,10 +344,13 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         if (!runtime_state->tablet_fail_infos().empty()) {
             params.__set_failInfos(runtime_state->tablet_fail_infos());
         }
+<<<<<<< HEAD
 
         // Send new errors to coordinator
         runtime_state->get_unreported_errors(&(params.error_log));
         params.__isset.error_log = (params.error_log.size() > 0);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     auto backend_id = get_backend_id();
@@ -321,6 +362,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     Status rpc_status;
 
     VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
+<<<<<<< HEAD
     try {
         try {
             coord->reportExecStatus(res, params);
@@ -344,11 +386,25 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         msg << "ReportExecStatus() to " << _coord_addr << " failed:\n" << e.what();
         LOG(WARNING) << msg.str();
         rpc_status = Status::InternalError(msg.str());
+=======
+
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            _coord_addr.hostname, _coord_addr.port,
+            [&res, &params](FrontendServiceConnection& client) { client->reportExecStatus(res, params); },
+            config::thrift_rpc_timeout_ms);
+
+    if (rpc_status.ok()) {
+        rpc_status = Status(res.status);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     if (!rpc_status.ok()) {
         // we need to cancel the execution of this fragment
+<<<<<<< HEAD
         update_status(rpc_status);
+=======
+        (void)update_status(rpc_status);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _executor.cancel();
     }
 }
@@ -397,7 +453,12 @@ void FragmentMgr::exec_actual(const std::shared_ptr<FragmentExecState>& exec_sta
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(s_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
+<<<<<<< HEAD
     exec_state->execute();
+=======
+    WARN_IF_ERROR(exec_state->execute(),
+                  strings::Substitute("Fail to execute fragment $0", print_id(exec_state->fragment_instance_id())));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Callback after remove from this id
     cb(exec_state->executor());
@@ -463,7 +524,11 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
     if (!st.ok()) {
         exec_state->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR);
         std::string error_msg = strings::Substitute("Put planfragment $0 to thread pool failed. err = $1",
+<<<<<<< HEAD
                                                     print_id(fragment_instance_id), st.get_error_msg());
+=======
+                                                    print_id(fragment_instance_id), st.message());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG(WARNING) << error_msg;
         {
             // Remove the exec state added
@@ -572,7 +637,12 @@ void FragmentMgr::cancel_worker() {
             }
         }
         for (auto& id : to_delete) {
+<<<<<<< HEAD
             cancel(id, PPlanFragmentCancelReason::TIMEOUT);
+=======
+            WARN_IF_ERROR(cancel(id, PPlanFragmentCancelReason::TIMEOUT),
+                          strings::Substitute("Fail to cancel fragment $0", print_id(id)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG(INFO) << "FragmentMgr cancel worker going to cancel timeout fragment " << print_id(id);
         }
         nap_sleep(1, [this] { return _stop; });
@@ -698,6 +768,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                 continue;
             }
 
+<<<<<<< HEAD
             Status fe_connection_status;
 
             FrontendServiceConnection fe_connection(fragment_exec_state->exec_env()->frontend_client_cache(),
@@ -714,6 +785,8 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                 continue;
             }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             std::vector<TReportExecStatusParams> report_exec_status_params_vector;
 
             TReportExecStatusParams params;
@@ -751,6 +824,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
             Status rpc_status;
 
             VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
+<<<<<<< HEAD
             try {
                 try {
                     fe_connection->batchReportExecStatus(res, report_batch);
@@ -768,6 +842,18 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                 std::stringstream msg;
                 msg << "ReportExecStatus() to " << fragment_exec_state->coord_addr() << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();
+=======
+            rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                    fragment_exec_state->coord_addr(),
+                    [&res, &report_batch](FrontendServiceConnection& client) {
+                        client->batchReportExecStatus(res, report_batch);
+                    },
+                    config::thrift_rpc_timeout_ms);
+
+            if (!rpc_status.ok()) {
+                LOG(WARNING) << "thrift rpc error:" << rpc_status;
+                continue;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
 
             const std::vector<TStatus>& status_list = res.status_list;
@@ -777,7 +863,11 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                     int32_t index = cur_batch_report_indexes[j];
                     FragmentExecState* fragment_exec_state = need_report_exec_states[index].get();
                     PlanFragmentExecutor* executor = fragment_exec_state->executor();
+<<<<<<< HEAD
                     fragment_exec_state->update_status(rpc_status);
+=======
+                    (void)fragment_exec_state->update_status(rpc_status);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     executor->cancel();
                 }
             }
@@ -870,7 +960,11 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
             LOG(WARNING) << "tuple descriptor is null. id: " << slot_ref.tuple_id;
             return Status::InvalidArgument("tuple descriptor is null");
         }
+<<<<<<< HEAD
         auto* slot_desc = desc_tbl->get_slot_descriptor(slot_ref.slot_id);
+=======
+        auto* slot_desc = desc_tbl->get_slot_descriptor_with_column(slot_ref.slot_id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (slot_desc == nullptr) {
             LOG(WARNING) << "slot descriptor is null. id: " << slot_ref.slot_id;
             return Status::InvalidArgument("slot descriptor is null");
@@ -945,7 +1039,10 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     query_options.query_type = TQueryType::EXTERNAL;
     // For spark sql / flink sql, we dont use page cache.
     query_options.use_page_cache = false;
+<<<<<<< HEAD
     query_options.use_column_pool = false;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     query_options.enable_profile = config::enable_profile_for_external_plan;
     exec_fragment_params.__set_query_options(query_options);
     VLOG_ROW << "external exec_plan_fragment params is "

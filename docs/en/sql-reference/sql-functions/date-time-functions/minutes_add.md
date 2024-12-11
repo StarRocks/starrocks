@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # minutes_add
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Adds the specified minutes to the date, accurate to the minute.
 
@@ -49,4 +53,8 @@ select minutes_add('2022-01-01', 1);
 +------------------------------+
 | 2022-01-01 00:01:00          |
 +------------------------------+
+<<<<<<< HEAD
 ```
+=======
+```
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

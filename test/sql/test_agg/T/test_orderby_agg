@@ -10,7 +10,10 @@ DUPLICATE KEY(`v1`, `v2`, `v3`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"

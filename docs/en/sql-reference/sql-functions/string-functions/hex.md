@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hex
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 If `x` is a numerical value, this function returns a hexadecimal string representation of the value.
 

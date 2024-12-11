@@ -28,7 +28,11 @@ StatusOr<ColumnPtr> StructFunctions::new_struct(FunctionContext* context, const 
     DCHECK_EQ(fields.size(), columns.size());
 
     for (int i = 0; i < columns.size(); i++) {
+<<<<<<< HEAD
         auto column = columns[i];
+=======
+        auto& column = columns[i];
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (column->only_null()) {
             fields[i]->append_nulls(column->size());
         } else if (column->is_constant()) {

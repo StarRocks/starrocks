@@ -16,5 +16,9 @@ package com.starrocks.sql.ast;
 
 public enum SetQualifier {
     ALL,
+<<<<<<< HEAD
     DISTINCT;
+=======
+    DISTINCT
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

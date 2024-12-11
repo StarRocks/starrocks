@@ -24,6 +24,7 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeThreadsScanner::_s_columns[] = {
+<<<<<<< HEAD
         {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"GROUP", TYPE_VARCHAR, sizeof(StringValue), false},
         {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -31,6 +32,16 @@ SchemaScanner::ColumnDesc SchemaBeThreadsScanner::_s_columns[] = {
         {"TID", TYPE_BIGINT, sizeof(int64_t), false},
         {"IDLE", TYPE_BOOLEAN, 1, false},
         {"FINISHED_TASKS", TYPE_BIGINT, sizeof(int64_t), false},
+=======
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"GROUP", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PTHREAD_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"IDLE", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), 1, false},
+        {"FINISHED_TASKS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"BOUND_CPUS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 SchemaBeThreadsScanner::SchemaBeThreadsScanner()
@@ -53,7 +64,11 @@ Status SchemaBeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
+<<<<<<< HEAD
             if (slot_id < 1 || slot_id > 7) {
+=======
+            if (slot_id < 1 || slot_id > 8) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -95,6 +110,14 @@ Status SchemaBeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.finished_tasks);
                 break;
             }
+<<<<<<< HEAD
+=======
+            case 8: {
+                // num_bound_cpu_cores
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_bound_cpu_cores);
+                break;
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             default:
                 break;
             }

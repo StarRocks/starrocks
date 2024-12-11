@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_approx_raw
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the value that corresponds to a specified percentile from `x`.
 

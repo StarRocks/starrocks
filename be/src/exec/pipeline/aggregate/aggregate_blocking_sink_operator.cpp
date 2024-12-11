@@ -74,6 +74,10 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
             _aggregator->set_ht_eos();
         }
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -96,7 +100,11 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
     SCOPED_TIMER(_aggregator->agg_compute_timer());
     // try to build hash table if has group by keys
     if (!_aggregator->is_none_group_by_exprs()) {
+<<<<<<< HEAD
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, _agg_group_by_with_limit));
+=======
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, _shared_limit_countdown, _agg_group_by_with_limit));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }
 
@@ -132,7 +140,12 @@ Status AggregateBlockingSinkOperatorFactory::prepare(RuntimeState* state) {
 OperatorPtr AggregateBlockingSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     // init operator
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
+<<<<<<< HEAD
     auto op = std::make_shared<AggregateBlockingSinkOperator>(aggregator, this, _id, _plan_node_id, driver_sequence);
+=======
+    auto op = std::make_shared<AggregateBlockingSinkOperator>(aggregator, this, _id, _plan_node_id, driver_sequence,
+                                                              _aggregator_factory->get_shared_limit_countdown());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return op;
 }
 

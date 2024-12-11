@@ -16,6 +16,10 @@
 
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD
+=======
+#include "runtime/agg_state_desc.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/aggregate_type.h"
 
 namespace starrocks {
@@ -161,4 +165,51 @@ TEST(FieldTest, test_with_nullable) {
     ASSERT_EQ(10, field2->short_key_length());
 }
 
+<<<<<<< HEAD
+=======
+TEST(FieldTest, test_with_agg_state_desc) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    AggStateDesc desc("avg", return_type, arg_types, true, 1);
+
+    // copy assignment
+    {
+        Field field1(1, "c1", get_type_info(TYPE_DOUBLE), STORAGE_AGGREGATE_AGG_STATE_UNION, &desc, 10, true, true);
+        ASSERT_TRUE(field1.get_agg_state_desc() != nullptr);
+
+        auto field2 = field1;
+        ASSERT_TRUE(field2.get_agg_state_desc() != nullptr);
+    }
+
+    // move assignment
+    {
+        auto field1 = std::make_shared<Field>(1, "c1", get_type_info(TYPE_DOUBLE), STORAGE_AGGREGATE_AGG_STATE_UNION,
+                                              &desc, 10, true, true);
+        ASSERT_EQ(1, field1->id());
+
+        auto field2 = std::move(field1);
+        ASSERT_TRUE(field2->get_agg_state_desc() != nullptr);
+    }
+
+    // with_name
+    {
+        auto field1 = std::make_shared<Field>(1, "c1", get_type_info(TYPE_DOUBLE), STORAGE_AGGREGATE_AGG_STATE_UNION,
+                                              &desc, 10, true, true);
+        ASSERT_EQ(1, field1->id());
+        ASSERT_TRUE(field1->get_agg_state_desc() != nullptr);
+        FieldPtr field2 = field1->with_name("c2");
+        ASSERT_TRUE(field2->get_agg_state_desc() != nullptr);
+    }
+    // with_nullable
+    {
+        auto field1 = std::make_shared<Field>(1, "c1", get_type_info(TYPE_DOUBLE), STORAGE_AGGREGATE_AGG_STATE_UNION,
+                                              &desc, 10, true, true);
+        ASSERT_EQ(1, field1->id());
+        ASSERT_TRUE(field1->get_agg_state_desc() != nullptr);
+        FieldPtr field2 = field1->with_nullable(false);
+        ASSERT_TRUE(field2->get_agg_state_desc() != nullptr);
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

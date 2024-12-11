@@ -16,11 +16,23 @@ ADD_BE_BENCH(${SRC_DIR}/bench/chunks_sorter_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/runtime_filter_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/csv_reader_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/shuffle_chunk_bench)
+<<<<<<< HEAD
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_array_bench)
 #ADD_BE_BENCH(${SRC_DIR}/bench/block_cache_bench)
+=======
+#ADD_BE_BENCH(${SRC_DIR}/bench/block_cache_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/roaring_bitmap_mem_bench)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_dict_decode_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/get_dict_codes_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/persistent_index_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/orc_column_reader_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/hash_functions_bench)
+<<<<<<< HEAD
+=======
+ADD_BE_BENCH(${SRC_DIR}/bench/binary_column_copy_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/hyperscan_vec_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/mem_equal_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/bit_unpack_bench)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

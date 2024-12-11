@@ -14,7 +14,12 @@
 
 package com.starrocks.credential;
 
+<<<<<<< HEAD
 import com.starrocks.credential.aws.AWSCloudCredential;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.aws.AwsCloudCredential;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TCloudConfiguration;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -39,11 +44,20 @@ public class CloudConfigurationFactoryTest {
         Assert.assertNotNull(cloudConfiguration);
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         Assert.assertEquals(
+<<<<<<< HEAD
                 "AWSCloudConfiguration{resources='', jars='', hdpuser='', cred=AWSCloudCredential{" +
                         "useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
                         "accessKey='ak', secretKey='sk', sessionToken='token', iamRoleArn='', " +
                         "externalId='', region='region', endpoint=''}, enablePathStyleAccess=false, " +
                         "enableSSL=true}", cloudConfiguration.toConfString());
+=======
+                "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
+                        "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
+                        "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+                        "region='region', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}",
+                cloudConfiguration.toConfString());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -59,17 +73,29 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.getCloudType(), CloudType.AWS);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
+<<<<<<< HEAD
         Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
         Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS),
+=======
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "false");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
         Assert.assertEquals(cc.toConfString(),
                 "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
+<<<<<<< HEAD
                         "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
                         "useInstanceProfile=false, accessKey='XX', secretKey='YY', sessionToken='', iamRoleArn='', " +
                         "externalId='', region='ZZ', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}");
+=======
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
+                        "accessKey='XX', secretKey='YY', sessionToken='', iamRoleArn='', stsRegion='', " +
+                        "stsEndpoint='', externalId='', region='ZZ', endpoint=''}, " +
+                        "enablePathStyleAccess=false, enableSSL=true}");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -85,7 +111,11 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.getCloudType(), CloudType.ALIYUN);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
+<<<<<<< HEAD
         Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+=======
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
@@ -118,7 +148,11 @@ public class CloudConfigurationFactoryTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAzurASLS1eCloudConfiguration() {
+=======
+    public void testAzureASLS1eCloudConfiguration() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Map<String, String> map = new HashMap<String, String>() {
             {
                 put(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_ENDPOINT, "XX");
@@ -168,6 +202,52 @@ public class CloudConfigurationFactoryTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testAzureADLS2ManagedIdentity() {
+        Map<String, String> map = new HashMap<>() {
+            {
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "endpoint");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "client-secret");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id");
+            }
+        };
+
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assert.assertEquals(cc.getCloudType(), CloudType.AZURE);
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        Assert.assertEquals("OAuth", conf.get("fs.azure.account.auth.type"));
+        Assert.assertEquals("org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider",
+                conf.get("fs.azure.account.oauth.provider.type"));
+        Assert.assertEquals("client-secret", conf.get("fs.azure.account.oauth2.client.secret"));
+        Assert.assertEquals("client-id", conf.get("fs.azure.account.oauth2.client.id"));
+        Assert.assertEquals("endpoint", conf.get("fs.azure.account.oauth2.client.endpoint"));
+    }
+
+    @Test
+    public void testAzureADLS2Oauth2() {
+        Map<String, String> map = new HashMap<>() {
+            {
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant-id");
+            }
+        };
+
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assert.assertEquals(cc.getCloudType(), CloudType.AZURE);
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        Assert.assertEquals("OAuth", conf.get("fs.azure.account.auth.type"));
+        Assert.assertEquals("org.apache.hadoop.fs.azurebfs.oauth2.MsiTokenProvider",
+                conf.get("fs.azure.account.oauth.provider.type"));
+        Assert.assertEquals("tenant-id", conf.get("fs.azure.account.oauth2.msi.tenant"));
+        Assert.assertEquals("client-id", conf.get("fs.azure.account.oauth2.client.id"));
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testGCPCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>() {
             {
@@ -211,6 +291,39 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.toConfString(),
                 "HDFSCloudConfiguration{resources='', jars='', hdpuser='XX', cred=HDFSCloudCredential{authentication='simple', " +
                         "username='XX', password='XX', krbPrincipal='', krbKeyTabFile='', krbKeyTabData=''}}");
+<<<<<<< HEAD
+=======
+
+        map.clear();
+        cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assert.assertEquals(CloudType.DEFAULT, cc.getCloudType());
+
+        cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map, true);
+        Assert.assertEquals(CloudType.HDFS, cc.getCloudType());
+    }
+
+    @Test
+    public void testTencentCloudConfiguration() {
+        Map<String, String> map = new HashMap<String, String>() {
+            {
+                put(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY, "XX");
+                put(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY, "YY");
+                put(CloudConfigurationConstants.TENCENT_COS_ENDPOINT, "ZZ");
+            }
+        };
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assert.assertNotNull(cc);
+        Assert.assertEquals(cc.getCloudType(), CloudType.TENCENT);
+        TCloudConfiguration tc = new TCloudConfiguration();
+        cc.toThrift(tc);
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        cc.toFileStoreInfo();
+        Assert.assertEquals(cc.toConfString(),
+                "TencentCloudConfiguration{resources='', jars='', hdpuser='', cred=TencentCloudCredential{accessKey='XX', " +
+                        "secretKey='YY', endpoint='ZZ'}}");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -230,9 +343,17 @@ public class CloudConfigurationFactoryTest {
     public void testGlueCredential() {
         HiveConf conf = new HiveConf();
         conf.set(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+<<<<<<< HEAD
         AWSCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
         Assert.assertEquals(cred.toCredString(),
                 "AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, accessKey='', secretKey='', " +
                         "sessionToken='', iamRoleArn='', externalId='', region='us-east-1', endpoint=''}");
+=======
+        AwsCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
+        Assert.assertNotNull(cred);
+        Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, " +
+                        "accessKey='', secretKey='', sessionToken='', iamRoleArn='', stsRegion='', " +
+                        "stsEndpoint='', externalId='', region='us-east-1', endpoint=''}", cred.toCredString());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

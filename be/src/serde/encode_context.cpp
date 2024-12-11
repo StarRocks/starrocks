@@ -24,7 +24,10 @@ EncodeContext::EncodeContext(const int col_num, const int encode_level) : _sessi
         _raw_bytes.emplace_back(0);
         _encoded_bytes.emplace_back(0);
     }
+<<<<<<< HEAD
     DCHECK(_session_encode_level != 0);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // the lowest bit is set and other bits are not zero, then enable adjust.
     if (_session_encode_level & 1 && (_session_encode_level >> 1)) {
         _enable_adjust = true;
@@ -32,7 +35,10 @@ EncodeContext::EncodeContext(const int col_num, const int encode_level) : _sessi
 }
 
 void EncodeContext::update(const int col_id, uint64_t mem_bytes, uint64_t encode_byte) {
+<<<<<<< HEAD
     DCHECK(_session_encode_level != 0);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (!_enable_adjust) {
         return;
     }

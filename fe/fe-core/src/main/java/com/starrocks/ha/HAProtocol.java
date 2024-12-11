@@ -36,4 +36,9 @@ public interface HAProtocol {
 
     // remove a node from the group
     boolean removeElectableNode(String nodeName);
+<<<<<<< HEAD
+=======
+
+    long getLatestEpoch();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -31,6 +32,19 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
+=======
+import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -50,9 +64,16 @@ import java.util.Set;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
+<<<<<<< HEAD
 public class CreateSyncMaterializedViewTest {
     private static final Logger LOG = LogManager.getLogger(CreateSyncMaterializedViewTest.class);
 
+=======
+// If you add a test in this file,
+// please add it in another file LakeSyncMaterializedViewTest too.
+// The test cases for both files are the same, but the RunMode is different.
+public class CreateSyncMaterializedViewTest {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
 
@@ -69,6 +90,7 @@ public class CreateSyncMaterializedViewTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+<<<<<<< HEAD
         Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
@@ -76,6 +98,17 @@ public class CreateSyncMaterializedViewTest {
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
+=======
+        ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
+
+        UtFrameUtils.createMinStarRocksCluster();
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
@@ -193,12 +226,21 @@ public class CreateSyncMaterializedViewTest {
                 .useDatabase("test");
         starRocksAssert.withView("create view test.view_to_tbl1 as select * from test.tbl1;");
         currentState = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         testDb = currentState.getDb("test");
     }
 
     private Table getTable(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
+=======
+        testDb = currentState.getLocalMetastore().getDb("test");
+    }
+
+    private Table getTable(String dbName, String mvName) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertNotNull(table);
         return table;
     }
@@ -216,14 +258,24 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         waitingRollupJobV2Finish();
         sql = "select * from sync_mv1 [_SYNC_MV_];";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
+<<<<<<< HEAD
         Assert.assertTrue(explainString.contains("partitions=0/2\n" +
                 "     rollup: sync_mv1"));
+=======
+        Assert.assertTrue(explainString.contains("partitions=2/2\n" +
+                "     rollup: sync_mv1\n" +
+                "     tabletRatio=6/6"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.dropMaterializedView("sync_mv1");
     }
 
@@ -235,11 +287,18 @@ public class CreateSyncMaterializedViewTest {
                 parseStmtWithNewParser(sql, connectContext);
         try {
             // aggregate_table_with_null already existed in the db
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
             Assert.fail();
         } catch (Exception e) {
             e.printStackTrace();
             Assert.assertTrue(e.getMessage().contains("Table [aggregate_table_with_null] already exists"));
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Table [aggregate_table_with_null] already exists in the db test"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -249,7 +308,11 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         waitingRollupJobV2Finish();
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
@@ -261,10 +324,18 @@ public class CreateSyncMaterializedViewTest {
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
             Assert.fail();
         } catch (Throwable e) {
             Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists"));
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+            Assert.fail();
+        } catch (Throwable e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists in " +
+                    "the table tbl1"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         starRocksAssert.dropMaterializedView("sync_mv1");
     }
@@ -275,7 +346,11 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         waitingRollupJobV2Finish();
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
@@ -286,10 +361,18 @@ public class CreateSyncMaterializedViewTest {
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
             Assert.fail();
         } catch (Throwable e) {
             Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists"));
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+            Assert.fail();
+        } catch (Throwable e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists " +
+                    "in table tbl1"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         starRocksAssert.dropMaterializedView("sync_mv1");
     }
@@ -300,7 +383,11 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view UPPER_MV1 as select K1, sum(V1) from TBL1 group by K1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         waitingRollupJobV2Finish();
         {
@@ -309,14 +396,32 @@ public class CreateSyncMaterializedViewTest {
             String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
             // output columns should be same with the base table.
             Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+<<<<<<< HEAD
                     " OUTPUT EXPRS:1: K1 | 2: mv_sum_V1\n"));
+=======
+                    " OUTPUT EXPRS:1: K1 | 2: mv_sum_V1\n" +
+                    "  PARTITION: UNPARTITIONED"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         {
             sql = "select K1, sum(V1) from TBL1 group by K1";
             Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
             String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
+<<<<<<< HEAD
             Assert.assertTrue(explainString.contains("0:OlapScanNode\n" +
                     "     TABLE: TBL1\n"));
+=======
+            Assert.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(4: mv_sum_V1)\n" +
+                    "  |  group by: 1: K1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: TBL1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=2/2\n" +
+                    "     rollup: UPPER_MV1"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         starRocksAssert.dropMaterializedView("UPPER_MV1");
     }
@@ -327,7 +432,11 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view lower_mv1 as select k1, sum(v1) from tbl1 group by K1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         waitingRollupJobV2Finish();
         {
@@ -336,19 +445,38 @@ public class CreateSyncMaterializedViewTest {
             String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
             // output columns should be same with the base table.
             Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+<<<<<<< HEAD
                     " OUTPUT EXPRS:1: k1 | 2: mv_sum_v1\n"));
+=======
+                    " OUTPUT EXPRS:1: k1 | 2: mv_sum_v1\n" +
+                    "  PARTITION: UNPARTITIONED"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         {
             sql = "select K1, sum(v1) from tbl1 group by K1";
             Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
             String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
+<<<<<<< HEAD
             Assert.assertTrue(explainString.contains("0:OlapScanNode\n" +
                     "     TABLE: tbl1\n"));
+=======
+            Assert.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(4: mv_sum_v1)\n" +
+                    "  |  group by: 1: k1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: tbl1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=2/2\n" +
+                    "     rollup: lower_mv1"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         starRocksAssert.dropMaterializedView("lower_mv1");
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateSynchronousMVOnLakeTable() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
@@ -366,6 +494,8 @@ public class CreateSyncMaterializedViewTest {
     }
 
     @Test
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testCreateSynchronousMVOnAnotherMV() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
@@ -374,7 +504,11 @@ public class CreateSyncMaterializedViewTest {
         // Change table type to materialized view
         Deencapsulation.setField(table, "type", Table.TableType.MATERIALIZED_VIEW);
         DdlException e = Assert.assertThrows(DdlException.class, () -> {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         });
         Assert.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
     }
@@ -497,8 +631,12 @@ public class CreateSyncMaterializedViewTest {
                 ")\n" +
                 "AGGREGATE KEY(k1, k2)\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+<<<<<<< HEAD
                 "PROPERTIES('replication_num' = '1');" +
                 "");
+=======
+                "PROPERTIES('replication_num' = '1');");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
                 "SELECT\n" +
                 "DATE_FORMAT(a.k1, '%Y-%m') AS month, \n" +
@@ -517,7 +655,10 @@ public class CreateSyncMaterializedViewTest {
         List<Column> columns = mvIndexMeta.getSchema();
         Set<String> keyColumns = ImmutableSet.of("mv_month");
         for (Column column : columns) {
+<<<<<<< HEAD
             System.out.println(column.getAggregationType());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (keyColumns.contains(column.getName())) {
                 Assert.assertTrue(column.isKey());
                 Assert.assertFalse(column.isAggregated());
@@ -531,6 +672,15 @@ public class CreateSyncMaterializedViewTest {
         starRocksAssert.dropTable("t1");
     }
 
+<<<<<<< HEAD
+=======
+    public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, statement).execute();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testCreateMVWithAggregateTable2() throws Exception {
         starRocksAssert.useDatabase("test");
@@ -543,8 +693,12 @@ public class CreateSyncMaterializedViewTest {
                 "    v1 BIGINT sum DEFAULT \"0\"\n" +
                 ")\n" +
                 "AGGREGATE KEY(k1,  k2, k3,  k4)\n" +
+<<<<<<< HEAD
                 "DISTRIBUTED BY HASH(k4)\n" +
                 "PROPERTIES('replication_num' = '1');");
+=======
+                "DISTRIBUTED BY HASH(k4);");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
                 "SELECT\n" +
                 "  a.k3,\n" +
@@ -566,7 +720,10 @@ public class CreateSyncMaterializedViewTest {
         List<Column> columns = mvIndexMeta.getSchema();
         Set<String> keyColumns = ImmutableSet.of("k3", "mv_month");
         for (Column column : columns) {
+<<<<<<< HEAD
             System.out.println(column.getAggregationType());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (keyColumns.contains(column.getName())) {
                 Assert.assertTrue(column.isKey());
                 Assert.assertFalse(column.isAggregated());
@@ -577,6 +734,10 @@ public class CreateSyncMaterializedViewTest {
             }
         }
 
+<<<<<<< HEAD
+=======
+        executeInsertSql(connectContext, "insert into t1 values ('200', 'a', 11.00, '2024-08-06', 1);");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.dropMaterializedView("test_mv1");
         starRocksAssert.dropTable("t1");
     }
@@ -593,8 +754,12 @@ public class CreateSyncMaterializedViewTest {
                 "    v1 BIGINT sum DEFAULT \"0\"\n" +
                 ")\n" +
                 "AGGREGATE KEY(k1,  k2, k3,  k4)\n" +
+<<<<<<< HEAD
                 "DISTRIBUTED BY HASH(k4)\n" +
                 "PROPERTIES('replication_num' = '1');");
+=======
+                "DISTRIBUTED BY HASH(k4);");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
                     "SELECT\n" +
@@ -613,4 +778,38 @@ public class CreateSyncMaterializedViewTest {
         }
         starRocksAssert.dropTable("t1");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCreateMVWithAggState() throws Exception {
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE t1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT DEFAULT \"0\"\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                    "SELECT k1, k2, avg_union(avg_state(k3)) as v1 from t1 group by k1, k2;");
+            starRocksAssert.dropMaterializedView("test_mv1");
+        }
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                    "SELECT k1, k2, avg_union(avg_state(k3 * 2)) as v1 from t1 group by k1, k2;");
+            starRocksAssert.dropMaterializedView("test_mv1");
+        }
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                    "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from t1 where k1 != 'a' group by k1, k2;");
+            starRocksAssert.dropMaterializedView("test_mv1");
+        }
+        starRocksAssert.dropTable("t1");
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

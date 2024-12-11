@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # microseconds_sub
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 从 `expr1` 中减去指定的时间间隔，单位为微秒。
 

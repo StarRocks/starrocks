@@ -66,7 +66,11 @@ public class ExternalCatalogTableBasicInfo implements BasicTable {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean isView() {
+=======
+    public boolean isOlapView() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return false;
     }
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_union
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Calculates the bitmap union of a set of values after grouping. Common usage scenarios include calculating PV and UV.
 

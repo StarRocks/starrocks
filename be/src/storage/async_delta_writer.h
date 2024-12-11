@@ -74,6 +74,14 @@ public:
     // [thread-safe and wait-free]
     void write_segment(const AsyncDeltaWriterSegmentRequest& req);
 
+<<<<<<< HEAD
+=======
+    // This method will flush all the records in memtable to disk.
+    //
+    // [thread-safe and wait-free]
+    void flush();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // [thread-safe and wait-free]
     void commit(AsyncDeltaWriterCallback* cb);
 
@@ -92,6 +100,15 @@ public:
 
     const FlushStatistic& get_flush_stats() const { return _writer->get_flush_stats(); }
 
+<<<<<<< HEAD
+=======
+    bool is_immutable() const { return _writer->is_immutable(); }
+
+    int64_t last_write_ts() const { return _writer->last_write_ts(); }
+
+    int64_t write_buffer_size() const { return _writer->write_buffer_size(); }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Just for testing
     DeltaWriter* writer() { return _writer.get(); }
 
@@ -111,6 +128,10 @@ private:
         bool commit_after_write = false;
         bool abort = false;
         bool abort_with_log = false;
+<<<<<<< HEAD
+=======
+        bool flush_after_write = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         int64_t create_time_ns;
     };
 

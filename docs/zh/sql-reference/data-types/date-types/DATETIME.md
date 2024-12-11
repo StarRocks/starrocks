@@ -12,6 +12,11 @@ import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'
 
 打印的形式是 `YYYY-MM-DD HH:MM:SS`。
 
+<<<<<<< HEAD
+=======
+从 v3.3.5 起，DATETIME 支持毫秒和微秒精度。打印形式为 `YYYY-MM-DD HH:MM:SS.fffffff`
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ## 示例
 
 创建表时指定字段类型为 DATETIME。

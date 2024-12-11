@@ -36,11 +36,19 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.utframe.UtFrameUtils;
@@ -79,9 +87,14 @@ public class SparkResourceTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
                              @Injectable Auth auth)
             throws UserException {
+=======
+    public void testFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         new Expectations() {
             {
                 globalStateMgr.getBrokerMgr();
@@ -91,6 +104,17 @@ public class SparkResourceTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // master: spark, deploy_mode: cluster
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
@@ -150,8 +174,13 @@ public class SparkResourceTest {
     }
 
     @Test(expected = DdlException.class)
+<<<<<<< HEAD
     public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
                                             @Injectable Auth auth) throws UserException {
+=======
+    public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // master: yarn, deploy_mode: cluster
         // yarn resource manager ha
         properties.put("spark.master", "yarn");
@@ -162,14 +191,30 @@ public class SparkResourceTest {
         properties.put("spark.hadoop.yarn.resourcemanager.hostname.rm3", "host3");
         properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
+<<<<<<< HEAD
+=======
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         Resource.fromStmt(stmt);
     }
 
     @Test
+<<<<<<< HEAD
     public void testUpdate(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
                            @Injectable Auth auth)
             throws UserException {
+=======
+    public void testUpdate(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         new Expectations() {
             {
                 globalStateMgr.getBrokerMgr();
@@ -179,6 +224,17 @@ public class SparkResourceTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         properties.put("spark.master", "yarn");
         properties.put("spark.submit.deployMode", "cluster");
         properties.put("spark.driver.memory", "1g");
@@ -201,9 +257,14 @@ public class SparkResourceTest {
     }
 
     @Test(expected = DdlException.class)
+<<<<<<< HEAD
     public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
                              @Injectable Auth auth)
             throws UserException {
+=======
+    public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         new Expectations() {
             {
                 globalStateMgr.getBrokerMgr();
@@ -213,6 +274,17 @@ public class SparkResourceTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         Resource.fromStmt(stmt);

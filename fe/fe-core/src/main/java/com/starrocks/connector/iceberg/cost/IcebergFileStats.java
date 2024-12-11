@@ -35,9 +35,12 @@ import java.util.function.Predicate;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toSet;
 
+<<<<<<< HEAD
 /**
  * Aggregated statistics for a collection of files.
  */
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class IcebergFileStats {
     private Map<Integer, Type.PrimitiveType> idToTypeMapping;
     private List<Types.NestedField> nonPartitionPrimitiveColumns;
@@ -103,10 +106,13 @@ public class IcebergFileStats {
         return recordCount;
     }
 
+<<<<<<< HEAD
     public long getFileCount() {
         return fileCount;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public long getSize() {
         return size;
     }
@@ -124,11 +130,15 @@ public class IcebergFileStats {
             return false;
         }
 
+<<<<<<< HEAD
         if (idToTypeMapping.get(fieldId) == null || values.get(fieldId) == null) {
             return false;
         }
 
         return true;
+=======
+        return idToTypeMapping.get(fieldId) != null && values.get(fieldId) != null;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private Optional<Double> getBoundStatistic(Integer fieldId, Map<Integer, Object> boundValues) {
@@ -250,7 +260,11 @@ public class IcebergFileStats {
     }
 
     public static Optional<Double> convertObjectToOptionalDouble(Type.PrimitiveType type, Object value) {
+<<<<<<< HEAD
         double valueConvert = 0;
+=======
+        double valueConvert;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (type instanceof Types.BooleanType) {
             valueConvert = (boolean) value ? 1 : 0;
         } else if (type instanceof Types.IntegerType) {
@@ -262,12 +276,17 @@ public class IcebergFileStats {
         } else if (type instanceof Types.DoubleType) {
             valueConvert = (double) value;
         } else if (type instanceof Types.TimestampType) {
+<<<<<<< HEAD
             // we deal iceberg TimestampType as seconds in columnstatistics
             // in iceberg it's microsecond
             valueConvert = ((long) value) / 1000000;
         } else if (type instanceof Types.DateType) {
             // we deal iceberg DateType as seconds in columnstatistics
             // in iceberg it's num of day from 1970-01-01
+=======
+            valueConvert = (double) (long) value / 1000000;
+        } else if (type instanceof Types.DateType) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             valueConvert = ((long) ((int) value)) * 86400;
         } else if (type instanceof Types.DecimalType) {
             valueConvert = ((BigDecimal) value).doubleValue();

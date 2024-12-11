@@ -26,11 +26,20 @@
 namespace starrocks {
 
 RollingAsyncParquetWriter::RollingAsyncParquetWriter(
+<<<<<<< HEAD
         TableInfo tableInfo, const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile,
         std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> commit_func, RuntimeState* state,
         int32_t driver_id)
         : _table_info(std::move(tableInfo)),
           _output_expr_ctxs(output_expr_ctxs),
+=======
+        TableInfo tableInfo, std::vector<ExprContext*> output_expr_ctxs, RuntimeProfile* parent_profile,
+        std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> commit_func, RuntimeState* state,
+        int32_t driver_id)
+        : _table_info(std::move(tableInfo)),
+          _max_file_size(_table_info.max_file_size),
+          _output_expr_ctxs(std::move(output_expr_ctxs)),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
           _parent_profile(parent_profile),
           _commit_func(std::move(commit_func)),
           _state(state),
@@ -47,7 +56,11 @@ Status RollingAsyncParquetWriter::init() {
     ASSIGN_OR_RETURN(auto compression_codec,
                      parquet::ParquetBuildHelper::convert_compression_type(_table_info.compress_type));
     builder.compression(compression_codec);
+<<<<<<< HEAD
     builder.version(::parquet::ParquetVersion::PARQUET_2_0);
+=======
+    builder.version(::parquet::ParquetVersion::PARQUET_2_6);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _properties = builder.build();
 
     return Status::OK();
@@ -62,18 +75,27 @@ std::string RollingAsyncParquetWriter::_new_file_location() {
     return _outfile_location;
 }
 
+<<<<<<< HEAD
 Status RollingAsyncParquetWriter::_new_file_writer() {
+=======
+Status RollingAsyncParquetWriter::_new_file_writer(RuntimeState* state) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string new_file_location = _new_file_location();
     WritableFileOptions options{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(options, new_file_location))
     _writer = std::make_shared<starrocks::parquet::AsyncFileWriter>(
             std::move(writable_file), new_file_location, _partition_location, _properties, _schema, _output_expr_ctxs,
+<<<<<<< HEAD
             ExecEnv::GetInstance()->pipeline_sink_io_pool(), _parent_profile, _max_file_size);
+=======
+            ExecEnv::GetInstance()->pipeline_sink_io_pool(), _parent_profile, _max_file_size, state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto st = _writer->init();
     return st;
 }
 
 Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state) {
+<<<<<<< HEAD
     if (_writer == nullptr) {
         RETURN_IF_ERROR(_new_file_writer());
     }
@@ -81,6 +103,17 @@ Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state
     if (_writer->file_size() > _max_file_size) {
         RETURN_IF_ERROR(close_current_writer(state));
         RETURN_IF_ERROR(_new_file_writer());
+=======
+    RETURN_IF_ERROR(get_io_status());
+
+    if (_writer == nullptr) {
+        RETURN_IF_ERROR(_new_file_writer(state));
+    }
+    // exceed file size
+    if (_max_file_size != -1 && _writer->file_size() > _max_file_size) {
+        RETURN_IF_ERROR(close_current_writer(state));
+        RETURN_IF_ERROR(_new_file_writer(state));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return _writer->write(chunk);
 }
@@ -108,6 +141,7 @@ Status RollingAsyncParquetWriter::close(RuntimeState* state) {
 
 bool RollingAsyncParquetWriter::closed() {
     for (auto& writer : _pending_commits) {
+<<<<<<< HEAD
         if (writer != nullptr && writer->closed()) {
             writer = nullptr;
         }
@@ -118,6 +152,27 @@ bool RollingAsyncParquetWriter::closed() {
 
     if (_writer != nullptr) {
         return _writer->closed();
+=======
+        if (!writer->closed()) {
+            return false;
+        }
+
+        auto st = writer->get_io_status();
+        if (!st.ok()) {
+            set_io_status(st);
+        }
+    }
+
+    if (_writer != nullptr) {
+        if (!_writer->closed()) {
+            return false;
+        }
+
+        auto st = _writer->get_io_status();
+        if (!st.ok()) {
+            set_io_status(st);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     return true;

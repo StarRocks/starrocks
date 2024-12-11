@@ -183,5 +183,13 @@ public class MockJournal implements Journal {
         public boolean removeElectableNode(String nodeName) {
             return true;
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public long getLatestEpoch() {
+            return 0;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

@@ -36,11 +36,19 @@
 
 #include <fmt/format.h>
 
+<<<<<<< HEAD
+=======
+#include <cstddef>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <memory>
 
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
+=======
+#include "simd/simd.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/encoding_info.h"
@@ -100,7 +108,15 @@ public:
             pos_in_data = offset_in_data + skips - skip_nulls;
         }
 
+<<<<<<< HEAD
         _data_decoder->seek_to_position_in_page(pos_in_data);
+=======
+#if BE_TEST
+        WARN_IF_ERROR(_data_decoder->seek_to_position_in_page(pos_in_data), "BE_TEST");
+#else
+        RETURN_IF_ERROR(_data_decoder->seek_to_position_in_page(pos_in_data));
+#endif
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _offset_in_page = offset;
         return Status::OK();
     }
@@ -131,6 +147,7 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     Status read(Column* column, const SparseRange& range) override {
         DCHECK_LE(range.span_size(), remaining());
         if (_has_null) {
@@ -138,6 +155,15 @@ public:
             size_t to_read = range.span_size();
             while (to_read > 0) {
                 Range r = iter.next(to_read);
+=======
+    Status read(Column* column, const SparseRange<>& range) override {
+        DCHECK_LE(range.span_size(), remaining());
+        if (_has_null) {
+            SparseRangeIterator<> iter = range.new_iterator();
+            size_t to_read = range.span_size();
+            while (to_read > 0) {
+                Range<> r = iter.next(to_read);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RETURN_IF_ERROR(seek(r.begin()));
                 size_t n = r.span_size();
                 RETURN_IF_ERROR(read(column, &n));
@@ -184,6 +210,7 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     Status read_dict_codes(Column* column, const SparseRange& range) override {
         DCHECK_LE(range.span_size(), remaining());
         if (_has_null) {
@@ -191,6 +218,15 @@ public:
             SparseRangeIterator iter = range.new_iterator();
             while (to_read > 0) {
                 Range r = iter.next(to_read);
+=======
+    Status read_dict_codes(Column* column, const SparseRange<>& range) override {
+        DCHECK_LE(range.span_size(), remaining());
+        if (_has_null) {
+            size_t to_read = range.span_size();
+            SparseRangeIterator<> iter = range.new_iterator();
+            while (to_read > 0) {
+                Range<> r = iter.next(to_read);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RETURN_IF_ERROR(seek(r.begin()));
                 size_t n = r.span_size();
                 RETURN_IF_ERROR(read_dict_codes(column, &n));
@@ -204,6 +240,27 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
+=======
+    size_t read_null_count() override {
+        DCHECK_EQ(_offset_in_page, 0);
+        size_t nrows_to_read = _num_rows;
+        size_t count = 0;
+        if (_has_null) {
+            while (nrows_to_read > 0) {
+                bool is_null = false;
+                size_t this_run = _null_decoder.GetNextRun(&is_null, nrows_to_read);
+                if (is_null) {
+                    count += this_run;
+                }
+                nrows_to_read -= this_run;
+                _offset_in_page += this_run;
+            }
+        }
+        return count;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     friend Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
@@ -238,7 +295,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     Status read(Column* column, const SparseRange& range) override {
+=======
+    Status read(Column* column, const SparseRange<>& range) override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         DCHECK_EQ(_offset_in_page, range.begin());
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
         if (_null_flags.size() == 0) {
@@ -247,11 +308,19 @@ public:
         } else {
             auto nc = down_cast<NullableColumn*>(column);
             RETURN_IF_ERROR(_data_decoder->next_batch(range, nc->data_column().get()));
+<<<<<<< HEAD
             SparseRangeIterator iter = range.new_iterator();
             size_t size = range.span_size();
             while (iter.has_more()) {
                 _offset_in_page = iter.begin();
                 Range r = iter.next(size);
+=======
+            SparseRangeIterator<> iter = range.new_iterator();
+            size_t size = range.span_size();
+            while (iter.has_more()) {
+                _offset_in_page = iter.begin();
+                Range<> r = iter.next(size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
                 _offset_in_page += r.span_size();
                 size -= r.span_size();
@@ -274,7 +343,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     Status read_dict_codes(Column* column, const SparseRange& range) override {
+=======
+    Status read_dict_codes(Column* column, const SparseRange<>& range) override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         DCHECK_EQ(_offset_in_page, range.begin());
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
 
@@ -284,11 +357,19 @@ public:
         } else {
             auto nc = down_cast<NullableColumn*>(column);
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(range, nc->data_column().get()));
+<<<<<<< HEAD
             SparseRangeIterator iter = range.new_iterator();
             size_t size = range.span_size();
             while (iter.has_more()) {
                 _offset_in_page = iter.begin();
                 Range r = iter.next(size);
+=======
+            SparseRangeIterator<> iter = range.new_iterator();
+            size_t size = range.span_size();
+            while (iter.has_more()) {
+                _offset_in_page = iter.begin();
+                Range<> r = iter.next(size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
                 _offset_in_page += r.span_size();
             }
@@ -298,6 +379,19 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
+=======
+    size_t read_null_count() override {
+        DCHECK_EQ(_offset_in_page, 0);
+        size_t count = 0;
+        if (_null_flags.size() > 0) {
+            count = SIMD::count_nonzero(_null_flags.data(), _num_rows);
+            _offset_in_page += _num_rows;
+        }
+        return count;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     friend Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,

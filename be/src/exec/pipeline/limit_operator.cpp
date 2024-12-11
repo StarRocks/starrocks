@@ -15,6 +15,10 @@
 #include "exec/pipeline/limit_operator.h"
 
 #include "column/chunk.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/query_context.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -40,4 +44,24 @@ Status LimitOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+void LimitOperator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    if (!_is_subordinate && ctx != nullptr) {
+        ctx->force_set_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+            ctx->update_pred_filter_stats(_plan_node_id,
+                                          _conjuncts_input_counter->value() - _conjuncts_output_counter->value());
+        }
+
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::pipeline

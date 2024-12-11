@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # arrays_overlap
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Checks whether the intersection of two arrays is empty. The arrays that you specify must be of the same data type. If the intersection is empty, this function returns `0`. Otherwise, this function returns `1`.
 

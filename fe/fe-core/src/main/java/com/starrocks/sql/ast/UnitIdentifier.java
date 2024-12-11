@@ -37,6 +37,14 @@ public class UnitIdentifier implements ParseNode {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public String toSql() {
+        return description;
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public NodePosition getPos() {
         return pos;
     }

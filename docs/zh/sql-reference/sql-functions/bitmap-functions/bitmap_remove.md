@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_remove
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 从 Bitmap 中删除指定的数值。
 

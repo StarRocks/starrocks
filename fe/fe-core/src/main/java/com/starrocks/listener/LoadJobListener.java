@@ -17,6 +17,11 @@ package com.starrocks.listener;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.DmlType;
+import com.starrocks.transaction.InsertOverwriteJobStats;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.transaction.TransactionState;
 
 /**
@@ -38,6 +43,7 @@ public interface LoadJobListener {
 
     /**
      * Listener after `Insert INTO` transaction is finished, which is only triggered without an error.
+<<<<<<< HEAD
      * @param transactionState finished transaction states
      * @param db database of the target table
      * @param table target table that has changed
@@ -50,6 +56,24 @@ public interface LoadJobListener {
      * @param table target table that has changed
      */
     void onInsertOverwriteJobCommitFinish(Database db, Table table);
+=======
+     *
+     * @param transactionState finished transaction states
+     * @param db               database of the target table
+     * @param table            target table that has changed
+     * @param dmlType
+     */
+    void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table, DmlType dmlType);
+
+    /**
+     * Listener after `Insert OVERWRITE` transaction is finished, which is only triggered without an error.
+     *
+     * @param db    database of the target table
+     * @param table target table that has changed
+     * @param stats
+     */
+    void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     /**
      * Listener after `Delete` transaction is finished, which is only triggered without an error.

@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## 功能
 
+<<<<<<< HEAD
 该语句用于查看 FE 节点。FE 节点添加方式及高可用部署请参考 [集群部署](../../../../administration/Deployment.md#部署-fe-高可用集群) 章节。
+=======
+该语句用于查看 FE 节点。FE 节点添加方式及高可用部署请参考 [集群部署](../../../../deployment/deploy_manually.md) 章节。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 > **注意**
 >

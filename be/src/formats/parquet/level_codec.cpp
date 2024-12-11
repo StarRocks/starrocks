@@ -14,8 +14,15 @@
 
 #include "formats/parquet/level_codec.h"
 
+<<<<<<< HEAD
 #include "util/bit_util.h"
 #include "util/coding.h"
+=======
+#include "util/bit_stream_utils.inline.h"
+#include "util/bit_util.h"
+#include "util/coding.h"
+#include "util/slice.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::parquet {
 
@@ -23,6 +30,11 @@ Status LevelDecoder::parse(tparquet::Encoding::type encoding, level_t max_level,
     _encoding = encoding;
     _bit_width = BitUtil::log2(max_level + 1);
     _num_levels = num_levels;
+<<<<<<< HEAD
+=======
+    // new page, invalid cached decode
+    _levels_decoded = _levels_parsed;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     switch (encoding) {
     case tparquet::Encoding::RLE: {
         if (slice->size < 4) {
@@ -58,4 +70,19 @@ Status LevelDecoder::parse(tparquet::Encoding::type encoding, level_t max_level,
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+size_t LevelDecoder::_get_level_to_decode_batch_size(size_t row_num) {
+    constexpr size_t min_level_batch_size = 4096;
+    size_t levels_remaining = _levels_decoded - _levels_parsed;
+    if (row_num <= levels_remaining) {
+        return 0;
+    }
+
+    size_t levels_to_decode = std::max(min_level_batch_size, row_num - levels_remaining);
+    levels_to_decode = std::min(levels_to_decode, static_cast<size_t>(_num_levels));
+    return levels_to_decode;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::parquet

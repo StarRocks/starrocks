@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+<<<<<<< HEAD
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
@@ -29,22 +30,40 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
+=======
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KeysDesc;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.QueryStatement;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+=======
+import com.starrocks.sql.ast.RangePartitionDesc;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.parser.ParsingException;
 
 import java.util.HashMap;
@@ -63,8 +82,11 @@ public class CTASAnalyzer {
 
         Analyzer.analyze(queryStatement, session);
 
+<<<<<<< HEAD
         // Pair<TableName, Pair<ColumnName, ColumnAlias>>
         Map<Pair<String, Pair<String, String>>, Table> columnNameToTable = Maps.newHashMap();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
         Map<String, Table> tableRefToTable = new HashMap<>();
         for (Map.Entry<TableName, Table> t : tables.entrySet()) {
@@ -97,15 +119,29 @@ public class CTASAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         for (int i = 0; i < allFields.size(); i++) {
             Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType());
             Expr originExpression = allFields.get(i).getOriginExpression();
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
                     null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
+=======
+        TableName tableNameObject = createTableStmt.getDbTbl();
+        tableNameObject.normalization(session);
+        CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
+
+        for (int i = 0; i < allFields.size(); i++) {
+            Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType(),
+                    createTableStmt.isOlapEngine());
+            Expr originExpression = allFields.get(i).getOriginExpression();
+            ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
+                    null, null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (isPKTable && keysDesc.containsCol(finalColumnNames.get(i))) {
                 columnDef.setAllowNull(false);
             }
             createTableStmt.addColumnDef(columnDef);
+<<<<<<< HEAD
             if (originExpression instanceof SlotRef) {
                 SlotRef slotRef = (SlotRef) originExpression;
                 // lateral json_each(parse_json(c1)) will return null
@@ -120,6 +156,8 @@ public class CTASAnalyzer {
                 columnNameToTable.put(new Pair<>(tableName,
                         new Pair<>(slotRef.getColumnName(), allFields.get(i).getName())), table);
             }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // For replication_num, The behavior is the same as creating a table
@@ -134,6 +172,7 @@ public class CTASAnalyzer {
             stmtProperties.put("replication_num", String.valueOf(defaultReplicationNum));
         }
 
+<<<<<<< HEAD
         if (null == createTableStmt.getDistributionDesc()) {
             if ((createTableStmt.getKeysDesc() != null && createTableStmt.getKeysDesc().getKeysType() != KeysType.DUP_KEYS)
                     || createTableStmt.getProperties().containsKey("colocate_with")) {
@@ -165,6 +204,8 @@ public class CTASAnalyzer {
             }
         }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         List<ColumnDef> columnDefs = createTableStmt.getColumnDefs();
 

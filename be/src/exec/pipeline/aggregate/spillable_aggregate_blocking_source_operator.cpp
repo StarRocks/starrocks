@@ -34,11 +34,21 @@ void SpillableAggregateBlockingSourceOperator::close(RuntimeState* state) {
 }
 
 bool SpillableAggregateBlockingSourceOperator::has_output() const {
+<<<<<<< HEAD
     if (AggregateBlockingSourceOperator::has_output()) {
         return true;
     }
 
     if (!_aggregator->spiller()->spilled()) {
+=======
+    bool has_spilled = _aggregator->spiller()->spilled();
+
+    if (!has_spilled && AggregateBlockingSourceOperator::has_output()) {
+        return true;
+    }
+
+    if (!has_spilled) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return false;
     }
     if (_accumulator.has_output()) {
@@ -101,6 +111,17 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeS
     return res;
 }
 
+<<<<<<< HEAD
+=======
+Status SpillableAggregateBlockingSourceOperator::reset_state(RuntimeState* state,
+                                                             const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    _has_last_chunk = true;
+    _accumulator.reset_state();
+    return Status::OK();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk(RuntimeState* state) {
     ChunkPtr res;
 
@@ -112,8 +133,13 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
     auto& spiller = _aggregator->spiller();
 
     if (!_aggregator->is_spilled_eos()) {
+<<<<<<< HEAD
         auto executor = _aggregator->spill_channel()->io_executor();
         ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, *executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+=======
+        DCHECK(_accumulator.need_input());
+        ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (chunk->is_empty()) {
             return chunk;
         }
@@ -123,6 +149,10 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         _accumulator.push(std::move(res));
 
     } else if (_has_last_chunk) {
+<<<<<<< HEAD
+=======
+        DCHECK(_accumulator.need_input());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _stream_aggregator->pull_eos_chunk());
         if (res != nullptr && !res->is_empty()) {

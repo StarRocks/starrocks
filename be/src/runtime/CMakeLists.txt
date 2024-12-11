@@ -20,6 +20,10 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
+<<<<<<< HEAD
+=======
+    buffer_control_result_writer.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     client_cache.cpp
     local_pass_through_buffer.cpp
     data_stream_mgr.cpp
@@ -29,6 +33,10 @@ set(RUNTIME_FILES
     datetime_value.cpp
     descriptors.cpp
     exec_env.cpp
+<<<<<<< HEAD
+=======
+    global_variables.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     user_function_cache.cpp
     jdbc_driver_manager.cpp
     mem_pool.cpp
@@ -38,11 +46,18 @@ set(RUNTIME_FILES
     runtime_state.cpp
     string_value.cpp
     decimalv2_value.cpp
+<<<<<<< HEAD
     large_int_value.cpp
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     fragment_mgr.cpp
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
     types.cpp
+<<<<<<< HEAD
+=======
+    agg_state_desc.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     mem_tracker.cpp
     data_stream_recvr.cpp
     export_sink.cpp
@@ -50,12 +65,23 @@ set(RUNTIME_FILES
     load_channel.cpp
     local_tablets_channel.cpp
     snapshot_loader.cpp
+<<<<<<< HEAD
     query_statistics.cpp 
+=======
+    query_statistics.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     message_body_sink.cpp
     stream_load/transaction_mgr.cpp
     stream_load/stream_load_context.cpp
     stream_load/stream_load_executor.cpp
     stream_load/stream_load_pipe.cpp
+<<<<<<< HEAD
+=======
+    stream_load/time_bounded_stream_load_pipe.cpp
+    batch_write/isomorphic_batch_write.cpp
+    batch_write/batch_write_mgr.cpp
+    batch_write/batch_write_util.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     routine_load/data_consumer.cpp
     routine_load/data_consumer_group.cpp
     routine_load/data_consumer_pool.cpp
@@ -66,11 +92,24 @@ set(RUNTIME_FILES
     memory_scratch_sink.cpp
     external_scan_context_mgr.cpp
     mysql_result_writer.cpp
+<<<<<<< HEAD
     file_result_writer.cpp
     statistic_result_writer.cpp
     variable_result_writer.cpp
     memory/system_allocator.cpp
     memory/mem_chunk_allocator.cpp
+=======
+    http_result_writer.cpp
+    file_result_writer.cpp
+    statistic_result_writer.cpp
+    metadata_result_writer.cpp
+    variable_result_writer.cpp
+    arrow_result_writer.cpp
+    memory/roaring_hook.cpp
+    memory/system_allocator.cpp
+    memory/mem_chunk_allocator.cpp
+    memory/column_allocator.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     tablets_channel.cpp
@@ -88,6 +127,15 @@ set(RUNTIME_FILES
     schema_table_sink.cpp
     command_executor.cpp
     iceberg_table_sink.cpp
+<<<<<<< HEAD
+=======
+    hive_table_sink.cpp
+    table_function_table_sink.cpp
+    blackhole_table_sink.cpp
+    dictionary_cache_sink.cpp
+    type_pack.cpp
+    customized_result_writer.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

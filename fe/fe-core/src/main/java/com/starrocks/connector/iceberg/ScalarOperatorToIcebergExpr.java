@@ -45,6 +45,11 @@ import org.apache.logging.log4j.Logger;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Objects;
+import java.util.Optional;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -130,10 +135,24 @@ public class ScalarOperatorToIcebergExpr {
         }
 
         private static Type getColumnType(String qualifiedName, IcebergContext context) {
+<<<<<<< HEAD
             String[] paths = qualifiedName.split("\\.");
             Type type = context.getSchema();
             for (String path : paths) {
                 type = type.asStructType().fieldType(path);
+=======
+            Types.StructType structType = context.getSchema().asStructType();
+            Type type = structType.fieldType(qualifiedName);
+            if (null != type) {
+                return type;
+            }
+            if (qualifiedName.contains(".")) {
+                type = context.getSchema();
+                String[] paths = qualifiedName.split("\\.");
+                for (String path : paths) {
+                    type = type.asStructType().fieldType(path);
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             return type;
         }
@@ -226,6 +245,16 @@ public class ScalarOperatorToIcebergExpr {
                         return literalValue;
                     }).collect(Collectors.toList());
 
+<<<<<<< HEAD
+=======
+            // It should not be pushed down if there is an implicit cast
+            // TODO: Some functions within ScalarOperatorFunctions could be computed on frontends.
+            // Maybe we can obtain the result first and then convert it into an Iceberg expression.
+            if (literalValues.stream().anyMatch(Objects::isNull)) {
+                return null;
+            }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (operator.isNotIn()) {
                 return notIn(columnName, literalValues);
             } else {
@@ -310,6 +339,7 @@ public class ScalarOperatorToIcebergExpr {
         }
 
         private ConstantOperator tryCastToResultType(ConstantOperator operator, Type.TypeID resultTypeID) {
+<<<<<<< HEAD
             try {
                 switch (resultTypeID) {
                     case BOOLEAN:
@@ -347,6 +377,50 @@ public class ScalarOperatorToIcebergExpr {
                 return null;
             }
             return operator;
+=======
+
+            Optional<ConstantOperator> res = Optional.empty();
+            switch (resultTypeID) {
+                case BOOLEAN:
+                    res = operator.castTo(com.starrocks.catalog.Type.BOOLEAN);
+                    break;
+                case DATE:
+                    res = operator.castTo(com.starrocks.catalog.Type.DATE);
+                    break;
+                case TIMESTAMP:
+                    res = operator.castTo(com.starrocks.catalog.Type.DATETIME);
+                    break;
+                case STRING:
+                case UUID:
+                    // num and string has different comparator
+                    if (operator.getType().isNumericType()) {
+                        return null;
+                    } else {
+                        res = operator.castTo(com.starrocks.catalog.Type.VARCHAR);
+                    }
+                    break;
+                case BINARY:
+                    res = operator.castTo(com.starrocks.catalog.Type.VARBINARY);
+                    break;
+                    // num usually don't need cast, and num and string has different comparator
+                    // cast is dangerous.
+                case INTEGER:
+                case LONG:
+                    // usually not used as partition column, don't do much work
+                case DECIMAL:
+                case FLOAT:
+                case DOUBLE:
+                case STRUCT:
+                case LIST:
+                case MAP:
+                    // not supported
+                case FIXED:
+                case TIME:
+                    return null;
+            }
+
+            return res.orElse(null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         @Override
@@ -424,14 +498,26 @@ public class ScalarOperatorToIcebergExpr {
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public String visitVariableReference(ColumnRefOperator operator, Void context) {
             return operator.getName();
         }
 
+<<<<<<< HEAD
+=======
+        @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public String visitCastOperator(CastOperator operator, Void context) {
             return operator.getChild(0).accept(this, context);
         }
 
+<<<<<<< HEAD
+=======
+        @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public String visitSubfield(SubfieldOperator operator, Void context) {
             ScalarOperator child = operator.getChild(0);
             if (!(child instanceof ColumnRefOperator)) {

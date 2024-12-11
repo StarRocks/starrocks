@@ -22,7 +22,14 @@
 #####################################################
 
 # starcache
+<<<<<<< HEAD
 STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.1.3/starcache-ubuntu22_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
 STARCACHE_MD5SUM="1dc678f68dbd34ff6dd24f22d3c7e761"
+=======
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.4.0-rc01/starcache-ubuntu22_arm64.tar.gz"
+STARCACHE_NAME="starcache.tar.gz"
+STARCACHE_SOURCE="starcache"
+STARCACHE_MD5SUM="494ae85999217ec6982f45d71c53a59b"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

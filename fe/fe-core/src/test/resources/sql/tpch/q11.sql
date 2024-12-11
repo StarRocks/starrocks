@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     ps_partkey,
@@ -26,6 +27,8 @@ group by
     )
 order by
     value desc ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 TOP-N (order by [[21: sum DESC NULLS LAST]])
     TOP-N (order by [[21: sum DESC NULLS LAST]])

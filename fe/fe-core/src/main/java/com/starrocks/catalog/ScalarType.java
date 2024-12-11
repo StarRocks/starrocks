@@ -69,7 +69,12 @@ public class ScalarType extends Type implements Cloneable {
     public static final int DEFAULT_SCALE = 0; // SQL standard
     // Longest supported VARCHAR and CHAR, chosen to match Hive.
     public static final int DEFAULT_STRING_LENGTH = 65533;
+<<<<<<< HEAD
     public static final int MAX_VARCHAR_LENGTH = 1048576;
+=======
+    // 1GB for each line, it's enough
+    public static final int CATALOG_MAX_VARCHAR_LENGTH = 1024 * 1024 * 1024;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final int MAX_CHAR_LENGTH = 255;
     // HLL DEFAULT LENGTH  2^14(registers) + 1(type)
     public static final int MAX_HLL_LENGTH = 16385;
@@ -304,12 +309,20 @@ public class ScalarType extends Type implements Cloneable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static int getOlapMaxVarcharLength() {
+        return Config.max_varchar_length;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static ScalarType createDefaultString() {
         ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
         return stringType;
     }
 
     // Use for Hive string now.
+<<<<<<< HEAD
     public static ScalarType createDefaultExternalTableString() {
         ScalarType stringType = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
         return stringType;
@@ -317,6 +330,14 @@ public class ScalarType extends Type implements Cloneable {
 
     public static ScalarType createMaxVarcharType() {
         ScalarType stringType = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+    public static ScalarType createDefaultCatalogString() {
+        return ScalarType.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH);
+    }
+
+    public static ScalarType createOlapMaxVarcharType() {
+        ScalarType stringType = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return stringType;
     }
 
@@ -354,6 +375,13 @@ public class ScalarType extends Type implements Cloneable {
         return new ScalarType(PrimitiveType.UNKNOWN_TYPE);
     }
 
+<<<<<<< HEAD
+=======
+    public static ScalarType createJsonType() {
+        return new ScalarType(PrimitiveType.JSON);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // A common type for two decimal v3 types means that if t2 = getCommonTypeForDecimalV3(t0, t1),
     // two invariants following is always holds:
     // 1. t2's integer part is sufficient to hold both t0 and t1's counterparts: i.e.
@@ -754,11 +782,14 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     @Override
+<<<<<<< HEAD
     public int getSlotSize() {
         return type.getSlotSize();
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public int getTypeSize() {
         return type.getTypeSize();
     }
@@ -873,4 +904,27 @@ public class ScalarType extends Type implements Cloneable {
                 return toSql();
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    protected String toTypeString(int depth) {
+        StringBuilder stringBuilder = new StringBuilder();
+        switch (type) {
+            case DECIMALV2:
+                stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
+                break;
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                stringBuilder.append(type.toString().toLowerCase()).append("(").append(precision).append(", ")
+                        .append(scale).append(")");
+                break;
+            default:
+                stringBuilder.append(type.toString().toLowerCase());
+                break;
+        }
+        return stringBuilder.toString();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

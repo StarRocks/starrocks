@@ -40,7 +40,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,9 +52,15 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TKafkaLoadInfo;
 import com.starrocks.thrift.TLoadSourceType;
+<<<<<<< HEAD
 import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
+=======
+import com.starrocks.thrift.TRoutineLoadTask;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.DatabaseTransactionMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -111,7 +121,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean readyToExecute() throws UserException {
+=======
+    public boolean readyToExecute() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (checkReadyToExecuteFast()) {
             return true;
         }
@@ -120,7 +134,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         Map<Integer, Long> latestOffsets = KafkaUtil.getLatestOffsets(kafkaRoutineLoadJob.getBrokerList(),
                 kafkaRoutineLoadJob.getTopic(),
                 ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),
+<<<<<<< HEAD
                 new ArrayList<>(partitionIdToOffset.keySet()));
+=======
+                new ArrayList<>(partitionIdToOffset.keySet()), warehouseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (Map.Entry<Integer, Long> entry : latestOffsets.entrySet()) {
             kafkaRoutineLoadJob.setPartitionOffset(entry.getKey(), entry.getValue());
         }
@@ -162,7 +180,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+=======
+    public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         KafkaRoutineLoadJob routineLoadJob = (KafkaRoutineLoadJob) job;
 
         // init tRoutineLoadTask and create plan fragment
@@ -171,12 +193,20 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         tRoutineLoadTask.setId(queryId);
         tRoutineLoadTask.setJob_id(routineLoadJob.getId());
         tRoutineLoadTask.setTxn_id(txnId);
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb(routineLoadJob.getDbId());
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(routineLoadJob.getDbId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (database == null) {
             throw new MetaNotFoundException("database " + routineLoadJob.getDbId() + " does not exist");
         }
         tRoutineLoadTask.setDb(database.getFullName());
+<<<<<<< HEAD
         Table tbl = database.getTable(routineLoadJob.getTableId());
+=======
+        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), routineLoadJob.getTableId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (tbl == null) {
             throw new MetaNotFoundException("table " + routineLoadJob.getTableId() + " does not exist");
         }
@@ -194,7 +224,16 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         tRoutineLoadTask.setKafka_load_info(tKafkaLoadInfo);
         tRoutineLoadTask.setType(TLoadSourceType.KAFKA);
         tRoutineLoadTask.setParams(plan(routineLoadJob));
+<<<<<<< HEAD
         tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond());
+=======
+        // When the transaction times out, we reduce the consumption time to lower the BE load.
+        if (msg != null && msg.contains(DatabaseTransactionMgr.TXN_TIMEOUT_BY_MANAGER)) {
+            tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond() / 2);
+        } else {
+            tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond());
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         tRoutineLoadTask.setMax_batch_rows(routineLoadJob.getMaxBatchRows());
         tRoutineLoadTask.setMax_batch_size(Config.max_routine_load_batch_size);
         if (!routineLoadJob.getFormat().isEmpty() && routineLoadJob.getFormat().equalsIgnoreCase("json")) {
@@ -231,7 +270,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         return latestPartOffset;
     }
 
+<<<<<<< HEAD
     private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
+=======
+    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
@@ -240,8 +283,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                     getStreamLoadMgr().getTaskByLabel(label);
             setStreamLoadTask(streamLoadTask);
         }
+<<<<<<< HEAD
         TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();
         tPlanFragment.getOutput_sink().getOlap_table_sink().setTxn_id(txnId);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return tExecPlanFragmentParams;
     }
 }

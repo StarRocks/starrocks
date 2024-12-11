@@ -33,8 +33,11 @@ namespace starrocks {
 class RuntimeState;
 class SlotDescriptor;
 struct ConvertFuncTree;
+<<<<<<< HEAD
 } // namespace starrocks
 namespace starrocks {
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 struct ArrowConvertContext {
     class RuntimeState* state;
@@ -77,7 +80,11 @@ LogicalType get_strict_type(ArrowTypeId at);
 
 struct ConvertFuncTree {
     ConvertFuncTree(ConvertFunc f) : func(f){};
+<<<<<<< HEAD
     ConvertFuncTree() : func(nullptr){};
+=======
+    ConvertFuncTree() = default;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ConvertFunc func = nullptr;
     std::vector<std::string> field_names; // used in struct
     std::vector<std::unique_ptr<ConvertFuncTree>> children;

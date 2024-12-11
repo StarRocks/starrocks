@@ -99,7 +99,11 @@ public:
         ASSERT_EQ(1024, src_rowset->num_rows());
         to_delete.push_back(src_rowset);
 
+<<<<<<< HEAD
         tablet->modify_rowsets(to_add, to_delete, &to_replace);
+=======
+        tablet->modify_rowsets_without_lock(to_add, to_delete, &to_replace);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_EQ(to_replace.size(), 1);
         ASSERT_EQ(to_replace[0]->rowset_id(), to_check->rowset_id());
     }
@@ -168,7 +172,11 @@ public:
         rowset_writer_context->partition_id = 10;
         rowset_writer_context->rowset_path_prefix = config::storage_root_path + "/data/0/12345/1111";
         rowset_writer_context->rowset_state = VISIBLE;
+<<<<<<< HEAD
         rowset_writer_context->tablet_schema = _tablet_schema.get();
+=======
+        rowset_writer_context->tablet_schema = _tablet_schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         rowset_writer_context->version.first = version;
         rowset_writer_context->version.second = version;
     }
@@ -234,7 +242,11 @@ public:
 
     void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer) {
         std::vector<std::string> test_data;
+<<<<<<< HEAD
         auto schema = ChunkHelper::convert_schema(*_tablet_schema);
+=======
+        auto schema = ChunkHelper::convert_schema(_tablet_schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (size_t j = 0; j < 8; ++j) {
             auto chunk = ChunkHelper::new_chunk(schema, 128);
             for (size_t i = 0; i < 128; ++i) {
@@ -314,7 +326,11 @@ public:
 
 protected:
     StorageEngine* _engine = nullptr;
+<<<<<<< HEAD
     std::unique_ptr<TabletSchema> _tablet_schema;
+=======
+    std::shared_ptr<TabletSchema> _tablet_schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string _schema_hash_path;
     std::unique_ptr<MemTracker> _metadata_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
@@ -1004,7 +1020,11 @@ TEST_F(CumulativeCompactionTest, test_issue_20084) {
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
     ASSERT_OK(tablet->init());
 
+<<<<<<< HEAD
     std::shared_ptr<Schema> schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
+=======
+    std::shared_ptr<Schema> schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // test reader
     auto reader = std::make_shared<TabletReader>(tablet, Version(0, _version - 1), *schema);
     ASSERT_OK(reader->prepare());

@@ -18,7 +18,11 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
 public class SyncRefreshSchemeDesc extends RefreshSchemeDesc {
+=======
+public class SyncRefreshSchemeDesc extends RefreshSchemeClause {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public SyncRefreshSchemeDesc() {
         this(NodePosition.ZERO);
@@ -27,6 +31,10 @@ public class SyncRefreshSchemeDesc extends RefreshSchemeDesc {
     public SyncRefreshSchemeDesc(NodePosition pos) {
         super(MaterializedView.RefreshType.SYNC, pos, MaterializedView.RefreshMoment.IMMEDIATE);
     }
+<<<<<<< HEAD
 
 }
 
+=======
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

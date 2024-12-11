@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # conv
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 对输入的参数 `x` 进行进制转换。
 

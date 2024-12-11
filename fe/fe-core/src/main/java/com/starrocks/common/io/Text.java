@@ -177,7 +177,11 @@ public class Text implements Writable {
             return -1; // not found
         } catch (CharacterCodingException e) {
             // can't get here
+<<<<<<< HEAD
             LOG.warn(e);
+=======
+            LOG.warn("Failed to execute find", e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return -1;
         }
     }

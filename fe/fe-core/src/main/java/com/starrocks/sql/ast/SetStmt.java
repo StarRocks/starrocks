@@ -36,6 +36,7 @@ public class SetStmt extends StatementBase {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean needAuditEncryption() {
         for (SetListItem var : setListItems) {
             if (var instanceof SetPassVar) {
@@ -46,6 +47,8 @@ public class SetStmt extends StatementBase {
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public RedirectStatus getRedirectStatus() {
         if (setListItems != null) {
             for (SetListItem var : setListItems) {

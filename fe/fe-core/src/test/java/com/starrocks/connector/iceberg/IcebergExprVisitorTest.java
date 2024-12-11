@@ -63,7 +63,12 @@ public class IcebergExprVisitorTest {
                             Types.NestedField.optional(14, "k14", Types.BooleanType.get()),
                             Types.NestedField.optional(15, "k15", Types.StringType.get()),
                             Types.NestedField.optional(16, "k16", Types.FloatType.get())
+<<<<<<< HEAD
                     )));
+=======
+                    )),
+                    Types.NestedField.optional(17, "k17.double", Types.DoubleType.get()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private static final ColumnRefOperator K1 = new ColumnRefOperator(3, Type.INT, "k1", true, false);
     private static final ColumnRefOperator K2 = new ColumnRefOperator(4, Type.INT, "k2", true, false);
@@ -81,6 +86,10 @@ public class IcebergExprVisitorTest {
     private static final SubfieldOperator K14 = new SubfieldOperator(K10, Type.BOOLEAN, ImmutableList.of("k14"));
     private static final SubfieldOperator K15 = new SubfieldOperator(K10, Type.STRING, ImmutableList.of("k15"));
     private static final SubfieldOperator K16 = new SubfieldOperator(K10, Type.FLOAT, ImmutableList.of("k16"));
+<<<<<<< HEAD
+=======
+    private static final ColumnRefOperator K17 = new ColumnRefOperator(17, Type.DOUBLE, "k17.double", true, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @Test
     public void testToIcebergExpression() {
@@ -431,4 +440,21 @@ public class IcebergExprVisitorTest {
         Assert.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
 
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testToIcebergExpressionDotColumn() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        Expression convertedExpr;
+
+        ConstantOperator value = ConstantOperator.createVarchar("11.11");
+        CastOperator cast = new CastOperator(Type.VARCHAR, K17);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.LT, cast, value)), context);
+        Assert.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

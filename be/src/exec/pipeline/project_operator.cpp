@@ -38,6 +38,14 @@ StatusOr<ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+<<<<<<< HEAD
+=======
+    if (chunk->is_empty()) {
+        DCHECK(chunk->owner_info().is_last_chunk());
+        _cur_chunk = chunk;
+        return Status::OK();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TRY_CATCH_ALLOC_SCOPE_START();
     {
         SCOPED_TIMER(_common_sub_expr_compute_timer);
@@ -80,6 +88,10 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     for (size_t i = 0; i < result_columns.size(); ++i) {
         _cur_chunk->append_column(result_columns[i], _column_ids[i]);
     }
+<<<<<<< HEAD
+=======
+    _cur_chunk->owner_info() = chunk->owner_info();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
@@ -96,6 +108,7 @@ Status ProjectOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state));
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
 
@@ -107,6 +120,13 @@ Status ProjectOperatorFactory::prepare(RuntimeState* state) {
 
     RETURN_IF_ERROR(init_dict_optimize(_common_sub_expr_ctxs, _common_sub_column_ids));
     RETURN_IF_ERROR(init_dict_optimize(_expr_ctxs, _column_ids));
+=======
+    DictOptimizeParser::set_output_slot_id(&_common_sub_expr_ctxs, _common_sub_column_ids);
+    DictOptimizeParser::set_output_slot_id(&_expr_ctxs, _column_ids);
+
+    RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     return Status::OK();
 }
@@ -114,7 +134,10 @@ Status ProjectOperatorFactory::prepare(RuntimeState* state) {
 void ProjectOperatorFactory::close(RuntimeState* state) {
     Expr::close(_expr_ctxs, state);
     Expr::close(_common_sub_expr_ctxs, state);
+<<<<<<< HEAD
     _dict_optimize_parser.close(state);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     OperatorFactory::close(state);
 }
 } // namespace starrocks::pipeline

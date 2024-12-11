@@ -17,8 +17,21 @@
 
 package com.starrocks.rpc;
 
+<<<<<<< HEAD
+=======
+import com.baidu.bjf.remoting.protobuf.annotation.Protobuf;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.baidu.bjf.remoting.protobuf.annotation.ProtobufClass;
 
 @ProtobufClass
 public class PExecPlanFragmentRequest extends AttachmentRequest {
+<<<<<<< HEAD
+=======
+    @Protobuf(order = 1, required = false)
+    String attachmentProtocol;
+
+    public void setAttachmentProtocol(String attachmentProtocol) {
+        this.attachmentProtocol = attachmentProtocol;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

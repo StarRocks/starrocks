@@ -18,6 +18,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Database;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
@@ -92,6 +96,15 @@ public class AnalyzeUpdateTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testColumnWithRowUpdate() {
+        analyzeFail("update tmcwr set name = 22",
+                "must specify where clause to prevent full table update");
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testLake() {
         new MockUp<GlobalStateMgr>() {
 
@@ -99,7 +112,11 @@ public class AnalyzeUpdateTest {
 
         new MockUp<MetaUtils>() {
             @Mock
+<<<<<<< HEAD
             public Table getTable(ConnectContext session, TableName tableName) {
+=======
+            public Table getSessionAwareTable(ConnectContext session, Database database, TableName tableName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 long dbId = 1L;
                 long tableId = 2L;
                 long partitionId = 3L;
@@ -117,7 +134,12 @@ public class AnalyzeUpdateTest {
 
                 // Index
                 MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+<<<<<<< HEAD
                 TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+=======
+                TabletMeta tabletMeta =
+                        new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 index.addTablet(tablet, tabletMeta);
 
                 // Partition
@@ -126,7 +148,12 @@ public class AnalyzeUpdateTest {
                 partitionInfo.setReplicationNum(partitionId, (short) 3);
 
                 // Lake table
+<<<<<<< HEAD
                 LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.PRIMARY_KEYS, partitionInfo, distributionInfo);
+=======
+                LakeTable table =
+                        new LakeTable(tableId, "t1", columns, KeysType.PRIMARY_KEYS, partitionInfo, distributionInfo);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return table;
             }
         };

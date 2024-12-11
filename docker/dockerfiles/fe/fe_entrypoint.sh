@@ -22,6 +22,10 @@ MYSELF=
 STARROCKS_ROOT=${STARROCKS_ROOT:-"/opt/starrocks"}
 STARROCKS_HOME=${STARROCKS_ROOT}/fe
 FE_CONFFILE=$STARROCKS_HOME/conf/fe.conf
+<<<<<<< HEAD
+=======
+META_DIR=$STARROCKS_HOME/meta
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 EXIT_IN_PROGRESS=false
 
 log_stderr()
@@ -265,7 +269,17 @@ if [[ "x$svc_name" == "x" ]] ; then
 fi
 
 update_conf_from_configmap
+<<<<<<< HEAD
 if [[ -f "/opt/starrocks/fe/meta/image/ROLE" ]];then
+=======
+# meta_dir from conf file
+meta_dir=`parse_confval_from_fe_conf "meta_dir"`
+if [[ "x$meta_dir" != "x" ]] ; then
+    META_DIR=$meta_dir
+fi
+
+if [[ -f "$META_DIR/image/ROLE" ]];then
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     log_stderr "start fe with exist meta."
     start_fe_with_meta
 else

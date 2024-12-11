@@ -45,6 +45,10 @@ public:
     bool is_constant() const override { return false; }
 
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
+<<<<<<< HEAD
+=======
+    void for_each_slot_id(const std::function<void(SlotId)>& cb) const override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::string debug_string() const override;
 

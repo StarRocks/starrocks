@@ -39,6 +39,13 @@ starrocks::MemTracker* CurrentThread::mem_tracker() {
     }
 }
 
+<<<<<<< HEAD
+=======
+starrocks::MemTracker* CurrentThread::singleton_check_mem_tracker() {
+    return tls_singleton_check_mem_tracker;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 CurrentThread& CurrentThread::current() {
     return tls_thread_status;
 }

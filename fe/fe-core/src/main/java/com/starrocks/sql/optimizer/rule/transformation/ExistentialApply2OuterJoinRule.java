@@ -289,9 +289,13 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
 
         // filter(UnCorrelation) agg -> project -> un-correlation filter
         if (null != apply.getPredicate()) {
+<<<<<<< HEAD
             OptExpression filterOptExpression =
                     OptExpression.create(new LogicalFilterOperator(apply.getPredicate()), input.getInputs().get(1));
 
+=======
+            OptExpression filterOptExpression = OptExpression.create(new LogicalFilterOperator(apply.getPredicate()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             rootOptExpression.getInputs().add(filterOptExpression);
             rootOptExpression = filterOptExpression;
         }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_to_bitmap
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将 array 类型转化为 bitmap 类型。该函数从 2.3 版本开始支持。
 

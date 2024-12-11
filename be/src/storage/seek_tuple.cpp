@@ -26,7 +26,11 @@ void SeekTuple::convert_to(SeekTuple* new_tuple, const std::vector<LogicalType>&
     _schema.convert_to(&new_tuple->_schema, new_types);
 
     RowConverter converter;
+<<<<<<< HEAD
     converter.init(_schema, new_tuple->_schema);
+=======
+    WARN_IF_ERROR(converter.init(_schema, new_tuple->_schema), "Cannot get field converter");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     converter.convert(&new_tuple->_values, _values);
 }
 

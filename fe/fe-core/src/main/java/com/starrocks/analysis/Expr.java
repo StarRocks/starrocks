@@ -40,6 +40,10 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Sets;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
@@ -82,6 +86,10 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Queue;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 
 /**
@@ -211,6 +219,13 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     private RoaringBitmap cachedUsedSlotIds = null;
 
+<<<<<<< HEAD
+=======
+    // is this Expr can be used in index filter and expr filter or only index filter
+    // passed to BE storage engine
+    private boolean isIndexOnlyFilter = false;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected Expr() {
         pos = NodePosition.ZERO;
         type = Type.INVALID;
@@ -324,6 +339,17 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         printSqlInParens = b;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isIndexOnlyFilter() {
+        return isIndexOnlyFilter;
+    }
+
+    public void setIndexOnlyFilter(boolean indexOnlyFilter) {
+        isIndexOnlyFilter = indexOnlyFilter;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Perform semantic analysis of node and all of its children.
      * Throws exception if any errors found.
@@ -428,6 +454,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
     }
 
+<<<<<<< HEAD
     /**
      * Gather conjuncts from this expr and return them in a list.
      * A conjunct is an expr that returns a boolean, e.g., Predicates, function calls,
@@ -485,6 +512,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static Expr compoundAnd(Collection<Expr> conjuncts) {
         return createCompound(CompoundPredicate.Operator.AND, conjuncts);
     }
@@ -769,7 +798,11 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * `toSqlWithoutTbl` will return sql without table name for column name, so it can be easier to compare two expr.
      */
     public String toSqlWithoutTbl() {
+<<<<<<< HEAD
         return new AstToSQLBuilder.AST2SQLBuilderVisitor(false, true).visit(this);
+=======
+        return new AstToSQLBuilder.AST2SQLBuilderVisitor(false, true, true).visit(this);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public String explain() {
@@ -844,6 +877,10 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
+<<<<<<< HEAD
+=======
+        msg.setIs_index_only_filter(isIndexOnlyFilter());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         visitor.visit(this, msg);
         container.addToNodes(msg);
         for (Expr child : children) {
@@ -1063,6 +1100,13 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return isConstantImpl();
     }
 
+<<<<<<< HEAD
+=======
+    public final boolean isParameter() {
+        return this instanceof Parameter;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Implements isConstant() - computes the value without using 'isConstant_'.
      */
@@ -1200,6 +1244,28 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    public List<SlotRef> collectAllSlotRefs() {
+        return collectAllSlotRefs(false);
+    }
+
+    public List<SlotRef> collectAllSlotRefs(boolean distinct) {
+        Collection<SlotRef> result = distinct ? Sets.newHashSet() : Lists.newArrayList();
+        Queue<Expr> q = Lists.newLinkedList();
+        q.add(this);
+        while (!q.isEmpty()) {
+            Expr head = q.poll();
+            if (head instanceof SlotRef) {
+                result.add((SlotRef) head);
+            }
+            q.addAll(head.getChildren());
+        }
+
+        return distinct ? Lists.newArrayList(result) : (List<SlotRef>) result;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Returns the first child if this Expr is a CastExpr. Otherwise, returns 'this'.
      */
@@ -1213,7 +1279,15 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public static double getConstFromExpr(Expr e) throws AnalysisException {
         Preconditions.checkState(e.isConstant());
+<<<<<<< HEAD
         double value = 0;
+=======
+        double value;
+        if (e instanceof UserVariableExpr) {
+            e = ((UserVariableExpr) e).getValue();
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (e instanceof LiteralExpr) {
             LiteralExpr lit = (LiteralExpr) e;
             value = lit.getDoubleValue();
@@ -1233,6 +1307,18 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
     }
 
+<<<<<<< HEAD
+=======
+    public static Function getBuiltinFunction(String name, Type[] argTypes, String[] argNames, Function.CompareMode mode) {
+        if (argNames == null) {
+            return getBuiltinFunction(name, argTypes, mode);
+        }
+        FunctionName fnName = new FunctionName(name);
+        Function searchDesc = new Function(fnName, argTypes, argNames, Type.INVALID, false);
+        return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Pushes negation to the individual operands of a predicate
      * tree rooted at 'root'.

@@ -14,6 +14,11 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.parser.NodePosition;
 
 // Drop ResourceGroup specified by name
@@ -34,6 +39,15 @@ public class DropResourceGroupStmt extends DdlStmt {
         return name;
     }
 
+<<<<<<< HEAD
+=======
+    public void analyze() {
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name)) {
+            throw new SemanticException(String.format("cannot drop builtin resource group [%s]", name));
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropResourceGroupStatement(this, context);

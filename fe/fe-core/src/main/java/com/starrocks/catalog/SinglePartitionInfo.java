@@ -34,7 +34,10 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -43,18 +46,24 @@ public class SinglePartitionInfo extends PartitionInfo {
         super(PartitionType.UNPARTITIONED);
     }
 
+<<<<<<< HEAD
     public static PartitionInfo read(DataInput in) throws IOException {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.readFields(in);
         return partitionInfo;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

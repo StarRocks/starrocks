@@ -23,9 +23,17 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+<<<<<<< HEAD
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
+=======
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
+#include "testutil/assert.h"
+#include "testutil/parallel_test.h"
+#include "util/defer_op.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -45,7 +53,11 @@ protected:
         tuple_desc_builder.build(&desc_tbl_builder);
 
         DescriptorTbl* desc_tbl = nullptr;
+<<<<<<< HEAD
         Status st = DescriptorTbl::create(_state, &_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+=======
+        Status st = DescriptorTbl::create(_state.get(), &_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                           config::vector_chunk_size);
         CHECK(st.ok()) << st.to_string();
 
@@ -58,6 +70,10 @@ protected:
         params->strict_mode = true;
         params->dest_tuple_id = 0;
         params->src_tuple_id = 0;
+<<<<<<< HEAD
+=======
+        params->json_file_size_limit = 1024 * 1024;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (int i = 0; i < types.size(); i++) {
             params->expr_of_dest_slot[i] = TExpr();
             params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
@@ -76,7 +92,11 @@ protected:
         TBrokerScanRange* broker_scan_range = _pool.add(new TBrokerScanRange());
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
+<<<<<<< HEAD
         return std::make_unique<JsonScanner>(_state, _profile, *broker_scan_range, _counter);
+=======
+        return std::make_unique<JsonScanner>(_state.get(), _profile, *broker_scan_range, _counter);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     ChunkPtr test_whole_row_json(int columns, const std::string& input_data, std::string jsonpath,
@@ -89,6 +109,10 @@ protected:
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
         range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+        range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         range.strip_outer_array = false;
         range.__isset.strip_outer_array = false;
         range.__isset.jsonpaths = true;
@@ -115,6 +139,10 @@ protected:
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
         range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+        range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         range.strip_outer_array = false;
         range.__isset.strip_outer_array = false;
         range.__isset.jsonpaths = true;
@@ -131,11 +159,29 @@ protected:
         return chunk;
     }
 
+<<<<<<< HEAD
+=======
+    std::shared_ptr<RuntimeState> create_runtime_state() {
+        TQueryOptions query_options;
+        TUniqueId fragment_id;
+        TQueryGlobals query_globals;
+        std::shared_ptr<RuntimeState> runtime_state =
+                std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+        TUniqueId id;
+        runtime_state->init_mem_trackers(id);
+        return runtime_state;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void SetUp() override {
         config::vector_chunk_size = 4096;
         _profile = _pool.add(new RuntimeProfile("test"));
         _counter = _pool.add(new ScannerCounter());
+<<<<<<< HEAD
         _state = _pool.add(new RuntimeState(TQueryGlobals()));
+=======
+        _state = create_runtime_state();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::string starrocks_home = getenv("STARROCKS_HOME");
     }
 
@@ -144,7 +190,11 @@ protected:
 private:
     RuntimeProfile* _profile = nullptr;
     ScannerCounter* _counter = nullptr;
+<<<<<<< HEAD
     RuntimeState* _state = nullptr;
+=======
+    std::shared_ptr<RuntimeState> _state = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ObjectPool _pool;
 };
 
@@ -160,6 +210,10 @@ TEST_F(JsonScannerTest, test_array_json) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -178,6 +232,12 @@ TEST_F(JsonScannerTest, test_array_json) {
     ChunkPtr chunk = st2.value();
     ASSERT_EQ(chunk->columns()[0]->debug_string(), "[1]");
     ASSERT_EQ(chunk->columns()[1]->debug_string(), "[[{\"k2\": \"v2\"}]]");
+<<<<<<< HEAD
+=======
+
+    ASSERT_GT(scanner->TEST_scanner_counter()->file_read_count, 0);
+    ASSERT_GT(scanner->TEST_scanner_counter()->file_read_ns, 0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 TEST_F(JsonScannerTest, test_json_without_path) {
@@ -190,6 +250,10 @@ TEST_F(JsonScannerTest, test_json_without_path) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -220,6 +284,10 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_basic) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -250,6 +318,10 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_null) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -280,6 +352,10 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_record) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -310,6 +386,10 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_array) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -341,6 +421,10 @@ TEST_F(JsonScannerTest, test_json_with_path) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -376,6 +460,10 @@ TEST_F(JsonScannerTest, test_one_level_array) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -407,6 +495,10 @@ TEST_F(JsonScannerTest, test_two_level_array) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -437,6 +529,10 @@ TEST_F(JsonScannerTest, test_invalid_column_in_array) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -454,7 +550,11 @@ TEST_F(JsonScannerTest, test_invalid_column_in_array) {
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
+<<<<<<< HEAD
     EXPECT_EQ("[NULL]", chunk->debug_row(0));
+=======
+    EXPECT_EQ("[[[NULL,20],[30,40]]]", chunk->debug_row(0));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 TEST_F(JsonScannerTest, test_invalid_nested_level1) {
@@ -468,6 +568,10 @@ TEST_F(JsonScannerTest, test_invalid_nested_level1) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -486,7 +590,11 @@ TEST_F(JsonScannerTest, test_invalid_nested_level1) {
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
+<<<<<<< HEAD
     EXPECT_EQ("[NULL]", chunk->debug_row(0));
+=======
+    EXPECT_EQ("[[NULL,NULL,NULL,NULL]]", chunk->debug_row(0));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 TEST_F(JsonScannerTest, test_invalid_nested_level2) {
@@ -499,6 +607,10 @@ TEST_F(JsonScannerTest, test_invalid_nested_level2) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -527,6 +639,10 @@ TEST_F(JsonScannerTest, test_json_with_long_string) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -557,6 +673,10 @@ TEST_F(JsonScannerTest, test_ndjson) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -591,6 +711,10 @@ TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -626,6 +750,10 @@ TEST_F(JsonScannerTest, test_json_new_parser) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -668,6 +796,10 @@ TEST_F(JsonScannerTest, test_adaptive_nullable_column) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -704,6 +836,10 @@ TEST_F(JsonScannerTest, test_adaptive_nullable_column_2) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -758,15 +894,30 @@ TEST_F(JsonScannerTest, test_multi_type) {
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
     types.emplace_back(TYPE_DATE);
     types.emplace_back(TYPE_DATETIME);
+<<<<<<< HEAD
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
+=======
+    types.emplace_back(TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     types.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 27, 9));
     types.emplace_back(TypeDescriptor::create_char_type(20));
     types.emplace_back(TYPE_TIME);
+<<<<<<< HEAD
+=======
+    types.emplace_back(TypeDescriptor::create_struct_type(
+            {"f_int", "f_string"}, {TypeDescriptor(TYPE_INT), TypeDescriptor::create_varchar_type(20)}));
+    types.emplace_back(
+            TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TypeDescriptor(TYPE_DOUBLE)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -774,22 +925,38 @@ TEST_F(JsonScannerTest, test_multi_type) {
     range.__set_path("./be/test/exec/test_data/json_scanner/test_multi_type.json");
     ranges.emplace_back(range);
 
+<<<<<<< HEAD
     auto scanner =
             create_json_scanner(types, ranges,
                                 {"f_bool", "f_tinyint", "f_smallint", "f_int", "f_bigint", "f_float", "f_double",
                                  "f_varchar", "f_date", "f_datetime", "f_array", "f_decimal", "f_char", "f_time"});
+=======
+    auto scanner = create_json_scanner(
+            types, ranges,
+            {"f_bool", "f_tinyint", "f_smallint", "f_int", "f_bigint", "f_float", "f_double", "f_varchar", "f_date",
+             "f_datetime", "f_array", "f_decimal", "f_char", "f_time", "f_struct", "f_map"});
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Status st;
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
     ChunkPtr chunk = scanner->get_next().value();
+<<<<<<< HEAD
     EXPECT_EQ(14, chunk->num_columns());
+=======
+    EXPECT_EQ(16, chunk->num_columns());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     EXPECT_EQ(1, chunk->num_rows());
 
     auto expected =
             "[1, 127, 32767, 2147483647, 9223372036854775807, 3.14, 3.14, 'starrocks', 2021-12-09, 2021-12-09 "
+<<<<<<< HEAD
             "10:00:00, '[1,3,5]', 1234565789012345678901234567.123456789, 'starrocks', 36000]";
+=======
+            "10:00:00, [1,3,5], 1234565789012345678901234567.123456789, 'starrocks', 36000, {f_int:1,f_string:'a'}, "
+            "{'f_double1':3.14,'f_double2':3.141}]";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     EXPECT_EQ(expected, chunk->debug_row(0));
 }
@@ -805,6 +972,10 @@ TEST_F(JsonScannerTest, test_cast_type) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -836,6 +1007,10 @@ TEST_F(JsonScannerTest, test_load_native_json) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -876,6 +1051,10 @@ TEST_F(JsonScannerTest, test_native_json_ndjson_with_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -1027,6 +1206,10 @@ TEST_F(JsonScannerTest, test_expanded_with_json_root) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.jsonpaths = "";
     range.json_root = "$.data";
@@ -1064,6 +1247,10 @@ TEST_F(JsonScannerTest, test_ndjson_expanded_with_json_root) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.jsonpaths = "";
     range.json_root = "$.data";
@@ -1110,6 +1297,10 @@ TEST_F(JsonScannerTest, test_construct_row_in_object_order) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -1140,6 +1331,10 @@ TEST_F(JsonScannerTest, test_jsonroot_with_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -1176,6 +1371,10 @@ TEST_F(JsonScannerTest, test_expanded_with_jsonroot_and_extracted_by_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.jsonpaths = R"(["$.keyname.ip", "$.keyname.value"])";
     range.json_root = "$.data";
@@ -1212,6 +1411,10 @@ TEST_F(JsonScannerTest, test_ndjson_expaned_with_jsonroot_and_extracted_by_jsonp
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.jsonpaths = R"(["$.keyname.ip", "$.keyname.value"])";
     range.json_root = "$.data";
@@ -1251,6 +1454,10 @@ TEST_F(JsonScannerTest, test_illegal_input) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -1276,6 +1483,10 @@ TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -1305,6 +1516,10 @@ TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = true;
     range.jsonpaths = "";
     range.json_root = "$.data";
@@ -1349,6 +1564,10 @@ TEST_F(JsonScannerTest, test_null_with_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+<<<<<<< HEAD
+=======
+    range.file_type = TFileType::FILE_LOCAL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -1363,6 +1582,51 @@ TEST_F(JsonScannerTest, test_null_with_jsonpath) {
     ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(JsonScannerTest, file_stream) {
+    // 1. create StreamLoadPipe
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _state->exec_env()->load_stream_mgr()->remove(load_id); });
+    ASSERT_OK(_state->exec_env()->load_stream_mgr()->put(load_id, pipe));
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_STREAM;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_load_id(load_id.to_thrift());
+    ranges.emplace_back(range);
+
+    std::string data = R"({"key1": 1, "key2": 2 }{"key1": 3, "key2": 4 })";
+    EXPECT_OK(pipe->append(data.c_str(), data.size()));
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = create_json_scanner(types, ranges, {"key1", "key2"});
+    Status st;
+    st = scanner->open();
+    EXPECT_OK(st);
+
+    auto res = scanner->get_next();
+    EXPECT_OK(res.status());
+
+    ChunkPtr chunk = res.value();
+    EXPECT_EQ(2, chunk->num_columns());
+    EXPECT_EQ(2, chunk->num_rows());
+
+    EXPECT_EQ("[1, 2]", chunk->debug_row(0));
+    EXPECT_EQ("[3, 4]", chunk->debug_row(1));
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 TEST_F(JsonScannerTest, test_duplicate_key) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);

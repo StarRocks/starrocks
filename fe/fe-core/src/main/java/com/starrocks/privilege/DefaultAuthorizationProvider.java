@@ -14,25 +14,39 @@
 
 package com.starrocks.privilege;
 
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.google.common.collect.Lists;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+=======
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class DefaultAuthorizationProvider implements AuthorizationProvider {
     private static final short PLUGIN_ID = 1;
     private static final short PLUGIN_VERSION = 1;
 
+<<<<<<< HEAD
     private static final Map<ObjectType, List<PrivilegeType>> TYPE_TO_ACTION_LIST =
             ImmutableMap.<ObjectType, List<PrivilegeType>>builder()
                     .put(ObjectType.TABLE, ImmutableList.of(
@@ -108,6 +122,96 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                             PrivilegeType.ALTER,
                             PrivilegeType.USAGE))
                     .build();
+=======
+    protected final Map<ObjectType, List<PrivilegeType>> typeToActionList = new HashMap<>();
+
+    public DefaultAuthorizationProvider() {
+        typeToActionList.put(ObjectType.TABLE, Lists.newArrayList(
+                PrivilegeType.DELETE,
+                PrivilegeType.DROP,
+                PrivilegeType.INSERT,
+                PrivilegeType.SELECT,
+                PrivilegeType.ALTER,
+                PrivilegeType.EXPORT,
+                PrivilegeType.UPDATE));
+
+        typeToActionList.put(ObjectType.DATABASE, Lists.newArrayList(
+                PrivilegeType.CREATE_TABLE,
+                PrivilegeType.DROP,
+                PrivilegeType.ALTER,
+                PrivilegeType.CREATE_VIEW,
+                PrivilegeType.CREATE_FUNCTION,
+                PrivilegeType.CREATE_MATERIALIZED_VIEW,
+                PrivilegeType.CREATE_PIPE));
+
+        typeToActionList.put(ObjectType.SYSTEM, Lists.newArrayList(
+                PrivilegeType.GRANT,
+                PrivilegeType.NODE,
+                PrivilegeType.CREATE_RESOURCE,
+                PrivilegeType.PLUGIN,
+                PrivilegeType.FILE,
+                PrivilegeType.BLACKLIST,
+                PrivilegeType.OPERATE,
+                PrivilegeType.CREATE_EXTERNAL_CATALOG,
+                PrivilegeType.REPOSITORY,
+                PrivilegeType.CREATE_RESOURCE_GROUP,
+                PrivilegeType.CREATE_GLOBAL_FUNCTION,
+                PrivilegeType.CREATE_STORAGE_VOLUME,
+                PrivilegeType.CREATE_WAREHOUSE));
+
+        typeToActionList.put(ObjectType.USER, Lists.newArrayList(
+                PrivilegeType.IMPERSONATE));
+
+        typeToActionList.put(ObjectType.RESOURCE, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP));
+
+        typeToActionList.put(ObjectType.VIEW, Lists.newArrayList(
+                PrivilegeType.SELECT,
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP));
+
+        typeToActionList.put(ObjectType.CATALOG, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.CREATE_DATABASE,
+                PrivilegeType.DROP,
+                PrivilegeType.ALTER));
+
+        typeToActionList.put(ObjectType.MATERIALIZED_VIEW, Lists.newArrayList(
+                PrivilegeType.ALTER,
+                PrivilegeType.REFRESH,
+                PrivilegeType.DROP,
+                PrivilegeType.SELECT));
+
+        typeToActionList.put(ObjectType.FUNCTION, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.DROP));
+
+        typeToActionList.put(ObjectType.RESOURCE_GROUP, Lists.newArrayList(
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP));
+
+        typeToActionList.put(ObjectType.PIPE, Lists.newArrayList(
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP,
+                PrivilegeType.USAGE));
+
+        typeToActionList.put(ObjectType.GLOBAL_FUNCTION, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.DROP));
+
+        typeToActionList.put(ObjectType.STORAGE_VOLUME, Lists.newArrayList(
+                PrivilegeType.DROP,
+                PrivilegeType.ALTER,
+                PrivilegeType.USAGE));
+
+        typeToActionList.put(ObjectType.WAREHOUSE, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static final String UNEXPECTED_TYPE = "unexpected type ";
 
@@ -123,22 +227,56 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
     @Override
     public Set<ObjectType> getAllPrivObjectTypes() {
+<<<<<<< HEAD
         return TYPE_TO_ACTION_LIST.keySet();
+=======
+        return typeToActionList.keySet();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public List<PrivilegeType> getAvailablePrivType(ObjectType objectType) {
+<<<<<<< HEAD
         return new ArrayList<>(TYPE_TO_ACTION_LIST.get(objectType));
+=======
+        return new ArrayList<>(typeToActionList.get(objectType));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public boolean isAvailablePrivType(ObjectType objectType, PrivilegeType privilegeType) {
+<<<<<<< HEAD
         if (!TYPE_TO_ACTION_LIST.containsKey(objectType)) {
             return false;
         }
         return TYPE_TO_ACTION_LIST.get(objectType).contains(privilegeType);
     }
 
+=======
+        if (!typeToActionList.containsKey(objectType)) {
+            return false;
+        }
+        return typeToActionList.get(objectType).contains(privilegeType);
+    }
+
+    @Override
+    public PrivilegeType getPrivilegeType(String privTypeString) {
+        return PrivilegeType.NAME_TO_PRIVILEGE.get(privTypeString);
+    }
+
+    @Override
+    public ObjectType getObjectType(String objectTypeUnResolved) {
+        if (ObjectType.NAME_TO_OBJECT.containsKey(objectTypeUnResolved)) {
+            return ObjectType.NAME_TO_OBJECT.get(objectTypeUnResolved);
+        }
+
+        if (ObjectType.PLURAL_TO_OBJECT.containsKey(objectTypeUnResolved)) {
+            return ObjectType.PLURAL_TO_OBJECT.get(objectTypeUnResolved);
+        }
+
+        throw new SemanticException("cannot find privilege object type " + objectTypeUnResolved);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @Override
     public PEntryObject generateObject(ObjectType objectType, List<String> objectTokens, GlobalStateMgr mgr)
@@ -159,6 +297,13 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             return ResourceGroupPEntryObject.generate(mgr, objectTokens);
         } else if (ObjectType.STORAGE_VOLUME.equals(objectType)) {
             return StorageVolumePEntryObject.generate(mgr, objectTokens);
+<<<<<<< HEAD
+=======
+        } else if (ObjectType.PIPE.equals(objectType)) {
+            return PipePEntryObject.generate(mgr, objectTokens);
+        } else if (ObjectType.WAREHOUSE.equals(objectType)) {
+            return WarehousePEntryObject.generate(mgr, objectTokens);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
     }
@@ -219,6 +364,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                               PrivilegeCollectionV2 currentPrivilegeCollection) {
         return currentPrivilegeCollection.allowGrant(objectType, wants, objects);
     }
+<<<<<<< HEAD
 
     @Override
     public void upgradePrivilegeCollection(PrivilegeCollectionV2 info, short pluginId, short metaVersion)
@@ -265,3 +411,6 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
         }
     }
 }
+=======
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -63,7 +63,11 @@ MutableColumnPtr DecimalV3Column<T>::clone_empty() const {
 }
 
 template <typename T>
+<<<<<<< HEAD
 void DecimalV3Column<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
+=======
+void DecimalV3Column<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto& data = this->get_data();
     auto s = DecimalV3Cast::to_string<T>(data[idx], _precision, _scale);
     buf->push_decimal(s);

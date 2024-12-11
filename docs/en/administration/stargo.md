@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 This topic describes how to deploy and manage StarRocks clusters with StarGo.
 
+<<<<<<< HEAD
 StarGo is a command line tool for multiple StarRocks clusters management. You can easily deploy, check, upgrade, downgrade, start and stop multiple clusters through StarGo.
+=======
+StarGo is a command line tool for multiple StarRocks clusters management. You can easily deploy, check, upgrade, downgrade, start, and stop multiple clusters through StarGo.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## Install StarGo
 

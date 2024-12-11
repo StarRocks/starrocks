@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_union_int
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 聚合函数，计算 TINYINT，SMALLINT 和 INT 类型的列中不同值的个数，返回值和 COUNT(DISTINCT expr) 相同。
 

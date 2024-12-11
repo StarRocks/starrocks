@@ -24,5 +24,9 @@ displayed_sidebar: docs
 cumulative_compaction_num_threads_per_disk = 4
 base_compaction_num_threads_per_disk = 2
 cumulative_compaction_check_interval_seconds = 2
+<<<<<<< HEAD
 update_compaction_num_threads_per_disk = 2 （该参数属于主键模型单独的compaction参数）
+=======
+update_compaction_num_threads_per_disk = 2 （该参数属于主键表单独的compaction参数）
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ```

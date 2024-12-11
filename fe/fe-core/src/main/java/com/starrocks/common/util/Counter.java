@@ -36,6 +36,10 @@ package com.starrocks.common.util;
 
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TCounterMergeType;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TCounterMinMaxType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TCounterStrategy;
 import com.starrocks.thrift.TUnit;
 
@@ -83,6 +87,13 @@ public class Counter {
                 || Objects.equals(strategy.merge_type, TCounterMergeType.SKIP_SECOND_MERGE);
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isSkipMinMax() {
+        return Objects.equals(strategy.min_max_type, TCounterMinMaxType.SKIP_ALL);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setStrategy(TCounterStrategy strategy) {
         this.strategy = strategy;
     }
@@ -93,7 +104,12 @@ public class Counter {
 
     public Counter(TUnit type, TCounterStrategy strategy, long value) {
         this.type = type.getValue();
+<<<<<<< HEAD
         if (strategy == null || strategy.aggregate_type == null || strategy.merge_type == null) {
+=======
+        if (strategy == null || strategy.aggregate_type == null || strategy.merge_type == null ||
+                strategy.min_max_type == null) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             this.strategy = Counter.createStrategy(type);
         } else {
             this.strategy = strategy;
@@ -109,11 +125,24 @@ public class Counter {
     }
 
     public static TCounterStrategy createStrategy(TUnit type) {
+<<<<<<< HEAD
         TCounterStrategy strategy = new TCounterStrategy();
         TCounterAggregateType aggregateType = isTimeType(type) ? TCounterAggregateType.AVG : TCounterAggregateType.SUM;
         TCounterMergeType mergeType = TCounterMergeType.MERGE_ALL;
         strategy.aggregate_type = aggregateType;
         strategy.merge_type = mergeType;
+=======
+        TCounterAggregateType aggregateType = isTimeType(type) ? TCounterAggregateType.AVG : TCounterAggregateType.SUM;
+        return createStrategy(aggregateType);
+    }
+
+    public static TCounterStrategy createStrategy(TCounterAggregateType aggregateType) {
+        TCounterStrategy strategy = new TCounterStrategy();
+        TCounterMergeType mergeType = TCounterMergeType.MERGE_ALL;
+        strategy.aggregate_type = aggregateType;
+        strategy.merge_type = mergeType;
+        strategy.min_max_type = TCounterMinMaxType.MIN_MAX_ALL;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return strategy;
     }
 

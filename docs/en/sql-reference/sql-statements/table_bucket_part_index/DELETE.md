@@ -97,7 +97,11 @@ select * from my_table order by date;
 
 #### Delete data
 
+<<<<<<< HEAD
 **Delete data from a specified partition**
+=======
+##### Delete data from a specified partition
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Delete rows whose `k1` values are `3` from the `p1` partition.
 
@@ -116,7 +120,11 @@ select * from my_table partition (p1);
 +------------+------+------+
 ```
 
+<<<<<<< HEAD
 **Delete data from a specified partition using AND**
+=======
+##### Delete data from a specified partition using AND
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Delete rows whose `k1` values are greater than or equal to `3` and whose `k2` values are `"abc"` from the `p1` partition.
 
@@ -132,7 +140,11 @@ select * from my_table partition (p1);
 +------------+------+------+
 ```
 
+<<<<<<< HEAD
 **Delete data from all partitions**
+=======
+##### Delete data from all partitions
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Delete rows whose `k2` values are `"abc"` or `"cba"` from all partitions.
 
@@ -225,7 +237,11 @@ select * from score_board;
 
 #### Delete data
 
+<<<<<<< HEAD
 **Delete data by primary key**
+=======
+##### Delete data by primary key
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 You can specify the primary key in the DELETE statement, so StarRocks does not need to scan the entire table.
 
@@ -244,7 +260,11 @@ select * from score_board;
 +------+------+------+
 ```
 
+<<<<<<< HEAD
 **Delete data by condition**
+=======
+##### Delete data by condition
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Example 1: Delete rows whose `score` values are `22` from the `score_board` table.
 
@@ -289,7 +309,11 @@ select * from score_board;
 2 rows in set (0.00 sec)
 ```
 
+<<<<<<< HEAD
 **Delete data by subquery result**
+=======
+##### Delete data by subquery result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 You can nest one or more subqueries in the `DELETE` statement and use the subquery results as conditions.
 
@@ -368,7 +392,11 @@ select * from score_board;
 2 rows in set (0.00 sec)
 ```
 
+<<<<<<< HEAD
 **Delete data by using multi-table join or CTE**
+=======
+##### Delete data by using multi-table join or CTE
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 To delete all movies produced by the producer "foo", you can execute the following statement:
 

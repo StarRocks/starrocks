@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # next_day
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the date of the first specified day of week (DOW) that occurs after the input date (DATE or DATETIME). For example, `next_day('2023-04-06', 'Monday')` returns the date of the next Monday that occurred after '2023-04-06'.
 

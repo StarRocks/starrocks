@@ -18,9 +18,16 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
+=======
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -56,6 +63,7 @@ public class RecoverInfo implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
+<<<<<<< HEAD
         out.writeLong(dbId);
         out.writeLong(tableId);
         out.writeLong(partitionId);
@@ -67,4 +75,8 @@ public class RecoverInfo implements Writable {
         partitionId = in.readLong();
     }
 
+=======
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # from_base64
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Decodes a Base64-encoded string. This function is an inverse of [to_base64](to_base64.md).
 

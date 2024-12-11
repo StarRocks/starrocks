@@ -44,8 +44,13 @@ public class IcebergTableFactory extends ExternalTableFactory {
                                             Map<String, String> properties) {
         tableBuilder.setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
+<<<<<<< HEAD
                 .setRemoteDbName(catalogTable.getRemoteDbName())
                 .setRemoteTableName(catalogTable.getRemoteTableName())
+=======
+                .setCatalogDBName(catalogTable.getCatalogDBName())
+                .setCatalogTableName(catalogTable.getCatalogTableName())
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .setIcebergProperties(properties)
                 .setNativeTable(catalogTable.getNativeTable());
     }

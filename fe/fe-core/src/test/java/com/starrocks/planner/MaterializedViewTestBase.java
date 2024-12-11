@@ -16,23 +16,40 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+=======
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.StatementBase;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
+<<<<<<< HEAD
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+=======
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -41,7 +58,11 @@ import org.junit.BeforeClass;
 
 import java.util.List;
 import java.util.Locale;
+<<<<<<< HEAD
 import java.util.Set;
+=======
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -62,6 +83,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     @BeforeClass
+<<<<<<< HEAD
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
@@ -113,6 +135,18 @@ public class MaterializedViewTestBase extends PlanTestBase {
             }
         };
 
+=======
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!starRocksAssert.databaseExist("_statistics_")) {
             StatisticsMetaManager m = new StatisticsMetaManager();
             m.createStatisticsTablesForTest();
@@ -168,25 +202,45 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 // create mv if needed
                 if (mv != null && !mv.isEmpty()) {
                     LOG.info("start to create mv:" + mv);
+<<<<<<< HEAD
                     ExecPlan mvPlan = getExecPlan(mv);
                     List<String> outputNames = mvPlan.getColNames();
                     String properties = this.properties != null ? "PROPERTIES (\n" +
                             this.properties + ")" : "";
                     String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
                             "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
+=======
+                    String properties = this.properties != null ? "PROPERTIES (\n" +
+                            this.properties + ")" : "";
+                    String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
+                            " REFRESH MANUAL " +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             properties + " AS " +
                             mv;
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
 
+<<<<<<< HEAD
                 if (isLogical) {
                     this.rewritePlan = getLogicalPlan(query);
                 } else {
                     this.rewritePlan = getFragmentPlan(query);
+=======
+                Pair<ExecPlan, String> planAndTrace =
+                        UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+                if (isLogical) {
+                    this.rewritePlan = planAndTrace.first.getExplainString(StatementBase.ExplainLevel.LOGICAL);
+                } else {
+                    this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
                 if (!Strings.isNullOrEmpty(traceLogModule)) {
                     System.out.println(this.rewritePlan);
                 }
+<<<<<<< HEAD
+=======
+                this.traceLog = planAndTrace.second;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } catch (Exception e) {
                 LOG.warn("test rewrite failed:", e);
                 this.exception = e;
@@ -267,7 +321,25 @@ public class MaterializedViewTestBase extends PlanTestBase {
             return this;
         }
 
+<<<<<<< HEAD
         public String geRewritePlan() {
+=======
+        public MVRewriteChecker contains(String... expects) {
+            for (String expect: expects) {
+                Assert.assertTrue(this.rewritePlan.contains(expect));
+            }
+            return this;
+        }
+
+        public MVRewriteChecker contains(List<String> expects) {
+            for (String expect: expects) {
+                Assert.assertTrue(this.rewritePlan.contains(expect));
+            }
+            return this;
+        }
+
+        public String getExecPlan() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return this.rewritePlan;
         }
     }
@@ -319,8 +391,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected static Table getTable(String dbName, String mvName) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertNotNull(table);
         return table;
     }
@@ -355,4 +432,32 @@ public class MaterializedViewTestBase extends PlanTestBase {
         starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(db, tableName);
     }
+<<<<<<< HEAD
 }
+=======
+
+    public static Pair<Table, Column> getRefBaseTablePartitionColumn(MaterializedView mv) {
+        Map<Table, List<Column>> result = mv.getRefBaseTablePartitionColumns();
+        Assert.assertTrue(result.size() == 1);
+        Map.Entry<Table, List<Column>> e = result.entrySet().iterator().next();
+        Assert.assertEquals(1, e.getValue().size());
+        return Pair.create(e.getKey(), e.getValue().get(0));
+    }
+
+    public String getQueryPlan(String query) {
+        return getQueryPlan(query, TExplainLevel.NORMAL);
+    }
+
+    public String getQueryPlan(String query, TExplainLevel level) {
+        try {
+            Pair<ExecPlan, String> planAndTrace =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+            return planAndTrace.first.getExplainString(level);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        return null;
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

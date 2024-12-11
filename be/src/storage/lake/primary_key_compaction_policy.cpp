@@ -74,9 +74,14 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
     }
 }
 
+<<<<<<< HEAD
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_metadata, _tablet->get_metadata(version));
     return pick_rowsets(tablet_metadata, false, nullptr);
+=======
+StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
+    return pick_rowsets(_tablet_metadata, false, nullptr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 // Return true if segment number meet the requirement of min input
@@ -93,13 +98,21 @@ bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tabl
     return false;
 }
 
+<<<<<<< HEAD
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(TabletMetadataPtr tablet_metadata,
                                                                        bool calc_score, std::vector<bool>* has_dels) {
     std::vector<RowsetPtr> input_rowsets;
+=======
+StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
+        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, bool calc_score, std::vector<bool>* has_dels) {
+    UpdateManager* mgr = _tablet_mgr->update_mgr();
+    std::vector<int64_t> rowset_indexes;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (!min_input_segment_check(tablet_metadata)) {
         // When the number of segments cannot meet the requirement
         // 1. Compaction score will be zero.
         // 2. None of rowset will be picked.
+<<<<<<< HEAD
         return input_rowsets;
     }
     UpdateManager* mgr = _tablet->update_mgr();
@@ -108,24 +121,47 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(TabletMet
             static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
     // 1. generate rowset candidate vector
     for (const auto& rowset_pb : tablet_metadata->rowsets()) {
+=======
+        return rowset_indexes;
+    }
+    std::vector<RowsetCandidate> rowset_vec;
+    const auto tablet_id = tablet_metadata->id();
+    const auto tablet_version = tablet_metadata->version();
+    const int64_t compaction_data_size_threshold =
+            static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
+    // 1. generate rowset candidate vector
+    for (int i = 0, sz = tablet_metadata->rowsets_size(); i < sz; i++) {
+        const RowsetMetadataPB& rowset_pb = tablet_metadata->rowsets(i);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         RowsetStat stat;
         stat.num_rows = rowset_pb.num_rows();
         stat.bytes = rowset_pb.data_size();
         if (rowset_pb.has_num_dels()) {
             stat.num_dels = rowset_pb.num_dels();
         } else {
+<<<<<<< HEAD
             stat.num_dels = mgr->get_rowset_num_deletes(_tablet->id(), tablet_metadata->version(), rowset_pb);
         }
         rowset_vec.emplace_back(std::make_shared<const RowsetMetadata>(rowset_pb), stat);
+=======
+            stat.num_dels = mgr->get_rowset_num_deletes(tablet_id, tablet_version, rowset_pb);
+        }
+        rowset_vec.emplace_back(&rowset_pb, stat, i);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     // 2. pick largest score level
     ASSIGN_OR_RETURN(auto pick_level_ptr, pick_max_level(calc_score, rowset_vec));
     if (pick_level_ptr == nullptr) {
+<<<<<<< HEAD
         return input_rowsets;
+=======
+        return rowset_indexes;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // 3. pick input rowsets from level
     size_t cur_compaction_result_bytes = 0;
+<<<<<<< HEAD
     std::stringstream input_infos;
     while (!pick_level_ptr->rowsets.empty()) {
         const auto& rowset_candidate = pick_level_ptr->rowsets.top();
@@ -136,6 +172,15 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(TabletMet
             has_dels->push_back(rowset_candidate.delete_bytes() > 0);
         }
         input_infos << input_rowsets.back()->id() << "|";
+=======
+    while (!pick_level_ptr->rowsets.empty()) {
+        const auto& rowset_candidate = pick_level_ptr->rowsets.top();
+        cur_compaction_result_bytes += rowset_candidate.read_bytes();
+        rowset_indexes.push_back(rowset_candidate.rowset_index);
+        if (has_dels != nullptr) {
+            has_dels->push_back(rowset_candidate.delete_bytes() > 0);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         if (cur_compaction_result_bytes >
             std::max(config::update_compaction_result_bytes, compaction_data_size_threshold)) {
@@ -144,14 +189,40 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(TabletMet
         // If calc_score is true, we skip `config::lake_pk_compaction_max_input_rowsets` check,
         // because `config::lake_pk_compaction_max_input_rowsets` is only used to limit the number
         // of rowsets for real compaction merges
+<<<<<<< HEAD
         if (!calc_score && input_rowsets.size() >= config::lake_pk_compaction_max_input_rowsets) {
+=======
+        if (!calc_score && rowset_indexes.size() >= config::lake_pk_compaction_max_input_rowsets) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             break;
         }
         pick_level_ptr->rowsets.pop();
     }
+<<<<<<< HEAD
     VLOG(2) << strings::Substitute("lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2",
                                    _tablet->id(), tablet_metadata->version(), input_infos.str());
 
+=======
+
+    return rowset_indexes;
+}
+
+StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
+        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, bool calc_score, std::vector<bool>* has_dels) {
+    std::vector<RowsetPtr> input_rowsets;
+    ASSIGN_OR_RETURN(auto rowset_indexes, pick_rowset_indexes(tablet_metadata, calc_score, has_dels));
+    input_rowsets.reserve(rowset_indexes.size());
+    for (auto rowset_index : rowset_indexes) {
+        input_rowsets.emplace_back(
+                std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_index, 0 /* compaction_segment_limit */));
+    }
+    VLOG(2) << strings::Substitute(
+            "lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2", tablet_metadata->id(),
+            tablet_metadata->version(),
+            JoinMapped(
+                    input_rowsets, [&](const RowsetPtr& rowset) -> std::string { return std::to_string(rowset->id()); },
+                    "|"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return input_rowsets;
 }
 
@@ -163,4 +234,8 @@ int64_t PrimaryCompactionPolicy::_get_data_size(const std::shared_ptr<const Tabl
     return size;
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::lake
+=======
+} // namespace starrocks::lake
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

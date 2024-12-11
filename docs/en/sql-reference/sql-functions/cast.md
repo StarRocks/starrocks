@@ -5,7 +5,11 @@ sidebar_position: 0.9
 
 # CAST
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts an input into the specified type. For example, `cast (input as BIGINT)` converts the input into a BIGINT value.
 

@@ -59,8 +59,13 @@ public:
         DCHECK(columns[0]->is_binary());
         if (ctx->get_num_args() > 1) {
             if (!ctx->is_notnull_constant_column(1)) {
+<<<<<<< HEAD
                 const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
                 const InputColumnType* column_sep = down_cast<const InputColumnType*>(columns[1]);
+=======
+                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
+                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                 std::string& result = this->data(state).intermediate_string;
 
@@ -79,7 +84,11 @@ public:
                 }
             } else {
                 auto const_column_sep = ctx->get_constant_column(1);
+<<<<<<< HEAD
                 const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
+=======
+                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 std::string& result = this->data(state).intermediate_string;
 
                 Slice val = column_val->get_slice(row_num);
@@ -98,7 +107,11 @@ public:
                 }
             }
         } else {
+<<<<<<< HEAD
             const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
+=======
+            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             std::string& result = this->data(state).intermediate_string;
 
             Slice val = column_val->get_slice(row_num);
@@ -120,9 +133,15 @@ public:
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         if (ctx->get_num_args() > 1) {
+<<<<<<< HEAD
             const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
             if (!ctx->is_notnull_constant_column(1)) {
                 const InputColumnType* column_sep = down_cast<const InputColumnType*>(columns[1]);
+=======
+            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
+            if (!ctx->is_notnull_constant_column(1)) {
+                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
                                                               column_sep->get_bytes().size());
             } else {
@@ -132,7 +151,11 @@ public:
                                                               sep.get_size() * chunk_size);
             }
         } else {
+<<<<<<< HEAD
             const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
+=======
+            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             this->data(state).intermediate_string.reserve(column_val->get_bytes().size() + 2 * chunk_size);
         }
 
@@ -321,6 +344,7 @@ struct GroupConcatAggregateStateV2 {
         data_columns->resize(output_col_num + 1);
     }
 
+<<<<<<< HEAD
     ~GroupConcatAggregateStateV2() {
         if (data_columns != nullptr) {
             for (auto& col : *data_columns) {
@@ -330,6 +354,8 @@ struct GroupConcatAggregateStateV2 {
             data_columns.reset(nullptr);
         }
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // using pointer rather than vector to avoid variadic size
     // group_concat(a, b order by c, d), the a,b,',',c,d are put into data_columns in order, and reject null for
     // output columns a and b.
@@ -483,6 +509,10 @@ public:
     // output columns wouldn't be null.
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& state_impl = this->data(state);
+<<<<<<< HEAD
+=======
+        DCHECK(state_impl.data_columns == nullptr || !state_impl.data_columns->empty());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (state_impl.data_columns == nullptr || (*state_impl.data_columns)[0]->size() == 0) {
             to->append_default();
             return;
@@ -502,7 +532,13 @@ public:
                     elem_size);
             auto& offsets = array_col->offsets_column()->get_data();
             offsets.push_back(offsets.back() + elem_size);
+<<<<<<< HEAD
         }
+=======
+            (*state_impl.data_columns)[i].reset(); // early release memory
+        }
+        state_impl.data_columns->clear();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // convert each cell of a row to a [nullable] array in a nullable struct, keep the same of chunk_size
@@ -550,7 +586,11 @@ public:
         // if i-th row is null, set nullable_array[x][i] = null, otherwise, set array[x][i]=src[x][i]
         std::vector<ArrayColumn*> arrays(columns.size());
         std::vector<NullData*> array_nulls(columns.size());
+<<<<<<< HEAD
         std::vector<std::vector<uint32_t>*> array_offsets(columns.size());
+=======
+        std::vector<Buffer<uint32_t>*> array_offsets(columns.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::vector<NullableColumn*> nullable_arrays(columns.size());
         auto old_size = columns[0]->size();
         for (auto j = 0; j < columns.size(); ++j) {
@@ -601,6 +641,11 @@ public:
             to->append_default();
             return;
         }
+<<<<<<< HEAD
+=======
+        DCHECK(!state_impl.data_columns->empty());
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto elem_size = (*state_impl.data_columns)[0]->size();
         if (elem_size == 0) {
             to->append_default();
@@ -610,6 +655,7 @@ public:
         Columns outputs(output_col_num);
         for (auto i = 0; i < output_col_num; ++i) {
             outputs[i] = (*state_impl.data_columns)[i];
+<<<<<<< HEAD
         }
         // order by
         if (!ctx->get_is_asc_order().empty()) {
@@ -617,6 +663,13 @@ public:
                 outputs[i] = (*state_impl.data_columns)[i]->clone_empty();
             }
             Permutation perm;
+=======
+            DCHECK(!outputs[i]->is_constant()); // as they are appended one by one.
+        }
+        // order by
+        Permutation perm;
+        if (!ctx->get_is_asc_order().empty()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Columns order_by_columns;
             SortDescs sort_desc(ctx->get_is_asc_order(), ctx->get_nulls_first());
             order_by_columns.assign(state_impl.data_columns->begin() + output_col_num, state_impl.data_columns->end());
@@ -632,6 +685,7 @@ public:
                 ctx->set_error(st.to_string().c_str(), false);
                 return;
             }
+<<<<<<< HEAD
             for (auto i = 0; i < output_col_num; ++i) {
                 materialize_column_by_permutation(outputs[i].get(), {(*state_impl.data_columns)[i]}, perm);
             }
@@ -639,6 +693,12 @@ public:
         // further remove duplicated values, pick the last unique one to identify the last sep and don't output it.
         // TODO(fzh) optimize it later
         std::vector<bool> duplicated(outputs[0]->size(), false);
+=======
+        }
+        // further remove duplicated values, pick the last unique one to identify the last sep and don't output it.
+        // TODO(fzh) optimize it later, as distinct is often rewritten to group by.
+        Buffer<bool> duplicated(outputs[0]->size(), false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (ctx->get_is_distinct()) {
             for (auto row_id = 0; row_id < elem_size; row_id++) {
                 bool is_duplicated = false;
@@ -676,6 +736,7 @@ public:
         bytes.resize(offset + length);
         bool overflow = false;
         size_t limit = ctx->get_group_concat_max_len() + offset;
+<<<<<<< HEAD
         for (auto j = 0; j < elem_size && !overflow; ++j) {
             if (duplicated[j]) {
                 continue;
@@ -689,6 +750,38 @@ public:
                     return;
                 }
                 auto str = binary_cols[i]->get_slice(j);
+=======
+        auto last_unique_row_id = elem_size - 1;
+        for (auto i = elem_size - 1; i >= 0; i--) {
+            auto idx = i;
+            if (!perm.empty()) {
+                idx = perm[i].index_in_chunk;
+            }
+            if (!duplicated[idx]) {
+                last_unique_row_id = i;
+                break;
+            }
+        }
+
+        DCHECK(perm.empty() || elem_size == perm.size());
+        for (auto j = 0; j <= last_unique_row_id && !overflow; ++j) {
+            auto idx = j;
+            if (!perm.empty()) {
+                idx = perm[j].index_in_chunk;
+            }
+            if (duplicated[idx]) {
+                continue;
+            }
+            for (auto i = 0; i < output_col_num && !overflow; ++i) {
+                if (j == last_unique_row_id && i + 1 == output_col_num) { // ignore the last separator
+                    continue;
+                }
+                if (UNLIKELY(i + 1 < output_col_num && binary_cols[i]->is_null(idx))) {
+                    ctx->set_error("group_concat mustn't output null", false);
+                    return;
+                }
+                auto str = binary_cols[i]->get_slice(idx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (offset + str.get_size() <= limit) {
                     memcpy(bytes.data() + offset, str.get_data(), str.get_size());
                     offset += str.get_size();
@@ -709,6 +802,10 @@ public:
                 }
             }
         }
+<<<<<<< HEAD
+=======
+        state_impl.data_columns->clear(); // early release memory
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         bytes.resize(offset);
         string->get_offset().emplace_back(offset);
     }

@@ -17,6 +17,10 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.BinaryType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -76,6 +80,12 @@ public class ArithmeticCommutativeRule extends BottomUpScalarOperatorRewriteRule
             if (!LEFT_COMMUTATIVE_MAP.containsKey(functionName)) {
                 return predicate;
             }
+<<<<<<< HEAD
+=======
+            if (s2.isConstantNull() && predicate.getBinaryType() == BinaryType.EQ_FOR_NULL) {
+                return predicate;
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             String fnName = LEFT_COMMUTATIVE_MAP.get(functionName);
             Function fn = findArithmeticFunction(call, fnName);
             CallOperator n = new CallOperator(fnName, fn.getReturnType(), Lists.newArrayList(result, s2), fn);
@@ -95,6 +105,12 @@ public class ArithmeticCommutativeRule extends BottomUpScalarOperatorRewriteRule
             if (!RIGHT_COMMUTATIVE_MAP.containsKey(functionName)) {
                 return predicate;
             }
+<<<<<<< HEAD
+=======
+            if (s1.isConstantNull() && predicate.getBinaryType() == BinaryType.EQ_FOR_NULL) {
+                return predicate;
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             String fnName = RIGHT_COMMUTATIVE_MAP.get(functionName);
             Function fn = findArithmeticFunction(call, fnName);
 

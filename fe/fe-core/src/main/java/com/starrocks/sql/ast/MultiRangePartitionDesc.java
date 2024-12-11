@@ -15,6 +15,10 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TimestampArithmeticExpr;
@@ -26,6 +30,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.text.ParseException;
@@ -48,7 +57,11 @@ public class MultiRangePartitionDesc extends PartitionDesc {
     private Long step;
     private final String timeUnit;
     private static final SimpleDateFormat DATEKEY_SDF = new SimpleDateFormat("yyyyMMdd");
+<<<<<<< HEAD
     private final ImmutableSet<TimestampArithmeticExpr.TimeUnit> supportedTimeUnitType = ImmutableSet.of(
+=======
+    public static final ImmutableSet<TimestampArithmeticExpr.TimeUnit> SUPPORTED_TIME_UNIT_TYPE = ImmutableSet.of(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             TimestampArithmeticExpr.TimeUnit.HOUR,
             TimestampArithmeticExpr.TimeUnit.DAY,
             TimestampArithmeticExpr.TimeUnit.WEEK,
@@ -65,6 +78,17 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         this.timeUnit = timeUnit;
     }
 
+<<<<<<< HEAD
+=======
+    public String getPartitionBegin() {
+        return partitionBegin;
+    }
+
+    public String getPartitionEnd() {
+        return partitionEnd;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Long getStep() {
         return step;
     }
@@ -78,17 +102,24 @@ public class MultiRangePartitionDesc extends PartitionDesc {
     }
 
     public List<SingleRangePartitionDesc> convertToSingle(PartitionConvertContext context) throws AnalysisException {
+<<<<<<< HEAD
 
         if (this.getStep() <= 0) {
             throw new AnalysisException("Batch partition every clause mush be larger than zero.");
         }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Type firstPartitionColumnType = context.getFirstPartitionColumnType();
         if (firstPartitionColumnType.isDateType()) {
             return buildDateTypePartition(context);
         } else if (firstPartitionColumnType.isIntegerType()) {
             return buildNumberTypePartition(context);
         } else {
+<<<<<<< HEAD
             throw new AnalysisException("Unsupported batch partition build type:" + firstPartitionColumnType + ".");
+=======
+            throw new SemanticException("Unsupported batch partition build type:" + firstPartitionColumnType + ".");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -126,6 +157,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                     "only supports an interval of 1");
         }
 
+<<<<<<< HEAD
         String partitionName;
         TimestampArithmeticExpr.TimeUnit timeUnitType = TimestampArithmeticExpr.TimeUnit.fromName(timeUnit);
         if (timeUnitType == null) {
@@ -133,6 +165,8 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         } else if (!supportedTimeUnitType.contains(timeUnitType)) {
             throw new AnalysisException("Batch build partition does not support time interval type: " + timeUnit);
         }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<SingleRangePartitionDesc> singleRangePartitionDescs = Lists.newArrayList();
         long currentLoopNum = 0;
         long maxAllowedLimit = Config.max_partitions_in_one_batch;
@@ -184,6 +218,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             outputDateFormat = DateUtils.DATE_TIME_FORMATTER;
         }
 
+<<<<<<< HEAD
         if (context.isAutoPartitionTable() || !Config.enable_create_partial_partition_in_batch) {
             LocalDateTime standardBeginTime;
             LocalDateTime standardEndTime;
@@ -243,6 +278,20 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             }
         }
 
+=======
+        TimestampArithmeticExpr.TimeUnit timeUnitType = TimestampArithmeticExpr.TimeUnit.fromName(timeUnit);
+        Preconditions.checkNotNull(timeUnitType);
+
+        if (context.isAutoPartitionTable()) {
+            PartitionDescAnalyzer.checkManualAddPartitionDateAligned(
+                    beginTime, endTime,
+                    timeUnit, timeInterval,
+                    dayOfWeek, dayOfMonth,
+                    context.getFirstPartitionColumnType());
+        }
+
+        String partitionName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         while (beginTime.isBefore(endTime)) {
             PartitionValue lowerPartitionValue = new PartitionValue(beginTime.format(outputDateFormat));
 

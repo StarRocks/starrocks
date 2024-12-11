@@ -14,12 +14,17 @@
 
 #include "storage/meta_reader.h"
 
+<<<<<<< HEAD
+=======
+#include <sstream>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <utility>
 #include <vector>
 
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+<<<<<<< HEAD
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "runtime/global_dict/config.h"
@@ -29,6 +34,23 @@
 namespace starrocks {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_merge", "max", "min", "count"};
+=======
+#include "column/datum.h"
+#include "column/datum_convert.h"
+#include "common/status.h"
+#include "runtime/global_dict/config.h"
+#include "storage/olap_common.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/rowset.h"
+#include "types/logical_type.h"
+#include "util/slice.h"
+
+namespace starrocks {
+
+std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
+        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX, META_MIN, META_COUNT_ROWS, META_COUNT_COL};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
@@ -109,6 +131,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
         auto s_id = _collect_context.result_slot_ids[i];
         auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
         const auto& field = _collect_context.seg_collecter_params.fields[i];
+<<<<<<< HEAD
         if (field == "dict_merge") {
             TypeDescriptor item_desc;
             item_desc = slot->type();
@@ -118,15 +141,41 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             ColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg ? true : false);
             chunk->append_column(std::move(column), slot->id());
         } else if (field == "count") {
+=======
+        if (field == META_DICT_MERGE) {
+            TypeDescriptor item_desc;
+            item_desc.type = TYPE_VARCHAR;
+            TypeDescriptor desc;
+            desc.type = TYPE_ARRAY;
+            desc.children.emplace_back(item_desc);
+            ColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg);
+            chunk->append_column(std::move(column), slot->id());
+        } else if (field == META_COUNT_COL || field == META_COUNT_ROWS) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             TypeDescriptor item_desc;
             item_desc.type = TYPE_BIGINT;
             TypeDescriptor desc;
             desc.type = TYPE_BIGINT;
             desc.children.emplace_back(item_desc);
+<<<<<<< HEAD
             ColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
         } else {
             ColumnPtr column = ColumnHelper::create_column(slot->type(), _has_count_agg ? true : false);
+=======
+            ColumnPtr column = ColumnHelper::create_column(desc, true);
+            chunk->append_column(std::move(column), slot->id());
+        } else if (field == META_FLAT_JSON_META) {
+            TypeDescriptor item_desc;
+            item_desc.type = TYPE_VARCHAR;
+            TypeDescriptor desc;
+            desc.type = TYPE_ARRAY;
+            desc.children.emplace_back(item_desc);
+            ColumnPtr column = ColumnHelper::create_column(desc, false);
+            chunk->append_column(std::move(column), slot->id());
+        } else {
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             chunk->append_column(std::move(column), slot->id());
         }
     }
@@ -138,16 +187,44 @@ SegmentMetaCollecter::SegmentMetaCollecter(SegmentSharedPtr segment) : _segment(
 SegmentMetaCollecter::~SegmentMetaCollecter() = default;
 
 Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params) {
+<<<<<<< HEAD
+=======
+    if (UNLIKELY(params == nullptr)) {
+        return Status::InvalidArgument("params is nullptr");
+    }
+    if (UNLIKELY(params->fields.size() != params->field_type.size())) {
+        return Status::InvalidArgument(fmt::format("unmatched field name count({}) and field type count({})",
+                                                   params->fields.size(), params->field_type.size()));
+    }
+    if (UNLIKELY(params->fields.size() != params->cids.size())) {
+        return Status::InvalidArgument(fmt::format("unmatched field name count({}) and column id count({})",
+                                                   params->fields.size(), params->cids.size()));
+    }
+    if (UNLIKELY(params->fields.size() != params->read_page.size())) {
+        return Status::InvalidArgument(fmt::format("unmatched field name count({}) and read page flags count({})",
+                                                   params->fields.size(), params->read_page.size()));
+    }
+    if (UNLIKELY(params->tablet_schema == nullptr)) {
+        return Status::InvalidArgument("tablet schema is nullptr");
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _params = params;
     return Status::OK();
 }
 
 Status SegmentMetaCollecter::open() {
+<<<<<<< HEAD
+=======
+    if (UNLIKELY(_params == nullptr)) {
+        return Status::InternalError("SegmentMetaCollecter::init() has not been called");
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(_init_return_column_iterators());
     return Status::OK();
 }
 
 Status SegmentMetaCollecter::_init_return_column_iterators() {
+<<<<<<< HEAD
     DCHECK_EQ(_params->fields.size(), _params->cids.size());
     DCHECK_EQ(_params->fields.size(), _params->read_page.size());
 
@@ -155,11 +232,27 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
     ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(_segment->file_name()));
 
     _column_iterators.resize(_params->max_cid + 1);
+=======
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
+    RandomAccessFileOptions ropts;
+    if (_segment->encryption_info()) {
+        ropts.encryption_info = *_segment->encryption_info();
+    }
+    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(ropts, _segment->file_name()));
+
+    auto max_cid = _params->cids.empty() ? 0 : *std::max_element(_params->cids.begin(), _params->cids.end());
+    _column_iterators.resize(max_cid + 1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (int i = 0; i < _params->fields.size(); i++) {
         if (_params->read_page[i]) {
             auto cid = _params->cids[i];
             if (_column_iterators[cid] == nullptr) {
+<<<<<<< HEAD
                 ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid));
+=======
+                const TabletColumn& col = _params->tablet_schema->column(cid);
+                ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, nullptr));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                 ColumnIteratorOptions iter_opts;
                 iter_opts.check_dict_encoding = true;
@@ -173,7 +266,14 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
 }
 
 Status SegmentMetaCollecter::collect(std::vector<Column*>* dsts) {
+<<<<<<< HEAD
     DCHECK_EQ(dsts->size(), _params->fields.size());
+=======
+    if (UNLIKELY(dsts->size() != _params->fields.size())) {
+        return Status::InvalidArgument(
+                fmt::format("invalid column count. expect: {} real: {}", _params->fields.size(), dsts->size()));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     for (size_t i = 0; i < _params->fields.size(); i++) {
         RETURN_IF_ERROR(_collect(_params->fields[i], _params->cids[i], (*dsts)[i], _params->field_type[i]));
@@ -182,6 +282,7 @@ Status SegmentMetaCollecter::collect(std::vector<Column*>* dsts) {
 }
 
 Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Column* column, LogicalType type) {
+<<<<<<< HEAD
     if (name == "dict_merge") {
         return _collect_dict(cid, column, type);
     } else if (name == "max") {
@@ -190,10 +291,84 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
         return _collect_min(cid, column, type);
     } else if (name == "count") {
         return _collect_count(column, type);
+=======
+    if (name == META_DICT_MERGE) {
+        return _collect_dict(cid, column, type);
+    } else if (name == META_MAX) {
+        return _collect_max(cid, column, type);
+    } else if (name == META_MIN) {
+        return _collect_min(cid, column, type);
+    } else if (name == META_COUNT_ROWS) {
+        return _collect_rows(column, type);
+    } else if (name == META_FLAT_JSON_META) {
+        return _collect_flat_json(cid, column);
+    } else if (name == META_COUNT_COL) {
+        return _collect_count(cid, column, type);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
 }
 
+<<<<<<< HEAD
+=======
+std::string append_read_name(const ColumnReader* col_reader) {
+    std::stringstream stream;
+    if (col_reader->column_type() == LogicalType::TYPE_JSON) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            stream << fmt::format("{}({}), ", sub_reader->name(), type_to_string(sub_reader->column_type()));
+        }
+        auto str = stream.str();
+        return str.substr(0, str.size() - 2);
+    }
+    if (col_reader->column_type() == LogicalType::TYPE_ARRAY) {
+        auto child = append_read_name((*col_reader->sub_readers())[0].get());
+        if (!child.empty()) {
+            stream << "[" << child << "]";
+        }
+    } else if (col_reader->column_type() == LogicalType::TYPE_MAP) {
+        auto child = append_read_name((*col_reader->sub_readers())[1].get());
+        if (!child.empty()) {
+            stream << "{" << child << "}";
+        }
+    } else if (col_reader->column_type() == LogicalType::TYPE_STRUCT) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            auto child = append_read_name(sub_reader.get());
+            if (!child.empty()) {
+                stream << sub_reader->name() << "(" << child << "), ";
+            }
+        }
+        auto str = stream.str();
+        return str.substr(0, str.size() - 2);
+    }
+    return stream.str();
+}
+
+Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
+    const ColumnReader* col_reader = _segment->column(cid);
+    if (col_reader == nullptr) {
+        return Status::NotFound("don't found column");
+    }
+
+    if (!is_semi_type(col_reader->column_type())) {
+        return Status::InternalError("column type mismatch");
+    }
+
+    if (col_reader->sub_readers() == nullptr || col_reader->sub_readers()->size() < 1) {
+        column->append_datum(DatumArray());
+        return Status::OK();
+    }
+
+    ArrayColumn* array_column = down_cast<ArrayColumn*>(column);
+    size_t size = array_column->offsets_column()->get_data().back();
+    auto res = append_read_name(col_reader);
+    if (!res.empty()) {
+        array_column->elements_column()->append_datum(Slice(res));
+        array_column->offsets_column()->append(size + 1);
+    }
+    return Status::OK();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // collect dict
 Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, LogicalType type) {
     if (!_column_iterators[cid]) {
@@ -208,7 +383,17 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
     }
 
     if (words.size() > DICT_DECODE_MAX_SIZE) {
+<<<<<<< HEAD
         return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
+=======
+        return Status::GlobalDictError(fmt::format("global dict size:{} greater than DICT_DECODE_MAX_SIZE:{}",
+                                                   words.size(), DICT_DECODE_MAX_SIZE));
+    }
+
+    // array<string> has none dict, return directly
+    if (words.size() < 1) {
+        return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     [[maybe_unused]] NullableColumn* nullable_column = nullptr;
@@ -260,26 +445,61 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, 
     }
     const ZoneMapPB* segment_zone_map_pb = col_reader->segment_zone_map();
     TypeInfoPtr type_info = get_type_info(delegate_type(type));
+<<<<<<< HEAD
     if constexpr (!is_max) {
+=======
+    if constexpr (!is_max) { // min
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Datum min;
         if (!segment_zone_map_pb->has_null()) {
             RETURN_IF_ERROR(datum_from_string(type_info.get(), &min, segment_zone_map_pb->min(), nullptr));
             column->append_datum(min);
+<<<<<<< HEAD
+=======
+        } else {
+            column->append_nulls(1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     } else if constexpr (is_max) {
         Datum max;
         if (segment_zone_map_pb->has_not_null()) {
             RETURN_IF_ERROR(datum_from_string(type_info.get(), &max, segment_zone_map_pb->max(), nullptr));
             column->append_datum(max);
+<<<<<<< HEAD
+=======
+        } else {
+            column->append_nulls(1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status SegmentMetaCollecter::_collect_count(Column* column, LogicalType type) {
+=======
+Status SegmentMetaCollecter::_collect_rows(Column* column, LogicalType type) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     uint32_t num_rows = _segment->num_rows();
     column->append_datum(int64_t(num_rows));
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, LogicalType type) {
+    if (!_column_iterators[cid]) {
+        return Status::InvalidArgument("Invalid Collect Params.");
+    }
+
+    uint32_t num_rows = _segment->num_rows();
+    size_t nulls = 0;
+    RETURN_IF_ERROR(_column_iterators[cid]->seek_to_first());
+    RETURN_IF_ERROR(_column_iterators[cid]->null_count(&nulls));
+    column->append_datum(int64_t(num_rows - nulls));
+
+    return Status::OK();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

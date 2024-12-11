@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_base64
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a string into a Base64-encoded string. This function is an inverse of [from_base64](from_base64.md).
 

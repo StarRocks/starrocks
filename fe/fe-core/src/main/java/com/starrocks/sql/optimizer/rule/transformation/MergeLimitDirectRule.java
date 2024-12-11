@@ -30,16 +30,30 @@ import java.util.List;
 public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule AGGREGATE = new MergeLimitDirectRule(OperatorType.LOGICAL_AGGR);
     public static final MergeLimitDirectRule OLAP_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_OLAP_SCAN);
+<<<<<<< HEAD
+=======
+    public static final MergeLimitDirectRule VIEW_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_VIEW_SCAN);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final MergeLimitDirectRule HIVE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_HIVE_SCAN);
     public static final MergeLimitDirectRule ICEBERG_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final MergeLimitDirectRule HUDI_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_HUDI_SCAN);
     public static final MergeLimitDirectRule DELTALAKE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
     public static final MergeLimitDirectRule FILE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_FILE_SCAN);
     public static final MergeLimitDirectRule PAIMON_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_PAIMON_SCAN);
+<<<<<<< HEAD
+=======
+    public static final MergeLimitDirectRule ODPS_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ODPS_SCAN);
+    public static final MergeLimitDirectRule KUDU_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_KUDU_SCAN);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final MergeLimitDirectRule SCHEMA_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final MergeLimitDirectRule MYSQL_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_MYSQL_SCAN);
     public static final MergeLimitDirectRule ES_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ES_SCAN);
     public static final MergeLimitDirectRule JDBC_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_JDBC_SCAN);
+<<<<<<< HEAD
+=======
+    public static final MergeLimitDirectRule ICEBERG_METADATA_SCAN = new MergeLimitDirectRule(
+            OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final MergeLimitDirectRule WINDOW = new MergeLimitDirectRule(OperatorType.LOGICAL_WINDOW);
     public static final MergeLimitDirectRule INTERSECT = new MergeLimitDirectRule(OperatorType.LOGICAL_INTERSECT);
     public static final MergeLimitDirectRule EXCEPT = new MergeLimitDirectRule(OperatorType.LOGICAL_EXCEPT);
@@ -49,6 +63,11 @@ public class MergeLimitDirectRule extends TransformationRule {
             new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION);
     public static final MergeLimitDirectRule TABLE_FUNCTION_TABLE_SCAN =
             new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN);
+<<<<<<< HEAD
+=======
+    public static final MergeLimitDirectRule CTE_CONSUMER =
+            new MergeLimitDirectRule(OperatorType.LOGICAL_CTE_CONSUME);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private MergeLimitDirectRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_MERGE_LIMIT_DIRECT, Pattern.create(OperatorType.LOGICAL_LIMIT)

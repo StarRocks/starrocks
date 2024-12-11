@@ -17,8 +17,11 @@ package com.starrocks.lake;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+<<<<<<< HEAD
 import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.AwsDefaultCredentialInfo;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
@@ -41,12 +44,16 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+<<<<<<< HEAD
 import com.starrocks.catalog.Table;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
@@ -55,14 +62,28 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+<<<<<<< HEAD
 import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
+=======
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -75,8 +96,11 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.threeten.extra.PeriodDuration;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.IOException;
 import java.time.LocalDate;
 import java.util.List;
@@ -87,12 +111,16 @@ import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJo
 public class LakeMaterializedViewTest {
     private static final String DB = "db_for_lake_mv";
 
+<<<<<<< HEAD
     private static PseudoCluster cluster;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
     public static void setUp() throws Exception {
+<<<<<<< HEAD
         Config.enable_experimental_mv = true;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         cluster = PseudoCluster.getInstance();
@@ -175,11 +203,38 @@ public class LakeMaterializedViewTest {
                 "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3");
+=======
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        connectContext = UtFrameUtils.createDefaultCtx();
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
+        starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase(DB).useDatabase(DB);
+
+        starRocksAssert.withTable("CREATE TABLE base_table\n" +
+                    "(\n" +
+                    "    k1 date,\n" +
+                    "    k2 int,\n" +
+                    "    k3 int\n" +
+                    ")\n" +
+                    "PARTITION BY RANGE(k1)\n" +
+                    "(\n" +
+                    "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                    "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(k2) BUCKETS 3");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @AfterClass
     public static void tearDown() {
+<<<<<<< HEAD
         PseudoCluster.getInstance().shutdown(true);
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -195,6 +250,10 @@ public class LakeMaterializedViewTest {
         long mvId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
+<<<<<<< HEAD
+=======
+        long physicalPartitionId = 6L;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
@@ -219,7 +278,11 @@ public class LakeMaterializedViewTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // refresh scheme
         MvRefreshScheme mvRefreshScheme = new MvRefreshScheme();
@@ -227,7 +290,11 @@ public class LakeMaterializedViewTest {
 
         // Lake mv
         LakeMaterializedView mv = new LakeMaterializedView(mvId, dbId, "mv1", columns, KeysType.AGG_KEYS,
+<<<<<<< HEAD
                 partitionInfo, distributionInfo, mvRefreshScheme);
+=======
+                    partitionInfo, distributionInfo, mvRefreshScheme);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Deencapsulation.setField(mv, "baseIndexId", indexId);
         mv.addPartition(partition);
         mv.setIndexMeta(indexId, "mv1", columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
@@ -250,6 +317,7 @@ public class LakeMaterializedViewTest {
         FilePathInfo pathInfo = builder.build();
         mv.setStorageInfo(pathInfo, new DataCacheInfo(true, true));
 
+<<<<<<< HEAD
         // Test serialize and deserialize
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
         try (DataOutputStream out = new DataOutputStream(byteArrayOutputStream)) {
@@ -268,12 +336,18 @@ public class LakeMaterializedViewTest {
         Assert.assertTrue(newTable.isCloudNativeTableOrMaterializedView());
         LakeMaterializedView newMv = (LakeMaterializedView) newTable;
 
+=======
+        // Test selectiveCopy
+        MaterializedView newMv = mv.selectiveCopy(Lists.newArrayList("p1"), true, IndexExtState.ALL);
+        Assert.assertTrue(newMv.isCloudNativeMaterializedView());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals("s3://test-bucket/1/", newMv.getDefaultFilePathInfo().getFullPath());
         FileCacheInfo cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
         Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
+<<<<<<< HEAD
         Partition p1 = newMv.getPartition(partitionId);
         MaterializedIndex newIndex = p1.getBaseIndex();
         long expectedTabletId = 10L;
@@ -297,6 +371,11 @@ public class LakeMaterializedViewTest {
         // Test appendUniqueProperties
         StringBuilder sb = new StringBuilder();
         Deencapsulation.invoke(newMv2, "appendUniqueProperties", sb);
+=======
+        // Test appendUniqueProperties
+        StringBuilder sb = new StringBuilder();
+        Deencapsulation.invoke(newMv, "appendUniqueProperties", sb);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String baseProperties = sb.toString();
         Assert.assertTrue(baseProperties.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(baseProperties.contains("\"enable_async_write_back\" = \"true\""));
@@ -307,6 +386,7 @@ public class LakeMaterializedViewTest {
     @Test
     public void testCreateMaterializedView() throws Exception {
         starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+<<<<<<< HEAD
                         "distributed by hash(k2) buckets 3\n" +
                         "PROPERTIES(\n" +
                         "   'datacache.enable' = 'true',\n" +
@@ -318,12 +398,30 @@ public class LakeMaterializedViewTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         MaterializedView mv = (MaterializedView) db.getTable("mv1");
+=======
+                    "distributed by hash(k2) buckets 3\n" +
+                    "PROPERTIES(\n" +
+                    "   'datacache.enable' = 'true',\n" +
+                    "   'enable_async_write_back' = 'false',\n" +
+                    "   'datacache.partition_duration' = '6 day'\n" +
+                    ")\n" +
+                    "refresh async\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        MaterializedView mv =
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(mv.isCloudNativeMaterializedView());
         Assert.assertTrue(mv.isActive());
 
         LakeMaterializedView lakeMv = (LakeMaterializedView) mv;
         // same as PseudoStarOSAgent.allocateFilePath
+<<<<<<< HEAD
         Assert.assertEquals("s3://test-bucket/1/", lakeMv.getDefaultFilePathInfo().getFullPath());
+=======
+        Assert.assertTrue(lakeMv.getDefaultFilePathInfo().getFullPath().startsWith("s3://dummy_unittest_bucket/dummy_sub_path"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // check table default cache info
         FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(0L);
         Assert.assertTrue(cacheInfo.getEnableCache());
@@ -348,12 +446,17 @@ public class LakeMaterializedViewTest {
         Assert.assertNotNull(task);
 
         starRocksAssert.dropMaterializedView("mv1");
+<<<<<<< HEAD
         Assert.assertNull(db.getTable("mv1"));
+=======
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testInactiveMaterializedView() throws Exception {
         starRocksAssert.withTable("create table base_table2\n" +
+<<<<<<< HEAD
                 "(\n" +
                 "    k4 date,\n" +
                 "    k5 int\n" +
@@ -366,21 +469,45 @@ public class LakeMaterializedViewTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         MaterializedView mv = (MaterializedView) db.getTable("mv2");
+=======
+                    "(\n" +
+                    "    k4 date,\n" +
+                    "    k5 int\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(k4) BUCKETS 3");
+        starRocksAssert.withMaterializedView("create materialized view mv2\n" +
+                    "distributed by hash(k2) buckets 3\n" +
+                    "refresh async\n" +
+                    "as select k1, k2, sum(k3) as total from base_table, base_table2 where k1 = k4 group by k1, k2;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        MaterializedView mv =
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv2");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(mv.isCloudNativeMaterializedView());
         Assert.assertTrue(mv.isActive());
 
         // drop base table and inactive mv
         starRocksAssert.dropTable("base_table2");
+<<<<<<< HEAD
         Assert.assertNull(db.getTable("base_table2"));
         Assert.assertFalse(mv.isActive());
 
         starRocksAssert.dropMaterializedView("mv2");
         Assert.assertNull(db.getTable("mv2"));
+=======
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table2"));
+        Assert.assertFalse(mv.isActive());
+
+        starRocksAssert.dropMaterializedView("mv2");
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv2"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testAlterAsyncMaterializedViewInterval() throws Exception {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv3\n" +
+<<<<<<< HEAD
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "REFRESH async START('2122-12-31 20:45:11') EVERY(INTERVAL 1 DAY)\n" +
@@ -388,6 +515,16 @@ public class LakeMaterializedViewTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         MaterializedView mv = (MaterializedView) db.getTable("mv3");
+=======
+                    "PARTITION BY k1\n" +
+                    "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                    "REFRESH async START('2122-12-31 20:45:11') EVERY(INTERVAL 1 DAY)\n" +
+                    "as select k1,k2 from base_table;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        MaterializedView mv =
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv3");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(mv.isCloudNativeMaterializedView());
 
         MaterializedView.AsyncRefreshContext asyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
@@ -397,19 +534,29 @@ public class LakeMaterializedViewTest {
 
         // alter interval
         String alterMvSql = "ALTER MATERIALIZED VIEW mv3 REFRESH ASYNC EVERY(INTERVAL 2 DAY);";
+<<<<<<< HEAD
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterMvSql);
+=======
+        StatementBase statement = SqlParser.parseSingleStatement(alterMvSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         stmtExecutor.execute();
         asyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
         Assert.assertEquals(2, asyncRefreshContext.getStep());
 
         starRocksAssert.dropMaterializedView("mv3");
+<<<<<<< HEAD
         Assert.assertNull(db.getTable("mv3"));
+=======
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv3"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testModifyRelatedColumnWithMaterializedView() {
         try {
             starRocksAssert.withTable("create table base_table4\n" +
+<<<<<<< HEAD
                     "(\n" +
                     "    k4 date,\n" +
                     "    k5 int\n" +
@@ -422,14 +569,34 @@ public class LakeMaterializedViewTest {
 
             Database db = GlobalStateMgr.getCurrentState().getDb(DB);
             MaterializedView mv = (MaterializedView) db.getTable("mv4");
+=======
+                        "(\n" +
+                        "    k4 date,\n" +
+                        "    k5 int\n" +
+                        ")\n" +
+                        "duplicate key(k4) distributed by hash(k4) buckets 3;");
+            starRocksAssert.withMaterializedView("create materialized view mv4\n" +
+                        "distributed by hash(k1) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k1, k5, sum(k3) as total from base_table, base_table4 where k1 = k4 group by k1, k5;");
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            MaterializedView mv =
+                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv4");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.assertTrue(mv.isCloudNativeMaterializedView());
             Assert.assertTrue(mv.isActive());
 
             // modify column which defined in mv
             String alterSql = "alter table base_table4 modify column k5 varchar(10)";
+<<<<<<< HEAD
             AlterTableStmt
                     alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
             GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+=======
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             waitForSchemaChangeAlterJobFinish();
 
@@ -437,9 +604,15 @@ public class LakeMaterializedViewTest {
             Assert.assertFalse(mv.isActive());
 
             starRocksAssert.dropMaterializedView("mv4");
+<<<<<<< HEAD
             Assert.assertNull(db.getTable("mv4"));
             starRocksAssert.dropTable("base_table4");
             Assert.assertNull(db.getTable("base_table4"));
+=======
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv4"));
+            starRocksAssert.dropTable("base_table4");
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table4"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } catch (Exception e) {
             System.out.println(e);
             Assert.fail();
@@ -450,6 +623,7 @@ public class LakeMaterializedViewTest {
     public void testNonPartitionMvEnableFillDataCache() {
         try {
             starRocksAssert.withTable("create table base_table5\n" +
+<<<<<<< HEAD
                     "(\n" +
                     "    k4 date,\n" +
                     "    k5 int\n" +
@@ -462,15 +636,36 @@ public class LakeMaterializedViewTest {
 
             Database db = GlobalStateMgr.getCurrentState().getDb(DB);
             MaterializedView mv = (MaterializedView) db.getTable("mv5");
+=======
+                        "(\n" +
+                        "    k4 date,\n" +
+                        "    k5 int\n" +
+                        ")\n" +
+                        "duplicate key(k4) distributed by hash(k4) buckets 3;");
+            starRocksAssert.withMaterializedView("create materialized view mv5\n" +
+                        "distributed by hash(k1) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k1, k5, sum(k3) as total from base_table, base_table5 where k1 = k4 group by k1, k5;");
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            MaterializedView mv =
+                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv5");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.assertTrue(mv.isCloudNativeMaterializedView());
 
             Partition p = mv.getPartition("mv5");
             Assert.assertTrue(mv.isEnableFillDataCache(p));
 
             starRocksAssert.dropMaterializedView("mv5");
+<<<<<<< HEAD
             Assert.assertNull(db.getTable("mv5"));
             starRocksAssert.dropTable("base_table5");
             Assert.assertNull(db.getTable("base_table5"));
+=======
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv5"));
+            starRocksAssert.dropTable("base_table5");
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table5"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } catch (Exception e) {
             System.out.println(e);
             Assert.fail();
@@ -491,6 +686,12 @@ public class LakeMaterializedViewTest {
         long indexId = 3L;
         long partition1Id = 20L;
         long partition2Id = 21L;
+<<<<<<< HEAD
+=======
+        long physicalPartitionId1 = 22L;
+        long physicalPartitionId2 = 23L;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
@@ -517,26 +718,42 @@ public class LakeMaterializedViewTest {
         TabletMeta tabletMeta1 = new TabletMeta(dbId, mvId, partition1Id, indexId, 0, TStorageMedium.HDD, true);
         Tablet tablet1 = new LakeTablet(tablet1Id);
         index1.addTablet(tablet1, tabletMeta1);
+<<<<<<< HEAD
         Partition partition1 = new Partition(partition1Id, "p1", index1, distributionInfo);
+=======
+        Partition partition1 = new Partition(partition1Id, physicalPartitionId1, "p1", index1, distributionInfo);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         LocalDate upper1 = LocalDate.now().minus(duration);
         LocalDate lower1 = upper1.minus(duration);
         Range<PartitionKey> range1 = Range.closedOpen(PartitionKey.ofDate(lower1), PartitionKey.ofDate(upper1));
         partitionInfo.addPartition(partition1Id, false, range1, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1, false,
+<<<<<<< HEAD
                                    new DataCacheInfo(true, false));
+=======
+                    new DataCacheInfo(true, false));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // partition2
         MaterializedIndex index2 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta2 = new TabletMeta(dbId, mvId, partition2Id, indexId, 0, TStorageMedium.HDD, true);
         Tablet tablet2 = new LakeTablet(tablet2Id);
         index2.addTablet(tablet2, tabletMeta2);
+<<<<<<< HEAD
         Partition partition2 = new Partition(partition2Id, "p2", index1, distributionInfo);
+=======
+        Partition partition2 = new Partition(partition2Id, physicalPartitionId2, "p2", index1, distributionInfo);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         LocalDate upper2 = LocalDate.now();
         LocalDate lower2 = upper2.minus(duration);
         Range<PartitionKey> range2 = Range.closedOpen(PartitionKey.ofDate(lower2), PartitionKey.ofDate(upper2));
         partitionInfo.addPartition(partition2Id, false, range2, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1, false,
+<<<<<<< HEAD
                                    new DataCacheInfo(true, false));
+=======
+                    new DataCacheInfo(true, false));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // refresh scheme
         MvRefreshScheme mvRefreshScheme = new MvRefreshScheme();
@@ -544,7 +761,11 @@ public class LakeMaterializedViewTest {
 
         // Lake mv
         LakeMaterializedView mv = new LakeMaterializedView(mvId, dbId, "mv1", columns, KeysType.AGG_KEYS,
+<<<<<<< HEAD
                                                            partitionInfo, distributionInfo, mvRefreshScheme);
+=======
+                    partitionInfo, distributionInfo, mvRefreshScheme);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Deencapsulation.setField(mv, "baseIndexId", indexId);
         mv.addPartition(partition1);
         mv.addPartition(partition2);

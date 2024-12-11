@@ -27,7 +27,10 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -114,7 +117,11 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
 
     @Override
     public String getDbName() throws MetaNotFoundException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
@@ -123,11 +130,19 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
 
     @Override
     public String getTableName() throws MetaNotFoundException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
         Table table = db.getTable(tableId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            throw new MetaNotFoundException("No found database: " + dbId);
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
@@ -205,7 +220,11 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
         if (dbId == StatsConstants.DEFAULT_ALL_ID) {
             dbName = "*";
         } else {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             dbName = db.getOriginName();
         }
         String tableName;
@@ -213,7 +232,15 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
             tableName = "*";
         } else {
             try {
+<<<<<<< HEAD
                 tableName = MetaUtils.getTable(dbId, tableId).getName();
+=======
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+                if (table == null) {
+                    throw new SemanticException("Table %s is not found", tableId);
+                }
+                tableName = table.getName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } catch (SemanticException e) {
                 tableName = "<tableId : " + tableId + ">";
                 status = StatsConstants.ScheduleStatus.FAILED;

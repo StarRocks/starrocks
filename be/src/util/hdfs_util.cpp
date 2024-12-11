@@ -20,12 +20,19 @@
 #include <string>
 
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
 #include "util/error_util.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
 std::string get_hdfs_err_msg() {
+<<<<<<< HEAD
     std::string error_msg = get_str_err_msg();
+=======
+    std::string error_msg = std::strerror(errno);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::stringstream ss;
     ss << "error=" << error_msg;
     char* root_cause = hdfsGetLastExceptionRootCause();

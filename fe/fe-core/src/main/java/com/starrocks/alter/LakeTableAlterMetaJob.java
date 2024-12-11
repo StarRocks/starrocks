@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+<<<<<<< HEAD
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
@@ -65,12 +66,32 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
 
     private static final Logger LOG = LogManager.getLogger(LakeTableAlterMetaJob.class);
 
+=======
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
+import com.starrocks.thrift.TTabletMetaType;
+
+import java.io.DataOutput;
+import java.io.IOException;
+import java.util.Set;
+
+public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "metaType")
     private TTabletMetaType metaType;
 
     @SerializedName(value = "metaValue")
     private boolean metaValue;
 
+<<<<<<< HEAD
     @SerializedName(value = "watershedTxnId")
     private long watershedTxnId = -1;
 
@@ -81,6 +102,10 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     @SerializedName(value = "commitVersionMap")
     // Mapping from partition id to commit version
     private Map<Long, Long> commitVersionMap = new HashMap<>();
+=======
+    @SerializedName(value = "persistentIndexType")
+    private String persistentIndexType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // for deserialization
     public LakeTableAlterMetaJob() {
@@ -88,6 +113,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     }
 
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
+<<<<<<< HEAD
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         this.metaType = metaType;
@@ -381,10 +407,38 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             LOG.info("LakeTableAlterMetaJob id: {} update visible version of partition: {}, visible Version: {}",
                     jobId, partition.getName(), commitVersion);
+=======
+                                 long timeoutMs, TTabletMetaType metaType, boolean metaValue,
+                                 String persistentIndexType) {
+        super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
+        this.metaType = metaType;
+        this.metaValue = metaValue;
+        this.persistentIndexType = persistentIndexType;
+    }
+
+    @Override
+    protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
+            MaterializedIndex index, long nodeId, Set<Long> tablets) {
+        return TabletMetadataUpdateAgentTaskFactory.createLakePersistentIndexUpdateTask(nodeId, tablets,
+                metaValue, persistentIndexType);
+    }
+
+    @Override
+    protected void updateCatalog(Database db, LakeTable table) {
+        if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+            // re-use ENABLE_PERSISTENT_INDEX for both enable index and index's type.
+            table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
+                    String.valueOf(metaValue));
+            table.getTableProperty().buildEnablePersistentIndex();
+            table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
+                    String.valueOf(persistentIndexType));
+            table.getTableProperty().buildPersistentIndexType();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     @Override
+<<<<<<< HEAD
     protected boolean cancelImpl(String errMsg) {
         if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
             return false;
@@ -497,6 +551,13 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     @Override
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+=======
+    protected void restoreState(LakeTableAlterMetaJobBase job) {
+        LakeTableAlterMetaJob other = (LakeTableAlterMetaJob) job;
+        this.metaType = other.metaType;
+        this.metaValue = other.metaValue;
+        this.persistentIndexType = other.persistentIndexType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

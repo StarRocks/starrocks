@@ -41,6 +41,10 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.service.FrontendOptions;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import mockit.Delegate;
 import mockit.Expectations;
@@ -317,7 +321,11 @@ public class RepositoryTest {
             List<List<String>> infos = repo.getSnapshotInfos(snapshotName, timestamp, null);
             Assert.assertEquals(2, infos.size());
 
+<<<<<<< HEAD
         } catch (AnalysisException e) {
+=======
+        } catch (SemanticException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             e.printStackTrace();
             Assert.fail();
         }

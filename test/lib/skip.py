@@ -28,14 +28,21 @@ skip_res_cmd = [
     "select connection_id()",
     "select connection_id();",
     ".*explain costs select.*",
+<<<<<<< HEAD
     "EXPLAIN SELECT.*",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     "rand()",
     "show stats meta",
     "SHOW RESOURCES",
     "show alter table column",
     "select db_id, table_id, column_name,.* from _statistics_.column_statistics.*",
     "SELECT \\* FROM .* LIMIT 1.*",
+<<<<<<< HEAD
     "explain .*",
+=======
+    "explain(?! select).*",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     "select \\* from t2 where c1 = \\(select c1 from t2 limit 1\\).*",
     "SHOW ALTER TABLE COLUMN ORDER BY CreateTime DESC LIMIT 1.*",
     "show load.*",

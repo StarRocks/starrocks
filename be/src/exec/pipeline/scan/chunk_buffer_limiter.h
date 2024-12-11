@@ -57,6 +57,11 @@ public:
     virtual size_t capacity() const = 0;
     // The default capacity when there isn't chunk memory usage statistics.
     virtual size_t default_capacity() const = 0;
+<<<<<<< HEAD
+=======
+    // Update mem limit of this chunk buffer
+    virtual void update_mem_limit(int64_t value) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 // The capacity of this limiter is unlimited.
@@ -127,6 +132,10 @@ public:
     size_t size() const override { return _pinned_chunks_counter; }
     size_t capacity() const override { return _capacity; }
     size_t default_capacity() const override { return _default_capacity; }
+<<<<<<< HEAD
+=======
+    void update_mem_limit(int64_t value) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     void _unpin(int num_chunks);
@@ -140,7 +149,11 @@ private:
     const size_t _max_capacity;
     const size_t _default_capacity;
 
+<<<<<<< HEAD
     const int64_t _mem_limit;
+=======
+    std::atomic<int64_t> _mem_limit;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::atomic<int> _pinned_chunks_counter = 0;
 };

@@ -16,6 +16,10 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.FeConstants;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.utframe.StarRocksAssert;
@@ -79,6 +83,10 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");");
+<<<<<<< HEAD
+=======
+        FeConstants.enablePruneEmptyOutputScan = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private static String removeSlotIds(String s) {
@@ -93,7 +101,11 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "arg_types:[TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))]), " +
                 "TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))])], " +
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))]), " +
+<<<<<<< HEAD
                 "has_var_args:false, signature:nullif(DOUBLE, DOUBLE), scalar_fn:TScalarFunction(symbol:), " +
+=======
+                "has_var_args:false, scalar_fn:TScalarFunction(symbol:), " +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "id:70307, fid:70307";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift, thrift.contains(expectString));
@@ -104,9 +116,13 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select avg(coalesce(col_decimal128p20s3, col_double)) from db1.decimal_table";
         String expectString = "fn:TFunction(name:TFunctionName(function_name:coalesce), binary_type:BUILTIN, " +
                 "arg_types:[TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))])], " +
+<<<<<<< HEAD
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))]), " +
                 "has_var_args:true, signature:coalesce(DOUBLE...), scalar_fn:TScalarFunction(symbol:), " +
                 "id:70407, fid:70407";
+=======
+                "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))]), ";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift, thrift.contains(expectString));
     }
@@ -127,10 +143,14 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String expectString =
                 "fn:TFunction(name:TFunctionName(function_name:money_format), binary_type:BUILTIN, arg_types:[TTypeDesc" +
                         "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))])], ret_type:TTypeDesc" +
+<<<<<<< HEAD
                         "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), has_var_args:false, signature:" +
                         "money_format(DECIMAL128(20,3)), scalar_fn:" +
                         "TScalarFunction(symbol:)" +
                         ", id:304022, fid:304022";
+=======
+                        "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), has_var_args:false, scalar_fn:";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
 
@@ -138,7 +158,11 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "fn:TFunction(name:TFunctionName(function_name:money_format), binary_type:BUILTIN, arg_types:[TTypeDesc(types:" +
                         "[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))])], ret_type:TTypeDesc" +
                         "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), has_var_args:false, " +
+<<<<<<< HEAD
                         "signature:money_format(DECIMAL128(20,3)), scalar_fn:TScalarFunction(symbol:), id:304022, fid:304022";
+=======
+                        "scalar_fn:TScalarFunction(symbol:), id:304022, fid:304022";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
     }
@@ -148,6 +172,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select col_decimal128p20s3 * 3.14 from db1.decimal_table";
         String expectString =
                 "TExpr(nodes:[TExprNode(node_type:ARITHMETIC_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR," +
+<<<<<<< HEAD
                         " scalar_type:TScalarType(type:DECIMAL128, precision:23, scale:5))]), opcode:MULTIPLY, num_children:2, " +
                         "output_scale:-1, output_column:-1, has_nullable_child:true, is_nullable:true, is_monotonic:true), " +
                         "TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:" +
@@ -157,6 +182,18 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                         "(type:DECIMAL128, precision:3, scale:2))]), num_children:0, decimal_literal:TDecimalLiteral(value:3.14, " +
                         "integer_value:3A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00), output_scale:-1, has_nullable_child:false, " +
                         "is_nullable:false, is_monotonic:true)])})";
+=======
+                        " scalar_type:TScalarType(type:DECIMAL128, precision:23, scale:5))]), " +
+                        "opcode:MULTIPLY, num_children:2, output_scale:-1, output_column:-1, has_nullable_child:true, " +
+                        "is_nullable:true, is_monotonic:true, is_index_only_filter:false), " +
+                        "TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
+                        "scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))]), num_children:0, " +
+                        "slot_ref:TSlotRef(slot_id:5, tuple_id:0), output_scale:-1, output_column:-1," +
+                        " has_nullable_child:false, is_nullable:true, is_monotonic:true, is_index_only_filter:false)," +
+                        " TExprNode(node_type:DECIMAL_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:3, scale:2))])," +
+                        " num_children:0, decimal_literal:TDecimalLiteral(value:3.14, integer_value:3A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00), " +
+                        "output_scale:-1, has_nullable_child:false, is_nullable:false, is_monotonic:true, is_index_only_filter:false)])})";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String plan = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(plan.contains(expectString));
     }
@@ -184,9 +221,14 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalBinaryPredicate() throws Exception {
         String sql = "select col_decimal64p13s0 > -9.223372E+18 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+<<<<<<< HEAD
         String snippet = "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
                 "> -9223372000000000000";
         Assert.assertTrue(plan.contains(snippet));
+=======
+        String snippet = "[3: col_decimal64p13s0, DECIMAL64(13,0), false] > -9223372000000000000";
+        Assert.assertTrue(plan, plan.contains(snippet));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -203,7 +245,20 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select * from db1.decimal_table where col_decimal64p13s0 between -9.223372E+18 and 9.223372E+18";
         String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
         String snippet =
+<<<<<<< HEAD
                 "PREDICATES: CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0)) >= -9223372000000000000, CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0)) <= 9223372000000000000";
+=======
+                "3: col_decimal64p13s0 >= -9223372000000000000, 3: col_decimal64p13s0 <= 9223372000000000000";
+        Assert.assertTrue(plan, plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal2() throws Exception {
+        String sql = "select cast(9.223372E+18 as decimal(13,1))";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "constant exprs: \n" +
+                "         NULL";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(plan, plan.contains(snippet));
     }
 

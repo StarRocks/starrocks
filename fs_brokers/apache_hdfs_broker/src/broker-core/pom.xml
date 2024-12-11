@@ -246,6 +246,23 @@ under the License.
         <dependency>
             <groupId>com.ksyun.kmr</groupId>
             <artifactId>hadoop-ks3</artifactId>
+<<<<<<< HEAD
+=======
+            <exclusions>
+                <exclusion>
+                    <artifactId>netty</artifactId>
+                    <groupId>io.netty</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>jackson-mapper-asl</artifactId>
+                    <groupId>org.codehaus.jackson</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>hadoop-mapreduce-client-core</artifactId>
+                    <groupId>org.apache.hadoop</groupId>
+                </exclusion>
+            </exclusions>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         </dependency>
     </dependencies>
 

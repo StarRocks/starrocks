@@ -31,7 +31,11 @@ import java.util.List;
 import java.util.Map;
 
 public class JoinCommutativityRule extends TransformationRule {
+<<<<<<< HEAD
     private static final Map<JoinOperator, JoinOperator> JOIN_COMMUTATIVITY_MAP =
+=======
+    public static final Map<JoinOperator, JoinOperator> JOIN_COMMUTATIVITY_MAP =
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ImmutableMap.<JoinOperator, JoinOperator>builder()
                     .put(JoinOperator.LEFT_ANTI_JOIN, JoinOperator.RIGHT_ANTI_JOIN)
                     .put(JoinOperator.RIGHT_ANTI_JOIN, JoinOperator.LEFT_ANTI_JOIN)

@@ -1,6 +1,14 @@
 /*
 !.gitignore
 !benchmark/
+<<<<<<< HEAD
 !src/
 !test/
 !CMakeLists.txt
+=======
+!cmake_modules/
+!src/
+!test/
+!CMakeLists.txt
+!extension/
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_array
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 接收 SQL 数组并返回一个 JSON 类型的数组（以下简称 JSON 数组）。
 

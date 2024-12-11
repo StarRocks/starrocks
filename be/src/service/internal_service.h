@@ -41,7 +41,10 @@
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/MVMaintenance_types.h"
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/internal_service.pb.h"
 #include "util/countdown_latch.h"
 #include "util/priority_thread_pool.hpp"
@@ -105,6 +108,19 @@ public:
                                   const PTabletWriterAddChunksRequest* request, PTabletWriterAddBatchResult* response,
                                   google::protobuf::Closure* done) override;
 
+<<<<<<< HEAD
+=======
+    void tablet_writer_add_chunk_via_http(google::protobuf::RpcController* controller,
+                                          const ::starrocks::PHttpRequest* request,
+                                          PTabletWriterAddBatchResult* response,
+                                          google::protobuf::Closure* done) override;
+
+    void tablet_writer_add_chunks_via_http(google::protobuf::RpcController* controller,
+                                           const ::starrocks::PHttpRequest* request,
+                                           PTabletWriterAddBatchResult* response,
+                                           google::protobuf::Closure* done) override;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void tablet_writer_add_segment(google::protobuf::RpcController* controller,
                                    const PTabletWriterAddSegmentRequest* request,
                                    PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) override;
@@ -156,6 +172,29 @@ public:
     void execute_command(google::protobuf::RpcController* controller, const ExecuteCommandRequestPB* request,
                          ExecuteCommandResultPB* response, google::protobuf::Closure* done) override;
 
+<<<<<<< HEAD
+=======
+    void update_fail_point_status(google::protobuf::RpcController* controller,
+                                  const PUpdateFailPointStatusRequest* request,
+                                  PUpdateFailPointStatusResponse* response, google::protobuf::Closure* done) override;
+
+    void list_fail_point(google::protobuf::RpcController* controller, const PListFailPointRequest* request,
+                         PListFailPointResponse* response, google::protobuf::Closure* done) override;
+
+    void exec_short_circuit(google::protobuf::RpcController* controller, const PExecShortCircuitRequest* request,
+                            PExecShortCircuitResult* response, google::protobuf::Closure* done) override;
+
+    void process_dictionary_cache(google::protobuf::RpcController* controller,
+                                  const PProcessDictionaryCacheRequest* request,
+                                  PProcessDictionaryCacheResult* response, google::protobuf::Closure* done) override;
+
+    void fetch_arrow_schema(google::protobuf::RpcController* controller, const PFetchArrowSchemaRequest* request,
+                            PFetchArrowSchemaResult* result, google::protobuf::Closure* done);
+
+    void stream_load(google::protobuf::RpcController* controller, const PStreamLoadRequest* request,
+                     PStreamLoadResponse* response, google::protobuf::Closure* done) override;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,
@@ -188,7 +227,11 @@ private:
     void _get_file_schema(google::protobuf::RpcController* controller, const PGetFileSchemaRequest* request,
                           PGetFileSchemaResult* response, google::protobuf::Closure* done);
 
+<<<<<<< HEAD
     Status _exec_plan_fragment(brpc::Controller* cntl);
+=======
+    Status _exec_plan_fragment(brpc::Controller* cntl, const PExecPlanFragmentRequest* request);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status _exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
                                            const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
@@ -200,6 +243,13 @@ private:
     Status _mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
     Status _mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
 
+<<<<<<< HEAD
+=======
+    // short circuit
+    Status _exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
+                               PExecShortCircuitResult* response);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 protected:
     ExecEnv* _exec_env;
 };

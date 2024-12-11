@@ -19,14 +19,23 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class CancelAlterTableStatementAnalyzer {
 
     public static void analyze(CancelAlterTableStmt statement, ConnectContext context) {
+<<<<<<< HEAD
         MetaUtils.normalizationTableName(context, statement.getDbTableName());
         // Check db.
         if (context.getGlobalStateMgr().getDb(statement.getDbName()) == null) {
+=======
+        statement.getDbTableName().normalization(context);
+        // Check db.
+        if (context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName()) == null) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
         }
     }

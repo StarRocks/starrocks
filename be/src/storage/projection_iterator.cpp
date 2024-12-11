@@ -33,12 +33,20 @@ public:
     size_t merged_rows() const override { return _child->merged_rows(); }
 
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+<<<<<<< HEAD
         ChunkIterator::init_encoded_schema(dict_maps);
+=======
+        RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return _child->init_encoded_schema(dict_maps);
     }
 
     Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+<<<<<<< HEAD
         ChunkIterator::init_output_schema(unused_output_column_ids);
+=======
+        RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         RETURN_IF_ERROR(_child->init_output_schema(unused_output_column_ids));
         _index_map.clear();
         build_index_map(this->_output_schema, _child->output_schema());

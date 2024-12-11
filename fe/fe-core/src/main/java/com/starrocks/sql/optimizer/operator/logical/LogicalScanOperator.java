@@ -21,6 +21,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.TableVersionRange;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -36,6 +40,11 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +68,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected Set<String> partitionColumns = Sets.newHashSet();
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimzeOption scanOptimzeOption;
+<<<<<<< HEAD
+=======
+    protected TableVersionRange tableVersionRange;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public LogicalScanOperator(
             OperatorType type,
@@ -68,12 +81,31 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             long limit,
             ScalarOperator predicate,
             Projection projection) {
+<<<<<<< HEAD
+=======
+        this(type, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, projection, TableVersionRange.empty());
+    }
+
+    public LogicalScanOperator(
+            OperatorType type,
+            Table table,
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+            long limit,
+            ScalarOperator predicate,
+            Projection projection,
+            TableVersionRange tableVersionRange) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(type, limit, predicate, projection);
         this.table = Objects.requireNonNull(table, "table is null");
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
         this.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
         this.columnAccessPaths = ImmutableList.of();
         this.scanOptimzeOption = new ScanOptimzeOption();
+<<<<<<< HEAD
+=======
+        this.tableVersionRange = tableVersionRange;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         buildColumnFilters(predicate);
     }
 
@@ -83,6 +115,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.columnMetaToColRefMap = ImmutableMap.of();
         this.columnAccessPaths = ImmutableList.of();
         this.scanOptimzeOption = new ScanOptimzeOption();
+<<<<<<< HEAD
+=======
+        this.tableVersionRange = TableVersionRange.empty();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public Table getTable() {
@@ -118,12 +154,41 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return scanOptimzeOption;
     }
 
+<<<<<<< HEAD
+=======
+    public TableVersionRange getTableVersionRange() {
+        return tableVersionRange;
+    }
+
+    public void setTableVersionRange(TableVersionRange tableVersionRange) {
+        this.tableVersionRange = tableVersionRange;
+    }
+
+    // for mark empty partitions/empty tablet
+    public boolean isEmptyOutputRows() {
+        return false;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         return new RowOutputInfo(colRefToColumnMetaMap.keySet().stream()
                 .collect(Collectors.toMap(Function.identity(), Function.identity())));
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (predicate == null) {
+            return new DomainProperty(Map.of());
+        }
+
+        DomainPropertyDeriver deriver = new DomainPropertyDeriver();
+        return deriver.derive(predicate);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void buildColumnFilters(ScalarOperator predicate) {
         this.columnFilters = ImmutableMap.copyOf(
                 ColumnFilterConverter.convertColumnFilter(Utils.extractConjuncts(predicate), table));
@@ -209,6 +274,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.columnAccessPaths = scanOperator.columnAccessPaths;
             builder.scanOptimzeOption = scanOperator.scanOptimzeOption;
             builder.partitionColumns = scanOperator.partitionColumns;
+<<<<<<< HEAD
+=======
+            builder.tableVersionRange = scanOperator.tableVersionRange;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return (B) this;
         }
 
@@ -239,5 +308,13 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.table = table;
             return (B) this;
         }
+<<<<<<< HEAD
+=======
+
+        public B setTableVersionRange(TableVersionRange tableVersionRange) {
+            builder.tableVersionRange = tableVersionRange;
+            return (B) this;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

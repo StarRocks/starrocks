@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # like
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Checks whether a given expression fuzzy matches the specified pattern. If yes, 1 is returned. Otherwise, 0 is returned. NULL is returned if any of the input parameter is NULL.
 

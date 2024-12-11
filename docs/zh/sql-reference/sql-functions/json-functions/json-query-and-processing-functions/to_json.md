@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_json
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将 Map 或 Struct 类型的数据转换成 JSON 数据。
 

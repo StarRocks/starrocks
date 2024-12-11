@@ -44,6 +44,11 @@ import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -52,6 +57,10 @@ import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.http.rest.RestBaseResult;
 import com.starrocks.http.rest.RestResult;
 import com.starrocks.persist.ColocatePersistInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.privilege.AccessDeniedException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -87,7 +96,11 @@ public class ColocateMetaService {
     private static final String GROUP_ID = "group_id";
     private static final String DB_ID = "db_id";
 
+<<<<<<< HEAD
     private static ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+=======
+    private static ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private static GroupId checkAndGetGroupId(BaseRequest request) throws DdlException {
         long grpId = Long.valueOf(request.getSingleParameter(GROUP_ID).trim());
@@ -107,7 +120,11 @@ public class ColocateMetaService {
 
         @Override
         public void executeWithoutPassword(BaseRequest request, BaseResponse response)
+<<<<<<< HEAD
                 throws DdlException {
+=======
+                throws DdlException, AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (redirectToLeader(request, response)) {
                 return;
             }
@@ -139,7 +156,11 @@ public class ColocateMetaService {
                 throws DdlException {
             response.setContentType("application/json");
             RestResult result = new RestResult();
+<<<<<<< HEAD
             result.addResultEntry("colocate_meta", GlobalStateMgr.getCurrentColocateIndex());
+=======
+            result.addResultEntry("colocate_meta", GlobalStateMgr.getCurrentState().getColocateTableIndex());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             sendResult(request, response, result);
         }
     }
@@ -259,15 +280,26 @@ public class ColocateMetaService {
                 isJoin = false;
             }
 
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(groupId.dbId);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 response.appendContent("Non-exist db");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                 return;
             }
+<<<<<<< HEAD
             db.writeLock();
             try {
                 OlapTable table = (OlapTable) globalStateMgr.getCurrentState().getTableIncludeRecycleBin(db, tableId);
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
+                OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (table == null) {
                     response.appendContent("Non-exist table");
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -282,7 +314,11 @@ public class ColocateMetaService {
                 response.appendContent("update succeed");
                 sendResult(request, response);
             } finally {
+<<<<<<< HEAD
                 db.writeUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
@@ -311,14 +347,22 @@ public class ColocateMetaService {
             List<List<Long>> backendsPerBucketSeq = new Gson().fromJson(meta, type);
             LOG.info("get buckets sequence: {}", backendsPerBucketSeq);
 
+<<<<<<< HEAD
             ColocateGroupSchema groupSchema = GlobalStateMgr.getCurrentColocateIndex().getGroupSchema(groupId);
+=======
+            ColocateGroupSchema groupSchema = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroupSchema(groupId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (backendsPerBucketSeq.size() != groupSchema.getBucketsNum()) {
                 throw new DdlException("Invalid bucket num. expected: " + groupSchema.getBucketsNum() + ", actual: "
                         + backendsPerBucketSeq.size());
             }
 
             List<Long> clusterBackendIds =
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+=======
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             //check the Backend id
             for (List<Long> backendIds : backendsPerBucketSeq) {
                 if (backendIds.size() != groupSchema.getReplicationNum()) {

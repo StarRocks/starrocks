@@ -193,10 +193,13 @@ void LRUCache::set_capacity(size_t capacity) {
     }
 }
 
+<<<<<<< HEAD
 void LRUCache::set_charge_mode(ChargeMode charge_mode) {
     _charge_mode = charge_mode;
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 uint64_t LRUCache::get_lookup_count() const {
     std::lock_guard l(_mutex);
     return _lookup_count;
@@ -406,7 +409,10 @@ ShardedLRUCache::ShardedLRUCache(size_t capacity, ChargeMode charge_mode)
     const size_t per_shard = (_capacity + (kNumShards - 1)) / kNumShards;
     for (auto& _shard : _shards) {
         _shard.set_capacity(per_shard);
+<<<<<<< HEAD
         _shard.set_charge_mode(_charge_mode);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 

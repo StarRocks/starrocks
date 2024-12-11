@@ -70,6 +70,12 @@ public class QueryState {
 
         IO_ERR,
 
+<<<<<<< HEAD
+=======
+        // execution Timeout
+        EXEC_TIME_OUT,
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         UNKNOWN
     }
 

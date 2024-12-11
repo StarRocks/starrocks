@@ -16,10 +16,17 @@ package com.starrocks.common.util.concurrent.lock;
 
 import com.google.common.base.Strings;
 
+<<<<<<< HEAD
 public class LockTimeoutException extends RuntimeException {
 
     public LockTimeoutException(String msg) {
         super(Strings.nullToEmpty(msg));
     }
 
+=======
+public class LockTimeoutException extends LockException {
+    public LockTimeoutException(String msg) {
+        super(Strings.nullToEmpty(msg));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

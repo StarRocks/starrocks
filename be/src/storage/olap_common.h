@@ -36,6 +36,10 @@
 
 #include <netinet/in.h>
 
+<<<<<<< HEAD
+=======
+#include <cstdint>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <functional>
 #include <list>
 #include <map>
@@ -148,10 +152,18 @@ enum ReaderType {
     READER_BASE_COMPACTION = 2,
     READER_CUMULATIVE_COMPACTION = 3,
     READER_CHECKSUM = 4,
+<<<<<<< HEAD
 };
 
 inline bool is_query(ReaderType reader_type) {
     return reader_type == READER_QUERY;
+=======
+    READER_BYPASS_QUERY = 5,
+};
+
+inline bool is_query(ReaderType reader_type) {
+    return reader_type == READER_QUERY || reader_type == READER_BYPASS_QUERY;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 inline bool is_compaction(ReaderType reader_type) {
@@ -249,7 +261,14 @@ struct OlapReaderStatistics {
 
     int64_t segment_stats_filtered = 0;
     int64_t rows_key_range_filtered = 0;
+<<<<<<< HEAD
     int64_t rows_stats_filtered = 0;
+=======
+    int64_t rows_after_key_range = 0;
+    int64_t rows_key_range_num = 0;
+    int64_t rows_stats_filtered = 0;
+    int64_t rows_vector_index_filtered = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t rows_bf_filtered = 0;
     int64_t rows_del_filtered = 0;
     int64_t del_filter_ns = 0;
@@ -259,9 +278,21 @@ struct OlapReaderStatistics {
 
     int64_t rows_bitmap_index_filtered = 0;
     int64_t bitmap_index_filter_timer = 0;
+<<<<<<< HEAD
 
     int64_t rows_del_vec_filtered = 0;
 
+=======
+    int64_t get_row_ranges_by_vector_index_timer = 0;
+    int64_t vector_search_timer = 0;
+    int64_t process_vector_distance_and_id_timer = 0;
+
+    int64_t rows_del_vec_filtered = 0;
+
+    int64_t rows_gin_filtered = 0;
+    int64_t gin_index_filter_ns = 0;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t rowsets_read_count = 0;
     int64_t segments_read_count = 0;
     int64_t total_columns_data_page_count = 0;
@@ -274,6 +305,10 @@ struct OlapReaderStatistics {
     int64_t pages_from_local_disk = 0;
 
     int64_t compressed_bytes_read_local_disk = 0;
+<<<<<<< HEAD
+=======
+    int64_t compressed_bytes_write_local_disk = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t compressed_bytes_read_remote = 0;
     // bytes read requested from be, same as compressed_bytes_read for local tablet
     int64_t compressed_bytes_read_request = 0;
@@ -283,13 +318,19 @@ struct OlapReaderStatistics {
     int64_t io_count_remote = 0;
     int64_t io_count_request = 0;
 
+<<<<<<< HEAD
     int64_t io_ns_local_disk = 0;
+=======
+    int64_t io_ns_read_local_disk = 0;
+    int64_t io_ns_write_local_disk = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t io_ns_remote = 0;
 
     int64_t prefetch_hit_count = 0;
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
     // ------ for lake tablet ------
+<<<<<<< HEAD
 };
 
 const char* const kBytesReadLocalDisk = "bytes_read_local_disk";
@@ -297,17 +338,65 @@ const char* const kBytesReadRemote = "bytes_read_remote";
 const char* const kIOCountLocalDisk = "io_count_local_disk";
 const char* const kIOCountRemote = "io_count_remote";
 const char* const kIONsLocalDisk = "io_ns_local_disk";
+=======
+
+    // ------ for json type, to count flat column ------
+    // key: json absolute path, value: count
+    int64_t json_flatten_ns = 0;
+    int64_t json_cast_ns = 0;
+    int64_t json_merge_ns = 0;
+    int64_t json_init_ns = 0;
+    std::unordered_map<std::string, int64_t> flat_json_hits;
+    std::unordered_map<std::string, int64_t> merge_json_hits;
+    std::unordered_map<std::string, int64_t> dynamic_json_hits;
+
+    // Counters for data sampling
+    int64_t sample_time_ns = 0;               // Records the time to prepare sample, actual IO time is not included
+    int64_t sample_size = 0;                  // Records the number of hits in the sample. Granularity can be BLOCK/PAGE
+    int64_t sample_population_size = 0;       // Records the total number of samples. Granularity can be BLOCK/PAGE
+    int64_t sample_build_histogram_count = 0; // Records the number of histogram built for sampling
+    int64_t sample_build_histogram_time_ns = 0; // Records the time to build histogram
+};
+
+// OlapWriterStatistics used to collect statistics when write data to storage
+struct OlapWriterStatistics {
+    int64_t segment_write_ns = 0;
+};
+
+const char* const kBytesReadLocalDisk = "bytes_read_local_disk";
+const char* const kBytesWriteLocalDisk = "bytes_write_local_disk";
+const char* const kBytesReadRemote = "bytes_read_remote";
+const char* const kIOCountLocalDisk = "io_count_local_disk";
+const char* const kIOCountRemote = "io_count_remote";
+const char* const kIONsReadLocalDisk = "io_ns_read_local_disk";
+const char* const kIONsWriteLocalDisk = "io_ns_write_local_disk";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 const char* const kIONsRemote = "io_ns_remote";
 const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
 const char* const kPrefetchPendingNs = "prefetch_pending_ns";
 
+<<<<<<< HEAD
 typedef uint32_t ColumnId;
 typedef int32_t ColumnUID;
 // Column unique id set
 typedef std::set<uint32_t> UniqueIdSet;
 // Column unique Id -> column id map
 typedef std::map<ColumnId, ColumnId> UniqueIdToColumnIdMap;
+=======
+// The position index of a column in a specific TabletSchema starts from 0.
+// The position of the same column in different TabletSchema may be different, which
+// means that the same column may have a different ColumnId in different contexts, depending
+// on the TabletSchema used.
+// TODO: Change the name
+typedef uint32_t ColumnId;
+
+// A unique identifier for a column within the Tablet scope, unlike ColumnId, ColumnUID
+// is independent of where the column appears in the Tablet schema.
+// Since versions 3.2.3, ColumnUID are generated by the FE, which uses the Java int
+// type, corresponding to the int32_t.
+typedef int32_t ColumnUID;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 // 8 bit rowset id version
 // 56 bit, inc number from 1
@@ -368,6 +457,19 @@ struct RowsetId {
     }
 };
 
+<<<<<<< HEAD
+=======
+struct HashOfRowsetId {
+    size_t operator()(const RowsetId& rowset_id) const {
+        size_t seed = 0;
+        seed = HashUtil::hash64(&rowset_id.hi, sizeof(rowset_id.hi), seed);
+        seed = HashUtil::hash64(&rowset_id.mi, sizeof(rowset_id.mi), seed);
+        seed = HashUtil::hash64(&rowset_id.lo, sizeof(rowset_id.lo), seed);
+        return seed;
+    }
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TabletSegmentId {
     int64_t tablet_id = INT64_MAX;
     uint32_t segment_id = UINT32_MAX;

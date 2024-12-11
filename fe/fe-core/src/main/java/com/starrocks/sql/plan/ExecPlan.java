@@ -18,17 +18,34 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+<<<<<<< HEAD
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.IdGenerator;
+import com.starrocks.common.util.ProfilingExecPlan;
+import com.starrocks.planner.ExecGroup;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.plugin.AuditEvent;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+=======
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;
@@ -54,8 +71,18 @@ public class ExecPlan {
     private final IdGenerator<PlanNodeId> nodeIdGenerator = PlanNodeId.createGenerator();
     private final IdGenerator<PlanFragmentId> fragmentIdGenerator = PlanFragmentId.createGenerator();
     private final Map<Integer, OptExpression> optExpressions = Maps.newHashMap();
+<<<<<<< HEAD
 
     private volatile ProfilingExecPlan profilingPlan;
+=======
+    private List<ExecGroup> execGroups = new ArrayList<>();
+
+    private volatile ProfilingExecPlan profilingPlan;
+    private LogicalPlan logicalPlan;
+    private ColumnRefFactory columnRefFactory;
+
+    private List<Integer> collectExecStatsIds;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @VisibleForTesting
     public ExecPlan() {
@@ -143,7 +170,20 @@ public class ExecPlan {
         return outputColumns;
     }
 
+<<<<<<< HEAD
     public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
+=======
+    public void setExecGroups(List<ExecGroup> execGroups) {
+        this.execGroups = execGroups;
+    }
+
+    public List<ExecGroup> getExecGroups() {
+        return this.execGroups;
+    }
+
+    public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
+        optExpression.getOp().setPlanNodeId(id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         optExpressions.put(id, optExpression);
     }
 
@@ -174,6 +214,20 @@ public class ExecPlan {
 
     public String getExplainString(TExplainLevel level) {
         StringBuilder str = new StringBuilder();
+<<<<<<< HEAD
+=======
+
+        if (level == TExplainLevel.VERBOSE || level == TExplainLevel.COSTS) {
+            if (FeConstants.showFragmentCost) {
+                final String prefix = "  ";
+                AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
+                str.append("PLAN COST").append("\n")
+                        .append(prefix).append("CPU: ").append(auditEvent.planCpuCosts).append("\n")
+                        .append(prefix).append("Memory: ").append(auditEvent.planMemCosts).append("\n\n");
+            }
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (level == null) {
             str.append(Explain.toString(physicalPlan, outputColumns));
         } else {
@@ -211,10 +265,41 @@ public class ExecPlan {
             case VERBOSE:
                 tlevel = TExplainLevel.VERBOSE;
                 break;
+<<<<<<< HEAD
             case COST:
+=======
+            case COSTS:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 tlevel = TExplainLevel.COSTS;
                 break;
         }
         return getExplainString(tlevel);
     }
+<<<<<<< HEAD
+=======
+
+    public LogicalPlan getLogicalPlan() {
+        return logicalPlan;
+    }
+
+    public void setLogicalPlan(LogicalPlan logicalPlan) {
+        this.logicalPlan = logicalPlan;
+    }
+
+    public ColumnRefFactory getColumnRefFactory() {
+        return columnRefFactory;
+    }
+
+    public void setColumnRefFactory(ColumnRefFactory columnRefFactory) {
+        this.columnRefFactory = columnRefFactory;
+    }
+
+    public List<Integer> getCollectExecStatsIds() {
+        return collectExecStatsIds;
+    }
+
+    public void setCollectExecStatsIds(List<Integer> collectExecStatsIds) {
+        this.collectExecStatsIds = collectExecStatsIds;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

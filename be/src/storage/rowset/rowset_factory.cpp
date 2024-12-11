@@ -44,7 +44,11 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::string& rowset_path,
+=======
+Status RowsetFactory::create_rowset(const TabletSchemaCSPtr& schema, const std::string& rowset_path,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
     *rowset = Rowset::create(schema, rowset_path, rowset_meta);
     RETURN_IF_ERROR((*rowset)->init());

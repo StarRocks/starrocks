@@ -14,16 +14,25 @@
 
 #include "storage/lake/lake_local_persistent_index.h"
 
+<<<<<<< HEAD
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/meta_file.h"
+=======
+#include "storage/chunk_helper.h"
+#include "storage/lake/lake_local_persistent_index_tablet_loader.h"
+#include "storage/lake/lake_primary_index.h"
+#include "storage/lake/meta_file.h"
+#include "storage/lake/rowset.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
 
 namespace starrocks::lake {
 
 // TODO refactor load from lake tablet, use same path with load from local tablet.
+<<<<<<< HEAD
 Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* tablet, const TabletMetadata& metadata,
                                                        int64_t base_version, const MetaFileBuilder* builder) {
     if (!is_primary_key(metadata)) {
@@ -311,6 +320,19 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
               << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
               << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
     return Status::OK();
+=======
+Status LakeLocalPersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                                       int64_t base_version, const MetaFileBuilder* builder) {
+    const auto tablet_id = metadata->id();
+    if (!is_primary_key(*metadata)) {
+        LOG(WARNING) << "tablet: " << tablet_id << " is not primary key tablet";
+        return Status::NotSupported("Only PrimaryKey table is supported to use persistent index");
+    }
+
+    std::unique_ptr<TabletLoader> loader =
+            std::make_unique<LakeLocalPersistentIndexTabletLoader>(tablet_mgr, metadata, base_version, builder, this);
+    return _load_by_loader(loader.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 } // namespace starrocks::lake

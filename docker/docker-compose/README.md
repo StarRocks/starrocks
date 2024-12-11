@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=c615c99c-0f73-4a8b-af76-1e7ab83b90b5" />
 
 # Docker Compose for StarRocks
@@ -51,3 +52,6 @@ ADD BACKEND "<be_ip>:9050";
 ```
 
 Replace `<be_ip>` with the actual IP address of the BE node.
+=======
+Please see https://github.com/StarRocks/demo/tree/master/deploy/docker-compose for more information
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

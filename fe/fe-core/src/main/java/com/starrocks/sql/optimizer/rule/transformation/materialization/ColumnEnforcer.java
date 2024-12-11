@@ -15,7 +15,11 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+<<<<<<< HEAD
 import autovalue.shaded.com.google.common.common.collect.Lists;
+=======
+import com.google.common.collect.Lists;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.OptExpression;

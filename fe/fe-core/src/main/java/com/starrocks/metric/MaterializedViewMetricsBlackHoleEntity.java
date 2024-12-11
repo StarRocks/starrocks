@@ -34,6 +34,15 @@ public class MaterializedViewMetricsBlackHoleEntity implements IMaterializedView
     public void increaseQueryMatchedCount(long count) {
 
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public void increaseQueryTextBasedMatchedCount(long count) {
+
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public void increaseQueryHitCount(long count) {
 

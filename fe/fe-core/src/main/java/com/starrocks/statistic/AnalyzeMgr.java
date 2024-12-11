@@ -14,14 +14,26 @@
 
 package com.starrocks.statistic;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+=======
+import com.google.common.base.Objects;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.TableName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.MetaNotFoundException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -30,6 +42,10 @@ import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.TableMetricsEntity;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.ImageWriter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -39,7 +55,10 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -48,8 +67,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
+<<<<<<< HEAD
 import java.io.DataOutputStream;
 import java.io.EOFException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -71,13 +93,23 @@ public class AnalyzeMgr implements Writable {
     private final Map<Long, AnalyzeJob> analyzeJobMap;
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
+<<<<<<< HEAD
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
+=======
+    private final Map<StatsMetaKey, ExternalBasicStatsMeta> externalBasicStatsMetaMap;
+    private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
+    private final Map<StatsMetaColumnKey, ExternalHistogramStatsMeta> externalHistogramStatsMetaMap;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // ConnectContext of all currently running analyze tasks
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     // only first load of table will trigger analyze, so we don't need limit thread pool queue size
     private static final ExecutorService ANALYZE_TASK_THREAD_POOL = ThreadPoolManager.newDaemonFixedThreadPool(
+<<<<<<< HEAD
             Config.statistic_collect_concurrency, Integer.MAX_VALUE,
+=======
+            Config.statistic_analyze_task_pool_size, Integer.MAX_VALUE,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             "analyze-task-concurrency-pool", true);
 
     private final Set<Long> dropPartitionIds = new ConcurrentSkipListSet<>();
@@ -89,7 +121,13 @@ public class AnalyzeMgr implements Writable {
         analyzeJobMap = Maps.newConcurrentMap();
         analyzeStatusMap = Maps.newConcurrentMap();
         basicStatsMetaMap = Maps.newConcurrentMap();
+<<<<<<< HEAD
         histogramStatsMetaMap = Maps.newConcurrentMap();
+=======
+        externalBasicStatsMetaMap = Maps.newConcurrentMap();
+        histogramStatsMetaMap = Maps.newConcurrentMap();
+        externalHistogramStatsMetaMap = Maps.newConcurrentMap();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public AnalyzeJob getAnalyzeJob(long id) {
@@ -126,6 +164,19 @@ public class AnalyzeMgr implements Writable {
         return Lists.newLinkedList(analyzeJobMap.values());
     }
 
+<<<<<<< HEAD
+=======
+    public List<NativeAnalyzeJob> getAllNativeAnalyzeJobList() {
+        return analyzeJobMap.values().stream().filter(AnalyzeJob::isNative).map(job -> (NativeAnalyzeJob) job).
+                collect(Collectors.toList());
+    }
+
+    public List<ExternalAnalyzeJob> getAllExternalAnalyzeJobList() {
+        return analyzeJobMap.values().stream().filter(job -> !job.isNative()).map(job -> (ExternalAnalyzeJob) job).
+                collect(Collectors.toList());
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void replayAddAnalyzeJob(AnalyzeJob job) {
         analyzeJobMap.put(job.getId(), job);
     }
@@ -143,10 +194,13 @@ public class AnalyzeMgr implements Writable {
         analyzeStatusMap.put(status.getId(), status);
     }
 
+<<<<<<< HEAD
     public void addOrUpdateAnalyzeStatus(AnalyzeStatus status) {
         analyzeStatusMap.put(status.getId(), status);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void replayRemoveAnalyzeStatus(AnalyzeStatus status) {
         analyzeStatusMap.remove(status.getId());
     }
@@ -183,17 +237,57 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public void dropExternalStats(String tableUUID) {
+=======
+    public void dropExternalAnalyzeStatus(String tableUUID) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<AnalyzeStatus> expireList = analyzeStatusMap.values().stream().
                 filter(status -> status instanceof ExternalAnalyzeStatus).
                 filter(status -> ((ExternalAnalyzeStatus) status).getTableUUID().equals(tableUUID)).
                 collect(Collectors.toList());
 
         expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
+<<<<<<< HEAD
+=======
+        for (AnalyzeStatus status : expireList) {
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeStatus(status);
+        }
+    }
+
+    public void dropExternalBasicStatsData(String tableUUID) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.dropExternalTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
     }
 
+<<<<<<< HEAD
+=======
+    public void dropExternalBasicStatsData(String catalogName, String dbName, String tableName) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropExternalTableStatistics(StatisticUtils.buildConnectContext(), catalogName, dbName, tableName);
+    }
+
+    public void dropAnalyzeJob(String catalogName, String dbName, String tblName) {
+        List<AnalyzeJob> expireList = Lists.newArrayList();
+        try {
+            for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
+                if (analyzeJob.getCatalogName().equals(catalogName) &&
+                        analyzeJob.getDbName().equals(dbName) &&
+                        analyzeJob.getTableName().equals(tblName)) {
+                    expireList.add(analyzeJob);
+                }
+            }
+        } catch (MetaNotFoundException e) {
+            LOG.warn("drop analyze job failed", e);
+        }
+        expireList.forEach(job -> analyzeJobMap.remove(job.getId()));
+        for (AnalyzeJob job : expireList) {
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeJob(job);
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
         GlobalStateMgr.getCurrentState().getEditLog().logAddBasicStatsMeta(basicStatsMeta);
@@ -203,6 +297,7 @@ public class AnalyzeMgr implements Writable {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
     }
 
+<<<<<<< HEAD
     public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
         Table table;
         try {
@@ -221,10 +316,79 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+=======
+    public void addExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
+        externalBasicStatsMetaMap.put(new StatsMetaKey(basicStatsMeta.getCatalogName(),
+                basicStatsMeta.getDbName(), basicStatsMeta.getTableName()), basicStatsMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddExternalBasicStatsMeta(basicStatsMeta);
+    }
+
+    public void replayAddExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
+        externalBasicStatsMetaMap.put(new StatsMetaKey(basicStatsMeta.getCatalogName(),
+                basicStatsMeta.getDbName(), basicStatsMeta.getTableName()), basicStatsMeta);
+    }
+
+    public void removeExternalBasicStatsMeta(String catalogName, String dbName, String tableName) {
+        StatsMetaKey key = new StatsMetaKey(catalogName, dbName, tableName);
+        if (externalBasicStatsMetaMap.containsKey(key)) {
+            ExternalBasicStatsMeta basicStatsMeta = externalBasicStatsMetaMap.remove(key);
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveExternalBasicStatsMeta(basicStatsMeta);
+        }
+    }
+
+    public void removeExternalHistogramStatsMeta(String catalogName, String dbName, String tableName, List<String> columns) {
+        for (String column : columns) {
+            StatsMetaColumnKey histogramKey = new StatsMetaColumnKey(catalogName, dbName, tableName, column);
+            if (externalHistogramStatsMetaMap.containsKey(histogramKey)) {
+                GlobalStateMgr.getCurrentState().getEditLog()
+                        .logRemoveExternalHistogramStatsMeta(externalHistogramStatsMetaMap.get(histogramKey));
+                externalHistogramStatsMetaMap.remove(histogramKey);
+            }
+        }
+    }
+
+    public void replayRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
+        externalBasicStatsMetaMap.remove(new StatsMetaKey(basicStatsMeta.getCatalogName(),
+                basicStatsMeta.getDbName(), basicStatsMeta.getTableName()));
+    }
+
+    public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            return;
+        }
+
+        if (async) {
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatistic(table, false);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshColumnStatistics(table, columns, false);
+        } else {
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatistic(table, true);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshColumnStatistics(table, columns, true);
+        }
+    }
+
+    public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
+                                                          List<String> columns, boolean async) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .refreshConnectorTableColumnStatistics(table, columns, async);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.remove(basicStatsMeta.getTableId());
     }
 
+<<<<<<< HEAD
+=======
+    public BasicStatsMeta getTableBasicStatsMeta(long tableId) {
+        return basicStatsMetaMap.get(tableId);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Map<Long, BasicStatsMeta> getBasicStatsMetaMap() {
         return basicStatsMetaMap;
     }
@@ -234,6 +398,28 @@ public class AnalyzeMgr implements Writable {
         return existInfo == null ? 0 : existInfo.getUpdateRows();
     }
 
+<<<<<<< HEAD
+=======
+    public Map<StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+        return externalBasicStatsMetaMap;
+    }
+
+    public ExternalBasicStatsMeta getExternalTableBasicStatsMeta(String catalogName, String dbName, String tableName) {
+        return externalBasicStatsMetaMap.get(new StatsMetaKey(catalogName, dbName, tableName));
+    }
+
+    public HistogramStatsMeta getHistogramMeta(long tableId, String column) {
+        return histogramStatsMetaMap.get(Pair.create(tableId, column));
+    }
+
+    public List<HistogramStatsMeta> getHistogramMetaByTable(long tableId) {
+        return histogramStatsMetaMap.entrySet().stream()
+                .filter(x -> x.getKey().first == tableId)
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList());
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void addHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
         histogramStatsMetaMap.put(
                 new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
@@ -246,20 +432,36 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void refreshHistogramStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (null == db) {
             return;
         }
         Table table = db.getTable(tableId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (null == db) {
+            return;
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (null == table) {
             return;
         }
 
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
         if (async) {
             GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
         } else {
             GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatisticsSync(table, columns);
+=======
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireHistogramStatistics(table.getId(), columns);
+        if (async) {
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table, columns);
+        } else {
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatisticsSync(table, columns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -271,16 +473,70 @@ public class AnalyzeMgr implements Writable {
         return histogramStatsMetaMap;
     }
 
+<<<<<<< HEAD
     public void clearStatisticFromDroppedTable() {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         Set<Long> tables = new HashSet<>();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+    public Map<StatsMetaColumnKey, ExternalHistogramStatsMeta> getExternalHistogramStatsMetaMap() {
+        return externalHistogramStatsMetaMap;
+    }
+
+    public void addExternalHistogramStatsMeta(ExternalHistogramStatsMeta histogramStatsMeta) {
+        externalHistogramStatsMetaMap.put(new StatsMetaColumnKey(histogramStatsMeta.getCatalogName(),
+                histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(), histogramStatsMeta.getColumn()),
+                histogramStatsMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddExternalHistogramStatsMeta(histogramStatsMeta);
+    }
+
+    public void replayAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta histogramStatsMeta) {
+        externalHistogramStatsMetaMap.put(new StatsMetaColumnKey(histogramStatsMeta.getCatalogName(),
+                histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(), histogramStatsMeta.getColumn()),
+                histogramStatsMeta);
+    }
+
+    public void replayRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta histogramStatsMeta) {
+        externalHistogramStatsMetaMap.remove(new StatsMetaColumnKey(histogramStatsMeta.getCatalogName(),
+                histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(), histogramStatsMeta.getColumn()));
+    }
+
+    public void refreshConnectorTableHistogramStatisticsCache(String catalogName, String dbName, String tableName,
+                                                              List<String> columns, boolean async) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorHistogramStatistics(table, columns);
+        if (async) {
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columns);
+        } else {
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatisticsSync(table, columns);
+        }
+    }
+
+    public void clearStatisticFromDroppedTable() {
+        clearStatisticFromNativeDroppedTable();
+        clearStatisticFromExternalDroppedTable();
+    }
+
+    public void clearStatisticFromNativeDroppedTable() {
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        Set<Long> tables = new HashSet<>();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                 continue;
             }
 
+<<<<<<< HEAD
             for (Table table : db.getTables()) {
+=======
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 /*
                  * If the meta contains statistical information, but the data is empty,
                  * it means that the table has been truncate or insert overwrite, and it is set to empty,
@@ -302,6 +558,37 @@ public class AnalyzeMgr implements Writable {
         dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
         dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
     }
+<<<<<<< HEAD
+=======
+
+    public void clearStatisticFromExternalDroppedTable() {
+        List<StatsMetaKey> droppedTables = new ArrayList<>();
+        for (Map.Entry<StatsMetaKey, ExternalBasicStatsMeta> entry : externalBasicStatsMetaMap.entrySet()) {
+            StatsMetaKey tableKey = entry.getKey();
+            try {
+                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableKey.getCatalogName(),
+                        tableKey.getDbName(), tableKey.getTableName());
+                if (table == null) {
+                    LOG.warn("Table {}.{}.{} not exists, clear it's statistics", tableKey.getCatalogName(),
+                            tableKey.getDbName(), tableKey.getTableName());
+                    droppedTables.add(tableKey);
+                }
+            } catch (Exception e) {
+                LOG.warn("Table {}.{}.{} throw exception, clear it's statistics", tableKey.getCatalogName(),
+                        tableKey.getDbName(), tableKey.getTableName(), e);
+                droppedTables.add(tableKey);
+            }
+        }
+
+        for (StatsMetaKey droppedTable : droppedTables) {
+            dropExternalBasicStatsMetaAndData(droppedTable.getCatalogName(), droppedTable.getDbName(),
+                    droppedTable.getTableName());
+            dropExternalHistogramStatsMetaAndData(droppedTable.getCatalogName(), droppedTable.getDbName(),
+                    droppedTable.getTableName());
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void recordDropPartition(long partitionId) {
         dropPartitionIds.add(partitionId);
     }
@@ -338,7 +625,11 @@ public class AnalyzeMgr implements Writable {
         }
 
         //  do the clear task once every 12 hours.
+<<<<<<< HEAD
         if (Duration.between(lastCleanTime, LocalDateTime.now()).toMinutes() * 60 < Config.clear_stale_stats_interval_sec) {
+=======
+        if (Duration.between(lastCleanTime, LocalDateTime.now()).toSeconds() < Config.clear_stale_stats_interval_sec) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return;
         }
 
@@ -354,9 +645,17 @@ public class AnalyzeMgr implements Writable {
                     && analyzeStatus.getStatus() == StatsConstants.ScheduleStatus.FINISH
                     && Duration.between(endTime, lastCleanTime).toMinutes() < 30) {
                 NativeAnalyzeStatus nativeAnalyzeStatus = (NativeAnalyzeStatus) analyzeStatus;
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(nativeAnalyzeStatus.getDbId());
                 if (db != null && db.getTable(nativeAnalyzeStatus.getTableId()) != null) {
                     tables.add(db.getTable(nativeAnalyzeStatus.getTableId()));
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(nativeAnalyzeStatus.getDbId());
+                if (db != null && GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), nativeAnalyzeStatus.getTableId()) != null) {
+                    tables.add(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), nativeAnalyzeStatus.getTableId()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         }
@@ -402,14 +701,24 @@ public class AnalyzeMgr implements Writable {
 
         if (checkTableIds.contains(CHECK_ALL_TABLES)) {
             checkTableIds.clear();
+<<<<<<< HEAD
             List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
             for (Long dbId : dbIds) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+            for (Long dbId : dbIds) {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                     continue;
                 }
 
+<<<<<<< HEAD
                 for (Table table : db.getTables()) {
+=======
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (table == null || !(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
                         continue;
                     }
@@ -426,12 +735,20 @@ public class AnalyzeMgr implements Writable {
 
         int exprLimit = Config.expr_children_limit / 2;
         for (Pair<Long, Long> dbTableId : checkTableIds) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbTableId.first);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbTableId.first);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (null == db) {
                 continue;
             }
 
+<<<<<<< HEAD
             Table table = db.getTable(dbTableId.second);
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), dbTableId.second);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (table == null) {
                 continue;
             }
@@ -509,6 +826,44 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void dropExternalBasicStatsMetaAndData(String catalogName, String dbName, String tableName) {
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(catalogName, dbName, tableName);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(catalogName, dbName, tableName);
+    }
+
+    public void dropExternalHistogramStatsMetaAndData(String catalogName, String dbName, String tableName) {
+        List<String> columns = Lists.newArrayList();
+        StatsMetaKey tableKey = new StatsMetaKey(catalogName, dbName, tableName);
+        for (StatsMetaColumnKey histogramKey : externalHistogramStatsMetaMap.keySet()) {
+            if (histogramKey.getTableKey().equals(tableKey)) {
+                columns.add(histogramKey.getColumnName());
+            }
+        }
+
+        dropExternalHistogramStatsMetaAndData(catalogName, dbName, tableName, columns);
+    }
+
+    public void dropExternalHistogramStatsMetaAndData(String catalogName, String dbName, String tableName,
+                                                      List<String> columns) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropExternalHistogram(StatisticUtils.buildConnectContext(), catalogName, dbName, tableName,
+                columns);
+
+        removeExternalHistogramStatsMeta(catalogName, dbName, tableName, columns);
+    }
+
+    public void dropExternalHistogramStatsMetaAndData(ConnectContext statsConnectCtx,
+                                                      TableName tableName, Table table,
+                                                      List<String> columns) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropExternalHistogram(statsConnectCtx, table.getUUID(), columns);
+
+        removeExternalHistogramStatsMeta(tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), columns);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void registerConnection(long analyzeID, ConnectContext ctx) {
         connectionMap.put(analyzeID, ctx);
     }
@@ -517,7 +872,11 @@ public class AnalyzeMgr implements Writable {
         ConnectContext context = connectionMap.remove(analyzeID);
         if (killExecutor) {
             if (context != null) {
+<<<<<<< HEAD
                 context.kill(false);
+=======
+                context.kill(false, "kill analyze unregisterConnection");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 throw new SemanticException("There is no running task with analyzeId " + analyzeID);
             }
@@ -527,7 +886,11 @@ public class AnalyzeMgr implements Writable {
     public void killConnection(long analyzeID) {
         ConnectContext context = connectionMap.get(analyzeID);
         if (context != null) {
+<<<<<<< HEAD
             context.kill(false);
+=======
+            context.kill(false, "kill analyze");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             throw new SemanticException("There is no running task with analyzeId " + analyzeID);
         }
@@ -538,12 +901,17 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void updateLoadRows(TransactionState transactionState) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(transactionState.getDbId());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(transactionState.getDbId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
             return;
         }
         TxnCommitAttachment attachment = transactionState.getTxnCommitAttachment();
         if (attachment instanceof RLTaskTxnCommitAttachment) {
+<<<<<<< HEAD
             long tableId = transactionState.getTableIdList().get(0);
             long loadedRows = ((RLTaskTxnCommitAttachment) attachment).getLoadedRows();
             updateBasicStatsMeta(db.getId(), tableId, loadedRows);
@@ -563,6 +931,35 @@ public class AnalyzeMgr implements Writable {
                 loadRows = table != null ? table.getRowCount() : 0;
             }
             updateBasicStatsMeta(db.getId(), tableId, loadRows);
+=======
+            if (!transactionState.getTableIdList().isEmpty()) {
+                long tableId = transactionState.getTableIdList().get(0);
+                long loadedRows = ((RLTaskTxnCommitAttachment) attachment).getLoadedRows();
+                updateBasicStatsMeta(db.getId(), tableId, loadedRows);
+            }
+        } else if (attachment instanceof ManualLoadTxnCommitAttachment) {
+            if (!transactionState.getTableIdList().isEmpty()) {
+                long tableId = transactionState.getTableIdList().get(0);
+                long loadedRows = ((ManualLoadTxnCommitAttachment) attachment).getLoadedRows();
+                updateBasicStatsMeta(db.getId(), tableId, loadedRows);
+            }
+        } else if (attachment instanceof LoadJobFinalOperation) {
+            LoadJobFinalOperation loadJobFinalOperation = (LoadJobFinalOperation) attachment;
+            loadJobFinalOperation.getLoadingStatus().travelTableCounters(
+                    kv -> updateBasicStatsMeta(db.getId(), kv.getKey(), kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS))
+            );
+        } else if (attachment instanceof InsertTxnCommitAttachment) {
+            if (!transactionState.getTableIdList().isEmpty()) {
+                long tableId = transactionState.getTableIdList().get(0);
+                long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
+                if (loadRows == 0) {
+                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
+                    loadRows = table != null ? table.getRowCount() : 0;
+                }
+                updateBasicStatsMeta(db.getId(), tableId, loadRows);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -573,7 +970,11 @@ public class AnalyzeMgr implements Writable {
 
         if (null != data) {
             if (null != data.jobs) {
+<<<<<<< HEAD
                 for (AnalyzeJob job : data.jobs) {
+=======
+                for (NativeAnalyzeJob job : data.jobs) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     replayAddAnalyzeJob(job);
                 }
             }
@@ -602,7 +1003,11 @@ public class AnalyzeMgr implements Writable {
     public void write(DataOutput out) throws IOException {
         // save history
         SerializeData data = new SerializeData();
+<<<<<<< HEAD
         data.jobs = getAllAnalyzeJobList();
+=======
+        data.jobs = getAllNativeAnalyzeJobList();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         data.nativeStatus = new ArrayList<>(getAnalyzeStatusMap().values().stream().
                 filter(AnalyzeStatus::isNative).
                 map(status -> (NativeAnalyzeStatus) status).collect(Collectors.toSet()));
@@ -613,6 +1018,7 @@ public class AnalyzeMgr implements Writable {
         Text.writeString(out, s);
     }
 
+<<<<<<< HEAD
     public long loadAnalyze(DataInputStream dis, long checksum) throws IOException {
         try {
             readFields(dis);
@@ -633,38 +1039,79 @@ public class AnalyzeMgr implements Writable {
         List<NativeAnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream().
                 filter(AnalyzeStatus::isNative).
                 map(status -> (NativeAnalyzeStatus) status).distinct().collect(Collectors.toList());
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        List<AnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream()
+                .distinct().collect(Collectors.toList());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         int numJson = 1 + analyzeJobMap.size()
                 + 1 + analyzeStatuses.size()
                 + 1 + basicStatsMetaMap.size()
+<<<<<<< HEAD
                 + 1 + histogramStatsMetaMap.size();
 
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ANALYZE_MGR, numJson);
 
         writer.writeJson(analyzeJobMap.size());
+=======
+                + 1 + histogramStatsMetaMap.size()
+                + 1 + externalBasicStatsMetaMap.size()
+                + 1 + externalHistogramStatsMetaMap.size();
+
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.ANALYZE_MGR, numJson);
+
+        writer.writeInt(analyzeJobMap.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
             writer.writeJson(analyzeJob);
         }
 
+<<<<<<< HEAD
         writer.writeJson(analyzeStatuses.size());
+=======
+        writer.writeInt(analyzeStatuses.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (AnalyzeStatus analyzeStatus : analyzeStatuses) {
             writer.writeJson(analyzeStatus);
         }
 
+<<<<<<< HEAD
         writer.writeJson(basicStatsMetaMap.size());
+=======
+        writer.writeInt(basicStatsMetaMap.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (BasicStatsMeta basicStatsMeta : basicStatsMetaMap.values()) {
             writer.writeJson(basicStatsMeta);
         }
 
+<<<<<<< HEAD
         writer.writeJson(histogramStatsMetaMap.size());
+=======
+        writer.writeInt(histogramStatsMetaMap.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (HistogramStatsMeta histogramStatsMeta : histogramStatsMetaMap.values()) {
             writer.writeJson(histogramStatsMeta);
         }
 
+<<<<<<< HEAD
+=======
+        writer.writeInt(externalBasicStatsMetaMap.size());
+        for (ExternalBasicStatsMeta basicStatsMeta : externalBasicStatsMetaMap.values()) {
+            writer.writeJson(basicStatsMeta);
+        }
+
+        writer.writeInt(externalHistogramStatsMetaMap.size());
+        for (ExternalHistogramStatsMeta histogramStatsMeta : externalHistogramStatsMetaMap.values()) {
+            writer.writeJson(histogramStatsMeta);
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+<<<<<<< HEAD
         int analyzeJobSize = reader.readInt();
         for (int i = 0; i < analyzeJobSize; ++i) {
             AnalyzeJob analyzeJob = reader.readJson(AnalyzeJob.class);
@@ -692,12 +1139,34 @@ public class AnalyzeMgr implements Writable {
 
     private void updateBasicStatsMeta(long dbId, long tableId, long loadedRows) {
         BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+=======
+        reader.readCollection(AnalyzeJob.class, this::replayAddAnalyzeJob);
+
+        reader.readCollection(AnalyzeStatus.class, this::replayAddAnalyzeStatus);
+
+        reader.readCollection(BasicStatsMeta.class, this::replayAddBasicStatsMeta);
+
+        reader.readCollection(HistogramStatsMeta.class, this::replayAddHistogramStatsMeta);
+
+        reader.readCollection(ExternalBasicStatsMeta.class, this::replayAddExternalBasicStatsMeta);
+
+        reader.readCollection(ExternalHistogramStatsMeta.class, this::replayAddExternalHistogramStatsMeta);
+    }
+
+    private void updateBasicStatsMeta(long dbId, long tableId, long loadedRows) {
+        BasicStatsMeta basicStatsMeta =
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (basicStatsMeta == null) {
             // first load without analyze op, we need fill a meta with loaded rows for cardinality estimation
             BasicStatsMeta meta = new BasicStatsMeta(dbId, tableId, Lists.newArrayList(),
                     StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
                     StatsConstants.buildInitStatsProp(), loadedRows);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             basicStatsMeta.increaseDeltaRows(loadedRows);
         }
@@ -705,7 +1174,11 @@ public class AnalyzeMgr implements Writable {
 
     private static class SerializeData {
         @SerializedName("analyzeJobs")
+<<<<<<< HEAD
         public List<AnalyzeJob> jobs;
+=======
+        public List<NativeAnalyzeJob> jobs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         @SerializedName("analyzeStatus")
         public List<NativeAnalyzeStatus> nativeStatus;
@@ -716,4 +1189,85 @@ public class AnalyzeMgr implements Writable {
         @SerializedName("histogramStatsMeta")
         public List<HistogramStatsMeta> histogramStatsMeta;
     }
+<<<<<<< HEAD
+=======
+
+    public static class StatsMetaKey {
+        private final String catalogName;
+        private final String dbName;
+        private final String tableName;
+
+        public StatsMetaKey(String catalogName, String dbName, String tableName) {
+            this.catalogName = catalogName;
+            this.dbName = dbName;
+            this.tableName = tableName;
+        }
+
+        public String getCatalogName() {
+            return catalogName;
+        }
+
+        public String getDbName() {
+            return dbName;
+        }
+
+        public String getTableName() {
+            return tableName;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof StatsMetaKey)) {
+                return false;
+            }
+            StatsMetaKey that = (StatsMetaKey) o;
+            return Objects.equal(catalogName, that.catalogName) &&
+                    Objects.equal(dbName, that.dbName) &&
+                    Objects.equal(tableName, that.tableName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(catalogName, dbName, tableName);
+        }
+    }
+
+    public static class StatsMetaColumnKey {
+        private final StatsMetaKey tableKey;
+        private final String columnName;
+        public StatsMetaColumnKey(String catalogName, String dbName, String tableName, String columnName) {
+            this.tableKey = new StatsMetaKey(catalogName, dbName, tableName);
+            this.columnName = columnName;
+        }
+
+        public StatsMetaKey getTableKey() {
+            return tableKey;
+        }
+
+        public String getColumnName() {
+            return columnName;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof StatsMetaColumnKey)) {
+                return false;
+            }
+            StatsMetaColumnKey that = (StatsMetaColumnKey) o;
+            return Objects.equal(tableKey, that.tableKey) &&
+                    Objects.equal(columnName, that.columnName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(tableKey, columnName);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # corr
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the Pearson correlation coefficient between two expressions. This function is supported from v2.5.10. It can also be used as a window function.
 

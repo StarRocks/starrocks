@@ -47,8 +47,11 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     private boolean isInMemory;
     private DataCacheInfo dataCacheInfo;
 
+<<<<<<< HEAD
     protected boolean isAnalyzed;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public SinglePartitionDesc(boolean ifNotExists, String partName, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.partName = partName;
@@ -60,7 +63,10 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         this.versionInfo = null;
         this.isInMemory = false;
         this.dataCacheInfo = null;
+<<<<<<< HEAD
         this.isAnalyzed = false;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -108,10 +114,13 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         return dataCacheInfo;
     }
 
+<<<<<<< HEAD
     public boolean isAnalyzed() {
         return isAnalyzed;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected void analyzeProperties(Map<String, String> tableProperties,
                                      PartitionKeyDesc partitionKeyDesc) throws AnalysisException {
         Map<String, String> partitionAndTableProperties = Maps.newHashMap();

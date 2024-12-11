@@ -15,8 +15,13 @@
 
 package com.starrocks.connector.hive.glue.converters;
 
+<<<<<<< HEAD
 import com.amazonaws.services.glue.model.Table;
 import com.google.gson.Gson;
+=======
+import com.google.gson.Gson;
+import software.amazon.awssdk.services.glue.model.Table;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class ConverterUtils {
 

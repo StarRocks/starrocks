@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_iso8601
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts the specified date into a string in ISO 8601 format.
 

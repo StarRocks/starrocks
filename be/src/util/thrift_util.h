@@ -35,6 +35,10 @@
 #pragma once
 
 #include <thrift/TApplicationException.h>
+<<<<<<< HEAD
+=======
+#include <thrift/TBase.h>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/protocol/TDebugProtocol.h>
 #include <thrift/protocol/TJSONProtocol.h>
@@ -44,6 +48,10 @@
 #include <sstream>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "common/config.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/status.h"
 
 namespace starrocks {
@@ -149,7 +157,15 @@ Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, TProtocolType t
     // transport. TMemoryBuffer is not const-safe, although we use it in
     // a const-safe way, so we have to explicitly cast away the const.
     std::shared_ptr<apache::thrift::transport::TMemoryBuffer> tmem_transport(
+<<<<<<< HEAD
             new apache::thrift::transport::TMemoryBuffer(const_cast<uint8_t*>(buf), *len));
+=======
+            new apache::thrift::transport::TMemoryBuffer(
+                    const_cast<uint8_t*>(buf), *len, apache::thrift::transport::TMemoryBuffer::MemoryPolicy::OBSERVE,
+                    std::make_shared<apache::thrift::TConfiguration>(config::thrift_max_message_size,
+                                                                     config::thrift_max_frame_size,
+                                                                     config::thrift_max_recursion_depth)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::shared_ptr<apache::thrift::protocol::TProtocol> tproto = create_deserialize_protocol(tmem_transport, type);
 
     try {
@@ -168,7 +184,22 @@ Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, TProtocolType t
     return Status::OK();
 }
 
+<<<<<<< HEAD
 // Redirects all Thrift logging to VLOG(1)
+=======
+template <class T>
+Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, const std::string& protocol, T* deserialized_msg) {
+    if (protocol == "json") {
+        return deserialize_thrift_msg<T>(buf, len, TProtocolType::JSON, deserialized_msg);
+    } else if (protocol == "compact") {
+        return deserialize_thrift_msg<T>(buf, len, TProtocolType::COMPACT, deserialized_msg);
+    } else {
+        return deserialize_thrift_msg<T>(buf, len, TProtocolType::BINARY, deserialized_msg);
+    }
+}
+
+// Redirects all Thrift logging to VLOG(2)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void init_thrift_logging();
 
 // Wait for a server that is running locally to start accepting
@@ -185,6 +216,7 @@ void t_network_address_to_string(const TNetworkAddress& address, std::string* ou
 // string representation
 bool t_network_address_comparator(const TNetworkAddress& a, const TNetworkAddress& b);
 
+<<<<<<< HEAD
 template <typename ThriftStruct>
 ThriftStruct from_json_string(const std::string& json_val) {
     using namespace apache::thrift::transport;
@@ -196,5 +228,9 @@ ThriftStruct from_json_string(const std::string& json_val) {
     ts.read(&protocol);
     return ts;
 }
+=======
+void thrift_from_json_string(::apache::thrift::TBase* base, const std::string& json_val);
+std::string thrift_to_json_string(const ::apache::thrift::TBase* base);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 } // namespace starrocks

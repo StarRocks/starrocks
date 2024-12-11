@@ -34,14 +34,22 @@ Status ThriftClientImpl::open() {
         try {
             _transport->close();
         } catch (const apache::thrift::transport::TTransportException& e) {
+<<<<<<< HEAD
             VLOG(1) << "Error closing socket to: " << ipaddress() << ":" << port() << ", ignoring (" << e.what() << ")";
+=======
+            VLOG(2) << "Error closing socket to: " << ipaddress() << ":" << port() << ", ignoring (" << e.what() << ")";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         // In certain cases in which the remote host is overloaded, this failure can
         // happen quite frequently. Let's print this error message without the stack
         // trace as there aren't many callers of this function.
         const std::string& err_msg =
                 strings::Substitute("Couldn't open transport for $0:$1 ($2)", ipaddress(), port(), e.what());
+<<<<<<< HEAD
         VLOG(1) << err_msg;
+=======
+        VLOG(2) << err_msg;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::ThriftRpcError(err_msg);
     }
     return Status::OK();

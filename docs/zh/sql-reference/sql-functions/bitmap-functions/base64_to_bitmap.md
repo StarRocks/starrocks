@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # base64_to_bitmap
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 导入外部 bitmap 数据到 StarRocks 时，需要先对 bitmap 数据进行序列化和 Base64 编码，生成 Base64 字符串。导入字符串到 StarRocks 时再进行 Base64 到 bitmap 的转化。
 该函数用于将 Base64 编码的字符串转化为 bitmap。
@@ -29,7 +33,11 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
 
 创建库表 `bitmapdb.bitmap_table`，使用 Stream Load 将 JSON 格式数据导入到 `bitmap_table` 中，过程中使用base64_to_bitmap 函数进行数据转换。
 
+<<<<<<< HEAD
 1. 在 StarRocks 中创建库和表，以创建主键模型 (PRIMARY KEY) 的表为例。
+=======
+1. 在 StarRocks 中创建库和表，以创建主键表为例。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ```SQL
     CREATE database bitmapdb;

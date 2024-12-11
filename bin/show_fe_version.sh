@@ -22,6 +22,10 @@ curdir=`cd "$curdir"; pwd`
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 export PID_DIR=`cd "$curdir"; pwd`
 export LOG_DIR=${STARROCKS_HOME}/log
+<<<<<<< HEAD
+=======
+source $STARROCKS_HOME/bin/common.sh
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 # java
 if [ "$JAVA_HOME" = "" ]; then
@@ -30,6 +34,15 @@ if [ "$JAVA_HOME" = "" ]; then
 fi
 JAVA=$JAVA_HOME/bin/java
 
+<<<<<<< HEAD
+=======
+JAVA_VERSION=$(jdk_version)
+if [[ "$JAVA_VERSION" -lt 11 ]]; then
+    echo "JDK $JAVA_VERSION is not supported, please use JDK 11 or 17"
+    exit -1
+fi
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 # add libs to CLASSPATH
 for f in $STARROCKS_HOME/lib/*.jar; do
   CLASSPATH=$f:${CLASSPATH};

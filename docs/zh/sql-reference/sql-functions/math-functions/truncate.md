@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # truncate
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回数值 `x` 保留到小数点后 `y` 位的值。
 

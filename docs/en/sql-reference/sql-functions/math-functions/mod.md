@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # mod
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 The modulus function that returns the remainder of `dividend` divided by `divisor`.
 

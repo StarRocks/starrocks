@@ -37,9 +37,15 @@ public class GCPCloudConfiguration extends CloudConfiguration {
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AZURE);
+<<<<<<< HEAD
         Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
         gcpCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties_v2(properties);
+=======
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
+        gcpCloudCredential.toThrift(properties);
+        tCloudConfiguration.setCloud_properties(properties);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

@@ -14,7 +14,15 @@
 
 #include "formats/parquet/encoding.h"
 
+<<<<<<< HEAD
 #include <memory>
+=======
+#include <iterator>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/encoding_plain.h"

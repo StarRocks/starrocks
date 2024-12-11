@@ -33,14 +33,22 @@ std::pair<std::shared_ptr<NullableColumn>, std::vector<int32_t>> extract_column_
     slices.reserve(dict_map.size() + 1);
     codes.reserve(dict_map.size() + 1);
 
+<<<<<<< HEAD
     slices.emplace_back(Slice());
+=======
+    slices.emplace_back();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     codes.emplace_back(0);
 
     for (auto& [slice, code] : dict_map) {
         slices.emplace_back(slice);
         codes.emplace_back(code);
     }
+<<<<<<< HEAD
     res->append_strings(slices);
+=======
+    res->append_strings(slices.data(), slices.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     res->set_null(0);
     return std::make_pair(std::move(res), std::move(codes));
 }

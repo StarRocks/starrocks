@@ -14,7 +14,11 @@
 
 package com.starrocks.load;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -37,7 +41,11 @@ public class ExportCheckerTest {
 
         new MockUp<ExportJob>() {
             @Mock
+<<<<<<< HEAD
             public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws UserException {
+=======
+            public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 

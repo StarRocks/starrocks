@@ -18,7 +18,11 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PaimonTable;
+<<<<<<< HEAD
 import com.starrocks.connector.Connector;
+=======
+import com.starrocks.connector.CatalogConnector;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
@@ -31,7 +35,11 @@ import java.util.HashMap;
 public class HudiScanNodeTest {
     @Test
     public void testInit(@Mocked GlobalStateMgr globalStateMgr,
+<<<<<<< HEAD
                          @Mocked Connector connector,
+=======
+                         @Mocked CatalogConnector connector,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                          @Mocked HudiTable table) {
         String catalog = "XXX";
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());

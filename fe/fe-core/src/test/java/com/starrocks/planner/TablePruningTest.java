@@ -40,6 +40,10 @@ public class TablePruningTest extends TablePruningTestBase {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
+<<<<<<< HEAD
+=======
+        ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FeConstants.runningUnitTest = true;
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
@@ -464,6 +468,7 @@ public class TablePruningTest extends TablePruningTestBase {
                 "A A0 left join A A1 on A1.a_pk = A0.a_pk",
                 "A A0 right join A A1 on A1.a_pk = A0.a_pk");
 
+<<<<<<< HEAD
         List<String> whereClauses = Lists.newArrayList(
                 "true",
                 "false",
@@ -471,6 +476,16 @@ public class TablePruningTest extends TablePruningTestBase {
                 "A1.a_pk>10",
                 "murmur_hash3_32(A0.a_pk)>10",
                 "murmur_hash3_32(A1.a_pk)>10",
+=======
+        // todo table prune not work when move around predicates from join conditions
+        List<String> whereClauses = Lists.newArrayList(
+                "true",
+                "false",
+                // "A0.a_pk>10",
+                // "A1.a_pk>10",
+                // "murmur_hash3_32(A0.a_pk)>10",
+                // "murmur_hash3_32(A1.a_pk)>10",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "murmur_hash3_32(A1.a_pk)>murmur_hash3_32(A1.a_pk)",
                 "murmur_hash3_32(A0.a_pk)>10 and murmur_hash3_32(A1.a_pk)>10",
                 "murmur_hash3_32(A0.a_c0)>10 and murmur_hash3_32(A0.a_c1)>10",
@@ -598,7 +613,10 @@ public class TablePruningTest extends TablePruningTestBase {
     public void testCboFKOuterJoinPKOfTwoTablesPruneSuccess() throws Exception {
         ctx.getSessionVariable().setEnableRboTablePrune(true);
         ctx.getSessionVariable().setOptimizerExecuteTimeout(3000000);
+<<<<<<< HEAD
         ctx.getSessionVariable().setEnableOptimizerTraceLog(true);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         List<String> selectItems = Lists.newArrayList(
                 "e_c0, e_fi_fk",

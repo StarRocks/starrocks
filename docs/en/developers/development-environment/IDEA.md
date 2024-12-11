@@ -9,7 +9,11 @@ Even if you are not using macOS, you can also refer to this tutorial.
 
 ## Requirements
 
+<<<<<<< HEAD
 **Thrift 0.13**
+=======
+### Thrift 0.13
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install. 
 
@@ -24,7 +28,11 @@ $ thrift -version
 Thrift version 0.13.0
 ```
 
+<<<<<<< HEAD
 **Protobuf**
+=======
+### Protobuf
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Just use the latest version v3, because the latest version of Protobuf is compatible with the v2 version of the Protobuf used in StarRocks.
 
@@ -32,19 +40,31 @@ Just use the latest version v3, because the latest version of Protobuf is compat
 brew install protobuf
 ```
 
+<<<<<<< HEAD
 **Maven**
+=======
+### Maven
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```
 brew install maven
 ```
 
+<<<<<<< HEAD
 **Openjdk 1.8 or 11**
+=======
+### Openjdk 1.8 or 11
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```bash
 brew install openjdk@11
 ```
 
+<<<<<<< HEAD
 **Python3**
+=======
+### Python3
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 MacOS is already installed by default.
 
@@ -58,13 +78,21 @@ brew list protobuf
 
 ## Configure the StarRocks
 
+<<<<<<< HEAD
 **Download the StarRocks**
+=======
+### Download the StarRocks
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```
 git clone https://github.com/StarRocks/starrocks.git
 ```
 
+<<<<<<< HEAD
 **Setup thirdparty directory**
+=======
+### Setup thirdparty directory
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Create `installed/bin` directory in `thirdparty`.
 
@@ -79,7 +107,11 @@ ln -s /opt/homebrew/bin/thrift thirdparty/installed/bin/thrift
 ln -s /opt/homebrew/bin/protoc thirdparty/installed/bin/protoc
 ```
 
+<<<<<<< HEAD
 **Setting environment variables**
+=======
+### Setting environment variables
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```bash
 export JAVA_HOME="/opt/homebrew/Cellar/openjdk@11/11.0.15" # Caution: The jdk version may be different in you desktop

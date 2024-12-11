@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dayofweek_iso
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the ISO standard day of the week for the specified date as an integer within the range of `1` to `7`. In this standard, `1` represents Monday, and `7` represents Sunday.
 

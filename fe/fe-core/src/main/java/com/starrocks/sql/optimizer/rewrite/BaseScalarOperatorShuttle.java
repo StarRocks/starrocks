@@ -29,6 +29,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictQueryOperator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -258,6 +263,19 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
         return shuttleIfUpdate(operator);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public ScalarOperator visitDictMappingOperator(DictMappingOperator operator, Void context) {
+        return shuttleIfUpdate(operator);
+    }
+
+    @Override
+    public ScalarOperator visitDictQueryOperator(DictQueryOperator operator, Void context) {
+        return shuttleIfUpdate(operator);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected List<ScalarOperator> visitList(List<ScalarOperator> operators, boolean[] update) {
         if (operators == null) {
             return null;

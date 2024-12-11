@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_cum_sum
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the cumulative sums of elements in an array.
 

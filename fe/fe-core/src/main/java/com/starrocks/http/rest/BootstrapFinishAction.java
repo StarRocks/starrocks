@@ -36,6 +36,10 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
+<<<<<<< HEAD
+=======
+import com.google.gson.annotations.SerializedName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Version;
@@ -43,6 +47,10 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
+=======
+import com.starrocks.monitor.jvm.JvmStats;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
@@ -57,6 +65,7 @@ import org.apache.logging.log4j.Logger;
 public class BootstrapFinishAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(BootstrapFinishAction.class);
 
+<<<<<<< HEAD
     private static final String CLUSTER_ID = "cluster_id";
     private static final String TOKEN = "token";
 
@@ -66,6 +75,10 @@ public class BootstrapFinishAction extends RestBaseAction {
     public static final String FE_START_TIME = "feStartTime";
     public static final String FE_VERSION = "feVersion";
 
+=======
+    private static final String TOKEN = "token";
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public BootstrapFinishAction(ActionController controller) {
         super(controller);
     }
@@ -82,6 +95,7 @@ public class BootstrapFinishAction extends RestBaseAction {
         BootstrapResult result;
         if (isReady) {
             result = new BootstrapResult();
+<<<<<<< HEAD
             String clusterIdStr = request.getSingleParameter(CLUSTER_ID);
             String token = request.getSingleParameter(TOKEN);
             if (!Strings.isNullOrEmpty(clusterIdStr) && !Strings.isNullOrEmpty(token)) {
@@ -105,6 +119,12 @@ public class BootstrapFinishAction extends RestBaseAction {
 
                 if (result.status == ActionStatus.OK) {
                     if (!token.equals(GlobalStateMgr.getCurrentState().getToken())) {
+=======
+            String token = request.getSingleParameter(TOKEN);
+            if (!Strings.isNullOrEmpty(token)) {
+                if (result.status == ActionStatus.OK) {
+                    if (!token.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getToken())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         result.status = ActionStatus.FAILED;
                         LOG.info("invalid token: {}", token);
                         result.msg = "invalid parameter";
@@ -115,11 +135,19 @@ public class BootstrapFinishAction extends RestBaseAction {
                     // cluster id and token are valid, return replayed journal id
                     long replayedJournalId = GlobalStateMgr.getCurrentState().getReplayedJournalId();
                     long feStartTime = GlobalStateMgr.getCurrentState().getFeStartTime();
+<<<<<<< HEAD
                     result.setMaxReplayedJournal(replayedJournalId);
+=======
+                    result.setReplayedJournal(replayedJournalId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     result.setQueryPort(Config.query_port);
                     result.setRpcPort(Config.rpc_port);
                     result.setFeStartTime(feStartTime);
                     result.setFeVersion(Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
+<<<<<<< HEAD
+=======
+                    result.setHeapUsedPercent(JvmStats.getJvmHeapUsedPercent());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         } else {
@@ -133,11 +161,26 @@ public class BootstrapFinishAction extends RestBaseAction {
     }
 
     public static class BootstrapResult extends RestBaseResult {
+<<<<<<< HEAD
         private long replayedJournalId = 0;
         private int queryPort = 0;
         private int rpcPort = 0;
         private long feStartTime = 0;
         private String feVersion;
+=======
+        @SerializedName("replayedJournalId")
+        private long replayedJournalId = 0;
+        @SerializedName("queryPort")
+        private int queryPort = 0;
+        @SerializedName("rpcPort")
+        private int rpcPort = 0;
+        @SerializedName("feStartTime")
+        private long feStartTime = 0;
+        @SerializedName("feVersion")
+        private String feVersion;
+        @SerializedName("heapUsedPercent")
+        private float heapUsedPercent;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         public BootstrapResult() {
             super();
@@ -147,11 +190,19 @@ public class BootstrapFinishAction extends RestBaseAction {
             super(msg);
         }
 
+<<<<<<< HEAD
         public void setMaxReplayedJournal(long replayedJournalId) {
             this.replayedJournalId = replayedJournalId;
         }
 
         public long getMaxReplayedJournal() {
+=======
+        public void setReplayedJournal(long replayedJournalId) {
+            this.replayedJournalId = replayedJournalId;
+        }
+
+        public long getReplayedJournal() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return replayedJournalId;
         }
 
@@ -187,10 +238,29 @@ public class BootstrapFinishAction extends RestBaseAction {
             this.feVersion = feVersion;
         }
 
+<<<<<<< HEAD
+=======
+        public float getHeapUsedPercent() {
+            return heapUsedPercent;
+        }
+
+        public void setHeapUsedPercent(float heapUsedPercent) {
+            this.heapUsedPercent = heapUsedPercent;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         @Override
         public String toJson() {
             Gson gson = new Gson();
             return gson.toJson(this);
         }
+<<<<<<< HEAD
+=======
+
+        public static BootstrapResult fromJson(String jsonStr) {
+            Gson gson = new Gson();
+            return gson.fromJson(jsonStr, BootstrapResult.class);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

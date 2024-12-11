@@ -180,4 +180,14 @@ void PartitionHashMapVariant::set_passthrough() {
     });
 }
 
+<<<<<<< HEAD
+=======
+void PartitionHashMapVariant::set_enable_pre_agg() {
+    visit([](auto& hash_map_with_key) {
+        DCHECK(hash_map_with_key != nullptr);
+        hash_map_with_key->enable_pre_agg = true;
+    });
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_hash
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将一个数值转换为 HLL 类型。通常用于导入中，将源数据中的数值映射到 StarRocks 表中的 HLL 列类型。
 

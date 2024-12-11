@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitor
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回两个数值在按位进行 OR 运算后的结果。
 

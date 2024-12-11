@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # group_concat
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Concatenates non-null values from a group into a single string, with a `sep` argument, which is `,` by default if not specified. This function can be used to concatenate values from multiple rows of a column into one string.
 

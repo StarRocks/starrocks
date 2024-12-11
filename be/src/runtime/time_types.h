@@ -117,7 +117,11 @@ public:
 
     inline static void to_date_with_cache(JulianDate julian, int* year, int* month, int* day);
 
+<<<<<<< HEAD
     static bool check(int year, int month, int day);
+=======
+    inline static bool check(int year, int month, int day);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     static JulianDate from_date(int year, int month, int day);
 
@@ -144,7 +148,11 @@ public:
 
     // Get date base on format "%Y-%m-%d", '-' means any char.
     // compare every char.
+<<<<<<< HEAD
     static bool from_string_to_date_internal(const char* ptr, int* year, int* month, int* day);
+=======
+    static bool from_string_to_date_internal(const char* ptr, int* pyear, int* pmonth, int* pday);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // process string based on format like "%Y-%m-%d %H:%i:%s",
     // if successful return true;
@@ -157,8 +165,22 @@ public:
                             int* second, int* microsecond);
     static bool from_string_to_date(const char* date_str, size_t len, int* year, int* month, int* day);
     static bool is_standard_datetime_format(const char* ptr, int length, const char** ptr_time);
+<<<<<<< HEAD
     static bool from_string_to_datetime(const char* date_str, size_t len, int* year, int* month, int* day, int* hour,
                                         int* minute, int* second, int* microsecond);
+=======
+    struct ToDatetimeResult {
+        int year;
+        int month;
+        int day;
+        int hour;
+        int minute;
+        int second;
+        int microsecond;
+    };
+
+    static std::pair<bool, bool> from_string_to_datetime(const char* date_str, size_t len, ToDatetimeResult* res);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public:
     // from_date(1970, 1, 1)
@@ -201,13 +223,23 @@ public:
 
     inline static Timestamp from_julian_and_time(JulianDate julian, Timestamp microsecond);
 
+<<<<<<< HEAD
     static bool check_time(int hour, int minute, int second, int microsecond);
+=======
+    inline static bool check_time(int hour, int minute, int second, int microsecond);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     inline static bool check(int year, int month, int day, int hour, int minute, int second, int microsecond);
 
     template <TimeUnit UNIT>
     static Timestamp add(Timestamp timestamp, int count);
 
+<<<<<<< HEAD
+=======
+    template <TimeUnit UNIT>
+    static Timestamp sub(Timestamp timestamp, int count);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     template <bool use_iso8601_format = false>
     static std::string to_string(Timestamp timestamp);
 
@@ -227,7 +259,11 @@ public:
     // MIN_DATE | 0
     static const Timestamp MIN_TIMESTAMP = (1892325482100162560LL);
 
+<<<<<<< HEAD
     // seconds from 1970.01.01
+=======
+    // seconds since julian date epoch to 1970.01.01
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static const Timestamp UNIX_EPOCH_SECONDS = (210866803200LL);
 };
 
@@ -307,6 +343,17 @@ bool date::char_to_digit(const char* value, int i, uint8_t* v) {
     }
 }
 
+<<<<<<< HEAD
+=======
+bool date::check(int year, int month, int day) {
+    if (year > 9999 || month > 12 || month < 1 || day > 31 || day < 1) {
+        return false;
+    }
+
+    return day <= DAYS_IN_MONTH[is_leap(year)][month];
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // ============================== Timestamp inline function ==================================
 
 Timestamp timestamp::to_time(Timestamp timestamp) {
@@ -381,6 +428,14 @@ Timestamp timestamp::add(Timestamp timestamp, int count) {
     }
 }
 
+<<<<<<< HEAD
+=======
+template <TimeUnit UNIT>
+Timestamp timestamp::sub(Timestamp timestamp, int count) {
+    return timestamp::add<UNIT>(timestamp, -count);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 double timestamp::time_to_literal(double time) {
     uint64_t t = time;
     uint64_t hour = t / 3600;
@@ -395,6 +450,13 @@ Timestamp timestamp::of_epoch_second(int64_t seconds, int64_t nanoseconds) {
     return timestamp::from_julian_and_time(day, second * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);
 }
 
+<<<<<<< HEAD
+=======
+bool timestamp::check_time(int hour, int minute, int second, int microsecond) {
+    return hour < HOURS_PER_DAY && minute < MINS_PER_HOUR && second < SECS_PER_MINUTE && microsecond < USECS_PER_SEC;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct JulianToDateEntry {
     // 14 bits
     uint16_t year;

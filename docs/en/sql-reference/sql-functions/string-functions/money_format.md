@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # money_format
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This function returns a string formatted as a currency string. The integer part is separated by comma every three bits and the decimal part is reserved for two bits.
 

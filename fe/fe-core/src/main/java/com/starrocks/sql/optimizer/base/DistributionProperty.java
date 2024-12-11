@@ -20,12 +20,17 @@ import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.optimizer.base.DistributionSpec.DistributionType.ANY;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import static com.starrocks.sql.optimizer.base.DistributionSpec.DistributionType.SHUFFLE;
 
 public class DistributionProperty implements PhysicalProperty {
     private final DistributionSpec spec;
     private final boolean isCTERequired;
 
+<<<<<<< HEAD
     public static final DistributionProperty EMPTY = new DistributionProperty();
 
     public DistributionProperty() {
@@ -39,6 +44,26 @@ public class DistributionProperty implements PhysicalProperty {
     }
 
     public DistributionProperty(DistributionSpec spec, boolean isCTERequired) {
+=======
+    public static DistributionProperty createProperty(DistributionSpec spec) {
+        return createProperty(spec, false);
+    }
+
+    public static DistributionProperty createProperty(DistributionSpec spec, boolean isCTERequired) {
+        if (spec.type == ANY) {
+            return EmptyDistributionProperty.INSTANCE;
+        } else {
+            return new DistributionProperty(spec, isCTERequired);
+        }
+    }
+
+    protected DistributionProperty() {
+        spec = AnyDistributionSpec.INSTANCE;
+        isCTERequired = false;
+    }
+
+    protected DistributionProperty(DistributionSpec spec, boolean isCTERequired) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.spec = spec;
         this.isCTERequired = isCTERequired;
     }
@@ -67,10 +92,13 @@ public class DistributionProperty implements PhysicalProperty {
         return isCTERequired;
     }
 
+<<<<<<< HEAD
     public DistributionProperty copyWithSpec(DistributionSpec distributionSpec) {
         return new DistributionProperty(distributionSpec, isCTERequired);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public boolean isSatisfy(PhysicalProperty other) {
         if (((DistributionProperty) other).isCTERequired()) {
@@ -91,8 +119,13 @@ public class DistributionProperty implements PhysicalProperty {
         if (spec.getType() == SHUFFLE) {
             HashDistributionSpec hashDistributionSpec = ((HashDistributionSpec) spec);
             if (!hashDistributionSpec.isAllNullStrict()) {
+<<<<<<< HEAD
                 return new DistributionProperty(hashDistributionSpec.getNullStrictSpec(
                         hashDistributionSpec.getPropertyInfo()), isCTERequired);
+=======
+                return DistributionProperty.createProperty(hashDistributionSpec.getNullStrictSpec(
+                        hashDistributionSpec.getEquivDesc()), isCTERequired);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         return this;
@@ -115,4 +148,12 @@ public class DistributionProperty implements PhysicalProperty {
         DistributionProperty rhs = (DistributionProperty) obj;
         return spec.equals(rhs.getSpec()) && isCTERequired == rhs.isCTERequired;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public String toString() {
+        return spec.toString();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

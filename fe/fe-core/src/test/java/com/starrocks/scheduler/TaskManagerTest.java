@@ -16,6 +16,11 @@
 package com.starrocks.scheduler;
 
 import com.google.api.client.util.Lists;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Queues;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.Config;
@@ -27,6 +32,10 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TGetTasksParams;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -38,18 +47,37 @@ import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+<<<<<<< HEAD
 import org.junit.Test;
+=======
+import org.junit.FixMethodOrder;
+import org.junit.Test;
+import org.junit.runners.MethodSorters;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+<<<<<<< HEAD
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
 import java.util.Queue;
 
+=======
+import java.lang.reflect.Field;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Collection;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class TaskManagerTest {
 
     private static final Logger LOG = LogManager.getLogger(TaskManagerTest.class);
@@ -58,6 +86,10 @@ public class TaskManagerTest {
     private static StarRocksAssert starRocksAssert;
     private static final ExecuteOption DEFAULT_MERGE_OPTION = makeExecuteOption(true, false);
     private static final ExecuteOption DEFAULT_NO_MERGE_OPTION = makeExecuteOption(false, false);
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Before
     public void setUp() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -78,7 +110,10 @@ public class TaskManagerTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
+<<<<<<< HEAD
         Config.enable_experimental_mv = true;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         UtFrameUtils.createMinStarRocksCluster();
 
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -86,6 +121,7 @@ public class TaskManagerTest {
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
+<<<<<<< HEAD
                 "(\n" +
                 "    k1 date,\n" +
                 "    k2 int,\n" +
@@ -111,6 +147,33 @@ public class TaskManagerTest {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES('replication_num' = '1');");
+=======
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl2\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -122,33 +185,63 @@ public class TaskManagerTest {
         SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
 
         Task task = TaskBuilder.buildTask(submitTaskStmt, ctx);
+<<<<<<< HEAD
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
 
         taskManager.createTask(task, true);
         // taskManager.executeTask(taskList.get(0).getName());
+=======
+        String dbName = UUIDUtil.genUUID().toString();
+        task.setDbName(dbName);
+
+        String realDbName = task.getDbName();
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        taskManager.createTask(task, true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
         taskRunManager.submitTaskRun(taskRun, new ExecuteOption(false));
+<<<<<<< HEAD
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
         Constants.TaskRunState state = null;
 
         int retryCount = 0;
         int maxRetry = 15;
         while (retryCount < maxRetry) {
+=======
+        List<TaskRunStatus> taskRuns = null;
+        Constants.TaskRunState state = null;
+
+        int retryCount = 0;
+        int maxRetry = 30;
+        TGetTasksParams getTasksParams = new TGetTasksParams();
+        getTasksParams.setDb(realDbName);
+        while (retryCount < maxRetry) {
+            taskRuns = taskManager.getMatchedTaskRunStatus(getTasksParams);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (taskRuns.size() > 0) {
                 state = taskRuns.get(0).getState();
             }
             retryCount++;
+<<<<<<< HEAD
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+=======
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                 break;
             }
             LOG.info("SubmitTaskRegularTest is waiting for TaskRunState retryCount:" + retryCount);
         }
+<<<<<<< HEAD
 
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
 
+=======
+        Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -215,6 +308,10 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+<<<<<<< HEAD
+=======
+        task.setDefinition("select 1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         long taskId = 1;
 
@@ -225,7 +322,10 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskRun1.getStatus().setPriority(0);
 
         TaskRun taskRun2 = TaskRunBuilder
@@ -234,7 +334,10 @@ public class TaskManagerTest {
                 .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskRun2.getStatus().setPriority(10);
 
         taskRunManager.arrangeTaskRun(taskRun1, false);
@@ -252,6 +355,10 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+<<<<<<< HEAD
+=======
+        task.setDefinition("select 1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         long taskId = 1;
 
@@ -262,7 +369,10 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskRun1.getStatus().setPriority(0);
 
         TaskRun taskRun2 = TaskRunBuilder
@@ -271,7 +381,10 @@ public class TaskManagerTest {
                 .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskRun2.getStatus().setPriority(10);
 
         taskRunManager.arrangeTaskRun(taskRun2, false);
@@ -290,6 +403,10 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+<<<<<<< HEAD
+=======
+        task.setDefinition("select 1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         long taskId = 1;
 
@@ -300,7 +417,10 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now + 10);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskRun1.getStatus().setPriority(0);
 
         TaskRun taskRun2 = TaskRunBuilder
@@ -309,7 +429,10 @@ public class TaskManagerTest {
                 .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskRun2.getStatus().setPriority(0);
 
         taskRunManager.arrangeTaskRun(taskRun1, false);
@@ -328,6 +451,10 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+<<<<<<< HEAD
+=======
+        task.setDefinition("select 1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         long taskId = 1;
 
@@ -338,7 +465,10 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now + 10);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskRun1.getStatus().setPriority(0);
 
         TaskRun taskRun2 = TaskRunBuilder
@@ -347,7 +477,10 @@ public class TaskManagerTest {
                 .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskRun2.getStatus().setPriority(0);
 
         taskRunManager.arrangeTaskRun(taskRun2, false);
@@ -366,6 +499,10 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+<<<<<<< HEAD
+=======
+        task.setDefinition("select 1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         long taskId = 1;
 
@@ -376,7 +513,10 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskRun1.getStatus().setPriority(0);
 
         TaskRun taskRun2 = TaskRunBuilder
@@ -385,7 +525,10 @@ public class TaskManagerTest {
                 .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskRun2.getStatus().setPriority(10);
 
         TaskRun taskRun3 = TaskRunBuilder
@@ -394,7 +537,10 @@ public class TaskManagerTest {
                 .build();
         taskRun3.setTaskId(taskId);
         taskRun3.initStatus("3", now + 10);
+<<<<<<< HEAD
         taskRun3.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskRun3.getStatus().setPriority(10);
 
         taskRunManager.arrangeTaskRun(taskRun2, false);
@@ -402,7 +548,11 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun3, false);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+<<<<<<< HEAD
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
+=======
+        Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(taskRuns != null);
         Assert.assertEquals(3, taskRuns.size());
     }
@@ -411,6 +561,10 @@ public class TaskManagerTest {
     public void testReplayUpdateTaskRunOutOfOrder() {
         TaskManager taskManager = new TaskManager();
         Task task = new Task("test");
+<<<<<<< HEAD
+=======
+        task.setDefinition("select 1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskManager.replayCreateTask(task);
         long taskId = 1;
 
@@ -418,12 +572,18 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         taskManager.replayCreateTaskRun(taskRun2.getStatus());
         taskManager.replayCreateTaskRun(taskRun1.getStatus());
 
@@ -485,6 +645,10 @@ public class TaskManagerTest {
 
     @Test
     public void testForceGC() {
+<<<<<<< HEAD
+=======
+        Config.enable_task_history_archive = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TaskRunManager taskRunManager = new TaskRunManager();
         for (int i = 0; i < 100; i++) {
             TaskRunStatus taskRunStatus = new TaskRunStatus();
@@ -494,8 +658,14 @@ public class TaskManagerTest {
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
+<<<<<<< HEAD
         Assert.assertEquals(20, taskRunManager.getTaskRunHistory().getAllHistory().size());
         Config.task_runs_max_history_number = 10000;
+=======
+        Assert.assertEquals(20, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
+        Config.task_runs_max_history_number = 10000;
+        Config.enable_task_history_archive = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -509,7 +679,11 @@ public class TaskManagerTest {
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
+<<<<<<< HEAD
         Assert.assertEquals(10, taskRunManager.getTaskRunHistory().getAllHistory().size());
+=======
+        Assert.assertEquals(10, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Config.task_runs_max_history_number = 10000;
     }
 
@@ -541,7 +715,11 @@ public class TaskManagerTest {
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
         ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
         executeOption.setSync(isSync);
+<<<<<<< HEAD
         return  executeOption;
+=======
+        return executeOption;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private TaskRun makeTaskRun(long taskId, Task task, ExecuteOption executeOption) {
@@ -570,7 +748,11 @@ public class TaskManagerTest {
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+<<<<<<< HEAD
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
+=======
+        Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(taskRuns != null);
         Assert.assertEquals(2, taskRunScheduler.getPendingQueueCount());
         Assert.assertEquals(2, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
@@ -618,6 +800,91 @@ public class TaskManagerTest {
         Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
     }
 
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTaskEquality() {
+        Task task1 = new Task("test");
+        task1.setDefinition("select 1");
+        task1.setId(1);
+
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task1)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
+        {
+            long now = System.currentTimeMillis();
+            taskRun1.setTaskId(task1.getId());
+            taskRun1.initStatus("1", now + 10);
+            taskRun1.getStatus().setPriority(0);
+        }
+
+        TaskRun taskRun2 = TaskRunBuilder
+                .newBuilder(task1)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("1", now + 10);
+            taskRun2.getStatus().setPriority(0);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            taskRun2.setExecuteOption(DEFAULT_NO_MERGE_OPTION);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(2);
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            taskRun2.setExecuteOption(DEFAULT_NO_MERGE_OPTION);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            try {
+                Field taskRunId = taskRun2.getClass().getDeclaredField("taskRunId");
+                taskRunId.setAccessible(true);
+                taskRunId.set(taskRun2, taskRun1.getTaskRunId());
+            } catch (Exception e) {
+                Assert.fail();
+            }
+            Assert.assertTrue(taskRun1.equals(taskRun2));
+        }
+
+        {
+            Map<Long, TaskRun> map1 = Maps.newHashMap();
+            map1.put(task1.getId(), taskRun1);
+            Map<Long, TaskRun> map2 = Maps.newHashMap();
+            map2.put(task1.getId(), taskRun1);
+            Assert.assertTrue(map1.equals(map2));
+            Map<Long, TaskRun> map3 = ImmutableMap.copyOf(map1);
+            Assert.assertTrue(map1.equals(map3));
+            Assert.assertTrue(map1.get(task1.getId()).equals(map3.get(task1.getId())));
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testSyncRefreshWithoutMergeable() {
         Config.enable_mv_refresh_sync_refresh_mergeable = false;
@@ -709,4 +976,25 @@ public class TaskManagerTest {
         taskRunManager.killTaskRun(1L, true);
         Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testTaskRunDefinition() {
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+        long taskId = 1;
+        TaskRun taskRun = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
+        long now = System.currentTimeMillis();
+        taskRun.setTaskId(taskId);
+        taskRun.initStatus("1", now + 10);
+        taskRun.getStatus().setPriority(0);
+        TaskRunStatus taskRunStatus = taskRun.getStatus();
+        Assert.assertEquals(taskRunStatus.getDefinition(), "select 1");
+    }
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

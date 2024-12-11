@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # parse_json
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a string to a JSON value.
 

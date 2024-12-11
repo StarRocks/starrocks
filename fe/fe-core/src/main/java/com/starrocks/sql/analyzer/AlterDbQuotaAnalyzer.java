@@ -34,7 +34,11 @@ public class AlterDbQuotaAnalyzer {
         AlterDatabaseQuotaStmt.QuotaType quotaType = statement.getQuotaType();
         if (quotaType == AlterDatabaseQuotaStmt.QuotaType.DATA) {
             try {
+<<<<<<< HEAD
                 statement.setQuota(ParseUtil.analyzeDataVolumn(statement.getQuotaValue()));
+=======
+                statement.setQuota(ParseUtil.analyzeDataVolume(statement.getQuotaValue()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }

@@ -31,7 +31,12 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HivePartitionName;
@@ -51,6 +56,10 @@ import java.util.Optional;
 
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
 import static com.starrocks.connector.PartitionUtil.fromPartitionKey;
+<<<<<<< HEAD
+=======
+import static com.starrocks.connector.PartitionUtil.getPartitionName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import static com.starrocks.connector.PartitionUtil.getSuffixName;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 
@@ -99,6 +108,17 @@ public class PartitionUtilTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testPaimonPartitionKey() throws AnalysisException {
+        PartitionKey partitionKey = createPartitionKey(
+                Lists.newArrayList("1", "a", "3.0", "__DEFAULT_PARTITION__"), partColumns,
+                Table.TableType.PAIMON);
+        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testCreateDeltaLakePartitionKey() throws AnalysisException {
         PartitionKey partitionKey = createPartitionKey(
                 Lists.newArrayList("1", "a", "3.0", DeltaLakeTable.PARTITION_NULL_VALUE), partColumns,
@@ -236,7 +256,11 @@ public class PartitionUtilTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetPartitionRange(@Mocked HiveTable table) throws UserException {
+=======
+    public void testGetPartitionRange(@Mocked HiveTable table) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Column partitionColumn = new Column("date", Type.DATE);
         List<String> partitionNames = ImmutableList.of("date=2022-08-02", "date=2022-08-19", "date=2022-08-21",
                 "date=2022-09-01", "date=2022-10-01", "date=2022-12-02");
@@ -249,7 +273,12 @@ public class PartitionUtilTest {
         };
         new MockUp<MetadataMgr>() {
             @Mock
+<<<<<<< HEAD
             public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+=======
+            public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                                   ConnectorMetadatRequestContext requestContext) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return partitionNames;
             }
         };
@@ -272,4 +301,23 @@ public class PartitionUtilTest {
         upperBound.pushColumn(new DateLiteral(2022, 12, 03), PrimitiveType.DATE);
         Assert.assertTrue(partitionMap.get("p20221202").upperEndpoint().equals(upperBound));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGetPartition() {
+        String base = "hdfs://hadoop01:9000/mytable";
+        String tableLocation = "hdfs://hadoop01:9000/mytable/";
+        Assert.assertTrue(getPartitionName(base, tableLocation).isEmpty());
+
+        String errorPath = "hdfs://aaa/bbb";
+        ExceptionChecker.expectThrowsWithMsg(
+                IllegalStateException.class,
+                "Can't infer partition name. base path",
+                () -> PartitionUtil.getPartitionName(base, errorPath));
+
+        String partitionPath = "hdfs://hadoop01:9000/mytable/year=2023/month=12/day=30";
+        Assert.assertEquals("year=2023/month=12/day=30", PartitionUtil.getPartitionName(base, partitionPath));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

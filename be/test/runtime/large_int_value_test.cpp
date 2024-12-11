@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 
 #include <gtest/gtest.h>
@@ -26,6 +27,15 @@
 
 #include "common/configbase.h"
 #include "common/logging.h"
+=======
+#include "types/large_int_value.h"
+
+#include <gtest/gtest.h>
+
+#include <string>
+
+#include "common/configbase.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "types/constexpr.h"
 
 namespace starrocks {

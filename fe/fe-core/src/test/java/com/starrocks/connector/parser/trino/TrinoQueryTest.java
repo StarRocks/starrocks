@@ -23,6 +23,10 @@ public class TrinoQueryTest extends TrinoTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
+<<<<<<< HEAD
+=======
+        starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -393,6 +397,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         String sql = "select c0, c1.a from test_struct";
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
+<<<<<<< HEAD
                 "  |  <slot 4> : 2: c1.a");
 
         sql = "select c0, test_struct.c1.a from test_struct";
@@ -421,6 +426,36 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 4> : 3: c2.a\n" +
                 "  |  <slot 5> : 3: c2.b");
+=======
+                "  |  <slot 4> : 2: c1.a[false]");
+
+        sql = "select c0, test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a[false]");
+
+        sql = "select c0, test.test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a[false]");
+
+        sql = "select c0, default_catalog.test.test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a[false]");
+
+        sql = "select c1.a[10].b from test_struct";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 2: c1.a[true][10].b[true]");
+
+        sql = "select c2.a, c2.b from test_struct";
+        assertPlanContains(sql, "  1:Project\n" +
+                "  |  <slot 4> : 3: c2.a[false]\n" +
+                "  |  <slot 5> : 3: c2.b[false]");
+
+        sql = "select c2.a + c2.b from test_struct";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : CAST(3: c2.a[true] AS DOUBLE) + 3: c2.b[true]");
+
+        sql = "select sum(c2.b) from test_struct group by c2.a";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 3: c2.a[false]\n" +
+                "  |  <slot 5> : 3: c2.b[false]");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void testSelectRow() throws Exception {
@@ -473,16 +508,29 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "map_from_arrays([1,2,3], ['a','b','c'])");
 
         sql = "select map_filter(map(array[10, 20, 30], array['a', NULL, 'c']), (k, v) -> v IS NOT NULL);";
+<<<<<<< HEAD
         assertPlanContains(sql, "map_filter(7: map_from_arrays, map_values(map_apply((<slot 2>, <slot 3>) -> " +
                 "map{<slot 2>:<slot 3> IS NOT NULL}, 7: map_from_arrays)))");
+=======
+        assertPlanContains(sql, "map_filter(map_from_arrays([10,20,30], ['a',NULL,'c']), " +
+                "map_values(map_apply((<slot 2>, <slot 3>) -> map{<slot 2>:<slot 3> IS NOT NULL}, " +
+                "map_from_arrays([10,20,30], ['a',NULL,'c']))))");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         sql = "select transform_keys(MAP(ARRAY [1, 2, 3], ARRAY ['a', 'b', 'c']), (k, v) -> k + 1);";
         assertPlanContains(sql, "map_apply((<slot 2>, <slot 3>) -> map{CAST(<slot 2> AS SMALLINT) + 1:<slot 3>}, " +
                 "map_from_arrays([1,2,3], ['a','b','c']))");
 
         sql = "select transform_values(map(array [1, 2, 3], array ['a', 'b', 'c']), (k, v) -> k * k);";
+<<<<<<< HEAD
         assertPlanContains(sql, "map_apply((<slot 2>, <slot 3>) -> map{<slot 2>:CAST(<slot 2> AS SMALLINT) * " +
                 "CAST(<slot 2> AS SMALLINT)}, map_from_arrays([1,2,3], ['a','b','c']))");
+=======
+        assertPlanContains(sql, "  1:Project\n" +
+                "  |  <slot 4> : map_apply((<slot 2>, <slot 3>) -> map{<slot 2>:<slot 6> * <slot 6>}\n" +
+                "        lambda common expressions:{<slot 6> <-> CAST(<slot 2> AS SMALLINT)}\n" +
+                "        , map_from_arrays([1,2,3], ['a','b','c']))");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -785,6 +833,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "regexp('abc123', 'abc*')");
 
         sql = "select regexp_extract('1a 2b 14m', '\\d+');";
+<<<<<<< HEAD
         assertPlanContains(sql, "if(3: regexp_extract = '', NULL, 3: regexp_extract)\n" +
                 "  |  common expressions:\n" +
                 "  |  <slot 3> : regexp_extract('1a 2b 14m', '\\\\d+', 0)");
@@ -798,6 +847,18 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "if(3: regexp_extract = '', NULL, 3: regexp_extract)\n" +
                 "  |  common expressions:\n" +
                 "  |  <slot 3> : regexp_extract('1abb 2b 14m', '[a-z]+', 1)");
+=======
+        assertPlanContains(sql, "if(regexp_extract('1a 2b 14m', '\\\\d+', 0) = '', NULL, " +
+                "regexp_extract('1a 2b 14m', '\\\\d+', 0))");
+
+        sql = "select regexp_extract('1abb 2b 14m', '[a-z]+');";
+        assertPlanContains(sql, "if(regexp_extract('1abb 2b 14m', '[a-z]+', 0) = '', NULL, " +
+                "regexp_extract('1abb 2b 14m', '[a-z]+', 0))");
+
+        sql = "select regexp_extract('1abb 2b 14m', '[a-z]+', 1);";
+        assertPlanContains(sql, "<slot 2> : if(regexp_extract('1abb 2b 14m', '[a-z]+', 1) = '', NULL, " +
+                "regexp_extract('1abb 2b 14m', '[a-z]+', 1))");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -810,6 +871,18 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testOffsetLimit() throws Exception {
+        String sql = "select * from t0 offset 1 limit 10";
+        assertPlanContains(sql, "offset: 1", "limit: 10");
+
+        sql = "select v1 from t0 order by v1 offset 2 limit 20";
+        assertPlanContains(sql, "offset: 2", "limit: 20");
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testHaving() throws Exception {
         String sql = "select sum(v1) from t0 having sum(v1) > 0";
         assertPlanContains(sql, "having: 4: sum > 0");
@@ -927,6 +1000,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
     @Test
     public void testIntervalLiteral() throws Exception {
+<<<<<<< HEAD
         String sql = "select date '2022-01-01' + interval '1' year;";
         assertPlanContains(sql, "<slot 2> : '2023-01-01 00:00:00'");
 
@@ -948,10 +1022,62 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 2> : '2023-02-02 01:01:01'");
 
         sql = "select interval '1' year + date '2022-01-01';";
+=======
+        String sql = "select timestamp '2022-01-01' + interval '1' year;";
+        assertPlanContains(sql, "<slot 2> : '2023-01-01 00:00:00'");
+
+        sql = "select timestamp '2022-01-01' + interval '1' year + interval '1' month;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-01 00:00:00'");
+
+        sql = "select timestamp '2022-01-01' + interval '1' year + interval '1' month + interval '1' day;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02 00:00:00'");
+
+        sql = "select timestamp '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02 01:00:00'");
+
+        sql = "select timestamp '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
+                "interval '1' minute;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02 01:01:00'");
+
+        sql = "select timestamp '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
+                "interval '1' minute + interval '1' second;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02 01:01:01'");
+
+        sql = "select interval '1' year + timestamp '2022-01-01';";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertPlanContains(sql, "<slot 2> : '2023-01-01 00:00:00'");
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testIntervalDateLiteral() throws Exception {
+        String sql = "select date '2022-01-01' + interval '1' year;";
+        assertPlanContains(sql, "<slot 2> : '2023-01-01'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-01'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
+                "interval '1' minute;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
+                "interval '1' minute + interval '1' second;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02'");
+
+        sql = "select interval '1' year + date '2022-01-01';";
+        assertPlanContains(sql, "<slot 2> : '2023-01-01'");
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void selectDoubleLiteral() throws Exception {
         String sql = "select 1.0";
         assertPlanContains(sql, "<slot 2> : 1.0");
@@ -996,7 +1122,11 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 2> : trim('  abcd')");
 
         sql = "select trim(trailing 'ER' from upper('worker'));";
+<<<<<<< HEAD
         assertPlanContains(sql, "<slot 2> : rtrim(upper('worker'), 'ER')");
+=======
+        assertPlanContains(sql, "<slot 2> : rtrim('WORKER', 'ER')");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         sql = "select trim(trailing from '  abcd');";
         assertPlanContains(sql, "<slot 2> : rtrim('  abcd')");
@@ -1041,7 +1171,12 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "      cast('2023-01-01' AS date)\n" +
                 "    )\n" +
                 "  );";
+<<<<<<< HEAD
         assertPlanContains(sql, "-1 * CAST(if(3: dayofweek_iso = 7, 0, 3: dayofweek_iso) AS BIGINT)");
+=======
+        assertPlanContains(sql, "-1 * CAST(if(dayofweek_iso('2023-01-01 00:00:00') = 7, 0, " +
+                "dayofweek_iso('2023-01-01 00:00:00')) AS BIGINT)");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -1180,4 +1315,40 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select rand(10, 100);";
         assertPlanContains(sql, "<slot 2> : floor(random() * 90.0 + 10.0)");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCastRowDataType() throws Exception {
+        String sql = "select CAST(ROW(1, 2e0) AS ROW(x BIGINT, y DOUBLE))";
+        assertPlanContains(sql, "CAST(row(1, 2.0) AS struct<X bigint(20), Y double>)");
+    }
+
+    @Test
+    public void testCastArrayDataType() throws Exception {
+        String sql = "select cast(ARRAY[1] as array(int))";
+        assertPlanContains(sql, "CAST([1] AS ARRAY<INT>)");
+    }
+
+    @Test
+    public void testDistinctFrom() throws Exception {
+        String sql = "select 1 is distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is not distinct from null";
+        analyzeSuccess(sql);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

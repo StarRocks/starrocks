@@ -70,8 +70,14 @@ public class TPCDS1TTestBase extends TPCDSPlanTestBase {
     }
 
     @BeforeEach
+<<<<<<< HEAD
     public void setUp() throws Exception {
         origin = GlobalStateMgr.getCurrentStatisticStorage();
+=======
+    public void setUp() {
+        super.setUp();
+        origin = GlobalStateMgr.getCurrentState().getStatisticStorage();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCDSStatisticStorage());
         setTPCDSTableStats(ROW_COUNT_MAP);
         FeConstants.runningUnitTest = true;

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # current_timestamp
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 获取当前时间，以 DATETIME 类型返回。
 

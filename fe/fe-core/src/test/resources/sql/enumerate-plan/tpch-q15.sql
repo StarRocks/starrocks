@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_suppkey,
@@ -36,6 +37,8 @@ where
 )
 order by
     s_suppkey;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [planCount]
 16
 [plan-1]

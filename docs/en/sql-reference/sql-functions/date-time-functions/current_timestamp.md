@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # current_timestamp
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Obtains the current date and returns a value if the DATETIME type.
 

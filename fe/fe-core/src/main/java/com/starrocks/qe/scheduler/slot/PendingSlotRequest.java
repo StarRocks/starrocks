@@ -18,6 +18,10 @@ import com.starrocks.qe.scheduler.RecoverableException;
 import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.concurrent.CompletableFuture;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.Future;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class PendingSlotRequest {
     private final LogicalSlot slot;
@@ -37,7 +41,11 @@ public class PendingSlotRequest {
         return leaderEndpoint;
     }
 
+<<<<<<< HEAD
     public CompletableFuture<LogicalSlot> getSlotFuture() {
+=======
+    public Future<LogicalSlot> getSlotFuture() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return slotFuture;
     }
 

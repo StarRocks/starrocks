@@ -18,10 +18,18 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.server.RunMode;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.FunctionRef;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class RestoreStmt extends AbstractBackupStmt {
     private boolean allowLoad = false;
@@ -31,6 +39,7 @@ public class RestoreStmt extends AbstractBackupStmt {
     private int starrocksMetaVersion = -1;
 
     public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
+<<<<<<< HEAD
                        Map<String, String> properties) {
         this(labelName, repoName, tblRefs, properties, NodePosition.ZERO);
     }
@@ -38,6 +47,20 @@ public class RestoreStmt extends AbstractBackupStmt {
     public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
                        Map<String, String> properties, NodePosition pos) {
         super(labelName, repoName, tblRefs, properties, pos);
+=======
+                       List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
+                       boolean withOnClause, String originDbName, Map<String, String> properties) {
+        this(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, NodePosition.ZERO);
+    }
+
+    public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
+                       List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
+                       boolean withOnClause, String originDbName,
+                       Map<String, String> properties, NodePosition pos) {
+        super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, pos);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public boolean allowLoad() {

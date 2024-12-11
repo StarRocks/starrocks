@@ -80,9 +80,15 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     const TPlanFragmentExecParams& params = request.params;
     _query_id = params.query_id;
 
+<<<<<<< HEAD
     LOG(INFO) << "Prepare(): query_id=" << print_id(_query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id)
               << " backend_num=" << request.backend_num;
+=======
+    VLOG(1) << "Prepare(): query_id=" << print_id(_query_id)
+            << " fragment_instance_id=" << print_id(params.fragment_instance_id)
+            << " backend_num=" << request.backend_num;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     DCHECK(_runtime_state->chunk_size() > 0);
 
@@ -90,6 +96,12 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     if (request.query_options.__isset.enable_profile) {
         enable_profile = request.query_options.enable_profile;
     }
+<<<<<<< HEAD
+=======
+    if (request.query_options.__isset.load_profile_collect_second) {
+        load_profile_collect_second = request.query_options.load_profile_collect_second;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
@@ -107,6 +119,13 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
     }
 
+<<<<<<< HEAD
+=======
+    if (request.fragment.__isset.query_global_dicts && request.fragment.__isset.query_global_dict_exprs) {
+        RETURN_IF_ERROR(_runtime_state->init_query_global_dict_exprs(request.fragment.query_global_dict_exprs));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (request.fragment.__isset.load_global_dicts) {
         RETURN_IF_ERROR(_runtime_state->init_load_global_dict(request.fragment.load_global_dicts));
     }
@@ -138,8 +157,13 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
+<<<<<<< HEAD
         scan_node->set_scan_ranges(scan_ranges);
         VLOG(1) << "scan_node_Id=" << scan_node->id() << " size=" << scan_ranges.size();
+=======
+        (void)scan_node->set_scan_ranges(scan_ranges);
+        VLOG(2) << "scan_node_Id=" << scan_node->id() << " size=" << scan_ranges.size();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     _runtime_state->set_per_fragment_instance_idx(params.sender_id);
@@ -182,7 +206,11 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 }
 
 Status PlanFragmentExecutor::open() {
+<<<<<<< HEAD
     LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
+=======
+    VLOG(1) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     tls_thread_status.set_query_id(_runtime_state->query_id());
 
     // Only register profile report worker for broker load and insert into here,
@@ -196,6 +224,7 @@ Status PlanFragmentExecutor::open() {
     }
 
     Status status = _open_internal_vectorized();
+<<<<<<< HEAD
     if (!status.ok() && !status.is_cancelled() && _runtime_state->log_has_space()) {
         LOG(WARNING) << "Fail to open fragment, instance_id=" << print_id(_runtime_state->fragment_instance_id())
                      << ", status=" << status;
@@ -203,6 +232,11 @@ Status PlanFragmentExecutor::open() {
         // fetch results (e.g. insert) may not receive the message directly and can
         // only retrieve the log.
         _runtime_state->log_error(status.get_error_msg());
+=======
+    if (!status.ok() && !status.is_cancelled()) {
+        LOG(WARNING) << "Fail to open fragment, instance_id=" << print_id(_runtime_state->fragment_instance_id())
+                     << ", status=" << status;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     update_status(status);
@@ -280,7 +314,11 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
 
 void PlanFragmentExecutor::collect_query_statistics() {
     _query_statistics->clear();
+<<<<<<< HEAD
     _plan->collect_query_statistics(_query_statistics.get());
+=======
+    (void)_plan->collect_query_statistics(_query_statistics.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void PlanFragmentExecutor::send_report(bool done) {
@@ -308,6 +346,15 @@ void PlanFragmentExecutor::send_report(bool done) {
         return;
     }
 
+<<<<<<< HEAD
+=======
+    auto start_timestamp = _runtime_state->timestamp_ms() / 1000;
+    auto now = std::time(nullptr);
+    if (load_profile_collect_second != -1 && now - start_timestamp < load_profile_collect_second) {
+        return;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // This will send a report even if we are cancelled.  If the query completed correctly
     // but fragments still need to be cancelled (e.g. limit reached), the coordinator will
     // be waiting for a final report and profile.
@@ -343,7 +390,11 @@ void PlanFragmentExecutor::update_status(const Status& new_status) {
         // if current `_status` is ok, set it to `new_status` to record the error.
         if (_status.ok()) {
             if (new_status.is_mem_limit_exceeded()) {
+<<<<<<< HEAD
                 _runtime_state->set_mem_limit_exceeded(new_status.get_error_msg());
+=======
+                (void)_runtime_state->set_mem_limit_exceeded(new_status.message());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             _status = new_status;
             if (_runtime_state->query_options().query_type == TQueryType::EXTERNAL) {
@@ -387,7 +438,11 @@ void PlanFragmentExecutor::cancel() {
         _stream_load_contexts.resize(0);
     }
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
+<<<<<<< HEAD
     _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
+=======
+    (void)_runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     if (_is_runtime_filter_merge_node) {
         _runtime_state->exec_env()->runtime_filter_worker()->close_query(_query_id);
@@ -464,9 +519,15 @@ void PlanFragmentExecutor::close() {
                     std::lock_guard<std::mutex> l(_status_lock);
                     status = _status;
                 }
+<<<<<<< HEAD
                 _sink->close(runtime_state(), status);
             } else {
                 _sink->close(runtime_state(), Status::InternalError("prepare failed"));
+=======
+                (void)_sink->close(runtime_state(), status);
+            } else {
+                (void)_sink->close(runtime_state(), Status::InternalError("prepare failed"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
@@ -502,6 +563,7 @@ Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentPa
     if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
         return Status::OK();
     }
+<<<<<<< HEAD
     _channel_stream_load = true;
     for (; iter != scan_range_map.end(); iter++) {
         for (const auto& scan_range : iter->second) {
@@ -526,6 +588,9 @@ Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentPa
         }
     }
     return Status::OK();
+=======
+    return Status::NotSupported("Non-pipeline engine does not support channel stream load");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 } // namespace starrocks

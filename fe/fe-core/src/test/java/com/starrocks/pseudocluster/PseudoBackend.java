@@ -22,8 +22,14 @@ import com.google.common.collect.Queues;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.NotImplementedException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.NetUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
@@ -34,6 +40,11 @@ import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
+<<<<<<< HEAD
+=======
+import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.DeleteTxnLogResponse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.ExecuteCommandRequestPB;
@@ -45,9 +56,21 @@ import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+<<<<<<< HEAD
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
+=======
+import com.starrocks.proto.PExecShortCircuitResult;
+import com.starrocks.proto.PFetchArrowSchemaRequest;
+import com.starrocks.proto.PFetchArrowSchemaResult;
+import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
+import com.starrocks.proto.PMVMaintenanceTaskResult;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
@@ -63,6 +86,12 @@ import com.starrocks.proto.PTabletWriterOpenRequest;
 import com.starrocks.proto.PTabletWriterOpenResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
+<<<<<<< HEAD
+=======
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
+import com.starrocks.proto.PublishLogVersionBatchRequest;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -81,7 +110,13 @@ import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
+<<<<<<< HEAD
 import com.starrocks.rpc.PGetFileSchemaRequest;
+=======
+import com.starrocks.rpc.PExecShortCircuitRequest;
+import com.starrocks.rpc.PGetFileSchemaRequest;
+import com.starrocks.rpc.PListFailPointRequest;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
@@ -419,7 +454,11 @@ public class PseudoBackend {
     }
 
     public String getHostHeartbeatPort() {
+<<<<<<< HEAD
         return host + ":" + heartBeatPort;
+=======
+        return NetUtils.getHostPortInAccessibleFormat(host, heartBeatPort);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public long getId() {
@@ -572,7 +611,11 @@ public class PseudoBackend {
         return ts;
     }
 
+<<<<<<< HEAD
     void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws UserException {
+=======
+    void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // Ignore the initial disk usage of tablet
         if (request.create_tablet_req.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
             lakeTabletManager.createTablet(request.create_tablet_req);
@@ -620,10 +663,17 @@ public class PseudoBackend {
         if (destTablet == null) {
             destTablet = new Tablet(task.tablet_id, srcTablet.tableId, srcTablet.partitionId, srcTablet.schemaHash,
                     srcTablet.enablePersistentIndex);
+<<<<<<< HEAD
             destTablet.fullCloneFrom(srcTablet, srcBackend.getId());
             tabletManager.addClonedTablet(destTablet);
         } else {
             destTablet.cloneFrom(srcTablet, srcBackend.getId());
+=======
+            destTablet.fullCloneFrom(srcTablet, srcBackend.getId(), getId());
+            tabletManager.addClonedTablet(destTablet);
+        } else {
+            destTablet.cloneFrom(srcTablet, srcBackend.getId(), getId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
     }
@@ -659,7 +709,11 @@ public class PseudoBackend {
                     String.format("alter (base:%d, new:%d version:%d) failed new tablet not found", task.base_tablet_id,
                             task.new_tablet_id, task.alter_version));
         }
+<<<<<<< HEAD
         if (newTablet.isRunning() == true) {
+=======
+        if (newTablet.isRunning()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throw new Exception(
                     String.format("alter (base:%d, new:%d version:%d) failed new tablet is running", task.base_tablet_id,
                             task.new_tablet_id, task.alter_version));
@@ -902,9 +956,15 @@ public class PseudoBackend {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
+<<<<<<< HEAD
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecPlanFragmentParams params = new TExecPlanFragmentParams();
             try {
+=======
+            final TExecPlanFragmentParams params = new TExecPlanFragmentParams();
+            try {
+                TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
@@ -935,9 +995,15 @@ public class PseudoBackend {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
+<<<<<<< HEAD
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
             try {
+=======
+            final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
+            try {
+                TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
@@ -1043,6 +1109,19 @@ public class PseudoBackend {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PFetchArrowSchemaResult> fetchArrowSchema(PFetchArrowSchemaRequest request) {
+            return null;
+        }
+
+        @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
             ExecuteCommandResultPB result = new ExecuteCommandResultPB();
             StatusPB pStatus = new StatusPB();
@@ -1057,6 +1136,24 @@ public class PseudoBackend {
             }
             return CompletableFuture.completedFuture(result);
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request) {
+            return null;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static class PseudoLakeService implements LakeService {
@@ -1081,6 +1178,14 @@ public class PseudoBackend {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public Future<DeleteTxnLogResponse> deleteTxnLog(DeleteTxnLogRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
             return CompletableFuture.completedFuture(null);
         }
@@ -1101,6 +1206,14 @@ public class PseudoBackend {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Future<LockTabletMetadataResponse> lockTabletMetadata(LockTabletMetadataRequest request) {
             return CompletableFuture.completedFuture(null);
         }
@@ -1358,7 +1471,12 @@ public class PseudoBackend {
             void cancel() {
             }
 
+<<<<<<< HEAD
             void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
+=======
+            void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws
+                    StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 for (PTabletWithPartition tabletWithPartition : tablets) {
                     Tablet tablet = tabletManager.getTablet(tabletWithPartition.tabletId);
                     if (tablet == null) {
@@ -1398,7 +1516,11 @@ public class PseudoBackend {
             }
         }
 
+<<<<<<< HEAD
         void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
+=======
+        void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             TabletsChannel tabletsChannel = indexToTabletsChannel.get(request.indexId);
             if (tabletsChannel == null) {
                 result.status =
@@ -1472,7 +1594,11 @@ public class PseudoBackend {
                 }
                 try {
                     channel.close(request, result);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     LOG.warn("error close load channel", e);
                     channel.cancel();
                     loadChannels.remove(loadIdString);

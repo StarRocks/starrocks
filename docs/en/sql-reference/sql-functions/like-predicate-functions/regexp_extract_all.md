@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # regexp_extract_all
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Extracts all substrings from the target string (`str`) that matches a regular expression pattern (`pattern`) and corresponds to the regex group index specified by `pos`. This function returns an array.
 
@@ -54,4 +58,8 @@ MySQL > SELECT regexp_extract_all('AbCdExCeF', '([[:lower:]]+)C([[:lower:]]+)', 
 
 ## Keywords
 
+<<<<<<< HEAD
 REGEXP_EXTRACT_ALL, REGEXP, EXTRACT
+=======
+REGEXP_EXTRACT_ALL,REGEXP,EXTRACT
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

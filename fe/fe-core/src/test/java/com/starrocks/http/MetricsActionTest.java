@@ -42,7 +42,11 @@ public class MetricsActionTest {
         }
         DefaultHttpRequest rawRequest =
                 new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri, headers);
+<<<<<<< HEAD
         return new BaseRequest(null, rawRequest);
+=======
+        return new BaseRequest(null, rawRequest, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test

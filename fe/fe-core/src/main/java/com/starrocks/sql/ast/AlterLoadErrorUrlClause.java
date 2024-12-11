@@ -38,7 +38,10 @@ public class AlterLoadErrorUrlClause extends AlterClause {
         this.properties = properties;
     }
 
+<<<<<<< HEAD
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Map<String, String> getProperties() {
         return properties;
     }

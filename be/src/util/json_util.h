@@ -38,7 +38,13 @@
 #include <rapidjson/rapidjson.h>
 
 #include <string>
+<<<<<<< HEAD
 
+=======
+#include <vector>
+
+#include "column/vectorized_fwd.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/status.h"
 #include "util/pretty_printer.h"
 #include "util/template_util.h"
@@ -76,4 +82,11 @@ ToJsonValue(const T& value, const TUnit::type unit, rapidjson::Document* documen
 }
 
 std::string to_json(const Status& status);
+<<<<<<< HEAD
+=======
+
+std::string to_json(const std::map<std::string, std::map<std::string, std::string>>& value);
+
+Status from_json(const std::string& json_value, std::map<std::string, std::map<std::string, std::string>>* map_result);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

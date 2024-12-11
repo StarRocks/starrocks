@@ -34,14 +34,22 @@
 
 package com.starrocks.load;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ReplicaPersistInfo;
+<<<<<<< HEAD
 
 import java.io.DataInput;
+=======
+import com.starrocks.persist.gson.GsonUtils;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -138,6 +146,7 @@ public class DeleteInfo implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
+<<<<<<< HEAD
         out.writeLong(dbId);
         out.writeLong(tableId);
         out.writeLong(partitionId);
@@ -187,5 +196,8 @@ public class DeleteInfo implements Writable {
 
         boolean hasAsyncDeleteJob = in.readBoolean();
         Preconditions.checkState(!hasAsyncDeleteJob, "async delete job is deprecated");
+=======
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

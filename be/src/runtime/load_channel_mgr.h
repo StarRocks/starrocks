@@ -86,10 +86,17 @@ public:
 
     std::shared_ptr<LoadChannel> remove_load_channel(const UniqueId& load_id);
 
+<<<<<<< HEAD
     void close();
 
     void abort_txn(int64_t txn_id);
 
+=======
+    void abort_txn(int64_t txn_id);
+
+    void close();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     static void* load_channel_clean_bg_worker(void* arg);
 

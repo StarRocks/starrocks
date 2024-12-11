@@ -14,7 +14,10 @@ PARTITION p20220103 VALUES [("2022-01-03"), ("2022-01-05")))
 DISTRIBUTED BY HASH(`region`, `order_date`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -3596,4 +3599,8 @@ UK	2022-01-02	54321	25	5
 UK	2022-01-04	54321	82	72
 UK	2022-01-04	67890	50	10
 UK	2022-01-04	98765	75	2
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

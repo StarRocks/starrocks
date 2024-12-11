@@ -15,15 +15,22 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.DdlException;
+=======
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -34,6 +41,10 @@ import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
 import com.starrocks.sql.parser.SqlParser;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.dump.QueryDumper;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang3.StringUtils;
@@ -50,6 +61,7 @@ import org.apache.logging.log4j.Logger;
 
 public class QueryDumpAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(QueryDumpAction.class);
+<<<<<<< HEAD
     private static final String DB = "db";
 
     private static final String MOCK = "mock";
@@ -63,12 +75,23 @@ public class QueryDumpAction extends RestBaseAction {
             .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpDeserializer())
             .create();
 
+=======
+
+    public static final String URL = "/api/query_dump";
+    private static final String DB = "db";
+    private static final String MOCK = "mock";
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public QueryDumpAction(ActionController controller) {
         super(controller);
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
+<<<<<<< HEAD
         controller.registerHandler(HttpMethod.POST, "/api/query_dump", new QueryDumpAction(controller));
+=======
+        controller.registerHandler(HttpMethod.POST, URL, new QueryDumpAction(controller));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -78,6 +101,7 @@ public class QueryDumpAction extends RestBaseAction {
         boolean enableMock = request.getSingleParameter(MOCK) == null ||
                 "true".equalsIgnoreCase(StringUtils.trim(request.getSingleParameter(MOCK)));
 
+<<<<<<< HEAD
         if (!Strings.isNullOrEmpty(catalogDbName)) {
             String[] catalogDbNames = catalogDbName.split("\\.");
 
@@ -94,10 +118,23 @@ public class QueryDumpAction extends RestBaseAction {
                 return;
             }
             context.setDatabase(db.getFullName());
+=======
+        String catalogName = "";
+        String dbName = "";
+        if (!Strings.isNullOrEmpty(catalogDbName)) {
+            String[] catalogDbNames = catalogDbName.split("\\.");
+
+            catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            if (catalogDbNames.length == 2) {
+                catalogName = catalogDbNames[0];
+            }
+            dbName = catalogDbNames[catalogDbNames.length - 1];
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         context.setIsHTTPQueryDump(true);
 
         String query = request.getContent();
+<<<<<<< HEAD
         if (Strings.isNullOrEmpty(query)) {
             response.getContent().append("not valid parameter");
             sendResult(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -125,5 +162,12 @@ public class QueryDumpAction extends RestBaseAction {
             response.getContent().append("not use cbo planner, try again.");
             sendResult(request, response, HttpResponseStatus.BAD_REQUEST);
         }
+=======
+
+        Pair<HttpResponseStatus, String> statusAndRes = QueryDumper.dumpQuery(catalogName, dbName, query, enableMock);
+
+        response.getContent().append(statusAndRes.second);
+        sendResult(request, response, statusAndRes.first);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

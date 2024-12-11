@@ -9,4 +9,8 @@ sidebar_position: 20
 - [ALTER](../../sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW.md)
 - [DROP](../../sql-reference/sql-statements/materialized_view/DROP_MATERIALIZED_VIEW.md)
 - [SHOW](../../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md)
+<<<<<<< HEAD
 - [Information schema](../../sql-reference/information_schema.md)
+=======
+- [Information schema](../../sql-reference/information_schema/materialized_views.md)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

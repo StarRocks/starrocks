@@ -22,6 +22,10 @@
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+<<<<<<< HEAD
+=======
+#include "common/statusor.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "fs/fs_memory.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -48,7 +52,11 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
+<<<<<<< HEAD
         return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema.get());
+=======
+        return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void test_int_map() {
@@ -144,7 +152,11 @@ protected:
         }
 
         // read and check
+<<<<<<< HEAD
         auto res = ColumnReader::create(&meta, segment.get());
+=======
+        auto res = ColumnReader::create(&meta, segment.get(), nullptr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
 
@@ -180,6 +192,7 @@ protected:
         }
 
         {
+<<<<<<< HEAD
             auto child_path = std::make_unique<ColumnAccessPath>();
             child_path->init(TAccessPathType::type::OFFSET, "offsets", 1);
 
@@ -188,6 +201,13 @@ protected:
             path.children().emplace_back(std::move(child_path));
 
             ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+=======
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::OFFSET, "offsets", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -210,14 +230,25 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
+<<<<<<< HEAD
                 ASSERT_EQ("{NULL:NULL}", dst_column->debug_item(0));
                 ASSERT_EQ("{}", dst_column->debug_item(1));
                 ASSERT_EQ("{NULL:NULL,NULL:NULL}", dst_column->debug_item(2));
                 ASSERT_EQ("{NULL:NULL,NULL:NULL,NULL:NULL}", dst_column->debug_item(3));
+=======
+                ASSERT_TRUE(dst_column->keys_column()->only_null());
+                ASSERT_TRUE(dst_column->values_column()->only_null());
+                ASSERT_EQ("{CONST: NULL:CONST: NULL}", dst_column->debug_item(0));
+                ASSERT_EQ("{}", dst_column->debug_item(1));
+                ASSERT_EQ("{CONST: NULL:CONST: NULL,CONST: NULL:CONST: NULL}", dst_column->debug_item(2));
+                ASSERT_EQ("{CONST: NULL:CONST: NULL,CONST: NULL:CONST: NULL,CONST: NULL:CONST: NULL}",
+                          dst_column->debug_item(3));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
         {
+<<<<<<< HEAD
             auto child_path = std::make_unique<ColumnAccessPath>();
             child_path->init(TAccessPathType::type::KEY, "key", 1);
 
@@ -226,6 +257,13 @@ protected:
             path.children().emplace_back(std::move(child_path));
 
             ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+=======
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::KEY, "key", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -248,10 +286,18 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
+<<<<<<< HEAD
                 ASSERT_EQ("{1:NULL}", dst_column->debug_item(0));
                 ASSERT_EQ("{}", dst_column->debug_item(1));
                 ASSERT_EQ("{2:NULL,3:NULL}", dst_column->debug_item(2));
                 ASSERT_EQ("{4:NULL,5:NULL,6:NULL}", dst_column->debug_item(3));
+=======
+                ASSERT_TRUE(dst_column->values_column()->only_null());
+                ASSERT_EQ("{1:CONST: NULL}", dst_column->debug_item(0));
+                ASSERT_EQ("{}", dst_column->debug_item(1));
+                ASSERT_EQ("{2:CONST: NULL,3:CONST: NULL}", dst_column->debug_item(2));
+                ASSERT_EQ("{4:CONST: NULL,5:CONST: NULL,6:CONST: NULL}", dst_column->debug_item(3));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }

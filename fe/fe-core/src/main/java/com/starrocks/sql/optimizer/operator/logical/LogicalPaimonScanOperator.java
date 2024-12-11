@@ -53,6 +53,14 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public boolean isEmptyOutputRows() {
+        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
         this.predicates = predicates;
     }

@@ -104,7 +104,11 @@ public class ExprHashCodeTest {
         // FloatLiteral doesn't equal to IntLiteral/LargeIntLiteral/BoolLiteral.
         Streams.forEachPair(floatLiterals.stream(), allLiterals.stream(), (x, y) -> {
             if (x == y) {
+<<<<<<< HEAD
                 Assertions.assertEquals(x, y);;
+=======
+                Assertions.assertEquals(x, y);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 Assertions.assertNotEquals(x, y);
             }
@@ -122,7 +126,11 @@ public class ExprHashCodeTest {
         // BoolLiteral doesn't equal to FloatLiteral/IntLiteral/LargeIntLiteral.
         Streams.forEachPair(boolLiterals.stream(), allLiterals.stream(), (x, y) -> {
             if (x == y) {
+<<<<<<< HEAD
                 Assertions.assertEquals(x, y);;
+=======
+                Assertions.assertEquals(x, y);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 Assertions.assertNotEquals(x, y);
             }

@@ -30,7 +30,11 @@ public class FileAnalyzer {
         new FileAnalyzer.FileAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class FileAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class FileAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         @Override
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {

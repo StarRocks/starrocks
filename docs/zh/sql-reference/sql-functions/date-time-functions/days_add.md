@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # days_add
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 向日期时间或日期加上指定的天数。
 

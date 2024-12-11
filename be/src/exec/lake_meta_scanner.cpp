@@ -19,7 +19,11 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent) : _parent(parent), _tablet(nullptr, 0) {}
+=======
+LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent) : _parent(parent) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Status LakeMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParams& params) {
     return _lazy_init(runtime_state, params);
@@ -33,6 +37,7 @@ Status LakeMetaScanner::_lazy_init(RuntimeState* runtime_state, const MetaScanne
 }
 
 Status LakeMetaScanner::_real_init() {
+<<<<<<< HEAD
     // init _tablet, _tablet_schema, possibly invoke remote IO operation when loading the _tablet_schema
     RETURN_IF_ERROR(_get_tablet(nullptr));
     RETURN_IF_ERROR(_init_meta_reader_params());
@@ -57,16 +62,38 @@ Status LakeMetaScanner::_init_meta_reader_params() {
     _reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
     _reader_params.desc_tbl = &_parent->_desc_tbl;
 
+=======
+    LakeMetaReaderParams reader_params;
+    reader_params.tablet_id = _tablet_id;
+    reader_params.version = Version(0, _version);
+    reader_params.runtime_state = _runtime_state;
+    reader_params.chunk_size = _runtime_state->chunk_size();
+    reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
+    reader_params.desc_tbl = &_parent->_desc_tbl;
+
+    _reader = std::make_unique<LakeMetaReader>();
+    TEST_SYNC_POINT_CALLBACK("lake_meta_scanner:open_mock_reader", &_reader);
+    // possible invoke heavy remote IO operations if local cache missed
+    RETURN_IF_ERROR(_reader->init(reader_params));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
 Status LakeMetaScanner::get_chunk(RuntimeState* state, ChunkPtr* chunk) {
     if (state->is_cancelled()) {
+<<<<<<< HEAD
         return Status::Cancelled("canceled state");
     }
 
     if (!_is_open) {
         return Status::InternalError("OlapMetaScanner Not open.");
+=======
+        return Status::Cancelled("canceled state of LakeMetaScanner");
+    }
+
+    if (!_is_open) {
+        return Status::InternalError("LakeMetaScanner::open() has not been called or has failed");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return _reader->do_get_next(chunk);
 }
@@ -95,6 +122,7 @@ bool LakeMetaScanner::has_more() {
     return _reader->has_more();
 }
 
+<<<<<<< HEAD
 // parameter not used
 Status LakeMetaScanner::_get_tablet(const TInternalScanRange*) {
     ASSIGN_OR_RETURN(_tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
@@ -102,4 +130,6 @@ Status LakeMetaScanner::_get_tablet(const TInternalScanRange*) {
     return Status::OK();
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

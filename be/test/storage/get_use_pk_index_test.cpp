@@ -55,7 +55,11 @@ public:
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
+<<<<<<< HEAD
         writer_context.tablet_schema = &tablet->tablet_schema();
+=======
+        writer_context.tablet_schema = tablet->tablet_schema();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = overlap;
@@ -201,7 +205,11 @@ public:
             std::vector<RowsetSharedPtr> rowsets;
             EditVersion full_version;
             ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(version, &rowsets, &full_version).ok());
+<<<<<<< HEAD
             if (full_version.major() >= version) {
+=======
+            if (full_version.major_number() >= version) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             }
             std::cerr << "waiting for version " << version << std::endl;
@@ -209,7 +217,11 @@ public:
     }
 
     void read_using_pk_index(int64_t key, int64_t version, bool multi_column_pk, bool expect_exist) {
+<<<<<<< HEAD
         const Schema& schema = *_tablet->tablet_schema().schema();
+=======
+        const Schema& schema = *_tablet->tablet_schema()->schema();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TabletReader reader(_tablet, Version(0, version), schema);
         TabletReaderParams params;
         params.is_pipeline = true;
@@ -225,12 +237,23 @@ public:
         std::string pk2_str = std::to_string(get_pk2(key));
         std::unique_ptr<ColumnPredicate> pk2_eq(
                 new_column_eq_predicate(get_type_info(LogicalType::TYPE_BIGINT), 1, pk2_str));
+<<<<<<< HEAD
         if (multi_column_pk) {
             params.predicates.emplace_back(pk2_eq.get());
             params.predicates.emplace_back(pk1_eq.get());
         } else {
             params.predicates.emplace_back(pk_eq.get());
         }
+=======
+        PredicateAndNode pred_root;
+        if (multi_column_pk) {
+            pred_root.add_child(PredicateColumnNode(pk2_eq.get()));
+            pred_root.add_child(PredicateColumnNode(pk1_eq.get()));
+        } else {
+            pred_root.add_child(PredicateColumnNode(pk_eq.get()));
+        }
+        params.pred_tree = PredicateTree::create(std::move(pred_root));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_OK(reader.prepare());
         ASSERT_OK(reader.open(params));
         auto chunk = ChunkHelper::new_chunk(reader.schema(), 1);

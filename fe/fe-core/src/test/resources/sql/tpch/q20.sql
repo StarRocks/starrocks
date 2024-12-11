@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_name,
@@ -36,6 +37,8 @@ where
   and n_name = 'ARGENTINA'
 order by
     s_name ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 TOP-N (order by [[2: S_NAME ASC NULLS FIRST]])
     TOP-N (order by [[2: S_NAME ASC NULLS FIRST]])

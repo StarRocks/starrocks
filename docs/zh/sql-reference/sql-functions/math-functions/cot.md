@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # cot
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 求参数 `x` 的余切值，`x` 是弧度。如果输入值为 `0` 或者 `NULL`，则返回 `NULL`。
 

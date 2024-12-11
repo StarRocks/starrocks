@@ -58,6 +58,7 @@ public class ErrorReport {
         return errMsg;
     }
 
+<<<<<<< HEAD
     public static SemanticException buildSemanticException(ErrorCode errorCode, Object... objs) {
         return new SemanticException(reportCommon(null, errorCode, objs));
     }
@@ -67,6 +68,8 @@ public class ErrorReport {
         throw new AnalysisException(reportCommon(pattern, ErrorCode.ERR_UNKNOWN_ERROR, objs));
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static void reportAnalysisException(ErrorCode errorCode, Object... objs)
             throws AnalysisException {
         reportAnalysisException(null, errorCode, objs);
@@ -76,6 +79,13 @@ public class ErrorReport {
         reportSemanticException(null, errorCode, objs);
     }
 
+<<<<<<< HEAD
+=======
+    public static SemanticException buildSemanticException(ErrorCode errorCode, Object... objs) {
+        return new SemanticException(reportCommon(null, errorCode, objs));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static void reportSemanticException(String pattern, ErrorCode errorCode, Object... objs) {
         throw new SemanticException(reportCommon(pattern, errorCode, objs));
     }
@@ -99,14 +109,38 @@ public class ErrorReport {
         throw new ValidateException(errorCode.formatErrorMsg(objs), errorType);
     }
 
+<<<<<<< HEAD
     public interface DdlExecutor {
         void apply() throws UserException;
+=======
+    public static void reportUserException(ErrorCode errorCode, Object... objs)
+            throws StarRocksException {
+        throw new StarRocksException(reportCommon(null, errorCode, objs));
+    }
+
+    public static void reportTimeoutException(ErrorCode errorCode, Object... objs)
+            throws TimeoutException {
+        throw new TimeoutException(reportCommon(null, errorCode, objs));
+    }
+
+    public static void reportNoAliveBackendException(ErrorCode errorCode, Object... objs)
+            throws NoAliveBackendException {
+        throw new NoAliveBackendException(reportCommon(null, errorCode, objs));
+    }
+
+    public interface DdlExecutor {
+        void apply() throws StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static void wrapWithRuntimeException(DdlExecutor fun) {
         try {
             fun.apply();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throw new RuntimeException(e);
         }
     }

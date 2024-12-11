@@ -38,6 +38,7 @@ namespace starrocks {
 AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _tnode(tnode),
+<<<<<<< HEAD
           _result_tuple_desc(descs.get_tuple_descriptor(tnode.analytic_node.output_tuple_id)) {
     TAnalyticWindow window = tnode.analytic_node.window;
 
@@ -61,6 +62,9 @@ AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
         }
     }
 }
+=======
+          _result_tuple_desc(descs.get_tuple_descriptor(tnode.analytic_node.output_tuple_id)) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -82,10 +86,13 @@ Status AnalyticNode::prepare(RuntimeState* state) {
     DCHECK(child(0)->row_desc().is_prefix_of(row_desc()));
 
     _analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc, false);
+<<<<<<< HEAD
 
     // Non-pipeline always use materializing mode and disable removable cumulative process
     _analytor->_need_partition_materializing = true;
     _analytor->_use_removable_cumulative_process = false;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(_analytor->prepare(state, _pool, runtime_profile()));
 
     return Status::OK();
@@ -101,6 +108,7 @@ Status AnalyticNode::open(RuntimeState* state) {
 }
 
 Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
+<<<<<<< HEAD
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
     RETURN_IF_CANCELLED(state);
@@ -120,6 +128,9 @@ Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     DCHECK(!(*chunk)->has_const_column());
     DCHECK_CHUNK(*chunk);
     return Status::OK();
+=======
+    return Status::InternalError("should not call get_next() in AnalyticNode");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void AnalyticNode::close(RuntimeState* state) {
@@ -135,6 +146,7 @@ void AnalyticNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
+<<<<<<< HEAD
 Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     while (!_analytor->_input_eos || _analytor->_has_output()) {
         RETURN_IF_ERROR(_try_fetch_next_partition_data(state));
@@ -322,6 +334,8 @@ Status AnalyticNode::_fetch_next_chunk(RuntimeState* state) {
     return _analytor->_add_chunk(child_chunk);
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 

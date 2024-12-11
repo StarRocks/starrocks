@@ -15,8 +15,11 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
@@ -50,13 +53,22 @@ public class ShowTaskTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+<<<<<<< HEAD
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         UtFrameUtils.createMinStarRocksCluster();
 
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
 
+<<<<<<< HEAD
+=======
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
@@ -105,7 +117,11 @@ public class ShowTaskTest {
         Assert.assertEquals(2, tasks.size());
         for (TTaskInfo task : tasks) {
             if(task.getTask_name().equals("test_periodical")) {
+<<<<<<< HEAD
                 Assert.assertEquals(task.getSchedule(),"PERIODICAL (START 2020-04-21T00:00 EVERY(5 SECONDS))");
+=======
+                Assert.assertEquals("PERIODICAL START(2020-04-21T00:00) EVERY(5 SECONDS)", task.getSchedule());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 Assert.assertEquals(task.getSchedule(),"MANUAL");
             }

@@ -44,7 +44,12 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 import java.util.Map;
@@ -55,7 +60,11 @@ public abstract class LoadScanNode extends ScanNode {
         super(id, desc, planNodeName);
     }
 
+<<<<<<< HEAD
     protected void initWhereExpr(Expr whereExpr, Analyzer analyzer) throws UserException {
+=======
+    protected void initWhereExpr(Expr whereExpr, Analyzer analyzer) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (whereExpr == null) {
             return;
         }
@@ -72,7 +81,11 @@ public abstract class LoadScanNode extends ScanNode {
         for (SlotRef slot : slots) {
             SlotDescriptor slotDesc = dstDescMap.get(slot.getColumnName());
             if (slotDesc == null) {
+<<<<<<< HEAD
                 throw new UserException("unknown column in where statement. "
+=======
+                throw new StarRocksException("unknown column in where statement. "
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         + "the column '" + slot.getColumnName() + "' in where clause must be in the target table.");
             }
             smap.getLhs().add(slot);
@@ -84,9 +97,15 @@ public abstract class LoadScanNode extends ScanNode {
         whereExpr = Expr.analyzeAndCastFold(whereExpr);
 
         if (!whereExpr.getType().isBoolean()) {
+<<<<<<< HEAD
             throw new UserException("where statement is not a valid statement return bool");
         }
         addConjuncts(Expr.extractConjuncts(whereExpr));
+=======
+            throw new StarRocksException("where statement is not a valid statement return bool");
+        }
+        addConjuncts(AnalyzerUtils.extractConjuncts(whereExpr));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     protected void checkBitmapCompatibility(Analyzer analyzer, SlotDescriptor slotDesc, Expr expr)

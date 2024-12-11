@@ -21,8 +21,13 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.RemoteScanRangeLocations;
+=======
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.hudi.HudiConnectorScanRangeSource;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -35,7 +40,11 @@ import com.starrocks.thrift.TScanRangeLocations;
 import java.util.List;
 
 public class HudiScanNode extends ScanNode {
+<<<<<<< HEAD
     private final RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
+=======
+    private HudiConnectorScanRangeSource scanRangeSource = null;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private final HudiTable hudiTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
@@ -67,7 +76,12 @@ public class HudiScanNode extends ScanNode {
 
     public void setupScanRangeLocations(DescriptorTable descTbl) {
         this.descTbl = descTbl;
+<<<<<<< HEAD
         scanRangeLocations.setup(descTbl, hudiTable, scanNodePredicates);
+=======
+        this.scanRangeSource = new HudiConnectorScanRangeSource(descTbl, hudiTable, scanNodePredicates);
+        this.scanRangeSource.setup();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void setupCloudCredential() {
@@ -75,7 +89,11 @@ public class HudiScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
+<<<<<<< HEAD
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+=======
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalog));
         cloudConfiguration = connector.getMetadata().getCloudConfiguration();
@@ -85,7 +103,11 @@ public class HudiScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+<<<<<<< HEAD
         return scanRangeLocations.getScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
+=======
+        return scanRangeSource.getAllOutputs();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -121,10 +143,16 @@ public class HudiScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
+<<<<<<< HEAD
         output.append(prefix).append(String.format("numNodes=%s", numNodes));
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+=======
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -138,11 +166,14 @@ public class HudiScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return scanRangeLocations.getScanRangeLocationsSize();
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
@@ -159,11 +190,15 @@ public class HudiScanNode extends ScanNode {
         HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
+<<<<<<< HEAD
     }
 
     @Override
     public boolean canUsePipeLine() {
         return true;
+=======
+        HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

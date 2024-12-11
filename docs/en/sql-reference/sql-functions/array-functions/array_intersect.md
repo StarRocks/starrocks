@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_intersect
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns an array of the elements in the intersection of one or more arrays.
 

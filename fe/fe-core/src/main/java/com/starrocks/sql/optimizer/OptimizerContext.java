@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.sql.optimizer;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -20,27 +23,51 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+=======
+import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+=======
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class OptimizerContext {
+=======
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+public class OptimizerContext {
+    private final UUID queryId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final Memo memo;
     private final RuleSet ruleSet;
     private final GlobalStateMgr globalStateMgr;
@@ -48,15 +75,23 @@ public class OptimizerContext {
     private final ColumnRefFactory columnRefFactory;
     private SessionVariable sessionVariable;
     private DumpInfo dumpInfo;
+<<<<<<< HEAD
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
     private OptimizerTraceInfo traceInfo;
     private OptimizerConfig optimizerConfig;
     private List<MaterializationContext> candidateMvs;
+=======
+    private Set<Long> currentSqlDbIds;
+    private CTEContext cteContext;
+    private TaskContext currentTaskContext;
+    private final OptimizerConfig optimizerConfig;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private Set<OlapTable>  queryTables;
 
     private long updateTableId = -1;
+<<<<<<< HEAD
     private boolean enableLeftRightJoinEquivalenceDerive = true;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
@@ -66,12 +101,38 @@ public class OptimizerContext {
     // TODO: refactor materialized view's variables/contexts into this.
     private QueryMaterializationContext queryMaterializationContext;
 
+=======
+
+    private boolean isObtainedFromInternalStatistics = false;
+    private final Stopwatch optimizerTimer = Stopwatch.createStarted();
+    private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
+
+    // The context for join predicate pushdown rule
+    private JoinPredicatePushdown.JoinPredicatePushDownContext joinPredicatePushDownContext =
+            new JoinPredicatePushdown.JoinPredicatePushDownContext();
+    // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
+    // lifecycle instead of per materialized view.
+    private QueryMaterializationContext queryMaterializationContext = new QueryMaterializationContext();
+
+    private boolean isShortCircuit = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private boolean inMemoPhase = false;
 
     // Is not null predicate can be derived from inner join or semi join,
     // which should be kept to be used to convert outer join into inner join.
     private List<IsNullPredicateOperator> pushdownNotNullPredicates = Lists.newArrayList();
 
+<<<<<<< HEAD
+=======
+    // uniquePartitionIdGenerator for external catalog
+    private long uniquePartitionIdGenerator = 0L;
+
+    // collect all LogicalOlapScanOperators in the query before any optimization
+    private List<LogicalOlapScanOperator> allLogicalOlapScanOperators;
+
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -79,10 +140,17 @@ public class OptimizerContext {
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
+<<<<<<< HEAD
         this.sessionVariable = VariableMgr.newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
         this.candidateMvs = Lists.newArrayList();
         this.queryMaterializationContext = new QueryMaterializationContext();
+=======
+        this.sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
+        this.optimizerConfig = new OptimizerConfig();
+        this.queryId = UUID.randomUUID();
+        this.allLogicalOlapScanOperators = Collections.emptyList();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @VisibleForTesting
@@ -97,15 +165,25 @@ public class OptimizerContext {
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
+<<<<<<< HEAD
         this.sessionVariable = connectContext.getSessionVariable();
         this.dumpInfo = connectContext.getDumpInfo();
+=======
+        this.queryId = connectContext.getQueryId();
+        this.sessionVariable = connectContext.getSessionVariable();
+        this.dumpInfo = connectContext.getDumpInfo();
+        this.currentSqlDbIds = connectContext.getCurrentSqlDbIds();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.cteContext = new CTEContext();
         cteContext.reset();
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
         this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
         this.optimizerConfig = optimizerConfig;
+<<<<<<< HEAD
         this.candidateMvs = Lists.newArrayList();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public Memo getMemo() {
@@ -140,6 +218,13 @@ public class OptimizerContext {
         return dumpInfo;
     }
 
+<<<<<<< HEAD
+=======
+    public Set<Long> getCurrentSqlDbIds() {
+        return currentSqlDbIds;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public CTEContext getCteContext() {
         return cteContext;
     }
@@ -152,18 +237,24 @@ public class OptimizerContext {
         return currentTaskContext;
     }
 
+<<<<<<< HEAD
     public void setTraceInfo(OptimizerTraceInfo traceInfo) {
         this.traceInfo = traceInfo;
     }
 
     public OptimizerTraceInfo getTraceInfo() {
         return traceInfo;
+=======
+    public UUID getQueryId() {
+        return queryId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public OptimizerConfig getOptimizerConfig() {
         return optimizerConfig;
     }
 
+<<<<<<< HEAD
     public List<MaterializationContext> getCandidateMvs() {
         return candidateMvs;
     }
@@ -178,17 +269,38 @@ public class OptimizerContext {
 
     public boolean isEnableLeftRightJoinEquivalenceDerive() {
         return enableLeftRightJoinEquivalenceDerive;
+=======
+    /**
+     * Get all valid candidate materialized views for the query:
+     * - The materialized view is valid to rewrite by rule(SPJG)
+     * - The materialized view's refresh-ness is valid to rewrite.
+     */
+    public List<MaterializationContext> getCandidateMvs() {
+        return queryMaterializationContext.getValidCandidateMVs();
+    }
+
+    public JoinPredicatePushdown.JoinPredicatePushDownContext getJoinPushDownParams() {
+        return joinPredicatePushDownContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void setUpdateTableId(long updateTableId) {
         this.updateTableId = updateTableId;
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public long getUpdateTableId() {
         return updateTableId;
     }
 
     public long optimizerElapsedMs() {
+<<<<<<< HEAD
         return traceInfo.getStopwatch().elapsed(TimeUnit.MILLISECONDS);
+=======
+        return optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public boolean ruleExhausted(RuleType ruleType) {
@@ -199,6 +311,17 @@ public class OptimizerContext {
         return elapsed > timeLimit;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isObtainedFromInternalStatistics() {
+        return isObtainedFromInternalStatistics;
+    }
+
+    public void setObtainedFromInternalStatistics(boolean obtainedFromInternalStatistics) {
+        isObtainedFromInternalStatistics = obtainedFromInternalStatistics;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Whether reach optimizer timeout
      */
@@ -244,6 +367,17 @@ public class OptimizerContext {
         return queryMaterializationContext;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isShortCircuit() {
+        return isShortCircuit;
+    }
+
+    public void setShortCircuit(boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void clear() {
         if (this.queryMaterializationContext != null) {
             this.queryMaterializationContext.clear();
@@ -270,4 +404,27 @@ public class OptimizerContext {
     public void clearNotNullPredicates() {
         pushdownNotNullPredicates.clear();
     }
+<<<<<<< HEAD
+=======
+
+    public long getNextUniquePartitionId() {
+        return uniquePartitionIdGenerator++;
+    }
+
+    public void setAllLogicalOlapScanOperators(List<LogicalOlapScanOperator> allScanOperators) {
+        this.allLogicalOlapScanOperators = allScanOperators;
+    }
+
+    public List<LogicalOlapScanOperator> getAllLogicalOlapScanOperators() {
+        return allLogicalOlapScanOperators;
+    }
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions;
+    }
+
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

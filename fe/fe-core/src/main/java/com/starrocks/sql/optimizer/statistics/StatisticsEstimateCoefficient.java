@@ -44,8 +44,15 @@ public class StatisticsEstimateCoefficient {
     public static final int DEFAULT_JDBC_OUTPUT_ROWS = 20000;
     // if after aggregate row count * DEFAULT_AGGREGATE_EFFECT_COEFFICIENT < input row count,
     // the aggregate has good effect.
+<<<<<<< HEAD
     public static final double LOW_AGGREGATE_EFFECT_COEFFICIENT = 1000;
     public static final double MEDIUM_AGGREGATE_EFFECT_COEFFICIENT = 100;
+=======
+    public static final double LOWER_AGGREGATE_EFFECT_COEFFICIENT = 10000;
+    public static final double LOW_AGGREGATE_EFFECT_COEFFICIENT = 1000;
+    public static final double MEDIUM_AGGREGATE_EFFECT_COEFFICIENT = 100;
+    public static final int SMALL_BROADCAST_JOIN_ROW_COUNT_UPPER_BOUND = 4096;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static final double EXTREME_HIGH_AGGREGATE_EFFECT_COEFFICIENT = 3;
     // default selectivity for anti join
@@ -53,7 +60,11 @@ public class StatisticsEstimateCoefficient {
     // default shuffle column row count limit
     public static final double DEFAULT_PRUNE_SHUFFLE_COLUMN_ROWS_LIMIT = 200000;
 
+<<<<<<< HEAD
     public static final long TINY_SCALE_ROWS_LIMIT = 100000;
+=======
+    public static final long TINY_SCALE_ROWS_LIMIT = 50000;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // a small scale rows, such as default push down aggregate row count limit, 100w
     public static final long SMALL_SCALE_ROWS_LIMIT = 1000000;

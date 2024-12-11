@@ -51,17 +51,32 @@ public class ColumnAccessPath {
     // The top one must be ROOT
     private TAccessPathType type;
 
+<<<<<<< HEAD
     private String path;
+=======
+    private final String path;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private final List<ColumnAccessPath> children;
 
     private boolean fromPredicate;
 
+<<<<<<< HEAD
     public ColumnAccessPath(TAccessPathType type, String path) {
+=======
+    // flat json used, to mark the type of the leaf
+    private Type valueType;
+
+    public ColumnAccessPath(TAccessPathType type, String path, Type valueType) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.type = type;
         this.path = path;
         this.children = Lists.newArrayList();
         this.fromPredicate = false;
+<<<<<<< HEAD
+=======
+        this.valueType = valueType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void setType(TAccessPathType type) {
@@ -72,10 +87,28 @@ public class ColumnAccessPath {
         return type;
     }
 
+<<<<<<< HEAD
+=======
+    public String getPath() {
+        return path;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean onlyRoot() {
         return type == TAccessPathType.ROOT && children.isEmpty();
     }
 
+<<<<<<< HEAD
+=======
+    public void setValueType(Type valueType) {
+        this.valueType = valueType;
+    }
+
+    public Type getValueType() {
+        return valueType;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setFromPredicate(boolean fromPredicate) {
         this.fromPredicate = fromPredicate;
     }
@@ -88,6 +121,20 @@ public class ColumnAccessPath {
         return children.stream().anyMatch(p -> p.path.equals(path));
     }
 
+<<<<<<< HEAD
+=======
+    public boolean hasOverlap(List<String> fieldNames) {
+        if (!hasChildPath() || fieldNames.isEmpty()) {
+            return true;
+        }
+
+        if (children.stream().noneMatch(p -> p.path.equals(fieldNames.get(0)))) {
+            return false;
+        }
+        return getChildPath(fieldNames.get(0)).hasOverlap(fieldNames.subList(1, fieldNames.size()));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean hasChildPath() {
         return !children.isEmpty();
     }
@@ -100,13 +147,36 @@ public class ColumnAccessPath {
         return children.stream().filter(p -> p.path.equals(path)).findFirst().orElse(null);
     }
 
+<<<<<<< HEAD
+=======
+    public List<ColumnAccessPath> getChildren() {
+        return children;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void clearChildPath() {
         children.clear();
     }
 
+<<<<<<< HEAD
     private void explainImpl(String parent, List<String> allPaths) {
         boolean hasName = type == TAccessPathType.FIELD || type == TAccessPathType.ROOT;
         String cur = parent + "/" + (hasName ? path : type.name());
+=======
+    public void clearUnusedValueType() {
+        // only save leaf's value type
+        if (!children.isEmpty()) {
+            this.valueType = Type.INVALID;
+            children.forEach(ColumnAccessPath::clearUnusedValueType);
+        }
+    }
+
+    private void explainImpl(String parent, List<String> allPaths) {
+        boolean hasName = type == TAccessPathType.FIELD || type == TAccessPathType.ROOT;
+        boolean hasType = valueType != Type.INVALID;
+        String cur = parent + "/" + (hasName ? path : type.name())
+                + (hasType ? "(" + valueType.toSql() + ")" : "");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (children.isEmpty()) {
             allPaths.add(cur);
         }
@@ -133,6 +203,12 @@ public class ColumnAccessPath {
         tColumnAccessPath.setPath(new StringLiteral(path).treeToThrift());
         tColumnAccessPath.setChildren(children.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList()));
         tColumnAccessPath.setFrom_predicate(fromPredicate);
+<<<<<<< HEAD
+=======
+        if (valueType != null) {
+            tColumnAccessPath.setType_desc(valueType.toThrift());
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return tColumnAccessPath;
     }
 }

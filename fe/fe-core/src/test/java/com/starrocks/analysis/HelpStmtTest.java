@@ -43,7 +43,10 @@ public class HelpStmtTest {
     @Test
     public void testNormal() throws AnalysisException {
         HelpStmt stmt = new HelpStmt("contents");
+<<<<<<< HEAD
         stmt.analyze((Analyzer) null);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals("contents", stmt.getMask());
         Assert.assertEquals("HELP contents", stmt.toString());
 
@@ -51,6 +54,7 @@ public class HelpStmtTest {
         Assert.assertEquals(3, stmt.getCategoryMetaData().getColumnCount());
         Assert.assertEquals(2, stmt.getKeywordMetaData().getColumnCount());
     }
+<<<<<<< HEAD
 
     @Test(expected = AnalysisException.class)
     public void testEmpty() throws AnalysisException {
@@ -58,4 +62,6 @@ public class HelpStmtTest {
         stmt.analyze((Analyzer) null);
         Assert.fail("No exception throws.");
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

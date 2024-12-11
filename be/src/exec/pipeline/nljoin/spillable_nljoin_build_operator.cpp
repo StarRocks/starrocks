@@ -52,7 +52,10 @@ bool SpillableNLJoinBuildOperator::is_finished() const {
 }
 
 Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
+<<<<<<< HEAD
     auto& executor = *_spill_channel->io_executor();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto spiller = _spill_channel->spiller();
 
     if (!spiller->spilled()) {
@@ -61,15 +64,24 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
         return Status::OK();
     }
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(spiller->flush(state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
     spiller->set_flush_all_call_back(
+=======
+    RETURN_IF_ERROR(spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+    RETURN_IF_ERROR(spiller->set_flush_all_call_back(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             [&, state]() {
                 RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(_driver_sequence, state));
                 _is_finished = true;
                 _spill_channel->set_finishing();
                 return Status::OK();
             },
+<<<<<<< HEAD
             state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+=======
+            state, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     return Status::OK();
 }
@@ -79,8 +91,12 @@ Status SpillableNLJoinBuildOperator::push_chunk(RuntimeState* state, const Chunk
         RETURN_IF_ERROR(NLJoinBuildOperator::push_chunk(state, chunk));
     } else {
         // TODO: process auto spill mode
+<<<<<<< HEAD
         _cross_join_context->input_channel(_driver_sequence)
                 .add_chunk_to_spill_buffer(state, chunk, *_spill_channel->io_executor());
+=======
+        RETURN_IF_ERROR(_cross_join_context->input_channel(_driver_sequence).add_chunk_to_spill_buffer(state, chunk));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return Status::OK();
 }
@@ -98,6 +114,12 @@ Status SpillableNLJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->read_shared = true;
     _spill_options->encode_level = state->spill_encode_level();
+<<<<<<< HEAD
+=======
+    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     return Status::OK();
 }

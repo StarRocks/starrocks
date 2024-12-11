@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_shipmode,
@@ -27,6 +28,8 @@ group by
     l_shipmode
 order by
     l_shipmode ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
     TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])

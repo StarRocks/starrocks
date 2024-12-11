@@ -37,6 +37,11 @@
 #include "runtime/runtime_state.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "runtime/types.h"
+<<<<<<< HEAD
+=======
+#include "types/logical_type.h"
+#include "util/runtime_profile.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -91,6 +96,10 @@ public:
         std::random_device dev;
         std::mt19937 rng(dev());
         UniformInt uniform_int;
+<<<<<<< HEAD
+=======
+        std::uniform_real_distribution<> niform_real(1, 10);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (low_card) {
             uniform_int.param(UniformInt::param_type(1, 100 * std::pow(2, slot_index)));
         } else {
@@ -122,6 +131,11 @@ public:
                 column->append_datum(Datum(x));
             } else if (type_desc.type == TYPE_VARCHAR) {
                 column->append_datum(Datum(gen_rand_str()));
+<<<<<<< HEAD
+=======
+            } else if (type_desc.type == TYPE_DOUBLE) {
+                column->append_datum(Datum(niform_real(rng)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 std::cerr << "not supported" << std::endl;
             }
@@ -193,6 +207,11 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         type_desc = TypeDescriptor(TYPE_INT);
     } else if (data_type == TYPE_VARCHAR) {
         type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+<<<<<<< HEAD
+=======
+    } else if (data_type == TYPE_DOUBLE) {
+        type_desc = TypeDescriptor(TYPE_DOUBLE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     } else {
         ASSERT_TRUE(false) << "not support type: " << data_type;
     }
@@ -228,6 +247,10 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
 
     for (auto _ : state) {
         state.PauseTiming();
+<<<<<<< HEAD
+=======
+        RuntimeProfile profile("dummy");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::unique_ptr<ChunksSorter> sorter;
         size_t expected_rows = 0;
         size_t total_rows = chunk->num_rows() * num_chunks;
@@ -257,6 +280,10 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         default:
             ASSERT_TRUE(false) << "unknown algorithm " << (int)sorter_algo;
         }
+<<<<<<< HEAD
+=======
+        sorter->setup_runtime(suite._runtime_state.get(), &profile, suite._runtime_state->instance_mem_tracker());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         int64_t iteration_data_size = 0;
         for (int i = 0; i < num_chunks; i++) {
@@ -268,14 +295,22 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
             // TopN Sorter needs timing when updating
             iteration_data_size += ck->bytes_usage();
             state.ResumeTiming();
+<<<<<<< HEAD
             sorter->update(runtime_state, ck);
+=======
+            ASSERT_TRUE(sorter->update(runtime_state, ck).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             state.PauseTiming();
             mem_usage = std::max(mem_usage, sorter->mem_usage());
         }
         data_size = std::max(data_size, iteration_data_size);
 
         state.ResumeTiming();
+<<<<<<< HEAD
         sorter->done(suite._runtime_state.get());
+=======
+        ASSERT_TRUE(sorter->done(suite._runtime_state.get()).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         item_processed += total_rows;
         state.PauseTiming();
         mem_usage = std::max(mem_usage, sorter->mem_usage());
@@ -284,13 +319,21 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         size_t actual_rows = 0;
         while (!eos) {
             ChunkPtr page;
+<<<<<<< HEAD
             sorter->get_next(&page, &eos);
+=======
+            ASSERT_TRUE(sorter->get_next(&page, &eos).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (eos) break;
             actual_rows += page->num_rows();
         }
         ASSERT_TRUE(eos);
         ASSERT_EQ(expected_rows, actual_rows);
+<<<<<<< HEAD
         sorter->done(suite._runtime_state.get());
+=======
+        ASSERT_TRUE(sorter->done(suite._runtime_state.get()).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     state.counters["rows_sorted"] += item_processed;
     state.counters["data_size"] += data_size;
@@ -429,7 +472,11 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
             }
         }
         SortedRuns merged;
+<<<<<<< HEAD
         merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged);
+=======
+        ASSERT_TRUE(merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_EQ(input_rows, merged.num_rows());
 
         num_rows += merged.num_rows();
@@ -443,6 +490,12 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
 static void BM_fullsort_notnull(benchmark::State& state) {
     do_bench(state, FullSort, TYPE_INT, state.range(0), state.range(1));
 }
+<<<<<<< HEAD
+=======
+static void BM_fullsort_float_notnull(benchmark::State& state) {
+    do_bench(state, FullSort, TYPE_DOUBLE, state.range(0), state.range(1));
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 static void BM_fullsort_nullable(benchmark::State& state) {
     do_bench(state, FullSort, TYPE_INT, state.range(0), state.range(1), SortParameters::with_nullable(true));
 }
@@ -521,6 +574,10 @@ static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
 // Full sort
 BENCHMARK(BM_fullsort_notnull)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_nullable)->Apply(CustomArgsFull);
+<<<<<<< HEAD
+=======
+BENCHMARK(BM_fullsort_float_notnull)->Apply(CustomArgsFull);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 BENCHMARK(BM_fullsort_varchar_column_incr)->Apply(CustomArgsFull);
 
 // Low-Cardinality Sort

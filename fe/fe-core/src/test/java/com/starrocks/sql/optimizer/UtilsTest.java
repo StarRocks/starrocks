@@ -84,7 +84,11 @@ public class UtilsTest {
 
     protected static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
+<<<<<<< HEAD
             partition.getBaseIndex().setRowCount(rowCount);
+=======
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -129,7 +133,11 @@ public class UtilsTest {
 
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } catch (DdlException e) {
             return;
         }
@@ -261,9 +269,15 @@ public class UtilsTest {
     public void unknownStats1() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10);
         GlobalStateMgr.getCurrentStatisticStorage().addColumnStatistic(t0, "v1",
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10);
+        GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v1",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 new ColumnStatistic(1, 1, 0, 1, 1));
 
         Map<ColumnRefOperator, Column> columnRefMap = new HashMap<>();
@@ -278,9 +292,15 @@ public class UtilsTest {
                 new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertTrue(Utils.hasUnknownColumnsStats(opt));
 
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentStatisticStorage().addColumnStatistic(t0, "v2",
                 new ColumnStatistic(1, 1, 0, 1, 1));
         GlobalStateMgr.getCurrentStatisticStorage().addColumnStatistic(t0, "v3",
+=======
+        GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v2",
+                new ColumnStatistic(1, 1, 0, 1, 1));
+        GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v3",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 new ColumnStatistic(1, 1, 0, 1, 1));
         opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
@@ -289,7 +309,11 @@ public class UtilsTest {
     @Test
     public void unknownStats2() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+=======
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         OptExpression opt =
                 new OptExpression(
                         new LogicalOlapScanOperator(t1, Maps.newHashMap(), Maps.newHashMap(), null, -1, null));

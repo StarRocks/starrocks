@@ -14,12 +14,20 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableList;
+=======
+import com.google.common.collect.ImmutableMap;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.planner.HdfsScanNode;
+<<<<<<< HEAD
 import com.starrocks.sql.PlannerProfile;
+=======
+import com.starrocks.qe.scheduler.DefaultWorkerProvider;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -28,18 +36,26 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import mockit.Expectations;
+<<<<<<< HEAD
 import mockit.Mock;
 import mockit.MockUp;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+<<<<<<< HEAD
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+=======
+import java.util.List;
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class HDFSBackendSelectorTest {
     @Mocked
@@ -76,12 +92,18 @@ public class HDFSBackendSelectorTest {
         return ans;
     }
 
+<<<<<<< HEAD
     private List<ComputeNode> createComputeNodes(int number) {
         List<ComputeNode> ans = new ArrayList<>();
+=======
+    private ImmutableMap<Long, ComputeNode> createComputeNodes(int number) {
+        Map<Long, ComputeNode> ans = new HashMap<>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (int i = 0; i < number; i++) {
             ComputeNode node = new ComputeNode(i, String.format(hostFormat, i), computeNodePort);
             node.setBePort(computeNodePort);
             node.setAlive(true);
+<<<<<<< HEAD
             ans.add(node);
         }
         return ans;
@@ -92,6 +114,16 @@ public class HDFSBackendSelectorTest {
             int scanNodeId) {
         Map<TNetworkAddress, Long> stats = new HashMap<>();
         for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
+=======
+            ans.put((long) i, node);
+        }
+        return ImmutableMap.copyOf(ans);
+    }
+
+    private Map<Long, Long> computeWorkerIdToReadBytes(FragmentScanRangeAssignment assignment, int scanNodeId) {
+        Map<Long, Long> stats = new HashMap<>();
+        for (Map.Entry<Long, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             List<TScanRangeParams> scanRangeParams = entry.getValue().get(scanNodeId);
             for (TScanRangeParams params : scanRangeParams) {
                 THdfsScanRange scanRange = params.scan_range.hdfs_scan_range;
@@ -103,11 +135,14 @@ public class HDFSBackendSelectorTest {
 
     @Test
     public void testHdfsScanNodeHashRing() throws Exception {
+<<<<<<< HEAD
         new MockUp<PlannerProfile>() {
             @Mock
             public void addCustomProperties(String name, String value) {
             }
         };
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         SessionVariable sessionVariable = new SessionVariable();
         new Expectations() {
             {
@@ -132,6 +167,7 @@ public class HDFSBackendSelectorTest {
         int scanRangeSize = 10000;
         int hostNumber = 3;
         List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
+<<<<<<< HEAD
         FragmentScanRangeAssignment assignment =
                 new FragmentScanRangeAssignment();
         Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
@@ -141,15 +177,114 @@ public class HDFSBackendSelectorTest {
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
                         ImmutableList.copyOf(computeNodes), false, false, false);
+=======
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         selector.computeScanRangeAssignment();
 
         int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
         double variance = 0.2 * avg;
+<<<<<<< HEAD
         Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);
         for (Map.Entry<TNetworkAddress, Long> entry : stats.entrySet()) {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
             Assert.assertTrue(Math.abs(entry.getValue() - avg) < variance);
         }
+=======
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
+            System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
+            Assert.assertTrue(entry.getValue() - avg < variance);
+        }
+
+        // test empty compute nodes
+        workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                true
+        );
+        selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
+        try {
+            selector.computeScanRangeAssignment();
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Failed to find backend to execute", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testHdfsScanNodeScanRangeReBalance() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+
+                ConnectContext.get();
+                result = context;
+
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        long scanRangeNumber = 10000;
+        long scanRangeSize = 10000;
+        int hostNumber = 3;
+        List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
+        selector.computeScanRangeAssignment();
+
+        long avg = (scanRangeNumber * scanRangeSize) / hostNumber + 1;
+        double variance = 0.2 * avg;
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
+            System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
+            Assert.assertTrue((entry.getValue() - avg) < variance);
+        }
+
+        variance = 0.4 / 100 * scanRangeNumber * scanRangeSize;
+        double actual = 0;
+        for (Map.Entry<ComputeNode, Long> entry : selector.reBalanceBytesPerComputeNode.entrySet()) {
+            System.out.printf("%s -> %d bytes re-balance\n", entry.getKey(), entry.getValue());
+            actual = actual + entry.getValue();
+        }
+        Assert.assertTrue(actual < variance);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -170,6 +305,7 @@ public class HDFSBackendSelectorTest {
         int hostNumber = 3;
         List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+<<<<<<< HEAD
         Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
         Set<Long> usedBackendIDs = new HashSet<>();
         List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
@@ -177,6 +313,19 @@ public class HDFSBackendSelectorTest {
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
                         ImmutableList.copyOf(computeNodes), false, false, false);
+=======
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         HashRing hashRing = selector.makeHashRing();
         Assert.assertTrue(hashRing.policy().equals("ConsistentHash"));
         ConsistentHashRing consistentHashRing = (ConsistentHashRing) hashRing;
@@ -224,6 +373,7 @@ public class HDFSBackendSelectorTest {
             }
         }
 
+<<<<<<< HEAD
         FragmentScanRangeAssignment assignment =
                 new FragmentScanRangeAssignment();
         Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
@@ -241,4 +391,86 @@ public class HDFSBackendSelectorTest {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
         }
     }
+=======
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        true, false, false);
+        selector.computeScanRangeAssignment();
+
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
+        Assert.assertEquals(stats.size(), localHostNumber);
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
+            System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
+        }
+    }
+
+    @Test
+    public void testHdfsScanNodeIncrementalScanRanges() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+
+                ConnectContext.get();
+                result = context;
+
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        int scanRangeNumber = 1;
+        int hostNumber = 3;
+        List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeNumber);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, true);
+        selector.computeScanRangeAssignment();
+        Assert.assertEquals(assignment.size(), 3);
+        int scanRanges = 0;
+        for (Map<Integer, List<TScanRangeParams>> scanNodes : assignment.values()) {
+            Assert.assertEquals(scanNodes.size(), 1);
+            List<TScanRangeParams> scanRangeParams = scanNodes.get(scanNodeId);
+            Assert.assertTrue(scanRangeParams.size() >= 1);
+            TScanRangeParams last = scanRangeParams.get(scanRangeParams.size() - 1);
+            Assert.assertTrue(last.isSetEmpty());
+            Assert.assertTrue(last.isSetHas_more());
+            Assert.assertTrue(last.isEmpty());
+            Assert.assertTrue(last.has_more == false);
+            for (TScanRangeParams p : scanRangeParams) {
+                if (!p.isEmpty()) {
+                    scanRanges += 1;
+                }
+            }
+        }
+        Assert.assertEquals(scanRanges, scanRangeNumber);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

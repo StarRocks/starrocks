@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.tree;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -47,6 +51,7 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
             PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.inputAt(0).getOp();
 
             if (topN.getSortPhase().isFinal() && !topN.isSplit() && topN.getLimit() == Operator.DEFAULT_LIMIT) {
+<<<<<<< HEAD
 
                 OptExpression.Builder partialSortOptBuilder = OptExpression.buildWithOpAndInputs(
                         new PhysicalTopNOperator(
@@ -70,6 +75,27 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
                         .setStatistics(optExpr.getStatistics())
                         .setCost(optExpr.getCost())
                         .setRequiredProperties(optExpr.getRequiredProperties());
+=======
+                OptExpression.Builder partialSortOptBuilder = OptExpression.builder()
+                        .setOp(new PhysicalTopNOperator(topN.getOrderSpec(), topN.getLimit(), topN.getOffset(),
+                                topN.getPartitionByColumns(), topN.getPartitionLimit(), SortPhase.PARTIAL,
+                                topN.getTopNType(), false, topN.isEnforced(), null, null, ImmutableMap.of()))
+                        .setInputs(optExpr.inputAt(0).getInputs())
+                        .setLogicalProperty(optExpr.inputAt(0).getLogicalProperty())
+                        .setStatistics(optExpr.getStatistics())
+                        .setCost(optExpr.getCost());
+
+                OptExpression.Builder newOptBuilder = OptExpression.builder()
+                        .setOp(new PhysicalTopNOperator(
+                                        topN.getOrderSpec(), topN.getLimit(), topN.getOffset(), topN.getPartitionByColumns(),
+                                        topN.getPartitionLimit(), SortPhase.FINAL, topN.getTopNType(), true,
+                                        topN.isEnforced(), null,
+                                        topN.getProjection(), null))
+                        .setInputs(Lists.newArrayList(partialSortOptBuilder.build()))
+                        .setLogicalProperty(optExpr.getLogicalProperty())
+                        .setStatistics(optExpr.getStatistics())
+                        .setCost(optExpr.getCost());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                 return visit(newOptBuilder.build(), null);
             } else {

@@ -51,9 +51,12 @@ public:
     virtual bool has_more() = 0;
 
 protected:
+<<<<<<< HEAD
     virtual Status _get_tablet(const TInternalScanRange* scan_range) = 0;
     virtual Status _init_meta_reader_params() = 0;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RuntimeState* _runtime_state{nullptr};
 
     bool _is_open = false;

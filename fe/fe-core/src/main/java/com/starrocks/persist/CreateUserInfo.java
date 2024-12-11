@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
@@ -22,17 +25,23 @@ import com.starrocks.authentication.UserProperty;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
 import com.starrocks.privilege.ObjectTypeDeprecate;
 import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.UserPrivilegeCollection;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class CreateUserInfo implements Writable {
     @SerializedName(value = "u")
@@ -42,11 +51,14 @@ public class CreateUserInfo implements Writable {
     @SerializedName(value = "p")
     UserProperty userProperty;
 
+<<<<<<< HEAD
     //Deprecated attribute, can be removed in version 3.2
     @SerializedName(value = "c")
     @Deprecated
     UserPrivilegeCollection userPrivilegeCollection;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "c2")
     UserPrivilegeCollectionV2 userPrivilegeCollectionV2;
 
@@ -84,6 +96,7 @@ public class CreateUserInfo implements Writable {
     }
 
     public UserPrivilegeCollectionV2 getUserPrivilegeCollection() {
+<<<<<<< HEAD
         if (userPrivilegeCollectionV2 == null) {
             UserPrivilegeCollectionV2 collection = new UserPrivilegeCollectionV2();
             collection.grantRoles(userPrivilegeCollection.getAllRoles());
@@ -97,6 +110,9 @@ public class CreateUserInfo implements Writable {
         } else {
             return userPrivilegeCollectionV2;
         }
+=======
+        return userPrivilegeCollectionV2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public short getPluginId() {

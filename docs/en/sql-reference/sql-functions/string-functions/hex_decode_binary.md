@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hex_decode_binary
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Decodes a hex encoded string to a binary.
 

@@ -53,4 +53,8 @@ public class TaskTest {
         Assert.assertEquals(false, Constants.TaskRunState.PENDING.isSuccessState());
         Assert.assertEquals(false, Constants.TaskRunState.RUNNING.isSuccessState());
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

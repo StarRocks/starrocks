@@ -36,7 +36,11 @@ public class ShowSnapshotAnalyzer {
         new ShowSnapshotAnalyzerVisitor().analyze(showSnapshotStmt, session);
     }
 
+<<<<<<< HEAD
     public static class ShowSnapshotAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    public static class ShowSnapshotAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

@@ -25,6 +25,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.load.EtlJobType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,7 +51,11 @@ public class LoadStmtAnalyzer {
         new LoadStmtAnalyzerVisitor().analyze(statement, context);
     }
 
+<<<<<<< HEAD
     static class LoadStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class LoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         private static final String VERSION = "version";
 
@@ -122,6 +131,7 @@ public class LoadStmtAnalyzer {
                 if (etlJobType == EtlJobType.SPARK && database != null) {
                     for (DataDescription dataDescription : dataDescriptions) {
                         String tableName = dataDescription.getTableName();
+<<<<<<< HEAD
                         Database db = GlobalStateMgr.getCurrentState().getDb(database);
                         if (db == null) {
                             continue;
@@ -129,6 +139,17 @@ public class LoadStmtAnalyzer {
                         db.readLock();
                         try {
                             Table table = db.getTable(tableName);
+=======
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(database);
+                        if (db == null) {
+                            continue;
+                        }
+                        Locker locker = new Locker();
+                        locker.lockDatabase(db.getId(), LockType.READ);
+                        try {
+                            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getFullName(), tableName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             if (table == null) {
                                 continue;
                             }
@@ -140,7 +161,11 @@ public class LoadStmtAnalyzer {
                                 }
                             }
                         } finally {
+<<<<<<< HEAD
                             db.readUnlock();
+=======
+                            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         }
                     }
                 }

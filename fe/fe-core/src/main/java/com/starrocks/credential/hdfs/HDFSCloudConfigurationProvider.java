@@ -14,13 +14,18 @@
 
 package com.starrocks.credential.hdfs;
 
+<<<<<<< HEAD
 import autovalue.shaded.com.google.common.common.base.Preconditions;
+=======
+import com.google.common.base.Preconditions;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationProvider;
 
 import java.util.HashMap;
 import java.util.Map;
 
+<<<<<<< HEAD
 import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
 import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
@@ -36,6 +41,23 @@ import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME
 public class HDFSCloudConfigurationProvider implements CloudConfigurationProvider {
 
     private static String getOrDefault(Map<String, String> prop, String... args) {
+=======
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_PASSWORD;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_USERNAME;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED;
+
+public class HDFSCloudConfigurationProvider implements CloudConfigurationProvider {
+
+    protected static String getOrDefault(Map<String, String> prop, String... args) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (String k : args) {
             String v = prop.get(k);
             if (v != null) {
@@ -45,8 +67,12 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         return "";
     }
 
+<<<<<<< HEAD
     @Override
     public CloudConfiguration build(Map<String, String> properties) {
+=======
+    protected Map<String, String> preprocessProperties(Map<String, String> properties) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Preconditions.checkNotNull(properties);
         Map<String, String> prop = new HashMap<>(properties);
 
@@ -59,6 +85,15 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         for (String k : keys) {
             prop.remove(k);
         }
+<<<<<<< HEAD
+=======
+        return prop;
+    }
+
+    @Override
+    public CloudConfiguration build(Map<String, String> properties) {
+        Map<String, String> prop = preprocessProperties(properties);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         HDFSCloudCredential hdfsCloudCredential = new HDFSCloudCredential(
                 getOrDefault(properties, HDFS_AUTHENTICATION),
@@ -72,7 +107,11 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         if (!hdfsCloudCredential.validate()) {
             return null;
         }
+<<<<<<< HEAD
         HDFSCloudConfiguration conf = new HDFSCloudConfiguration(hdfsCloudCredential);
         return conf;
+=======
+        return new HDFSCloudConfiguration(hdfsCloudCredential);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

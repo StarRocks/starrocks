@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # square
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Calculates the square of a value.
 

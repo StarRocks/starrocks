@@ -1,0 +1,249 @@
+-- name: test_python_udf
+-- scalar python udf inline
+
+CREATE FUNCTION get_type(boolean) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return type(x)  
+$$;
+
+CREATE FUNCTION get_type(int) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+
+CREATE FUNCTION get_type(double) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+
+CREATE FUNCTION get_type(string) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+
+CREATE FUNCTION get_type(array<int>) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+
+
+CREATE FUNCTION get_type(struct<a int, b string>) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+
+CREATE FUNCTION get_type(map<int,string>) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+
+
+select get_type(1);
+select get_type(1.1);
+select get_type('1');
+select get_type([]);
+select get_type([1,2,3]);
+select get_type(named_struct('a', 1,'b','value'));
+select get_type(map(1,2));
+-- scalar udf add one 
+CREATE FUNCTION add_one(int) RETURNS 
+int 
+properties(
+    "symbol" = "add", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def add(x):
+    return x + 1  
+$$;
+
+CREATE FUNCTION add_one(bigint) RETURNS 
+bigint 
+properties(
+    "symbol" = "add", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def add(x):
+    return x + 1  
+$$;
+
+select add_one(1);
+select add_one(2200000000);
+
+-- vectorized python udf inline
+CREATE FUNCTION vector_echo(int) RETURNS 
+int 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def echo(x):
+    return x  
+$$;
+
+CREATE FUNCTION vector_echo(bigint) RETURNS 
+bigint 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def echo(x):
+    return x 
+$$;
+
+CREATE FUNCTION vector_echo(string) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def echo(x):
+    return type(x)  
+$$;
+
+
+CREATE FUNCTION vector_echo(array<int>) RETURNS 
+array<int> 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def echo(x):
+    return type(x)  
+$$;
+
+
+CREATE FUNCTION get_type(struct<a int, b string>) RETURNS 
+struct<a int, b string> 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def echo(x):
+    return x 
+$$;
+
+-- vectorized add one 
+
+CREATE FUNCTION vectorized_add_one(int) RETURNS 
+int 
+properties(
+    "symbol" = "add", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def add(x):
+    return x + 1  
+$$;
+
+CREATE FUNCTION vectorized_add_one(bigint) RETURNS 
+bigint 
+properties(
+    "symbol" = "add", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+import pyarrow.compute as pc
+
+def add(x):
+    return pc.add(x, 1)
+$$;
+
+select add_one(1);
+select add_one(2200000000);

@@ -15,7 +15,10 @@ DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c3",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -38,7 +41,10 @@ DISTRIBUTED BY HASH(`c2`, `c1`, `c0`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c3, c4",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -1346,4 +1352,24 @@ SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS
 0420a206
 0420a206
 0420a206
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS value FROM low_card_duplicate order by value limit 10;
+-- result:
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

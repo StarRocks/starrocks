@@ -40,13 +40,20 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
+<<<<<<< HEAD
 import com.starrocks.system.SystemInfoService;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TFrontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
@@ -59,14 +66,28 @@ import com.starrocks.thrift.TUserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+=======
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 /**
  * Full scan of an SCHEMA table.
  */
 public class SchemaScanNode extends ScanNode {
+<<<<<<< HEAD
+=======
+
+    private static final Logger LOG = LogManager.getLogger(SchemaScanNode.class);
+
+    private String catalogName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final String tableName;
     private String schemaDb;
     private String schemaTable;
@@ -162,13 +183,27 @@ public class SchemaScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.SCHEMA_SCAN_NODE;
         msg.schema_scan_node = new TSchemaScanNode(desc.getId().asInt(), tableName);
+<<<<<<< HEAD
+=======
+
+        if (catalogName != null) {
+            msg.schema_scan_node.setCatalog_name(catalogName);
+        } else {
+            msg.schema_scan_node.setCatalog_name(DEFAULT_INTERNAL_CATALOG_NAME);
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (schemaDb != null) {
             msg.schema_scan_node.setDb(schemaDb);
         } else {
@@ -302,7 +337,11 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public void computeFeNodes() {
+<<<<<<< HEAD
         for (Frontend fe : GlobalStateMgr.getCurrentState().getFrontends(null /* all */)) {
+=======
+        for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!fe.isAlive()) {
                 continue;
             }
@@ -318,6 +357,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public void computeBeScanRanges() {
+<<<<<<< HEAD
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         Set<ComputeNode> computeNodes = new HashSet<>(systemInfoService.getIdToBackend().values());
         if (RunMode.isSharedDataMode()) {
@@ -327,13 +367,38 @@ public class SchemaScanNode extends ScanNode {
             // if user specifies BE id, we try to scan all BEs(including bad BE)
             // if user doesn't specify BE id, we only scan live BEs
             if ((be.isAlive() && beId == null) || (beId != null && beId.equals(be.getId()))) {
+=======
+        List<ComputeNode> nodeList;
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+
+            nodeList = computeNodeIds.stream()
+                    .map(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(id))
+                    .collect(Collectors.toList());
+        } else {
+            nodeList = Lists.newArrayList();
+            nodeList.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends());
+            nodeList.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes());
+        }
+
+        for (ComputeNode node : nodeList) {
+            // if user specifies BE id, we try to scan all BEs(including bad BE)
+            // if user doesn't specify BE id, we only scan live BEs
+            if ((node.isAlive() && beId == null) || (beId != null && beId.equals(node.getId()))) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (beScanRanges == null) {
                     beScanRanges = Lists.newArrayList();
                 }
                 TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
                 TScanRangeLocation location = new TScanRangeLocation();
+<<<<<<< HEAD
                 location.setBackend_id(be.getId());
                 location.setServer(new TNetworkAddress(be.getHost(), be.getBePort()));
+=======
+                location.setBackend_id(node.getId());
+                location.setServer(new TNetworkAddress(node.getHost(), node.getBePort()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 scanRangeLocations.addToLocations(location);
                 TScanRange scanRange = new TScanRange();
                 scanRangeLocations.setScan_range(scanRange);
@@ -352,6 +417,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return beScanRanges == null ? 1 : beScanRanges.size();
     }
@@ -362,8 +428,25 @@ public class SchemaScanNode extends ScanNode {
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
+    }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

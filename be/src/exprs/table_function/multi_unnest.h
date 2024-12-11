@@ -38,11 +38,16 @@ public:
         long row_count = state->get_columns()[0]->size();
         state->set_processed_rows(row_count);
 
+<<<<<<< HEAD
         std::vector<ColumnPtr> compacted_array_list;
+=======
+        std::vector<ColumnPtr> unnested_array_list;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (auto& col_idx : state->get_columns()) {
             Column* column = col_idx.get();
 
             auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
+<<<<<<< HEAD
             ColumnPtr compacted_array_elements = col_array->elements_column()->clone_empty();
             compacted_array_list.emplace_back(compacted_array_elements);
         }
@@ -54,6 +59,23 @@ public:
             long max_length_array_size = 0;
             for (auto& col_idx : state->get_columns()) {
                 Column* column = col_idx.get();
+=======
+            ColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
+            unnested_array_list.emplace_back(unnested_array_elements);
+        }
+
+        auto copy_count_column = UInt32Column::create();
+        uint32_t offset = 0;
+        copy_count_column->append(offset);
+        for (int row_idx = 0; row_idx < row_count; ++row_idx) {
+            uint32_t max_length_array_size = 0;
+            for (auto& col_idx : state->get_columns()) {
+                Column* column = col_idx.get();
+                if (column->is_null(row_idx)) {
+                    // current row is null, ignore the offset.
+                    continue;
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
                 auto offset_column = col_array->offsets_column();
 
@@ -63,14 +85,25 @@ public:
                     max_length_array_size = array_element_length;
                 }
             }
+<<<<<<< HEAD
             compacted_offset_column->append(offset + max_length_array_size);
             offset += max_length_array_size;
+=======
+            if (max_length_array_size == 0 && state->get_is_left_join()) {
+                offset += 1;
+                copy_count_column->append(offset);
+            } else {
+                offset += max_length_array_size;
+                copy_count_column->append(offset);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
                 Column* column = state->get_columns()[col_idx].get();
                 auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
                 auto offset_column = col_array->offsets_column();
 
+<<<<<<< HEAD
                 long array_element_length =
                         offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
                 compacted_array_list[col_idx]->append(*(col_array->elements_column()),
@@ -78,16 +111,43 @@ public:
 
                 if (array_element_length < max_length_array_size) {
                     compacted_array_list[col_idx]->append_nulls(max_length_array_size - array_element_length);
+=======
+                if (max_length_array_size == 0 && state->get_is_left_join()) {
+                    unnested_array_list[col_idx]->append_nulls(1);
+                } else {
+                    if (column->is_null(row_idx)) {
+                        // current row is null, ignore element data.
+                        unnested_array_list[col_idx]->append_nulls(max_length_array_size);
+                    } else {
+                        auto array_element_length =
+                                offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
+                        unnested_array_list[col_idx]->append(*(col_array->elements_column()),
+                                                             offset_column->get(row_idx).get_int32(),
+                                                             array_element_length);
+
+                        if (array_element_length < max_length_array_size) {
+                            unnested_array_list[col_idx]->append_nulls(max_length_array_size - array_element_length);
+                        }
+                    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         }
 
         Columns result;
+<<<<<<< HEAD
         for (auto& col_idx : compacted_array_list) {
             result.emplace_back(col_idx);
         }
 
         return std::make_pair(result, compacted_offset_column);
+=======
+        for (auto& col_idx : unnested_array_list) {
+            result.emplace_back(col_idx);
+        }
+
+        return std::make_pair(result, copy_count_column);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     class UnnestState : public TableFunctionState {
@@ -99,6 +159,13 @@ public:
 
     Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new UnnestState();
+<<<<<<< HEAD
+=======
+        const auto& table_fn = fn.table_fn;
+        if (table_fn.__isset.is_left_join) {
+            (*state)->set_is_left_join(table_fn.is_left_join);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 

@@ -22,6 +22,11 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
+<<<<<<< HEAD
+=======
+#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/work_group_fwd.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
@@ -89,6 +94,7 @@ private:
     mutable MemTracker* old_tracker = nullptr;
 };
 
+<<<<<<< HEAD
 struct IOTaskExecutor {
     workgroup::ScanExecutor* pool;
     workgroup::WorkGroupPtr wg;
@@ -98,12 +104,29 @@ struct IOTaskExecutor {
     template <class Func>
     Status submit(Func&& func) {
         workgroup::ScanTask task(wg, func);
+=======
+struct SpillIOTaskContext {
+    bool use_local_io_executor = true;
+};
+using SpillIOTaskContextPtr = std::shared_ptr<SpillIOTaskContext>;
+
+struct IOTaskExecutor {
+    static Status submit(workgroup::ScanTask task) {
+        const auto& task_ctx = task.get_work_context();
+        bool use_local_io_executor = true;
+        if (task_ctx.task_context_data.has_value()) {
+            auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(task_ctx.task_context_data);
+            use_local_io_executor = io_ctx->use_local_io_executor;
+        }
+        auto* pool = get_executor(task.workgroup.get(), use_local_io_executor);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (pool->submit(std::move(task))) {
             return Status::OK();
         } else {
             return Status::InternalError("offer task failed");
         }
     }
+<<<<<<< HEAD
 };
 
 struct SyncTaskExecutor {
@@ -114,6 +137,66 @@ struct SyncTaskExecutor {
     }
 };
 
+=======
+    static void force_submit(workgroup::ScanTask task) {
+        const auto& task_ctx = task.get_work_context();
+        auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(task_ctx.task_context_data);
+        auto* pool = get_executor(task.workgroup.get(), io_ctx->use_local_io_executor);
+        pool->force_submit(std::move(task));
+    }
+
+private:
+    inline static workgroup::ScanExecutor* get_executor(workgroup::WorkGroup* wg, bool use_local_io_executor) {
+        return use_local_io_executor ? wg->executors()->scan_executor() : wg->executors()->connector_scan_executor();
+    }
+};
+
+struct SyncTaskExecutor {
+    static Status submit(workgroup::ScanTask task) {
+        do {
+            task.run();
+        } while (!task.is_finished());
+        return Status::OK();
+    }
+
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+};
+
+#define BREAK_IF_YIELD(wg, yield, time_spent_ns)                                                \
+    if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {                          \
+        *yield = true;                                                                          \
+        break;                                                                                  \
+    }                                                                                           \
+    if (wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT && \
+        wg->scan_sched_entity()->in_queue()->should_yield(wg, time_spent_ns)) {                 \
+        *yield = true;                                                                          \
+        break;                                                                                  \
+    }
+
+#define RETURN_OK_IF_NEED_YIELD(wg, yield, time_spent_ns)                                       \
+    if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {                          \
+        *yield = true;                                                                          \
+        return Status::OK();                                                                    \
+    }                                                                                           \
+    if (wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT && \
+        wg->scan_sched_entity()->in_queue()->should_yield(wg, time_spent_ns)) {                 \
+        *yield = true;                                                                          \
+        return Status::OK();                                                                    \
+    }
+#define RETURN_IF_ERROR_EXCEPT_YIELD(stmt)                                                            \
+    do {                                                                                              \
+        auto&& status__ = (stmt);                                                                     \
+        if (UNLIKELY(!status__.ok() && !status__.is_yield())) {                                       \
+            return to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
+        }                                                                                             \
+    } while (false)
+
+#define RETURN_IF_YIELD(yield) \
+    if (yield) {               \
+        return Status::OK();   \
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #define DEFER_GUARD_END(guard) auto VARNAME_LINENUM(defer) = DeferOp([&]() { guard.scoped_end(); });
 
 #define RESOURCE_TLS_MEMTRACER_GUARD(state, ...) \
@@ -121,4 +204,10 @@ struct SyncTaskExecutor {
 
 #define TRACKER_WITH_SPILLER_GUARD(state, spiller) RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this())
 
+<<<<<<< HEAD
+=======
+#define TRACKER_WITH_SPILLER_READER_GUARD(state, spiller) \
+    RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this(), std::weak_ptr((spiller)->reader()))
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::spill

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # covar_samp
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回两个随机变量的样本协方差。该函数从 2.5.10 版本开始支持，也可用作窗口函数。
 

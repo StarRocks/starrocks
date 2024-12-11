@@ -17,7 +17,14 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.proto.PPlanFragmentCancelReason;
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.thrift.TUniqueId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -30,16 +37,29 @@ import java.util.concurrent.TimeUnit;
 public class CoordinatorMonitorTest {
 
     @Test
+<<<<<<< HEAD
     public void testDeadBackendAndComputeNodeChecker(@Mocked Coordinator coord1,
                                                      @Mocked Coordinator coord2,
                                                      @Mocked Coordinator coord3) throws InterruptedException {
+=======
+    public void testDeadBackendAndComputeNodeChecker(@Mocked DefaultCoordinator coord1,
+                                                     @Mocked DefaultCoordinator coord2,
+                                                     @Mocked DefaultCoordinator coord3) throws InterruptedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         int prevHeartbeatTimeout = Config.heartbeat_timeout_second;
         Config.heartbeat_timeout_second = 1;
 
         try {
+<<<<<<< HEAD
             List<Coordinator> coordinators = ImmutableList.of(coord1, coord2, coord3);
 
             final QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
+=======
+            List<DefaultCoordinator> coordinators = ImmutableList.of(coord1, coord2, coord3);
+
+            final QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
+            Pair<PPlanFragmentCancelReason, String> coord1Cancel = new Pair<>(null, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             CountDownLatch cancelInvocationLatch = new CountDownLatch(2);
             new Expectations(qeProcessor, coord1, coord2, coord3) {
@@ -49,6 +69,27 @@ public class CoordinatorMonitorTest {
                 }
 
                 {
+<<<<<<< HEAD
+=======
+                    coord1.getQueryId();
+                    result = new TUniqueId(0xaabbccddL, 0xaabbccddL);
+                    minTimes = 0;
+                }
+
+                {
+                    coord2.getQueryId();
+                    result = new TUniqueId(0xddccbbaaL, 0xddccbbaaL);
+                    minTimes = 0;
+                }
+
+                {
+                    coord3.getQueryId();
+                    result = new TUniqueId(0xccbbddaaL, 0xccddbbaaL);
+                    minTimes = 0;
+                }
+
+                {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     coord1.isUsingBackend(anyLong);
                     result = new mockit.Delegate<Boolean>() {
                         boolean isUsingBackend(Long backendID) {
@@ -80,6 +121,11 @@ public class CoordinatorMonitorTest {
                     result = new mockit.Delegate<Boolean>() {
                         void cancel(PPlanFragmentCancelReason cancelReason, String cancelledMessage) {
                             cancelInvocationLatch.countDown();
+<<<<<<< HEAD
+=======
+                            coord1Cancel.first = cancelReason;
+                            coord1Cancel.second = cancelledMessage;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         }
                     };
                     times = 1;
@@ -111,6 +157,12 @@ public class CoordinatorMonitorTest {
 
             // Wait until invoking coord1.cancel and coord3.cancel once or timeout.
             Assert.assertTrue(cancelInvocationLatch.await(5, TimeUnit.SECONDS));
+<<<<<<< HEAD
+=======
+
+            Assert.assertEquals(PPlanFragmentCancelReason.INTERNAL_ERROR, coord1Cancel.first);
+            Assert.assertEquals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR, coord1Cancel.second);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             Config.heartbeat_timeout_second = prevHeartbeatTimeout;
         }

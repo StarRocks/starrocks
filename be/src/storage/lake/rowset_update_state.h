@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+<<<<<<< HEAD
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -26,15 +27,48 @@ namespace starrocks {
 namespace lake {
 
 class MetaFileBuilder;
+=======
+#include "gutil/macros.h"
+#include "storage/lake/rowset.h"
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_metadata.h"
+#include "storage/tablet_schema.h"
+
+namespace starrocks::lake {
+
+class RssidFileInfoContainer;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     std::vector<std::unique_ptr<Column>> write_columns;
+<<<<<<< HEAD
+=======
+    void reset() {
+        src_rss_rowids.clear();
+        write_columns.clear();
+    }
+    size_t memory_usage() const {
+        size_t memory_usage = 0;
+        for (const auto& col : write_columns) {
+            if (col != nullptr) {
+                memory_usage += col->memory_usage();
+            }
+        }
+        return memory_usage;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
+<<<<<<< HEAD
     std::unique_ptr<Column> write_column;
+=======
+    // Container used to store the values of auto increment columns
+    std::unique_ptr<Column> write_column;
+    // Schema of modified columns
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::shared_ptr<TabletSchema> schema;
     // auto increment column id in partial segment file
     // but not in full tablet schema
@@ -45,11 +79,34 @@ struct AutoIncrementPartialUpdateState {
 
     AutoIncrementPartialUpdateState() : schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
 
+<<<<<<< HEAD
     void init(std::shared_ptr<TabletSchema>& schema, uint32_t id, uint32_t segment_id) {
         this->schema = schema;
         this->id = id;
         this->segment_id = segment_id;
     }
+=======
+    void init(std::shared_ptr<TabletSchema> modified_schema, uint32_t id, uint32_t segment_id) {
+        this->schema = std::move(modified_schema);
+        this->id = id;
+        this->segment_id = segment_id;
+    }
+    void reset() {
+        src_rss_rowids.clear();
+        write_column.reset();
+        schema.reset();
+        rowids.clear();
+    }
+    size_t memory_usage() const { return write_column ? write_column->memory_usage() : 0; }
+};
+
+struct RowsetUpdateStateParams {
+    const TxnLogPB_OpWrite& op_write;
+    const TabletSchemaPtr& tablet_schema;
+    const TabletMetadataPtr& metadata;
+    const Tablet* tablet;
+    const RssidFileInfoContainer& container;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class RowsetUpdateState {
@@ -59,6 +116,7 @@ public:
     RowsetUpdateState();
     ~RowsetUpdateState();
 
+<<<<<<< HEAD
     Status load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version, Tablet* tablet,
                 const MetaFileBuilder* builder, bool need_check_conflict, bool need_lock);
 
@@ -67,22 +125,72 @@ public:
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
+=======
+    DISALLOW_COPY_AND_MOVE(RowsetUpdateState);
+
+    // How to use `RowsetUpdateState` when publish:
+    //
+    // init()
+    //
+    // for each segment:
+    //      load_segment()
+    //      rewrite_segment()
+    //      ...
+    //      release_segment()
+    //
+    // for each del file:
+    //      load_delete()
+    //      ...
+    //      release_delete()
+
+    // init params in RowsetUpdateState.
+    void init(const RowsetUpdateStateParams& params);
+
+    // Load `segment_id`-th segment file's state.
+    Status load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
+                        bool need_resolve_conflict, bool need_lock);
+
+    // Handle `segment_id`-th segment file's partial update request.
+    Status rewrite_segment(uint32_t segment_id, const RowsetUpdateStateParams& params,
+                           std::map<int, FileInfo>* replace_segments, std::vector<std::string>* orphan_files);
+
+    // Release `segment_id`-th segment file's state.
+    void release_segment(uint32_t segment_id);
+
+    // Load `del_id`-th delete file's state.
+    Status load_delete(uint32_t del_id, const RowsetUpdateStateParams& params);
+
+    // Release `del_id`-th delete file's state.
+    void release_delete(uint32_t del_id);
+
+    const ColumnUniquePtr& upserts(uint32_t segment_id) const { return _upserts[segment_id]; }
+    const ColumnUniquePtr& deletes(uint32_t segment_id) const { return _deletes[segment_id]; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::size_t memory_usage() const { return _memory_usage; }
 
     std::string to_string() const;
 
+<<<<<<< HEAD
     const std::vector<PartialUpdateState>& parital_update_states() { return _partial_update_states; }
+=======
+    const PartialUpdateState& parital_update_states(uint32_t segment_id) { return _partial_update_states[segment_id]; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     static void plan_read_by_rssid(const std::vector<uint64_t>& rowids, size_t* num_default,
                                    std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid,
                                    std::vector<uint32_t>* idxes);
 
+<<<<<<< HEAD
     const std::vector<std::unique_ptr<Column>>& auto_increment_deletes() const;
+=======
+    const ColumnUniquePtr& auto_increment_deletes(uint32_t segment_id) const;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     static StatusOr<bool> file_exist(const std::string& full_path);
 
 private:
+<<<<<<< HEAD
     Status _do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet, bool need_lock);
 
     Status _do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema, Tablet* tablet,
@@ -109,18 +217,49 @@ private:
 
     std::once_flag _load_once_flag;
     Status _status;
+=======
+    // Load segment state
+    Status _do_load_upserts(uint32_t segment_id, const RowsetUpdateStateParams& params);
+
+    Status _prepare_partial_update_states(uint32_t segment_id, const RowsetUpdateStateParams& params, bool need_lock);
+
+    Status _prepare_auto_increment_partial_update_states(uint32_t segment_id, const RowsetUpdateStateParams& params,
+                                                         bool need_lock);
+
+    // resolve conflict when publish transaction
+    Status _resolve_conflict(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version);
+
+    Status _resolve_conflict_partial_update(const RowsetUpdateStateParams& params,
+                                            const std::vector<uint64_t>& new_rss_rowids,
+                                            std::vector<uint32_t>& read_column_ids, uint32_t segment_id,
+                                            size_t& total_conflicts);
+
+    Status _resolve_conflict_auto_increment(const RowsetUpdateStateParams& params,
+                                            const std::vector<uint64_t>& new_rss_rowids, uint32_t segment_id,
+                                            size_t& total_conflicts);
+
+    void _reset();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // one for each segment file
     std::vector<ColumnUniquePtr> _upserts;
     // one for each delete file
     std::vector<ColumnUniquePtr> _deletes;
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
+<<<<<<< HEAD
+=======
+    // Because we can load partial segments when preload, so need vector to track their version.
+    std::vector<int64_t> _base_versions;
+    int64_t _schema_version = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // TODO: dump to disk if memory usage is too large
     std::vector<PartialUpdateState> _partial_update_states;
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
 
+<<<<<<< HEAD
     std::vector<std::unique_ptr<Column>> _auto_increment_delete_pks;
 
     int64_t _base_version;
@@ -128,6 +267,18 @@ private:
 
     RowsetUpdateState(const RowsetUpdateState&) = delete;
     const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
+=======
+    std::vector<ColumnUniquePtr> _auto_increment_delete_pks;
+
+    // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
+    RowsetMetadataUniquePtr _rowset_meta_ptr;
+    std::unique_ptr<Rowset> _rowset_ptr;
+
+    // to be destructed after segment iters
+    OlapReaderStatistics _stats;
+    std::vector<ChunkIteratorPtr> _segment_iters;
+    std::map<string, string> _column_to_expr_value;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {
@@ -135,6 +286,10 @@ inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {
     return os;
 }
 
+<<<<<<< HEAD
 } // namespace lake
 
 } // namespace starrocks
+=======
+} // namespace starrocks::lake
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

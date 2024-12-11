@@ -18,7 +18,11 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.credential.CloudConfiguration;
+<<<<<<< HEAD
 import com.starrocks.credential.aws.AWSCloudConfiguration;
+=======
+import com.starrocks.credential.aws.AwsCloudConfiguration;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
@@ -36,10 +40,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+<<<<<<< HEAD
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+=======
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class SharedNothingStorageVolumeMgrTest {
     @Mocked
@@ -82,9 +93,15 @@ public class SharedNothingStorageVolumeMgrTest {
         StorageVolume sv = svm.getStorageVolumeByName(svName);
         Assert.assertEquals(sv.getId(), svm.getStorageVolume(storageVolumeId).getId());
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
+<<<<<<< HEAD
         Assert.assertEquals("region", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
                 .getRegion());
         Assert.assertEquals("endpoint", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+=======
+        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+                .getRegion());
+        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .getEndpoint());
         try {
             svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
@@ -110,9 +127,15 @@ public class SharedNothingStorageVolumeMgrTest {
         svm.updateStorageVolume(svName, storageParams, Optional.of(true), "test update");
         sv = svm.getStorageVolumeByName(svName);
         cloudConfiguration = sv.getCloudConfiguration();
+<<<<<<< HEAD
         Assert.assertEquals("region1", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
                 .getRegion());
         Assert.assertEquals("endpoint1", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+=======
+        Assert.assertEquals("region1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+                .getRegion());
+        Assert.assertEquals("endpoint1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .getEndpoint());
         Assert.assertEquals("test update", sv.getComment());
         Assert.assertEquals(true, sv.getEnabled());

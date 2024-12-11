@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_intersect
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 输入一组 bitmap 值，求这一组 bitmap 值的交集，并返回。
 

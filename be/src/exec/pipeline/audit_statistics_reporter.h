@@ -29,7 +29,11 @@ public:
     static Status report_audit_statistics(const TReportAuditStatisticsParams& params, ExecEnv* exec_env,
                                           const TNetworkAddress& fe_addr);
 
+<<<<<<< HEAD
     [[nodiscard]] Status submit(std::function<void()>&& report_task);
+=======
+    Status submit(std::function<void()>&& report_task);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     std::unique_ptr<ThreadPool> _thread_pool;

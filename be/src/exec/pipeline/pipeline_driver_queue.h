@@ -177,6 +177,7 @@ private:
     /// These methods should be guarded by the outside _global_mutex.
     template <bool from_executor>
     void _put_back(const DriverRawPtr driver);
+<<<<<<< HEAD
     workgroup::WorkGroupDriverSchedEntity* _take_next_wg();
     // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
     void _update_min_wg();
@@ -185,17 +186,28 @@ private:
     // _update_bandwidth_control_period resets period_end_ns and period_usage_ns, when a new period comes.
     // It is invoked when taking a task to execute or an executed task is finished.
     void _update_bandwidth_control_period();
+=======
+    workgroup::WorkGroupDriverSchedEntity* _pick_next_wg() const;
+    // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
+    void _update_min_wg();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     template <bool from_executor>
     void _enqueue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity);
     void _dequeue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity);
 
+<<<<<<< HEAD
     int64_t _bandwidth_quota_ns() const;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // The ideal runtime of a work group is the weighted average of the schedule period.
     int64_t _ideal_runtime_ns(workgroup::WorkGroupDriverSchedEntity* wg_entity) const;
 
 private:
     static constexpr int64_t SCHEDULE_PERIOD_PER_WG_NS = 100'000'000;
+<<<<<<< HEAD
     static constexpr int64_t BANDWIDTH_CONTROL_PERIOD_NS = 100'000'000;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     struct WorkGroupDriverSchedEntityComparator {
         using WorkGroupDriverSchedEntityPtr = workgroup::WorkGroupDriverSchedEntity*;
@@ -206,6 +218,10 @@ private:
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
+<<<<<<< HEAD
+=======
+    std::condition_variable _cv_for_borrowed_cpus;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool _is_closed = false;
 
     // Contains the workgroups which include the drivers ready to be run.
@@ -213,12 +229,17 @@ private:
     // MUST guarantee the entity is not in set, when updating its vruntime.
     WorkgroupSet _wg_entities;
 
+<<<<<<< HEAD
     size_t _sum_cpu_limit = 0;
+=======
+    size_t _sum_cpu_weight = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     size_t _num_drivers = 0;
 
     // Cache the minimum entity, used to check should_yield() without lock.
     std::atomic<workgroup::WorkGroupDriverSchedEntity*> _min_wg_entity = nullptr;
+<<<<<<< HEAD
 
     // Hard bandwidth control to non-short-query workgroups.
     // - The control period is 100ms, and the total quota of non-short-query workgroups is 100ms*(vCPUs-rt_wg.cpu_limit).
@@ -232,6 +253,8 @@ private:
     // - Otherwise, don't apply the control.
     int64_t _bandwidth_control_period_end_ns = 0;
     std::atomic<int64_t> _bandwidth_usage_ns = 0;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks::pipeline

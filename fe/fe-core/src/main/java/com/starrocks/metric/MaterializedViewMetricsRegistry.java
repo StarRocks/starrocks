@@ -16,7 +16,10 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+<<<<<<< HEAD
 import com.google.common.annotations.VisibleForTesting;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
@@ -66,11 +69,14 @@ public class MaterializedViewMetricsRegistry {
         }
     }
 
+<<<<<<< HEAD
     @VisibleForTesting
     public void clear() {
         idToMVMetrics.clear();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static void doCollectMetrics(MvId mvId, MaterializedViewMetricsEntity entity,
                                        MetricVisitor visitor, boolean minifyMetrics) {
         if (!entity.initDbAndTableName()) {

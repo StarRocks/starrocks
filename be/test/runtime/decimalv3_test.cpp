@@ -20,7 +20,11 @@
 #include <tuple>
 #include <vector>
 
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
+=======
+#include "types/large_int_value.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/logging.h"
 namespace starrocks {
 

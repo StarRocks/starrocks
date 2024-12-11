@@ -16,6 +16,10 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableMap;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -37,21 +41,37 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
+=======
+    public boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return true;
     }
 
     @Override
+<<<<<<< HEAD
     public void updateGlobalDict(long tableId, String columnName,  long collectedVersion, long versionTime) {
     }
 
     @Override
     public boolean hasGlobalDict(long tableId, String columnName) {
+=======
+    public void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion, long versionTime) {
+    }
+
+    @Override
+    public boolean hasGlobalDict(long tableId, ColumnId columnName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return true;
     }
 
     @Override
+<<<<<<< HEAD
     public void removeGlobalDict(long tableId, String columnName) {
+=======
+    public void removeGlobalDict(long tableId, ColumnId columnName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -64,7 +84,11 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
+<<<<<<< HEAD
     public Optional<ColumnDict> getGlobalDict(long tableId, String columnName) {
+=======
+    public Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Optional.of(COLUMN_DICT);
     }
 }

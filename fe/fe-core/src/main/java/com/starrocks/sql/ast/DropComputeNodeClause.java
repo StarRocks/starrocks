@@ -19,6 +19,7 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 
 public class DropComputeNodeClause extends ComputeNodeClause {
+<<<<<<< HEAD
 
     public DropComputeNodeClause(List<String> hostPorts) {
         this(hostPorts, NodePosition.ZERO);
@@ -26,5 +27,25 @@ public class DropComputeNodeClause extends ComputeNodeClause {
 
     public DropComputeNodeClause(List<String> hostPorts, NodePosition pos) {
         super(hostPorts, pos);
+=======
+    public String warehouse;
+
+    public DropComputeNodeClause(List<String> hostPorts, String warehouse) {
+        this(hostPorts, warehouse, NodePosition.ZERO);
+    }
+
+    public DropComputeNodeClause(List<String> hostPorts, String warehouse, NodePosition pos) {
+        super(hostPorts, pos);
+        this.warehouse = warehouse;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropComputeNodeClause(this, context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

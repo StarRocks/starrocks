@@ -5,7 +5,11 @@ displayed_sidebar: docs
 
 # sum
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回指定列所有值的总和。该函数会忽略 NULL 值，可以与 DISTINCT 运算符搭配使用。
 

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
@@ -32,6 +33,38 @@ public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
     }
 
     @AfterClass
+=======
+import com.google.common.collect.Lists;
+import com.starrocks.common.DdlException;
+import com.starrocks.planner.TpchSQL;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.io.File;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
+    @TempDir
+    public static File temp;
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        ConnectorPlanTestBase.doInit(temp.toURI().toString());
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+        connectContext.changeCatalogDb("hive0.tpch");
+        connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+    }
+
+    @AfterAll
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static void afterClass() {
         try {
             UtFrameUtils.dropMockBackend(10002);
@@ -41,6 +74,7 @@ public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
         }
     }
 
+<<<<<<< HEAD
     @Test
     public void testTPCH1() {
         runFileUnitTest("external/hive/tpch/q1");
@@ -152,5 +186,19 @@ public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
     @Test
     public void testTPCH22() {
         runFileUnitTest("external/hive/tpch/q22");
+=======
+    @ParameterizedTest(name = "Tpch.{0}")
+    @MethodSource("tpchSource")
+    public void testTPCH(String name, String sql, String resultFile) {
+        runFileUnitTest(sql, resultFile);
+    }
+
+    private static Stream<Arguments> tpchSource() {
+        List<Arguments> cases = Lists.newArrayList();
+        for (Map.Entry<String, String> entry : TpchSQL.getAllSQL().entrySet()) {
+            cases.add(Arguments.of(entry.getKey(), entry.getValue(), "external/hive/tpch/" + entry.getKey()));
+        }
+        return cases.stream();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

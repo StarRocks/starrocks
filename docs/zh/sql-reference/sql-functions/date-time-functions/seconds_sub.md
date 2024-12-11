@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # seconds_sub
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 给指定的日期时间或日期减去指定的秒数。
 

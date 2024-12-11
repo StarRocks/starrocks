@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dayofmonth
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Obtains the day part in a date and returns a value that ranges from 1 to 31.
 

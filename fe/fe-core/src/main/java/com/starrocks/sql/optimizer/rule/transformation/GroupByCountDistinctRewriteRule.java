@@ -19,8 +19,16 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+<<<<<<< HEAD
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+=======
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.OlapTable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -49,11 +57,23 @@ import java.util.stream.Collectors;
  *
  * Rewrite count(distinct xx) group by x when distinct columns satisfy scan distribution
  *
+<<<<<<< HEAD
+=======
+ * 1. If xx is not primary key:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
  * e.g.
  * select count(distinct xx) from t group by x
  * ->
  * select count(xx) from (select x, xx from t group by x, xx) tt group by x;
  *
+<<<<<<< HEAD
+=======
+ * 2. If xx is primary key:
+ * e.g.
+ * select count(distinct xx) from t group by x
+ * ->
+ * select count(xx) from t group by x;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
  */
 public class GroupByCountDistinctRewriteRule extends TransformationRule {
     // multi-stage distinct function mapping
@@ -171,6 +191,24 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
 
         List<ColumnRefOperator> firstGroupBy = Lists.newArrayList(aggregate.getGroupingKeys());
         Preconditions.checkState(distinctColumn.isPresent());
+<<<<<<< HEAD
+=======
+
+        LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getInputs().get(0).getOp();
+        if (isPrimaryKey(distinctColumn.get(), scan)) {
+            Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
+            distinctMap.forEach((k, v) -> {
+                CallOperator newAgg = transformDistinctAgg(v);
+                newAggregations.put(k, newAgg);
+            });
+            LogicalAggregationOperator newAggregateOp = new LogicalAggregationOperator.Builder()
+                    .withOperator(aggregate)
+                    .setAggregations(newAggregations)
+                    .build();
+            return Lists.newArrayList(OptExpression.create(newAggregateOp, input.getInputs()));
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         firstGroupBy.add(distinctColumn.get());
 
         Map<ColumnRefOperator, CallOperator> firstAggregations = Maps.newHashMap();
@@ -243,4 +281,20 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
                 FunctionSet.MULTI_DISTINCT_COUNT.equals(call.getFunction().functionName()) ||
                 FunctionSet.ARRAY_AGG_DISTINCT.equals(call.getFunction().functionName());
     }
+<<<<<<< HEAD
+=======
+
+    private boolean isPrimaryKey(ColumnRefOperator column, LogicalOlapScanOperator scan) {
+        OlapTable olapTable = (OlapTable) scan.getTable();
+        if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+            List<Column> keyColumnNames = olapTable.getKeyColumns();
+            // The check() ensures there is only one DISTINCT column, so composite pk is not supported here
+            if (keyColumnNames.size() != 1) {
+                return false;
+            }
+            return keyColumnNames.get(0).getName().equals(column.getName());
+        }
+        return false;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

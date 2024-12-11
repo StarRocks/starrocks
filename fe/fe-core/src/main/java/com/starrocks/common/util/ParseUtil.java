@@ -47,17 +47,38 @@ public class ParseUtil {
 
     private static Pattern dataVolumnPattern = Pattern.compile("(\\d+)(\\D*)");
 
+<<<<<<< HEAD
     public static long analyzeDataVolumn(String dataVolumnStr) throws AnalysisException {
         long dataVolumn = 0;
         Matcher m = dataVolumnPattern.matcher(dataVolumnStr);
+=======
+    public static long parseDataVolumeStr(String dataVolumeStr) {
+        try {
+            return analyzeDataVolume(dataVolumeStr);
+        } catch (AnalysisException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static long analyzeDataVolume(String dataVolumeStr) throws AnalysisException {
+        long dataVolumn = 0;
+        Matcher m = dataVolumnPattern.matcher(dataVolumeStr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (m.matches()) {
             try {
                 dataVolumn = Long.parseLong(m.group(1));
             } catch (NumberFormatException nfe) {
+<<<<<<< HEAD
                 throw new AnalysisException("invalid data volumn:" + m.group(1));
             }
             if (dataVolumn <= 0L) {
                 throw new AnalysisException("Data volumn must larger than 0");
+=======
+                throw new AnalysisException("invalid data volume:" + m.group(1));
+            }
+            if (dataVolumn <= 0L) {
+                throw new AnalysisException("Data volume must larger than 0");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
 
             String unit = "B";
@@ -71,7 +92,11 @@ public class ParseUtil {
                 throw new AnalysisException("invalid unit:" + tmpUnit);
             }
         } else {
+<<<<<<< HEAD
             throw new AnalysisException("invalid data volumn expression:" + dataVolumnStr);
+=======
+            throw new AnalysisException("invalid data volume expression:" + dataVolumeStr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return dataVolumn;
     }
@@ -89,6 +114,17 @@ public class ParseUtil {
         return replicaNumber;
     }
 
+<<<<<<< HEAD
+=======
+    public static long analyzeLongValue(String value) throws AnalysisException {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            throw new AnalysisException("invalid number: " + value);
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static boolean parseBooleanValue(String value, String name) {
         if (value.equalsIgnoreCase("ON")
                 || value.equalsIgnoreCase("TRUE")
@@ -137,5 +173,8 @@ public class ParseUtil {
         }
         return "`" + str + "`";
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

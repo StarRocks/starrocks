@@ -12,12 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -25,15 +29,26 @@ import com.google.common.collect.Sets;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+=======
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+<<<<<<< HEAD
+=======
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -45,23 +60,33 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+<<<<<<< HEAD
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
+=======
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
+<<<<<<< HEAD
 import org.apache.thrift.protocol.TBinaryProtocol;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -69,6 +94,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+=======
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
@@ -76,6 +107,7 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
+<<<<<<< HEAD
     private static final String JSON_KEY_ICEBERG_DB = "database";
     private static final String JSON_KEY_ICEBERG_TABLE = "table";
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
@@ -87,6 +119,18 @@ public class IcebergTable extends Table {
     private String remoteDbName;
     @SerializedName(value = "tn")
     private String remoteTableName;
+=======
+    private static final String PARQUET_FORMAT = "parquet";
+    public static final String DATA_SEQUENCE_NUMBER = "$data_sequence_number";
+    public static final String SPEC_ID = "$spec_id";
+    public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
+
+    private String catalogName;
+    @SerializedName(value = "dn")
+    protected String catalogDBName;
+    @SerializedName(value = "tn")
+    protected String catalogTableName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "rn")
     private String resourceName;
     @SerializedName(value = "prop")
@@ -95,6 +139,7 @@ public class IcebergTable extends Table {
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private List<Column> partitionColumns;
 
+<<<<<<< HEAD
     private Optional<Snapshot> snapshot = Optional.empty();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
@@ -106,10 +151,15 @@ public class IcebergTable extends Table {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private Set<Integer> identifierFieldIds = Sets.newHashSet();
 
+=======
+    private final AtomicLong partitionIdGen = new AtomicLong(0L);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public IcebergTable() {
         super(TableType.ICEBERG);
     }
 
+<<<<<<< HEAD
     public IcebergTable(long id, String srTableName, String catalogName, String resourceName, String remoteDbName,
                         String remoteTableName, List<Column> schema, org.apache.iceberg.Table nativeTable,
                         Map<String, String> icebergProperties) {
@@ -122,6 +172,19 @@ public class IcebergTable extends Table {
         this.icebergProperties = icebergProperties;
         Optional<Snapshot> snapshot = getSnapshot();
         this.cachedSnapshotId = snapshot.map(Snapshot::snapshotId).orElse(-1L);
+=======
+    public IcebergTable(long id, String srTableName, String catalogName, String resourceName, String catalogDBName,
+                        String catalogTableName, String comment, List<Column> schema,
+                        org.apache.iceberg.Table nativeTable, Map<String, String> icebergProperties) {
+        super(id, srTableName, TableType.ICEBERG, schema);
+        this.catalogName = catalogName;
+        this.resourceName = resourceName;
+        this.catalogDBName = catalogDBName;
+        this.catalogTableName = catalogTableName;
+        this.comment = comment;
+        this.nativeTable = nativeTable;
+        this.icebergProperties = icebergProperties;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -129,10 +192,15 @@ public class IcebergTable extends Table {
         return catalogName == null ? getResourceMappingCatalogName(resourceName, "iceberg") : catalogName;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getResourceName() {
         return resourceName;
     }
 
+<<<<<<< HEAD
     public String getRemoteDbName() {
         return remoteDbName;
     }
@@ -170,13 +238,27 @@ public class IcebergTable extends Table {
         } finally {
             writeUnlock();
         }
+=======
+    @Override
+    public String getCatalogDBName() {
+        return catalogDBName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+        return catalogTableName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
             String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
+<<<<<<< HEAD
             return String.join(".", catalogName, remoteDbName, remoteTableName,
+=======
+            return String.join(".", catalogName, catalogDBName, catalogTableName,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     uuid == null ? "" : uuid);
         } else {
             return Long.toString(id);
@@ -186,6 +268,7 @@ public class IcebergTable extends Table {
     @Override
     public List<Column> getPartitionColumns() {
         if (partitionColumns == null) {
+<<<<<<< HEAD
             List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
                     filter(partitionField -> partitionField.transform().isIdentity()).collect(Collectors.toList());
             partitionColumns = identityPartitionFields.stream().map(partitionField -> getColumn(partitionField.name()))
@@ -195,6 +278,51 @@ public class IcebergTable extends Table {
         return partitionColumns;
     }
 
+=======
+            List<PartitionField> partitionFields = this.getNativeTable().spec().fields();
+            Schema schema = this.getNativeTable().schema();
+            partitionColumns = partitionFields.stream().map(partitionField ->
+                    getColumn(getPartitionSourceName(schema, partitionField))).collect(Collectors.toList());
+        }
+        return partitionColumns;
+    }
+
+    public List<Column> getPartitionColumnsIncludeTransformed() {
+        List<Column> allPartitionColumns = new ArrayList<>();
+        for (PartitionField field : getNativeTable().spec().fields()) {
+            if (!field.transform().isIdentity() && hasPartitionTransformedEvolution()) {
+                continue;
+            }
+            String baseColumnName = nativeTable.schema().findColumnName(field.sourceId());
+            Column partitionCol = getColumn(baseColumnName);
+            allPartitionColumns.add(partitionCol);
+        }
+        return allPartitionColumns;
+    }
+
+    public boolean isAllPartitionColumnsAlwaysIdentity() {
+        // now we are sure we have never applied transformation,
+        // we check if all partition columns are identity.
+        for (PartitionField field : getNativeTable().spec().fields()) {
+            if (!field.transform().isIdentity()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public PartitionField getPartitionField(String partitionColumnName) {
+        List<PartitionField> allPartitionFields = getNativeTable().spec().fields();
+        Schema schema = this.getNativeTable().schema();
+        for (PartitionField field : allPartitionFields) {
+            if (getPartitionSourceName(schema, field).equalsIgnoreCase(partitionColumnName)) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public long nextPartitionId() {
         return partitionIdGen.getAndIncrement();
     }
@@ -222,9 +350,64 @@ public class IcebergTable extends Table {
         return indexes;
     }
 
+<<<<<<< HEAD
     @Override
     public boolean isUnPartitioned() {
         return getPartitionColumns().size() == 0;
+=======
+    // TODO(stephen): we should refactor this part to be compatible with cases of different transform result types
+    //  in the same partition column.
+    // day(dt) -> identity dt
+    public boolean hasPartitionTransformedEvolution() {
+        return (!isV2Format() && getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid())) ||
+                (isV2Format() && getNativeTable().spec().specId() > 0);
+    }
+
+    public boolean isV2Format() {
+        return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
+    }
+
+    /**
+     * <p>
+     *     In the Iceberg Partition Evolution scenario, 'org.apache.iceberg.PartitionField#name' only represents the
+     *     name of a partition in the Iceberg table's Partition Spec. This name is used when trying to obtain the
+     *     names of Partition Spec partitions. e.g.
+     * </p>
+     * <p>
+     *     {
+     *   "source-id": 4,
+     *   "field-id": 1000,
+     *   "name": "ts_day",
+     *   "transform": "day"
+     *   }
+     * </p>
+     * <p>
+     *     column id is '4', column name is 'ts', but 'PartitionField#name' is 'ts_day', 'PartitionField#fieldId'
+     *     is '1000', 'PartitionField#name' default is 'columnName_transformName', and we can customize this name.
+     *     So even for an Identity Transform, this name doesn't necessarily have to match the schema column name,
+     *     because we can customize this name. But in general, nobody customize an Identity Transform Partition name.
+     * </p>
+     * <p>
+     *     To obtain the table columns for Iceberg tables, we use 'org.apache.iceberg.Schema#findColumnName'.
+     * </p>
+     *<br>
+     * refs:<br>
+     * - https://iceberg.apache.org/spec/#partition-evolution<br>
+     * - https://iceberg.apache.org/spec/#partition-specs<br>
+     * - https://iceberg.apache.org/spec/#partition-transforms
+     */
+    public String getPartitionSourceName(Schema schema, PartitionField partition) {
+        return schema.findColumnName(partition.sourceId());
+    }
+
+    @Override
+    public boolean isUnPartitioned() {
+        return ((BaseTable) getNativeTable()).operations().current().spec().isUnpartitioned();
+    }
+
+    public boolean isPartitioned() {
+        return !isUnPartitioned();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public List<String> getPartitionColumnNames() {
@@ -232,6 +415,14 @@ public class IcebergTable extends Table {
                 .collect(Collectors.toList());
     }
 
+<<<<<<< HEAD
+=======
+    public List<String> getPartitionColumnNamesWithTransform() {
+        PartitionSpec partitionSpec = getNativeTable().spec();
+        return IcebergApiConverter.toPartitionFields(partitionSpec);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public String getTableIdentifier() {
         String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
@@ -246,20 +437,39 @@ public class IcebergTable extends Table {
         return getNativeTable().location();
     }
 
+<<<<<<< HEAD
+=======
+    public PartitionField getPartitionFiled(String colName) {
+        org.apache.iceberg.Table nativeTable = getNativeTable();
+        return nativeTable.spec().fields().stream()
+                .filter(field -> nativeTable.schema().findColumnName(field.sourceId()).equalsIgnoreCase(colName))
+                .findFirst()
+                .orElse(null);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public org.apache.iceberg.Table getNativeTable() {
         // For compatibility with the resource iceberg table. native table is lazy. Prevent failure during fe restarting.
         if (nativeTable == null) {
             IcebergTable resourceMappingTable = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
+<<<<<<< HEAD
                     .getTable(getCatalogName(), remoteDbName, remoteTableName);
             if (resourceMappingTable == null) {
                 throw new StarRocksConnectorException("Can't find table %s.%s.%s",
                         getCatalogName(), remoteDbName, remoteTableName);
+=======
+                    .getTable(getCatalogName(), catalogDBName, catalogTableName);
+            if (resourceMappingTable == null) {
+                throw new StarRocksConnectorException("Can't find table %s.%s.%s",
+                        getCatalogName(), catalogDBName, catalogTableName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             nativeTable = resourceMappingTable.getNativeTable();
         }
         return nativeTable;
     }
 
+<<<<<<< HEAD
     public long getRefreshSnapshotTime() {
         return refreshSnapshotTime;
     }
@@ -272,6 +482,8 @@ public class IcebergTable extends Table {
         this.identifierFieldIds = identifierFieldIds;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
@@ -288,6 +500,7 @@ public class IcebergTable extends Table {
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
 
+<<<<<<< HEAD
         Set<Integer> identifierIds = nativeTable.schema().identifierFieldIds();
         if (identifierIds.isEmpty()) {
             identifierIds = this.identifierFieldIds;
@@ -300,6 +513,8 @@ public class IcebergTable extends Table {
                             .collect(Collectors.toList()))));
         }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!partitions.isEmpty()) {
             TPartitionMap tPartitionMap = new TPartitionMap();
             for (int i = 0; i < partitions.size(); i++) {
@@ -315,7 +530,11 @@ public class IcebergTable extends Table {
             // partition info may be very big, and it is the same in plan fragment send to every be.
             // extract and serialize it as a string, will get better performance(about 3x in test).
             try {
+<<<<<<< HEAD
                 TSerializer serializer = new TSerializer(TBinaryProtocol::new);
+=======
+                TSerializer serializer = ConfigurableSerDesFactory.getTSerializer();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 byte[] bytes = serializer.serialize(tPartitionMap);
                 byte[] compressedBytes = Util.compress(bytes);
                 TCompressedPartitionMap tCompressedPartitionMap = new TCompressedPartitionMap();
@@ -329,12 +548,17 @@ public class IcebergTable extends Table {
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.ICEBERG_TABLE,
+<<<<<<< HEAD
                 fullSchema.size(), 0, remoteTableName, remoteDbName);
+=======
+                fullSchema.size(), 0, catalogTableName, catalogDBName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         tTableDescriptor.setIcebergTable(tIcebergTable);
         return tTableDescriptor;
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         super.write(out);
 
@@ -372,6 +596,8 @@ public class IcebergTable extends Table {
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isSupported() {
         return true;
     }
@@ -384,8 +610,23 @@ public class IcebergTable extends Table {
     }
 
     @Override
+<<<<<<< HEAD
     public int hashCode() {
         return com.google.common.base.Objects.hashCode(getCatalogName(), remoteDbName, getTableIdentifier());
+=======
+    public boolean supportPreCollectMetadata() {
+        return true;
+    }
+
+    @Override
+    public boolean isTemporal() {
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        return com.google.common.base.Objects.hashCode(getCatalogName(), catalogDBName, getTableIdentifier());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -398,9 +639,14 @@ public class IcebergTable extends Table {
         String catalogName = getCatalogName();
         String tableIdentifier = getTableIdentifier();
         return Objects.equal(catalogName, otherTable.getCatalogName()) &&
+<<<<<<< HEAD
                 Objects.equal(remoteDbName, otherTable.remoteDbName) &&
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
 
+=======
+                Objects.equal(catalogDBName, otherTable.catalogDBName) &&
+                Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static Builder builder() {
@@ -412,12 +658,22 @@ public class IcebergTable extends Table {
         private String srTableName;
         private String catalogName;
         private String resourceName;
+<<<<<<< HEAD
         private String remoteDbName;
         private String remoteTableName;
         private List<Column> fullSchema;
         private Map<String, String> icebergProperties;
         private org.apache.iceberg.Table nativeTable;
         private long snapshotId;
+=======
+        private String catalogDBName;
+        private String catalogTableName;
+
+        private String comment;
+        private List<Column> fullSchema;
+        private Map<String, String> icebergProperties;
+        private org.apache.iceberg.Table nativeTable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         public Builder() {
         }
@@ -437,11 +693,20 @@ public class IcebergTable extends Table {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public Builder setComment(String comment) {
+            this.comment = comment;
+            return this;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Builder setResourceName(String resourceName) {
             this.resourceName = resourceName;
             return this;
         }
 
+<<<<<<< HEAD
         public Builder setRemoteDbName(String remoteDbName) {
             this.remoteDbName = remoteDbName;
             return this;
@@ -449,6 +714,15 @@ public class IcebergTable extends Table {
 
         public Builder setRemoteTableName(String remoteTableName) {
             this.remoteTableName = remoteTableName;
+=======
+        public Builder setCatalogDBName(String catalogDbName) {
+            this.catalogDBName = catalogDbName;
+            return this;
+        }
+
+        public Builder setCatalogTableName(String catalogTableName) {
+            this.catalogTableName = catalogTableName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return this;
         }
 
@@ -467,6 +741,7 @@ public class IcebergTable extends Table {
             return this;
         }
 
+<<<<<<< HEAD
         public Builder setSnapshotId(long snapshotId) {
             this.snapshotId = snapshotId;
             return this;
@@ -493,4 +768,11 @@ public class IcebergTable extends Table {
     private void readUnlock() {
         lock.readLock().unlock();
     }
+=======
+        public IcebergTable build() {
+            return new IcebergTable(id, srTableName, catalogName, resourceName, catalogDBName, catalogTableName,
+                    comment, fullSchema, nativeTable, icebergProperties);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

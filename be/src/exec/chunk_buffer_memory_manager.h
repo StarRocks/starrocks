@@ -35,7 +35,13 @@ public:
             LOG(WARNING) << "invalid per_driver_mem_limit";
         }
         size_t res = max_input_dop * _max_memory_usage_per_driver;
+<<<<<<< HEAD
         _max_memory_usage = (res > _max_memory_usage || res <= 0) ? _max_memory_usage.load() : res;
+=======
+        if (res < _max_memory_usage) {
+            _max_memory_usage = res;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void update_memory_usage(int64_t memory_usage, int64_t num_rows) {
@@ -49,6 +55,18 @@ public:
 
     bool is_full() const { return _memory_usage >= _max_memory_usage || _buffered_num_rows > _max_buffered_rows; }
 
+<<<<<<< HEAD
+=======
+    bool is_half_full() const { return _memory_usage * 2 >= _max_memory_usage; }
+
+    size_t get_max_input_dop() const { return _max_input_dop; }
+
+    void update_max_memory_usage(size_t max_memory_usage) {
+        DCHECK(max_memory_usage > 0);
+        _max_memory_usage = max_memory_usage;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void clear() {
         _memory_usage = 0;
         _buffered_num_rows = 0;

@@ -14,6 +14,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <functional>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
@@ -91,6 +96,12 @@ public:
     // Whether we could pull chunk from this operator
     virtual bool has_output() const = 0;
 
+<<<<<<< HEAD
+=======
+    // return true if operator should ignore eos chunk
+    virtual bool ignore_empty_eos() const { return true; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Whether we could push chunk to this operator
     virtual bool need_input() const = 0;
 
@@ -225,9 +236,20 @@ public:
 
     // Adjusts the execution mode of the operator (will only be called by the OperatorMemoryResourceManager component)
     virtual void set_execute_mode(int performance_level) {}
+<<<<<<< HEAD
     virtual bool spillable() const { return false; }
     // Operator can free memory/buffer early
     virtual bool releaseable() const { return false; }
+=======
+    // @TODO(silverbullet233): for an operator, the way to reclaim memory is either spill
+    // or push the buffer data to the downstream operator.
+    // Maybe we don’t need to have the concepts of spillable and releasable, and we can use reclaimable instead.
+    // Later, we need to refactor here.
+    virtual bool spillable() const { return false; }
+    // Operator can free memory/buffer early
+    virtual bool releaseable() const { return false; }
+    virtual void enter_release_memory_mode() {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     spill::OperatorMemoryResourceManager& mem_resource_manager() { return _mem_resource_manager; }
 
     // the memory that can be freed by the current operator
@@ -257,6 +279,11 @@ public:
     // apply operation for each child operator
     virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
+<<<<<<< HEAD
+=======
+    virtual void update_exec_stats(RuntimeState* state);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -314,7 +341,13 @@ protected:
 private:
     void _init_rf_counters(bool init_bloom);
     void _init_conjuct_counters();
+<<<<<<< HEAD
     std::shared_ptr<MemTracker> _mem_tracker;
+=======
+
+    std::shared_ptr<MemTracker> _mem_tracker;
+    std::vector<ExprContext*> _runtime_in_filters;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class OperatorFactory {
@@ -361,6 +394,11 @@ public:
     RuntimeFilterHub* runtime_filter_hub() { return _runtime_filter_hub; }
 
     std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
+<<<<<<< HEAD
+=======
+    // acquire local colocate runtime filter
+    std::vector<ExprContext*> get_colocate_runtime_in_filters(size_t driver_sequence);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
         if (_runtime_filter_collector == nullptr) {
             return nullptr;
@@ -389,8 +427,18 @@ public:
     // Whether it has any runtime filter built by TopN node.
     bool has_topn_filter() const;
 
+<<<<<<< HEAD
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);
+=======
+    // try to get runtime filter from cache
+    void acquire_runtime_filter(RuntimeState* state);
+
+protected:
+    void _prepare_runtime_in_filters(RuntimeState* state);
+    void _prepare_runtime_holders(const std::vector<RuntimeFilterHolder*>& holders,
+                                  std::vector<ExprContext*>* runtime_in_filters);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     const int32_t _id;
     const std::string _name;

@@ -5,7 +5,11 @@ displayed_sidebar: docs
 
 # count
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算总行数。
 

@@ -26,6 +26,10 @@ import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.SessionVariable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -48,12 +52,24 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
+=======
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
+=======
+import java.util.Comparator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -93,7 +109,87 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+<<<<<<< HEAD
         return ((LogicalJoinOperator) input.getOp()).getJoinHint().equals(JoinOperator.HINT_SKEW);
+=======
+        // respect the join hint
+        if (((LogicalJoinOperator) input.getOp()).getJoinHint().equals(JoinOperator.HINT_SKEW)) {
+            return true;
+        }
+
+        if (!context.getSessionVariable().isEnableStatsToOptimizeSkewJoin()) {
+            return false;
+        }
+        LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
+        JoinOperator joinType = joinOperator.getJoinType();
+        if (joinType != JoinOperator.INNER_JOIN && joinType != JoinOperator.LEFT_OUTER_JOIN) {
+            // only support inner join and left join
+            return false;
+        }
+
+        ColumnRefSet leftOutputColumns = input.inputAt(0).getOutputColumns();
+        ColumnRefSet rightOutputColumns = input.inputAt(1).getOutputColumns();
+
+        List<BinaryPredicateOperator> equalConjs = JoinHelper.
+                getEqualsPredicate(leftOutputColumns, rightOutputColumns,
+                        Utils.extractConjuncts(joinOperator.getOnPredicate()));
+        if (equalConjs.isEmpty()) {
+            return false;
+        }
+        Statistics leftChildStats = input.inputAt(0).getStatistics();
+        if (leftChildStats == null) {
+            return false;
+        }
+        double leftRowCount = leftChildStats.getOutputRowCount();
+
+        for (BinaryPredicateOperator equalConj : equalConjs) {
+            if (!equalConj.getChild(0).isColumnRef() || !equalConj.getChild(1).isColumnRef()) {
+                // only support column equal column
+                continue;
+            }
+            ColumnRefOperator leftColumn = (ColumnRefOperator) equalConj.getChild(0);
+            ColumnRefOperator rightColumn = (ColumnRefOperator) equalConj.getChild(1);
+            ColumnRefOperator skewJoinColumn = null;
+            // choose the skew join column, it could be left or right column of the predicate
+            if (leftOutputColumns.contains(leftColumn.getId())) {
+                skewJoinColumn = leftColumn;
+            } else {
+                skewJoinColumn = rightColumn;
+            }
+            if (!leftChildStats.getColumnStatistics().containsKey(skewJoinColumn)) {
+                continue;
+            }
+            ColumnStatistic leftColumnStats = leftChildStats.getColumnStatistic(skewJoinColumn);
+            if (leftColumnStats == null || leftColumnStats.getHistogram() == null) {
+                // only support column with histogram stats
+                continue;
+            }
+            // sort the MCV by value
+            List<Pair<String, Long>> leftChildMCV = Lists.newArrayList();
+            int useMCVCount = Math.min(context.getSessionVariable().getSkewJoinOptimizeUseMCVCount(),
+                    leftColumnStats.getHistogram().getMCV().size());
+            leftColumnStats.getHistogram().getMCV().entrySet().stream().
+                    sorted(Map.Entry.comparingByValue(Comparator.reverseOrder())).limit(useMCVCount).
+                    forEach(entry -> {
+                        leftChildMCV.add(Pair.create(entry.getKey(), entry.getValue()));
+                    });
+            if (isDataSkew(leftChildMCV, leftRowCount, context.getSessionVariable())) {
+                joinOperator.setSkewColumn(skewJoinColumn);
+                joinOperator.setSkewValues(leftChildMCV.stream().map(pair -> ConstantOperator.createVarchar(pair.first)).
+                        collect(Collectors.toList()));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isDataSkew(List<Pair<String, Long>> mcvList, double rowCount, SessionVariable sessionVariable) {
+        if (rowCount < 1) {
+            return false;
+        }
+        long mcvRowCount = mcvList.stream().mapToLong(pair -> pair.second).sum();
+        return ((double) mcvRowCount / rowCount) > sessionVariable.getSkewJoinDataSkewThreshold();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -110,6 +206,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                         Utils.extractConjuncts(oldJoinOperator.getOnPredicate()));
         for (BinaryPredicateOperator equalConj : equalConjs) {
             ScalarOperator child0 = equalConj.getChild(0);
+<<<<<<< HEAD
             if (skewColumn.equals(child0)) {
                 rightSkewColumn = equalConj.getChild(1);
                 break;
@@ -120,6 +217,47 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         }
         if (rightSkewColumn == null) {
             throw new StarRocksConnectorException("Can't find skew column");
+=======
+            ScalarOperator child1 = equalConj.getChild(1);
+            // skew column may be left or right column of the equal predicate
+            if (skewColumn.equals(child0)) {
+                rightSkewColumn = child1;
+                break;
+            } else if (skewColumn.equals(child1)) {
+                rightSkewColumn = child0;
+                break;
+            } else {
+                // find the skew column in the left/right child project map
+                if (input.inputAt(0).getOp() instanceof LogicalProjectOperator) {
+                    Map<ColumnRefOperator, ScalarOperator> projectMap = ((LogicalProjectOperator) input.inputAt(0).
+                            getOp()).getColumnRefMap();
+                    ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectMap);
+                    ScalarOperator rewriteChild0 = rewriter.rewrite(child0);
+                    ScalarOperator rewriteChild1 = rewriter.rewrite(child1);
+                    if (skewColumn.equals(rewriteChild0)) {
+                        skewColumn = rewriteChild0;
+                        rightSkewColumn = child1;
+                        break;
+                    } else if (rewriteChild0.isCast() && skewColumn.equals(rewriteChild0.getChild(0))) {
+                        skewColumn = rewriteChild0.getChild(0);
+                        rightSkewColumn = child1;
+                    } else if (skewColumn.equals(rewriteChild1)) {
+                        skewColumn = rewriteChild1;
+                        rightSkewColumn = child0;
+                        break;
+                    } else if (rewriteChild1.isCast() && skewColumn.equals(rewriteChild1.getChild(0))) {
+                        skewColumn = rewriteChild1.getChild(0);
+                        rightSkewColumn = child0;
+                    }
+                }
+            }
+        }
+        // when use hint, we should check the skew column, and throw exception if not found
+        if (rightSkewColumn == null && oldJoinOperator.getJoinHint().equals(JoinOperator.HINT_SKEW)) {
+            throw new StarRocksConnectorException("Can't find skew column");
+        } else if (rightSkewColumn == null) {
+            return Lists.newArrayList();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // 1. add salt for left child
@@ -175,8 +313,14 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         CallOperator randFnOperator = new CallOperator(FunctionSet.RAND, randFn.getReturnType(), Lists.newArrayList(),
                 randFn);
 
+<<<<<<< HEAD
         Function multiplyFn = Expr.getBuiltinFunction(FunctionSet.MULTIPLY, new Type[] {randFn.getReturnType(), Type.INT},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+=======
+        Function multiplyFn =
+                Expr.getBuiltinFunction(FunctionSet.MULTIPLY, new Type[] {randFn.getReturnType(), Type.INT},
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         int randRange = context.getSessionVariable().getSkewJoinRandRange();
         CallOperator multiplyFnOperator = new CallOperator(FunctionSet.MULTIPLY, randFn.getReturnType(),
                 Lists.newArrayList(randFnOperator, ConstantOperator.createDouble(randRange)), multiplyFn);
@@ -255,7 +399,12 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         OptExpression unnestOpt = OptExpression.create(unnestOperator, skewValuesOpt);
 
         Map<ColumnRefOperator, ScalarOperator> unnestProjectMap = unnestOperator.getOutputColRefs().stream().
+<<<<<<< HEAD
                 collect(Collectors.toMap(java.util.function.Function.identity(), java.util.function.Function.identity()));
+=======
+                collect(Collectors.toMap(java.util.function.Function.identity(),
+                        java.util.function.Function.identity()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         int skewRandRange = context.getSessionVariable().getSkewJoinRandRange();
 
         Map<ColumnRefOperator, ScalarOperator> generateSeriesChildProjectMap = Maps.newHashMap();

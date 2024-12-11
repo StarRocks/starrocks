@@ -195,7 +195,11 @@ PathVersionListSharedPtr TimestampedVersionTracker::fetch_and_delete_path_by_id(
     _stale_version_path_map.erase(path_id);
 
     for (auto& version : ptr->timestamped_versions()) {
+<<<<<<< HEAD
         _version_graph.delete_version_from_graph(version->version());
+=======
+        (void)_version_graph.delete_version_from_graph(version->version());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return ptr;
 }

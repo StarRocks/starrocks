@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # cosine_similarity
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算两个向量的余弦夹角来评估向量之间的相似度。
 

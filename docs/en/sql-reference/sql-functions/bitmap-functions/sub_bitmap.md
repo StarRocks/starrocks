@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # sub_bitmap
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Intercepts `len` elements from a BITMAP value `src` starting from the position specified by `offset`. The output elements are a subset of `src`.
 

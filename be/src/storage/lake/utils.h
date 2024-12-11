@@ -15,6 +15,10 @@
 #pragma once
 
 #include "common/statusor.h"
+<<<<<<< HEAD
+=======
+#include "storage/persistent_index.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::lake {
 
@@ -42,4 +46,11 @@ inline StatusOr<T> enhance_error_prompt(StatusOr<T> res) {
     }
 }
 
+<<<<<<< HEAD
+=======
+inline IndexValue build_index_value(const IndexValueWithVerPB& value) {
+    return IndexValue(((uint64_t)value.rssid() << 32 | value.rowid()));
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::lake

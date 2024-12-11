@@ -26,6 +26,10 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+<<<<<<< HEAD
+=======
+#include <stdint.h>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #include <utility>
 
@@ -35,6 +39,13 @@
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
+<<<<<<< HEAD
+=======
+namespace parquet {
+class ColumnWriter;
+} // namespace parquet
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 namespace starrocks::parquet {
 
 class LevelBuilderResult;

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_format
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将日期类型按照 `format` 的类型转化为字符串。
 

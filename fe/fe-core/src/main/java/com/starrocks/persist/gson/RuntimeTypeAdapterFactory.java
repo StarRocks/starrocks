@@ -380,7 +380,11 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
                 @SuppressWarnings("unchecked") // registration requires that subtype extends T
                 TypeAdapter<R> delegate = (TypeAdapter<R>) labelToDelegate.get(label);
                 if (delegate == null) {
+<<<<<<< HEAD
                     throw new JsonParseException("cannot deserialize " + baseType + " subtype named " + label
+=======
+                    throw new SubtypeNotFoundException(label, "cannot deserialize " + baseType + " subtype named " + label
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             + "; did you forget to register a subtype?");
                 }
                 return delegate.fromJsonTree(jsonElement);

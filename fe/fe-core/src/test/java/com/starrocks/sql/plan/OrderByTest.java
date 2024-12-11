@@ -74,7 +74,11 @@ class OrderByTest extends PlanTestBase {
                 "sort_tuple_slot_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode"
                         + "(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), num_children:0, slot_ref:TSlotRef"
                         + "(slot_id:1, tuple_id:2), output_scale:-1, output_column:-1, "
+<<<<<<< HEAD
                         + "has_nullable_child:false, is_nullable:true, is_monotonic:true)])]"));
+=======
+                        + "has_nullable_child:false, is_nullable:true, is_monotonic:true"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -164,7 +168,10 @@ class OrderByTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
+<<<<<<< HEAD
                 "     numNodes=0\n" +
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "     limit: 10");
 
         sql = "select * from (select max(v5) from t1) tmp order by null limit 10;";
@@ -452,6 +459,10 @@ class OrderByTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 8> 8: expr ASC\n" +
+<<<<<<< HEAD
+=======
+                "  |  analytic partition by: 8: expr\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:Project\n" +
@@ -478,6 +489,10 @@ class OrderByTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 8> 8: expr ASC\n" +
+<<<<<<< HEAD
+=======
+                "  |  analytic partition by: 8: expr\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:Project\n" +
@@ -500,6 +515,10 @@ class OrderByTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 8> 8: expr ASC\n" +
+<<<<<<< HEAD
+=======
+                "  |  analytic partition by: 8: expr\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:Project\n" +
@@ -558,7 +577,11 @@ class OrderByTest extends PlanTestBase {
         assertNotContains(plan, "runtime filters");
     }
 
+<<<<<<< HEAD
     // @Test
+=======
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void testGroupByOrderBy() throws Exception {
         String sql = "select v2,v3,v2 from t0 group by 1,2,3 order by 1,2,3";
         String plan = getFragmentPlan(sql);

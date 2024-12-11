@@ -54,17 +54,33 @@ namespace starrocks {
 
 ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& t_output_expr, const TResultSink& sink,
                        int buffer_size)
+<<<<<<< HEAD
         : _t_output_expr(t_output_expr), _buf_size(buffer_size) {
+=======
+        : _row_desc(row_desc), _t_output_expr(t_output_expr), _buf_size(buffer_size) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (!sink.__isset.type || sink.type == TResultSinkType::MYSQL_PROTOCAL) {
         _sink_type = TResultSinkType::MYSQL_PROTOCAL;
     } else {
         _sink_type = sink.type;
     }
 
+<<<<<<< HEAD
+=======
+    if (_sink_type == TResultSinkType::HTTP_PROTOCAL) {
+        _format_type = sink.format;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_sink_type == TResultSinkType::FILE) {
         CHECK(sink.__isset.file_options);
         _file_opts = std::make_shared<ResultFileOptions>(sink.file_options);
     }
+<<<<<<< HEAD
+=======
+
+    _is_binary_format = sink.is_binary_row;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status ResultSink::prepare_exprs(RuntimeState* state) {
@@ -94,7 +110,12 @@ Status ResultSink::prepare(RuntimeState* state) {
     // create writer based on sink type
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
+<<<<<<< HEAD
         _writer.reset(new (std::nothrow) MysqlResultWriter(_sender.get(), _output_expr_ctxs, _profile));
+=======
+        _writer.reset(new (std::nothrow)
+                              MysqlResultWriter(_sender.get(), _output_expr_ctxs, _is_binary_format, _profile));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         break;
     case TResultSinkType::FILE:
         CHECK(_file_opts.get() != nullptr);
@@ -106,6 +127,11 @@ Status ResultSink::prepare(RuntimeState* state) {
     case TResultSinkType::VARIABLE:
         _writer.reset(new (std::nothrow) VariableResultWriter(_sender.get(), _output_expr_ctxs, _profile));
         break;
+<<<<<<< HEAD
+=======
+    case TResultSinkType::CUSTOMIZED:
+        return Status::InternalError("Non-pipeline not support CUSTOMIZED format");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     default:
         return Status::InternalError("Unknown result sink type");
     }
@@ -149,10 +175,17 @@ Status ResultSink::close(RuntimeState* state, Status exec_status) {
         if (_writer != nullptr) {
             _sender->update_num_written_rows(_writer->get_written_rows());
         }
+<<<<<<< HEAD
         _sender->close(final_status);
     }
     state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
                                                     state->fragment_instance_id());
+=======
+        (void)_sender->close(final_status);
+    }
+    (void)state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
+                                                          state->fragment_instance_id());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Expr::close(_output_expr_ctxs, state);
 
     _closed = true;

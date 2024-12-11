@@ -20,6 +20,23 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+class OrcMemoryPool : public orc::MemoryPool {
+public:
+    ~OrcMemoryPool() override = default;
+
+    char* malloc(uint64_t size) override;
+
+    void free(char* p) override;
+
+    int64_t bytes_allocated() const;
+
+private:
+    std::atomic_int64_t _bytes_allocated{0};
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 orc::MemoryPool* getOrcMemoryPool();
 
 } // namespace starrocks

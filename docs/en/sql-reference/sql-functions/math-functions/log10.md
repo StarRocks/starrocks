@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # log10, dlog10
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Calculates the base 10 logarithm of a number.
 

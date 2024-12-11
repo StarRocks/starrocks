@@ -119,14 +119,22 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED BY '12345' DEFAULT ROLE 'example_role'
 
 #### 修改用户属性
 
+<<<<<<< HEAD
 您可以使用 [SET PROPERTY](../../sql-reference/sql-statements/account-management/SET_PROPERTY.md) 设置用户的属性。
+=======
+您可以使用 [ALTER USER](../../sql-reference/sql-statements/account-management/ALTER_USER.md) 设置用户的属性。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 相同用户名的用户标识共享一个属性。在以下示例中，只需将属性配置给 `jack`，那么该属性配置会对所有含用户名 `jack` 的用户标识生效。
 
 将用户 `jack` 的最大连接数设置为 `1000`：
 
 ```SQL
+<<<<<<< HEAD
 SET PROPERTY FOR jack 'max_user_connections' = '1000';
+=======
+ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ```
 
 #### 重置用户密码

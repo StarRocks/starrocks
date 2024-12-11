@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # sleep
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Delays the execution of an operation for a specified period of time (in seconds) and returns a BOOLEAN value to indicate whether the sleep is completed without interruption. `1` is returned if the sleep is completed without interruption. Otherwise, `0` is returned.
 

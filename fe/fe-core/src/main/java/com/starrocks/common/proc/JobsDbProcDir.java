@@ -76,7 +76,11 @@ public class JobsDbProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid db id format: " + dbIdStr);
         }
 
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(dbId);
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             throw new AnalysisException("Database[" + dbId + "] does not exist.");
         }
@@ -91,14 +95,22 @@ public class JobsDbProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
 
         result.setNames(TITLE_NAMES);
+<<<<<<< HEAD
         List<String> names = globalStateMgr.getDbNames();
+=======
+        List<String> names = globalStateMgr.getLocalMetastore().listDbNames();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (names == null || names.isEmpty()) {
             // empty
             return result;
         }
 
         for (String name : names) {
+<<<<<<< HEAD
             Database db = globalStateMgr.getDb(name);
+=======
+            Database db = globalStateMgr.getLocalMetastore().getDb(name);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             result.addRow(Lists.newArrayList(String.valueOf(db.getId()), name));
         }
 

@@ -257,7 +257,11 @@ PARALLEL_TEST(NullableColumnTest, test_update_rows) {
     replace_col1->append_datum((int32_t)5);
 
     std::vector<uint32_t> replace_idxes = {1, 4};
+<<<<<<< HEAD
     ASSERT_TRUE(column->update_rows(*replace_col1.get(), replace_idxes.data()).ok());
+=======
+    column->update_rows(*replace_col1.get(), replace_idxes.data());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_EQ(5, column->size());
     ASSERT_TRUE(column->data_column().unique());
     ASSERT_TRUE(column->null_column().unique());
@@ -281,7 +285,11 @@ PARALLEL_TEST(NullableColumnTest, test_update_rows) {
     replace_col2->append_datum({});
     replace_col2->append_datum("jk");
 
+<<<<<<< HEAD
     ASSERT_TRUE(column1->update_rows(*replace_col2.get(), replace_idxes.data()).ok());
+=======
+    column1->update_rows(*replace_col2.get(), replace_idxes.data());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_EQ(5, column1->size());
     ASSERT_TRUE(column1->data_column().unique());
     ASSERT_TRUE(column1->null_column().unique());

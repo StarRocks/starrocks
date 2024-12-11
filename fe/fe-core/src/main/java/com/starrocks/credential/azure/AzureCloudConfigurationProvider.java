@@ -21,6 +21,7 @@ import com.starrocks.credential.CredentialUtil;
 
 import java.util.Map;
 
+<<<<<<< HEAD
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CLIENT_ID;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_ENDPOINT;
@@ -37,6 +38,24 @@ import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_EN
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT;
+=======
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CLIENT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS1_USE_MANAGED_SERVICE_IDENTITY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_CONTAINER;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class AzureCloudConfigurationProvider implements CloudConfigurationProvider {
 

@@ -50,6 +50,10 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
+<<<<<<< HEAD
+=======
+#include "runtime/tablets_channel.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "serde/protobuf_serde.h"
 #include "util/uid_util.h"
 
@@ -64,6 +68,10 @@ class TabletsChannel;
 class LoadChannel;
 class LoadChannelMgr;
 class OlapTableSchemaParam;
+<<<<<<< HEAD
+=======
+class RuntimeProfile;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace lake {
 class TabletManager;
@@ -82,6 +90,11 @@ public:
 
     DISALLOW_COPY_AND_MOVE(LoadChannel);
 
+<<<<<<< HEAD
+=======
+    void set_profile_config(const PLoadChannelProfileConfig& config);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Open a new load channel if it does not exist.
     // NOTE: This method may be called multiple times, and each time with a different |request|.
     void open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request, PTabletWriterOpenResult* response,
@@ -98,7 +111,11 @@ public:
 
     void abort();
 
+<<<<<<< HEAD
     void abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason);
+=======
+    void abort(const TabletsChannelKey& key, const std::vector<int64_t>& tablet_ids, const std::string& reason);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 
@@ -108,18 +125,34 @@ public:
 
     int64_t timeout() const { return _timeout_s; }
 
+<<<<<<< HEAD
     std::shared_ptr<TabletsChannel> get_tablets_channel(int64_t index_id);
 
     void remove_tablets_channel(int64_t index_id);
+=======
+    std::shared_ptr<TabletsChannel> get_tablets_channel(const TabletsChannelKey& key);
+
+    void remove_tablets_channel(const TabletsChannelKey& key);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
     Span get_span() { return _span; }
 
+<<<<<<< HEAD
+=======
+    void report_profile(PTabletWriterAddBatchResult* result, bool print_profile);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
+<<<<<<< HEAD
+=======
+    bool _should_enable_profile();
+    std::vector<std::shared_ptr<TabletsChannel>> _get_all_channels();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     LoadChannelMgr* _load_mgr;
     LakeTabletManager* _lake_tablet_mgr;
@@ -135,14 +168,47 @@ private:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::atomic<time_t> _last_updated_time;
 
+<<<<<<< HEAD
     // lock protect the tablets channel map
     bthread::Mutex _lock;
     // index id -> tablets channel
     std::unordered_map<int64_t, std::shared_ptr<TabletsChannel>> _tablets_channels;
+=======
+    // Put profile before _tablets_channels to avoid TabletsChannel use profile in destructor
+    // The root profile named "LoadChannel"
+    std::shared_ptr<RuntimeProfile> _root_profile;
+    // The profile named "Channel" for each BE
+    RuntimeProfile* _profile;
+
+    // lock protect the tablets channel map
+    bthread::Mutex _lock;
+    // key -> tablets channel
+    std::map<TabletsChannelKey, std::shared_ptr<TabletsChannel>> _tablets_channels;
+    std::atomic<bool> _closed{false};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Span _span;
     size_t _num_chunk{0};
     size_t _num_segment = 0;
+<<<<<<< HEAD
+=======
+
+    int64_t _create_time_ns;
+    bool _enable_profile{false};
+    int64_t _big_query_profile_threshold_ns{-1};
+    int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
+    std::atomic<int64_t> _last_report_time_ns{0};
+    std::atomic<bool> _final_report{false};
+    std::atomic<bool> _is_reporting_profile{false};
+
+    RuntimeProfile::Counter* _index_num = nullptr;
+    RuntimeProfile::Counter* _peak_memory_usage = nullptr;
+    RuntimeProfile::Counter* _deserialize_chunk_count = nullptr;
+    RuntimeProfile::Counter* _deserialize_chunk_timer = nullptr;
+    RuntimeProfile::Counter* _profile_report_count = nullptr;
+    RuntimeProfile::Counter* _profile_report_timer = nullptr;
+    RuntimeProfile::Counter* _profile_serialized_size = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {

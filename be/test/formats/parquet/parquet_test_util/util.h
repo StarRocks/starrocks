@@ -20,6 +20,10 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+<<<<<<< HEAD
+=======
+#include "common/global_types.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/logging.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
@@ -39,6 +43,10 @@ public:
     struct SlotDesc {
         std::string name;
         TypeDescriptor type;
+<<<<<<< HEAD
+=======
+        SlotId id = -1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     };
 
     static TupleDescriptor* create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDesc* slot_descs) {
@@ -49,17 +57,28 @@ public:
                 break;
             }
             TSlotDescriptorBuilder b2;
+<<<<<<< HEAD
             b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(i).nullable(true);
+=======
+            b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(slot_descs[i].id).nullable(true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             tuple_desc_builder.add_slot(b2.build());
         }
         tuple_desc_builder.build(&table_desc_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+<<<<<<< HEAD
         std::vector<bool> nullable_tuples = std::vector<bool>{true};
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
         RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+=======
+        DescriptorTbl* tbl = nullptr;
+        CHECK(DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size).ok());
+
+        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return row_desc->tuple_descriptors()[0];
     }
 
@@ -83,7 +102,11 @@ public:
         ASSERT_EQ(expected->debug_columns(), actual->debug_columns());
         for (size_t i = 0; i < expected->num_columns(); i++) {
             const auto& expected_col = expected->get_column_by_index(i);
+<<<<<<< HEAD
             const auto& actual_col = expected->get_column_by_index(i);
+=======
+            const auto& actual_col = actual->get_column_by_index(i);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (expected_col->debug_string() != actual_col->debug_string()) {
                 std::cout << expected_col->debug_string() << std::endl;
                 std::cout << actual_col->debug_string() << std::endl;

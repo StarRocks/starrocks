@@ -1,4 +1,10 @@
 -- name: test_count_star_after_adding_column @sequential
+<<<<<<< HEAD
+=======
+ADMIN SET FRONTEND CONFIG ("enable_fast_schema_evolution"="false");
+-- result:
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 create table t0(
     k1 INT,
     c1 INT
@@ -61,3 +67,9 @@ select * from t0 order by k1;
 -- result:
 1	1	None
 -- !result
+<<<<<<< HEAD
+=======
+ADMIN SET FRONTEND CONFIG ("enable_fast_schema_evolution"="true");
+-- result:
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -128,6 +128,26 @@ jobs:
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
+<<<<<<< HEAD
+=======
+      - name: add branch-3.4 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.4')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.4'
+
+      - name: add branch-3.3 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.3')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.3'
+
+      - name: add branch-3.2 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.2')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.2'
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
       - name: add branch-3.1 label
         if: contains(toJson(github.event.pull_request.body), '[x] 3.1')
@@ -141,6 +161,7 @@ jobs:
         with:
           labels: '3.0'
 
+<<<<<<< HEAD
       - name: add branch-2.5 label
         if: contains(toJson(github.event.pull_request.body), '[x] 2.5')
         uses: actions-ecosystem/action-add-labels@v1
@@ -152,6 +173,25 @@ jobs:
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: '2.4'
+=======
+      - name: remove branch-3.4 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.4') && contains(github.event.pull_request.labels.*.name, '3.4')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '3.4'
+
+      - name: remove branch-3.3 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.3') && contains(github.event.pull_request.labels.*.name, '3.3')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '3.3'
+
+      - name: remove branch-3.2 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.2') && contains(github.event.pull_request.labels.*.name, '3.2')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '3.2'
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
       - name: remove branch-3.1 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 3.1') && contains(github.event.pull_request.labels.*.name, '3.1')
@@ -165,6 +205,7 @@ jobs:
         with:
           labels: '3.0'
 
+<<<<<<< HEAD
       - name: remove branch-2.5 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 2.5') && contains(github.event.pull_request.labels.*.name, '2.5')
         uses: actions-ecosystem/action-remove-labels@v1
@@ -177,6 +218,8 @@ jobs:
         with:
           labels: '2.4'
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
       - name: check-done
         if: >
           (startsWith(github.event.pull_request.title, '[BugFix]') ||
@@ -267,6 +310,7 @@ jobs:
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash
 
+<<<<<<< HEAD
   feature-label-check:
     runs-on: ubuntu-latest
     steps:
@@ -285,6 +329,8 @@ jobs:
           labels: 'feature'
           github_token: ${{ secrets.PAT }}
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   changelist-check:
     runs-on: [self-hosted, normal]
     if: >

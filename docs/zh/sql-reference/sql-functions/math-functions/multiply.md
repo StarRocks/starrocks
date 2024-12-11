@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # multiply
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算参数 `arg1` 与 `arg2` 的乘积。
 

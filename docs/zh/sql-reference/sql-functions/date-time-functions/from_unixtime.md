@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # from_unixtime
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将 UNIX 时间戳转化为对应的时间格式。返回的时间格式由 `string_format` 指定，默认为 `yyyy-MM-dd HH:mm:ss`，也支持 [date_format](./date_format.md) 中的格式。
 

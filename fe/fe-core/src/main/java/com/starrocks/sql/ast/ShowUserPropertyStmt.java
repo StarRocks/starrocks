@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
@@ -23,6 +24,16 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.UserPropertyProcNode;
+=======
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserProperty;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.PatternMatcher;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -30,11 +41,20 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 // Show Property Stmt
 //  syntax:
 //      SHOW PROPERTY [FOR user] [LIKE key pattern]
 public class ShowUserPropertyStmt extends ShowStmt {
+<<<<<<< HEAD
+=======
+    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
+            .add("Key").add("Value").build();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private String user;
     private String pattern;
@@ -65,6 +85,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
         this.pattern = pattern;
     }
 
+<<<<<<< HEAD
     public List<List<String>> getRows(ConnectContext connectContext) throws AnalysisException {
         List<List<String>> rows = new ArrayList<>();
         AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
@@ -72,6 +93,19 @@ public class ShowUserPropertyStmt extends ShowStmt {
         // Currently only "max_user_connections" is supported
         long maxConn = authenticationManager.getMaxConn(user);
         rows.add(Lists.newArrayList("max_user_connections", String.valueOf(maxConn)));
+=======
+    public List<List<String>> getRows(ConnectContext connectContext) {
+        List<List<String>> rows = new ArrayList<>();
+        AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+
+        UserProperty userProperty = authenticationManager.getUserProperty(user);
+        rows.add(Lists.newArrayList(UserProperty.PROP_MAX_USER_CONNECTIONS, String.valueOf(userProperty.getMaxConn())));
+        rows.add(Lists.newArrayList(UserProperty.PROP_CATALOG, userProperty.getCatalog()));
+        rows.add(Lists.newArrayList(UserProperty.PROP_DATABASE, userProperty.getDatabase()));
+        for (Map.Entry<String, String> entry : userProperty.getSessionVariables().entrySet()) {
+            rows.add(Lists.newArrayList(String.format("%s.%s", "session", entry.getKey()), entry.getValue()));
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         if (pattern == null) {
             return rows;
@@ -93,7 +127,11 @@ public class ShowUserPropertyStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+<<<<<<< HEAD
         for (String col : UserPropertyProcNode.TITLE_NAMES) {
+=======
+        for (String col : TITLE_NAMES) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
         }
         return builder.build();

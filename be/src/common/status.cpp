@@ -7,6 +7,10 @@
 #include <fmt/format.h>
 
 #include "common/config.h"
+<<<<<<< HEAD
+=======
+#include "gen_cpp/StatusCode_types.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/Status_types.h"  // for TStatus
 #include "gen_cpp/status.pb.h"     // for StatusPB
 #include "gutil/strings/fastmem.h" // for memcpy_inlined
@@ -16,6 +20,7 @@ namespace starrocks {
 // See 'Status::_state' for details.
 static const char g_moved_from_state[5] = {'\x00', '\x00', '\x00', '\x00', TStatusCode::INTERNAL_ERROR};
 
+<<<<<<< HEAD
 inline const char* assemble_state(TStatusCode::type code, Slice msg, Slice ctx) {
     DCHECK(code != TStatusCode::OK);
 
@@ -24,13 +29,28 @@ inline const char* assemble_state(TStatusCode::type code, Slice msg, Slice ctx) 
 
     const auto len1 = static_cast<uint16_t>(msg.size);
     const auto len2 = static_cast<uint16_t>(ctx.size);
+=======
+inline const char* assemble_state(TStatusCode::type code, std::string_view msg, std::string_view ctx) {
+    DCHECK(code != TStatusCode::OK);
+
+    auto msg_size = std::min<size_t>(msg.size(), std::numeric_limits<uint16_t>::max());
+    auto ctx_size = std::min<size_t>(ctx.size(), std::numeric_limits<uint16_t>::max());
+
+    const auto len1 = static_cast<uint16_t>(msg_size);
+    const auto len2 = static_cast<uint16_t>(ctx_size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const uint32_t size = static_cast<uint32_t>(len1) + len2;
     auto result = new char[size + 5];
     memcpy(result, &len1, sizeof(len1));
     memcpy(result + 2, &len2, sizeof(len2));
     result[4] = static_cast<char>(code);
+<<<<<<< HEAD
     strings::memcpy_inlined(result + 5, msg.data, len1);
     strings::memcpy_inlined(result + 5 + len1, ctx.data, len2);
+=======
+    strings::memcpy_inlined(result + 5, msg.data(), len1);
+    strings::memcpy_inlined(result + 5 + len1, ctx.data(), len2);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return result;
 }
 
@@ -45,18 +65,31 @@ const char* Status::copy_state(const char* state) {
     return result;
 }
 
+<<<<<<< HEAD
 const char* Status::copy_state_with_extra_ctx(const char* state, Slice ctx) {
+=======
+const char* Status::copy_state_with_extra_ctx(const char* state, std::string_view ctx) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     uint16_t len1;
     uint16_t len2;
     strings::memcpy_inlined(&len1, state, sizeof(len1));
     strings::memcpy_inlined(&len2, state + sizeof(len1), sizeof(len2));
     uint32_t old_length = static_cast<uint32_t>(len1) + len2 + 5;
+<<<<<<< HEAD
     ctx.size = std::min<size_t>(ctx.size, std::numeric_limits<uint16_t>::max() - len2);
     auto new_length = static_cast<uint32_t>(old_length + ctx.size);
     auto result = new char[new_length];
     strings::memcpy_inlined(result, state, old_length);
     strings::memcpy_inlined(result + old_length, ctx.data, ctx.size);
     auto new_len2 = static_cast<uint16_t>(len2 + ctx.size);
+=======
+    auto ctx_size = std::min<size_t>(ctx.size(), std::numeric_limits<uint16_t>::max() - len2);
+    auto new_length = static_cast<uint32_t>(old_length + ctx_size);
+    auto result = new char[new_length];
+    strings::memcpy_inlined(result, state, old_length);
+    strings::memcpy_inlined(result + old_length, ctx.data(), ctx_size);
+    auto new_len2 = static_cast<uint16_t>(len2 + ctx_size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     memcpy(result + 2, &new_len2, sizeof(new_len2));
     return result;
 }
@@ -64,9 +97,15 @@ const char* Status::copy_state_with_extra_ctx(const char* state, Slice ctx) {
 Status::Status(const TStatus& s) {
     if (s.status_code != TStatusCode::OK) {
         if (s.error_msgs.empty()) {
+<<<<<<< HEAD
             _state = assemble_state(s.status_code, Slice(), Slice());
         } else {
             _state = assemble_state(s.status_code, s.error_msgs[0], Slice());
+=======
+            _state = assemble_state(s.status_code, {}, {});
+        } else {
+            _state = assemble_state(s.status_code, s.error_msgs[0], {});
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 }
@@ -75,14 +114,25 @@ Status::Status(const StatusPB& s) {
     auto code = (TStatusCode::type)s.status_code();
     if (code != TStatusCode::OK) {
         if (s.error_msgs_size() == 0) {
+<<<<<<< HEAD
             _state = assemble_state(code, Slice(), Slice());
         } else {
             _state = assemble_state(code, s.error_msgs(0), Slice());
+=======
+            _state = assemble_state(code, {}, {});
+        } else {
+            _state = assemble_state(code, s.error_msgs(0), {});
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 }
 
+<<<<<<< HEAD
 Status::Status(TStatusCode::type code, Slice msg, Slice ctx) : _state(assemble_state(code, msg, ctx)) {}
+=======
+Status::Status(TStatusCode::type code, std::string_view msg, std::string_view ctx)
+        : _state(assemble_state(code, msg, ctx)) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #if defined(ENABLE_STATUS_FAILED)
 int32_t Status::get_cardinality_of_inject() {
@@ -134,7 +184,11 @@ void Status::to_thrift(TStatus* s) const {
     } else {
         s->status_code = code();
         auto msg = message();
+<<<<<<< HEAD
         s->error_msgs.emplace_back(msg.data, msg.size);
+=======
+        s->error_msgs.emplace_back(msg.data(), msg.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         s->__isset.error_msgs = true;
     }
 }
@@ -146,7 +200,11 @@ void Status::to_protobuf(StatusPB* s) const {
     } else {
         s->set_status_code(code());
         auto msg = message();
+<<<<<<< HEAD
         s->add_error_msgs(msg.data, msg.size);
+=======
+        s->add_error_msgs(msg.data(), msg.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -217,15 +275,63 @@ std::string Status::code_as_string() const {
         return "Resource temporarily unavailable";
     case TStatusCode::REMOTE_FILE_NOT_FOUND:
         return "Remote file not found";
+<<<<<<< HEAD
+=======
+    case TStatusCode::ANALYSIS_ERROR:
+        return "Analysis error";
+    case TStatusCode::KUDU_NOT_ENABLED:
+        return "Kudu not enabled";
+    case TStatusCode::KUDU_NOT_SUPPORTED_ON_OS:
+        return "Kudu not supported on os";
+    case TStatusCode::TOO_MANY_TASKS:
+        return "Too many tasks";
+    case TStatusCode::ES_INTERNAL_ERROR:
+        return "ES internal error";
+    case TStatusCode::ES_INDEX_NOT_FOUND:
+        return "ES index not found";
+    case TStatusCode::ES_SHARD_NOT_FOUND:
+        return "ES shard not found";
+    case TStatusCode::ES_INVALID_CONTEXTID:
+        return "ES invalid context id";
+    case TStatusCode::ES_INVALID_OFFSET:
+        return "ES invalid offset";
+    case TStatusCode::ES_REQUEST_ERROR:
+        return "ES request error";
+    case TStatusCode::ABORTED:
+        return "Aborted";
+    case TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED:
+        return "Version already merged";
+    case TStatusCode::DUPLICATE_RPC_INVOCATION:
+        return "Duplicate RPC invocation";
+    case TStatusCode::GLOBAL_DICT_ERROR:
+        return "Global dictionary error";
+    case TStatusCode::UNKNOWN:
+        return "Unknown";
+    case TStatusCode::TXN_NOT_EXISTS:
+        return "Transaction not exist";
+    case TStatusCode::TXN_IN_PROCESSING:
+        return "Transaction in processing";
+    case TStatusCode::YIELD:
+        return "Task yield";
+    case TStatusCode::JIT_COMPILE_ERROR:
+        return "JIT compile error";
+    case TStatusCode::CAPACITY_LIMIT_EXCEED:
+        return "Capaticy limit exceeded";
+    case TStatusCode::SHUTDOWN:
+        return "Shut down in progress";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     case TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED:
         return "Big query cpu second limit exceeded";
     case TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED:
         return "Big query scan rows limit exceeded";
+<<<<<<< HEAD
     default: {
         char tmp[30];
         snprintf(tmp, sizeof(tmp), "Unknown code(%d): ", static_cast<int>(code()));
         return tmp;
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return {};
 }
@@ -237,18 +343,30 @@ std::string Status::to_string(bool with_context_info) const {
     }
 
     result.append(": ");
+<<<<<<< HEAD
     Slice msg;
+=======
+    std::string_view msg;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (with_context_info) {
         msg = detailed_message();
     } else {
         msg = message();
     }
 
+<<<<<<< HEAD
     result.append(reinterpret_cast<const char*>(msg.data), msg.size);
     return result;
 }
 
 Slice Status::message() const {
+=======
+    result.append(reinterpret_cast<const char*>(msg.data()), msg.size());
+    return result;
+}
+
+std::string_view Status::message() const {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_state == nullptr) {
         return {};
     }
@@ -258,7 +376,11 @@ Slice Status::message() const {
     return {_state + 5, len1};
 }
 
+<<<<<<< HEAD
 Slice Status::detailed_message() const {
+=======
+std::string_view Status::detailed_message() const {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_state == nullptr) {
         return {};
     }
@@ -270,6 +392,7 @@ Slice Status::detailed_message() const {
     uint32_t length = static_cast<uint32_t>(len1) + len2;
     return {_state + 5, length};
 }
+<<<<<<< HEAD
 Status Status::clone_and_prepend(const Slice& msg) const {
     if (ok()) {
         return *this;
@@ -288,6 +411,20 @@ Status Status::clone_and_append(const Slice& msg) const {
     std::string_view msg_view(reinterpret_cast<const char*>(msg.data), msg.size);
     std::string_view msg_view2(reinterpret_cast<const char*>(msg2.data), msg2.size);
     return {code(), fmt::format("{}: {}", msg_view2, msg_view)};
+=======
+Status Status::clone_and_prepend(std::string_view msg) const {
+    if (ok()) {
+        return *this;
+    }
+    return {code(), fmt::format("{}: {}", msg, message())};
+}
+
+Status Status::clone_and_append(std::string_view msg) const {
+    if (ok()) {
+        return *this;
+    }
+    return {code(), fmt::format("{}: {}", message(), msg)};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status Status::clone_and_append_context(const char* filename, int line, const char* expr) const {

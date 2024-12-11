@@ -16,6 +16,10 @@ package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.HintNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.SessionVariable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
@@ -33,29 +37,48 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
 
     private CommonTokenStream tokenStream;
 
+<<<<<<< HEAD
+=======
+    private SessionVariable sessionVariable;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private IdentityHashMap<ParserRuleContext, List<Token>> contextWithTokenMap = new IdentityHashMap<>();
 
     private List<Token> tokenList = Lists.newArrayList();
 
+<<<<<<< HEAD
     public HintCollector(CommonTokenStream tokenStream) {
         this.tokenStream = tokenStream;
+=======
+    public HintCollector(CommonTokenStream tokenStream, SessionVariable sessionVariable) {
+        this.tokenStream = tokenStream;
+        this.sessionVariable = sessionVariable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void collect(StarRocksParser.SingleStatementContext context) {
         visit(context);
     }
 
+<<<<<<< HEAD
 
     public IdentityHashMap<ParserRuleContext, List<Token>> getContextWithTokenMap() {
         return contextWithTokenMap;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public IdentityHashMap<ParserRuleContext, List<HintNode>> getContextWithHintMap() {
         IdentityHashMap<ParserRuleContext, List<HintNode>> map = new IdentityHashMap<>();
         for (Map.Entry<ParserRuleContext, List<Token>> entry : contextWithTokenMap.entrySet()) {
             ParserRuleContext key = entry.getKey();
             List<HintNode> hintNodes = entry.getValue().stream()
+<<<<<<< HEAD
                     .map(HintFactory::buildHintNode).filter(e -> e != null)
+=======
+                    .map(e -> HintFactory.buildHintNode(e, sessionVariable))
+                    .filter(e -> e != null)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .collect(Collectors.toList());
             if (CollectionUtils.isNotEmpty(hintNodes)) {
                 map.put(key, hintNodes);
@@ -101,7 +124,11 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
 
     @Override
     public Void visitUpdateStatement(StarRocksParser.UpdateStatementContext context) {
+<<<<<<< HEAD
         extractHintToRight(context);
+=======
+        extractHintToRight(context, context.UPDATE().getSymbol().getTokenIndex());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!(context.fromClause() instanceof StarRocksParser.DualContext)) {
             StarRocksParser.FromContext fromContext = (StarRocksParser.FromContext) context.fromClause();
             if (fromContext.relations() != null) {
@@ -113,7 +140,11 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
 
     @Override
     public Void visitDeleteStatement(StarRocksParser.DeleteStatementContext context) {
+<<<<<<< HEAD
         extractHintToRight(context);
+=======
+        extractHintToRight(context, context.DELETE().getSymbol().getTokenIndex());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (context.using != null) {
             context.using.relation().stream().forEach(this::visit);
         }
@@ -179,6 +210,17 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    private void extractHintToLeft(ParserRuleContext ctx) {
+        Token semi = ctx.start;
+        int i = semi.getTokenIndex();
+        List<Token> hintTokens = tokenStream.getHiddenTokensToLeft(i, HINT_CHANNEL);
+        if (hintTokens != null) {
+            contextWithTokenMap.computeIfAbsent(ctx, e -> new ArrayList<>()).addAll(hintTokens);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private void extractHintToRight(ParserRuleContext ctx) {
         Token semi = ctx.start;
@@ -188,4 +230,14 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
             contextWithTokenMap.computeIfAbsent(ctx, e -> new ArrayList<>()).addAll(hintTokens);
         }
     }
+<<<<<<< HEAD
+=======
+
+    private void extractHintToRight(ParserRuleContext ctx, int fromIndex) {
+        List<Token> hintTokens = tokenStream.getHiddenTokensToRight(fromIndex, HINT_CHANNEL);
+        if (hintTokens != null) {
+            contextWithTokenMap.computeIfAbsent(ctx, e -> new ArrayList<>()).addAll(hintTokens);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

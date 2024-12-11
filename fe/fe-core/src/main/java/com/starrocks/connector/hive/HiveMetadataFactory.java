@@ -16,11 +16,24 @@ package com.starrocks.connector.hive;
 
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+<<<<<<< HEAD
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileOperations;
 
 import java.util.Optional;
+=======
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.connector.RemoteFileOperations;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.Executor;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.connector.hive.CachingHiveMetastore.createQueryLevelInstance;
@@ -32,9 +45,20 @@ public class HiveMetadataFactory {
     private final long perQueryMetastoreMaxNum;
     private final long perQueryCacheRemotePathMaxNum;
     private final ExecutorService pullRemoteFileExecutor;
+<<<<<<< HEAD
     private final boolean isRecursive;
     private final boolean enableHmsEventsIncrementalSync;
     private final HdfsEnvironment hdfsEnvironment;
+=======
+    private final Executor updateRemoteFilesExecutor;
+    private final Executor updateStatisticsExecutor;
+    private final Executor refreshOthersFeExecutor;
+    private final boolean isRecursive;
+    private final boolean enableHmsEventsIncrementalSync;
+    private final HdfsEnvironment hdfsEnvironment;
+    private final MetastoreType metastoreType;
+    private final ConnectorProperties connectorProperties;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public HiveMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -42,22 +66,45 @@ public class HiveMetadataFactory {
                                CachingHiveMetastoreConf hmsConf,
                                CachingRemoteFileConf fileConf,
                                ExecutorService pullRemoteFileExecutor,
+<<<<<<< HEAD
                                boolean isRecursive,
                                boolean enableHmsEventsIncrementalSync,
                                HdfsEnvironment hdfsEnvironment) {
+=======
+                               Executor updateRemoteFilesExecutor,
+                               Executor updateStatisticsExecutor,
+                               Executor refreshOthersFeExecutor,
+                               boolean isRecursive,
+                               boolean enableHmsEventsIncrementalSync,
+                               HdfsEnvironment hdfsEnvironment,
+                               MetastoreType metastoreType,
+                               Map<String, String> properties) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
         this.perQueryMetastoreMaxNum = hmsConf.getPerQueryCacheMaxNum();
         this.perQueryCacheRemotePathMaxNum = fileConf.getPerQueryCacheMaxSize();
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
+<<<<<<< HEAD
         this.isRecursive = isRecursive;
         this.enableHmsEventsIncrementalSync = enableHmsEventsIncrementalSync;
         this.hdfsEnvironment = hdfsEnvironment;
+=======
+        this.updateRemoteFilesExecutor = updateRemoteFilesExecutor;
+        this.updateStatisticsExecutor = updateStatisticsExecutor;
+        this.refreshOthersFeExecutor = refreshOthersFeExecutor;
+        this.isRecursive = isRecursive;
+        this.enableHmsEventsIncrementalSync = enableHmsEventsIncrementalSync;
+        this.hdfsEnvironment = hdfsEnvironment;
+        this.metastoreType = metastoreType;
+        this.connectorProperties = new ConnectorProperties(ConnectorType.HIVE, properties);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public HiveMetadata create() {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
+<<<<<<< HEAD
                 createQueryLevelInstance(metastore, perQueryMetastoreMaxNum), metastore instanceof CachingHiveMetastore);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
                 CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
@@ -75,6 +122,30 @@ public class HiveMetadataFactory {
         Optional<CacheUpdateProcessor> cacheUpdateProcessor;
         if (remoteFileIO instanceof CachingRemoteFileIO || metastore instanceof CachingHiveMetastore) {
             cacheUpdateProcessor = Optional.of(new CacheUpdateProcessor(
+=======
+                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
+                metastore instanceof CachingHiveMetastore,
+                hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
+        RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
+                CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
+                pullRemoteFileExecutor,
+                updateRemoteFilesExecutor,
+                isRecursive,
+                remoteFileIO instanceof CachingRemoteFileIO,
+                hdfsEnvironment.getConfiguration());
+        HiveStatisticsProvider statisticsProvider = new HiveStatisticsProvider(hiveMetastoreOperations, remoteFileOperations);
+
+        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
+        return new HiveMetadata(catalogName, hdfsEnvironment, hiveMetastoreOperations, remoteFileOperations,
+                statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor, refreshOthersFeExecutor,
+                connectorProperties);
+    }
+
+    public synchronized Optional<HiveCacheUpdateProcessor> getCacheUpdateProcessor() {
+        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
+        if (remoteFileIO instanceof CachingRemoteFileIO || metastore instanceof CachingHiveMetastore) {
+            cacheUpdateProcessor = Optional.of(new HiveCacheUpdateProcessor(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     catalogName, metastore, remoteFileIO, pullRemoteFileExecutor,
                     isRecursive, enableHmsEventsIncrementalSync));
         } else {

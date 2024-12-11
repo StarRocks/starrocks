@@ -12,8 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 package com.starrocks.connector;
 
+=======
+
+package com.starrocks.connector;
+
+import com.google.common.base.Joiner;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
@@ -34,12 +41,17 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HivePartitionKey;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.IcebergTable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -47,10 +59,25 @@ import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
+import com.starrocks.planner.PartitionColumnFilter;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PartitionDiff;
+import com.starrocks.sql.common.RangePartitionDiffer;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
+<<<<<<< HEAD
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
@@ -59,6 +86,20 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+=======
+import org.apache.iceberg.PartitionData;
+import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Types;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -71,22 +112,74 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.connector.iceberg.IcebergApiConverter.PARTITION_NULL_VALUE;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import static org.apache.hadoop.hive.common.FileUtils.escapePathName;
 import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class PartitionUtil {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(PartitionUtil.class);
     public static final String ICEBERG_DEFAULT_PARTITION = "ICEBERG_DEFAULT_PARTITION";
 
+=======
+    // used for compute date/datetime literal
+    public enum DateTimeInterval {
+        NONE,
+        YEAR,
+        MONTH,
+        DAY,
+        HOUR
+    }
+
+    private static final Logger LOG = LogManager.getLogger(PartitionUtil.class);
+    public static final String ICEBERG_DEFAULT_PARTITION = "ICEBERG_DEFAULT_PARTITION";
+
+    public static final String MYSQL_PARTITION_MAXVALUE = "MAXVALUE";
+
+    @Deprecated
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, Table.TableType.HIVE);
     }
 
+<<<<<<< HEAD
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
                                                   Table.TableType tableType) throws AnalysisException {
         return ConnectorPartitionTraits.build(tableType).createPartitionKey(values, columns);
     }
 
+=======
+    /**
+     * Use createPartitionKey instead, because `createPartitionKeyWithType` not takes care timezone.
+     */
+    @Deprecated
+    public static PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types,
+                                                          Table.TableType tableType) throws AnalysisException {
+        return ConnectorPartitionTraits.build(tableType).createPartitionKeyWithType(values, types);
+    }
+
+    public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
+                                                  Table.TableType tableType) throws AnalysisException {
+        Preconditions.checkState(values.size() == columns.size(),
+                "columns size is %s, but values size is %s", columns.size(), values.size());
+
+        return createPartitionKeyWithType(values, columns.stream().map(Column::getType).collect(Collectors.toList()), tableType);
+    }
+
+    public static PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns,
+                                                  Table table) throws AnalysisException {
+        Preconditions.checkState(partitionValues.size() == partitionColumns.size(),
+                "partition columns size is %s, but partition values size is %s",
+                partitionColumns.size(), partitionValues.size());
+
+        return ConnectorPartitionTraits.build(table).createPartitionKey(partitionValues, partitionColumns);
+    }
+
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // If partitionName is `par_col=0/par_date=2020-01-01`, return ["0", "2020-01-01"]
     public static List<String> toPartitionValues(String partitionName) {
         // mimics Warehouse.makeValsFromName
@@ -113,8 +206,12 @@ public class PartitionUtil {
         return FileUtils.makePartName(partitionColumnNames, partitionValues);
     }
 
+<<<<<<< HEAD
     public static String toHivePartitionName(List<String> partitionColNames,
                                              Map<String, String> partitionColNameToValue) {
+=======
+    public static String toHivePartitionName(List<String> partitionColNames, Map<String, String> partitionColNameToValue) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         int i = 0;
         StringBuilder name = new StringBuilder();
         for (String partitionColName : partitionColNames) {
@@ -123,8 +220,12 @@ public class PartitionUtil {
             }
             String partitionValue = partitionColNameToValue.get(partitionColName);
             if (partitionValue == null) {
+<<<<<<< HEAD
                 throw new StarRocksConnectorException("Can't find column {} in {}", partitionColName,
                         partitionColNameToValue);
+=======
+                throw new StarRocksConnectorException("Can't find column {} in {}", partitionColName, partitionColNameToValue);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             name.append(escapePathName(partitionColName.toLowerCase(Locale.ROOT)));
             name.append('=');
@@ -186,8 +287,12 @@ public class PartitionUtil {
     // eg. partitionNames: [p1=1/p2=2, p1=1/p2=3, p1=2/p2=2, p1=2/p2=3]
     //     partitionValues: [empty, 2]
     // return [p1=1/p2=2, p1=2/p2=2]
+<<<<<<< HEAD
     public static List<String> getFilteredPartitionKeys(List<String> partitionNames,
                                                         List<Optional<String>> partitionValues) {
+=======
+    public static List<String> getFilteredPartitionKeys(List<String> partitionNames, List<Optional<String>> partitionValues) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<String> filteredPartitionName = Lists.newArrayList();
         for (String partitionName : partitionNames) {
             List<String> values = toPartitionValues(partitionName);
@@ -206,10 +311,49 @@ public class PartitionUtil {
         return filteredPartitionName;
     }
 
+<<<<<<< HEAD
+=======
+
+    public static List<PartitionKey> getPartitionKeys(Table table) {
+        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        if (table.isUnPartitioned()) {
+            partitionKeys.add(new PartitionKey());
+        } else {
+            List<String> partitionNames = getPartitionNames(table);
+            List<Column> partitionColumns = getPartitionColumns(table);
+            try {
+                for (String partitionName : partitionNames) {
+                    partitionKeys.add(
+                            createPartitionKey(toPartitionValues(partitionName), partitionColumns, table));
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to get partition keys", e);
+                throw new StarRocksConnectorException("Failed to get partition keys", e);
+            }
+        }
+        return partitionKeys;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static List<Column> getPartitionColumns(Table table) {
         return ConnectorPartitionTraits.build(table).getPartitionColumns();
     }
 
+<<<<<<< HEAD
+=======
+    // partition name such like p1=1/p2=__HIVE_DEFAULT_PARTITION__, this function will convert it to
+    // p1=1/p2=NULL
+    public static String normalizePartitionName(String partitionName, List<String> partitionColumnNames, String nullValue) {
+        List<String> partitionValues = Lists.newArrayList(toPartitionValues(partitionName));
+        for (int i = 0; i < partitionValues.size(); ++i) {
+            if (partitionValues.get(i).equals(nullValue)) {
+                partitionValues.set(i, "NULL");
+            }
+        }
+        return toHivePartitionName(partitionColumnNames, partitionValues);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Return table's partition name to partition key range's mapping:
      * - for native base table, just return its range partition map;
@@ -218,6 +362,7 @@ public class PartitionUtil {
      * @param table           : the ref base table of materialized view
      * @param partitionColumn : the ref base table's partition column which mv's partition derives
      */
+<<<<<<< HEAD
     public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn,
                                                                         Expr partitionExpr)
             throws UserException {
@@ -226,6 +371,23 @@ public class PartitionUtil {
 
     // check the partitionColumn exist in the partitionColumns
     private static int checkAndGetPartitionColumnIndex(List<Column> partitionColumns, Column partitionColumn)
+=======
+    public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn, Expr partitionExpr)
+            throws StarRocksException {
+        return ConnectorPartitionTraits.build(table).getPartitionKeyRange(partitionColumn, partitionExpr);
+    }
+
+    /**
+     * NOTE: Ensure result list cell's order is the same with partitionColumns.
+     */
+    public static Map<String, PCell> getPartitionCells(Table table, List<Column> partitionColumns)
+            throws StarRocksException {
+        return ConnectorPartitionTraits.build(table).getPartitionCells(partitionColumns);
+    }
+
+    // check the partitionColumn exist in the partitionColumns
+    public static int checkAndGetPartitionColumnIndex(List<Column> partitionColumns, Column partitionColumn)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throws AnalysisException {
         int partitionColumnIndex = -1;
         for (int index = 0; index < partitionColumns.size(); ++index) {
@@ -244,6 +406,7 @@ public class PartitionUtil {
     /**
      * NOTE:
      * this method may generate the same partition name:
+<<<<<<< HEAD
      * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
      * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
      */
@@ -251,12 +414,30 @@ public class PartitionUtil {
         String partitionName = "p" + partitionKey.getKeys().get(0).getStringValue();
         // generate legal partition name
         return partitionName.replaceAll("[^a-zA-Z0-9_]*", "");
+=======
+     * partitionName1 : par_col=0/par_date=2020-01-01 => p0_20200101
+     * partitionName2 : par_col=1/par_date=2020-01-01 => p1_20200101
+     */
+    public static String generateMVPartitionName(PartitionKey partitionKey) {
+        StringBuilder sb = new StringBuilder("p");
+        List<String> partitionNames = partitionKey.getKeys()
+                .stream()
+                .map(literalExpr -> generateLiteralPartitionName(literalExpr))
+                .collect(Collectors.toList());
+        sb.append(Joiner.on("_").join(partitionNames));
+        return sb.toString();
+    }
+
+    private static String generateLiteralPartitionName(LiteralExpr literalExpr) {
+        return literalExpr.getStringValue().replaceAll("[^a-zA-Z0-9_]*", "");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(Table table) {
         return ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
     }
 
+<<<<<<< HEAD
     // Get partition name generated for mv from hive/hudi/iceberg partition name,
     // external table partition name like this :
     // col_date=2023-01-01,
@@ -278,18 +459,82 @@ public class PartitionUtil {
      */
     public static Map<String, Set<String>> getMVPartitionNameMapOfExternalTable(Table table,
                                                                                 Column partitionColumn,
+=======
+    public static Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(Table table, List<String> partitionNames) {
+        return ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo(partitionNames);
+    }
+
+    // Get partition name generated for mv from hive/hudi/iceberg partition name,
+    // external table partition name like this :
+    // col_date=2023-01-01,
+    // it needs to generate a legal partition name for mv like 'p20230101' when mv
+    // based on partitioned external table.
+    public static Set<String> getMVPartitionName(Table table, Column partitionColumn,
+                                                 List<String> partitionNames,
+                                                 boolean isListPartition,
+                                                 Expr partitionExpr) throws AnalysisException {
+
+        if (isListPartition) {
+            Map<String, PCell> partitionNameWithList = getMVPartitionToCells(table, ImmutableList.of(partitionColumn),
+                    partitionNames);
+            return Sets.newHashSet(partitionNameWithList.keySet());
+        } else {
+            Map<String, Range<PartitionKey>> partitionNameWithRange = getMVPartitionNameWithRange(table, partitionColumn,
+                    partitionNames, partitionExpr);
+            return Sets.newHashSet(partitionNameWithRange.keySet());
+        }
+    }
+
+    public static Map<String, Range<PartitionKey>> getMVPartitionNameWithRange(Table table, Column partitionColumn,
+                                                                               List<String> partitionNames,
+                                                                               Expr partitionExpr) throws AnalysisException {
+        if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isPaimonTable()) {
+            return getRangePartitionMapOfExternalTable(table, partitionColumn, partitionNames, partitionExpr);
+        } else if (table.isJDBCTable()) {
+            return PartitionUtil.getRangePartitionMapOfJDBCTable(table, partitionColumn, partitionNames, partitionExpr);
+        } else {
+            throw new DmlException("Can not get partition range from table with type : %s", table.getType());
+        }
+    }
+
+    /**
+     *  NOTE:
+     *  External tables may contain multi partition columns, so the same mv partition name may contain multi external
+     *  table partitions. eg:
+     *   partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     *   partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     */
+    public static Map<String, Set<String>> getMVPartitionNameMapOfExternalTable(Table table,
+                                                                                List<Column> refPartitionColumns,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                                                                 List<String> partitionNames)
             throws AnalysisException {
         List<Column> partitionColumns = getPartitionColumns(table);
         // Get the index of partitionColumn when table has multi partition columns.
+<<<<<<< HEAD
         int partitionColumnIndex = checkAndGetPartitionColumnIndex(partitionColumns, partitionColumn);
+=======
+        List<Integer> partitionColumnIdxes = Lists.newArrayList();
+        for (Column refPartitionColumn : refPartitionColumns) {
+            partitionColumnIdxes.add(checkAndGetPartitionColumnIndex(partitionColumns, refPartitionColumn));
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Map<String, Set<String>> mvPartitionKeySetMap = Maps.newHashMap();
         if (table.isJDBCTable()) {
             for (String partitionName : partitionNames) {
                 PartitionKey partitionKey = createPartitionKey(
+<<<<<<< HEAD
                         ImmutableList.of(partitionName),
                         ImmutableList.of(partitionColumn),
                         table.getType());
+=======
+                        partitionColumnIdxes.stream()
+                                .map(p -> getPartitionNameForJDBCTable(partitionColumns.get(p), partitionName))
+                                .collect(Collectors.toList()),
+                        partitionColumnIdxes.stream().map(partitionColumns::get).collect(Collectors.toList()),
+                        table);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 String mvPartitionName = generateMVPartitionName(partitionKey);
                 mvPartitionKeySetMap.computeIfAbsent(mvPartitionName, x -> Sets.newHashSet())
                         .add(partitionName);
@@ -298,9 +543,15 @@ public class PartitionUtil {
             for (String partitionName : partitionNames) {
                 List<String> partitionNameValues = toPartitionValues(partitionName);
                 PartitionKey partitionKey = createPartitionKey(
+<<<<<<< HEAD
                         ImmutableList.of(partitionNameValues.get(partitionColumnIndex)),
                         ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
                         table.getType());
+=======
+                        partitionColumnIdxes.stream().map(partitionNameValues::get).collect(Collectors.toList()),
+                        partitionColumnIdxes.stream().map(partitionColumns::get).collect(Collectors.toList()),
+                        table);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 String mvPartitionName = generateMVPartitionName(partitionKey);
                 mvPartitionKeySetMap.computeIfAbsent(mvPartitionName, x -> Sets.newHashSet())
                         .add(partitionName);
@@ -309,12 +560,47 @@ public class PartitionUtil {
         return mvPartitionKeySetMap;
     }
 
+<<<<<<< HEAD
+=======
+    // Iceberg Table has partition transforms like this:
+    // partition column is (ts timestamp), table could partition by year(ts), month(ts), day(ts), hour(ts)
+    // this function could get the dateInterval from partition transform
+    public static DateTimeInterval getDateTimeInterval(Table table, Column partitionColumn) {
+        if (partitionColumn.getType() != Type.DATE && partitionColumn.getType() != Type.DATETIME) {
+            return DateTimeInterval.NONE;
+        }
+        if (table.isIcebergTable()) {
+            return IcebergPartitionUtils.getDateTimeIntervalFromIceberg((IcebergTable) table, partitionColumn);
+        } else {
+            // add 1 day as default interval
+            return DateTimeInterval.DAY;
+        }
+    }
+
+    private static String getPartitionNameForJDBCTable(Column partitionColumn, String partitionName) {
+        if (partitionName.equalsIgnoreCase(MYSQL_PARTITION_MAXVALUE)) {
+            // For the special handling of maxvalue, take the maximum value for int type and 9999-12-31 for date,
+            // For varchar and char, due to the need to convert them to time partitions using str2date, they are also taken as 9999-12-31
+            if (partitionColumn.getPrimitiveType().isIntegerType()) {
+                partitionName = IntLiteral.createMaxValue(partitionColumn.getType()).getStringValue();
+            } else {
+                partitionName = DateLiteral.createMaxValue(Type.DATE).getStringValue();
+            }
+        }
+        return partitionName;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Map partition values to partition ranges, eg:
      * [NULL,1992-01-01,1992-01-02,1992-01-03]
      * ||
      * \/
+<<<<<<< HEAD
      * [0000-01-01, 1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, MAX_VALUE)
+=======
+     * [0000-01-01,1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, 1993-01-04)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
      * <p>
      * NOTE:
      * External tables may contain multi partition columns, so the same mv partition name may contain multi external
@@ -333,6 +619,7 @@ public class PartitionUtil {
         int partitionColumnIndex = checkAndGetPartitionColumnIndex(partitionColumns, partitionColumn);
         List<PartitionKey> partitionKeys = new ArrayList<>();
         Map<String, PartitionKey> mvPartitionKeyMap = Maps.newHashMap();
+<<<<<<< HEAD
         if (table.isJDBCTable()) {
             for (String partitionName : partitionNames) {
                 putMvPartitionKeyIntoMap(table, partitionColumn, partitionKeys, mvPartitionKeyMap, partitionName);
@@ -343,11 +630,19 @@ public class PartitionUtil {
                 putMvPartitionKeyIntoMap(table, partitionColumns.get(partitionColumnIndex), partitionKeys,
                         mvPartitionKeyMap, partitionNameValues.get(partitionColumnIndex));
             }
+=======
+
+        for (String partitionName : partitionNames) {
+            List<String> partitionNameValues = toPartitionValues(partitionName);
+            putMvPartitionKeyIntoMap(table, partitionColumns.get(partitionColumnIndex), partitionKeys,
+                    mvPartitionKeyMap, partitionNameValues.get(partitionColumnIndex));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = mvPartitionKeyMap.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+<<<<<<< HEAD
         int index = 0;
         PartitionKey lastPartitionKey = null;
         String lastPartitionName = null;
@@ -388,10 +683,129 @@ public class PartitionUtil {
 
             Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
             mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, endKey));
+=======
+
+        boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
+        Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
+
+        PrimitiveType partitionColPrimType = partitionColumn.getPrimitiveType();
+        DateTimeInterval partitionDateTimeInterval = getDateTimeInterval(table, partitionColumn);
+
+        // NOTE: For external table, convert partition values to partition ranges just like list partition.
+        // Each partition's lower bound is the partition value itself, and the upper bound is the next partition value.
+        // This is more robust, and it's better to handle the case where the partition value is not continuous.
+        for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
+            String partitionKeyName = entry.getKey();
+            PartitionKey lowerBound = entry.getValue();
+            if (lowerBound.getKeys().get(0).isNullable()) {
+                // If partition key is NULL literal, rewrite it to min value.
+                lowerBound = PartitionKey.createInfinityPartitionKeyWithType(
+                        ImmutableList.of(partitionColumn.getPrimitiveType()), false);
+            }
+            Preconditions.checkState(!mvPartitionRangeMap.containsKey(partitionKeyName));
+            PartitionKey upperBound = nextPartitionKey(lowerBound, partitionDateTimeInterval, partitionColPrimType,
+                    isConvertToDate);
+            mvPartitionRangeMap.put(partitionKeyName, Range.closedOpen(lowerBound, upperBound));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return mvPartitionRangeMap;
     }
 
+<<<<<<< HEAD
+=======
+    public static PartitionKey nextPartitionKey(PartitionKey lastPartitionKey,
+                                                DateTimeInterval dateTimeInterval,
+                                                PrimitiveType partitionColPrimType,
+                                                boolean isStringConvertToDate) throws AnalysisException {
+        LiteralExpr literalExpr;
+        if (isStringConvertToDate) {
+            PartitionKey lastDate = convertToDate(lastPartitionKey);
+            String lastDateFormat = lastPartitionKey.getKeys().get(0).getStringValue();
+            DateTimeFormatter formatter = DateUtils.probeFormat(lastDateFormat);
+            DateLiteral nextDate = (DateLiteral) addOffsetForLiteral(lastDate.getKeys().get(0), 1,
+                    dateTimeInterval);
+            literalExpr = new StringLiteral(nextDate.toLocalDateTime().format(formatter));
+        } else {
+            literalExpr = addOffsetForLiteral(lastPartitionKey.getKeys().get(0), 1, dateTimeInterval);
+        }
+        PartitionKey partitionKey = new PartitionKey();
+        partitionKey.pushColumn(literalExpr, partitionColPrimType);
+        return partitionKey;
+    }
+
+    /**
+     * Map partition values to partition ranges, eg:
+     * [1992-01-01,1992-01-02,1992-01-03]
+     * ||
+     * \/
+     * (0000-01-01, 1992-01-01],(1992-01-01, 1992-01-02], (1992-01-02, 1992-01-03]
+     * <p>
+     * NOTE:
+     * External tables may contain multi partition columns, so the same mv partition name may contain multi external
+     * table partitions. eg:
+     * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     */
+    public static Map<String, Range<PartitionKey>> getRangePartitionMapOfJDBCTable(Table table,
+                                                                                   Column partitionColumn,
+                                                                                   List<String> partitionNames,
+                                                                                   Expr partitionExpr)
+            throws AnalysisException {
+
+        // Determine if it is the str2date function
+        boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
+        List<PartitionKey> partitionKeys = new ArrayList<>();
+        Map<String, PartitionKey> mvPartitionKeyMap = Maps.newHashMap();
+        for (String partitionName : partitionNames) {
+            partitionName = getPartitionNameForJDBCTable(partitionColumn, partitionName);
+            putMvPartitionKeyIntoMap(table, partitionColumn, partitionKeys, mvPartitionKeyMap, partitionName);
+        }
+
+        LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = mvPartitionKeyMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+        PartitionKey lastPartitionKey = null;
+        String partitionName = null;
+
+        Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
+        for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
+            // Adapt to the range partitioning method of JDBC Table, the partitionName adopts the name of upperBound
+            partitionName = entry.getKey();
+            if (lastPartitionKey == null) {
+                lastPartitionKey = entry.getValue();
+                if (!lastPartitionKey.getKeys().get(0).isMinValue()) {
+                    // If partition key is not min value, rewrite it to min value.
+                    lastPartitionKey = PartitionKey.createInfinityPartitionKeyWithType(
+                            ImmutableList.of(isConvertToDate ?
+                                    PrimitiveType.DATE : partitionColumn.getPrimitiveType()), false);
+                } else {
+                    if (lastPartitionKey.getKeys().get(0).isNullable()) {
+                        // If partition key is NULL literal, rewrite it to min value.
+                        lastPartitionKey = PartitionKey.createInfinityPartitionKeyWithType(
+                                ImmutableList.of(isConvertToDate ?
+                                        PrimitiveType.DATE : partitionColumn.getPrimitiveType()), false);
+                    } else {
+                        lastPartitionKey = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
+                    }
+                    continue;
+                }
+            }
+            PartitionKey upperBound = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
+            putRangeToMvPartitionRangeMapForJDBCTable(mvPartitionRangeMap, partitionName, lastPartitionKey, upperBound);
+            lastPartitionKey = upperBound;
+        }
+
+        return mvPartitionRangeMap;
+    }
+
+    private static void putRangeToMvPartitionRangeMapForJDBCTable(Map<String, Range<PartitionKey>> mvPartitionRangeMap,
+                                                                  String partitionName,
+                                                                  PartitionKey lastPartitionKey,
+                                                                  PartitionKey upperBound) {
+        Preconditions.checkState(!mvPartitionRangeMap.containsKey(partitionName));
+        mvPartitionRangeMap.put(partitionName, Range.openClosed(lastPartitionKey, upperBound));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * If base table column type is string but partition type is date, we need to convert the string to date
      * @param partitionExpr   PARTITION BY expr
@@ -443,10 +857,20 @@ public class PartitionUtil {
      * @param stringLiteral: input string literal to convert.
      * @return             : date literal if string literal can be converted, otherwise throw SemanticException.
      */
+<<<<<<< HEAD
     public static DateLiteral convertToDateLiteral(LiteralExpr stringLiteral) throws SemanticException {
         if (stringLiteral == null) {
             return null;
         }
+=======
+    public static LiteralExpr convertToDateLiteral(LiteralExpr stringLiteral) throws SemanticException {
+        if (stringLiteral == null) {
+            return null;
+        }
+        if (stringLiteral.isConstantNull()) {
+            return NullLiteral.create(Type.DATE);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             String dateLiteral = stringLiteral.getStringValue();
             LocalDateTime dateValue = DateUtils.parseStrictDateTime(dateLiteral);
@@ -464,28 +888,50 @@ public class PartitionUtil {
     private static PartitionKey convertToDate(PartitionKey partitionKey) throws SemanticException {
         PartitionKey newPartitionKey = new PartitionKey();
         try {
+<<<<<<< HEAD
             DateLiteral dateLiteral = convertToDateLiteral(partitionKey.getKeys().get(0));
             newPartitionKey.pushColumn(dateLiteral, PrimitiveType.DATE);
             return newPartitionKey;
         } catch (SemanticException e) {
             throw new SemanticException("convert string {} to date partition key failed:",
                     partitionKey.getKeys().get(0).getStringValue(), e);
+=======
+            LiteralExpr dateLiteral = convertToDateLiteral(partitionKey.getKeys().get(0));
+            newPartitionKey.pushColumn(dateLiteral, PrimitiveType.DATE);
+            return newPartitionKey;
+        } catch (SemanticException e) {
+            SemanticException semanticException =
+                    new SemanticException("convert string %s to date partition key failed:",
+                            partitionKey.getKeys().get(0).getStringValue(), e);
+            semanticException.addSuppressed(e);
+            throw semanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     private static void putMvPartitionKeyIntoMap(Table table, Column partitionColumn, List<PartitionKey> partitionKeys,
+<<<<<<< HEAD
                                                  Map<String, PartitionKey> mvPartitionKeyMap, String partitionName)
             throws AnalysisException {
         PartitionKey partitionKey = createPartitionKey(
                 ImmutableList.of(partitionName),
                 ImmutableList.of(partitionColumn),
                 table.getType());
+=======
+                                                 Map<String, PartitionKey> mvPartitionKeyMap, String partitionValue)
+            throws AnalysisException {
+        PartitionKey partitionKey = createPartitionKey(
+                ImmutableList.of(partitionValue),
+                ImmutableList.of(partitionColumn),
+                table);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         partitionKeys.add(partitionKey);
         String mvPartitionName = generateMVPartitionName(partitionKey);
         // TODO: check `mvPartitionName` existed.
         mvPartitionKeyMap.put(mvPartitionName, partitionKey);
     }
 
+<<<<<<< HEAD
     public static Map<String, List<List<String>>> getMVPartitionNameWithList(Table table,
                                                                              Column partitionColumn,
                                                                              List<String> partitionNames)
@@ -495,11 +941,29 @@ public class PartitionUtil {
 
         // Get the index of partitionColumn when table has multi partition columns.
         int partitionColumnIndex = checkAndGetPartitionColumnIndex(partitionColumns, partitionColumn);
+=======
+    /**
+     * NOTE: Ensure output plist cell's order is the same with partitionColumns.
+     */
+    public static Map<String, PCell> getMVPartitionToCells(Table table,
+                                                           List<Column> refPartitionColumns,
+                                                           List<String> partitionNames)
+            throws AnalysisException {
+        Map<String, PCell> partitionListMap = new LinkedHashMap<>();
+        List<Column> partitionColumns = getPartitionColumns(table);
+
+        // Get the index of partitionColumn when table has multi partition columns.
+        List<Integer> partitionColumnIdxes = Lists.newArrayList();
+        for (Column refPartitionColumn : refPartitionColumns) {
+            partitionColumnIdxes.add(checkAndGetPartitionColumnIndex(partitionColumns, refPartitionColumn));
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         List<PartitionKey> partitionKeys = new ArrayList<>();
         for (String partitionName : partitionNames) {
             List<String> partitionNameValues = toPartitionValues(partitionName);
             PartitionKey partitionKey = createPartitionKey(
+<<<<<<< HEAD
                     ImmutableList.of(partitionNameValues.get(partitionColumnIndex)),
                     ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
                     table.getType());
@@ -507,6 +971,15 @@ public class PartitionUtil {
             String mvPartitionName = generateMVPartitionName(partitionKey);
             List<List<String>> partitionKeyList = generateMVPartitionList(partitionKey);
             partitionListMap.put(mvPartitionName, partitionKeyList);
+=======
+                    partitionColumnIdxes.stream().map(partitionNameValues::get).collect(Collectors.toList()),
+                    partitionColumnIdxes.stream().map(partitionColumns::get).collect(Collectors.toList()),
+                    table);
+            partitionKeys.add(partitionKey);
+            String mvPartitionName = generateMVPartitionName(partitionKey);
+            List<List<String>> partitionKeyList = generateMVPartitionList(partitionKey);
+            partitionListMap.put(mvPartitionName, new PListCell(partitionKeyList));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return partitionListMap;
     }
@@ -527,7 +1000,11 @@ public class PartitionUtil {
     // if all partition fields are no longer active (dropped by partition evolution), return "ICEBERG_DEFAULT_PARTITION"
     public static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
         StringBuilder sb = new StringBuilder();
+<<<<<<< HEAD
         for (int index = 0; index < partition.size(); ++index) {
+=======
+        for (int index = 0; index < partitionSpec.fields().size(); ++index) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             PartitionField partitionField = partitionSpec.fields().get(index);
             // skip inactive partition field
             if (partitionField.transform().isVoid()) {
@@ -548,14 +1025,63 @@ public class PartitionUtil {
         return ICEBERG_DEFAULT_PARTITION;
     }
 
+<<<<<<< HEAD
+=======
+    public static List<String> getIcebergPartitionValues(PartitionSpec spec,
+                                                         StructLike partition,
+                                                         boolean existPartitionTransformedEvolution) {
+        PartitionData partitionData = (PartitionData) partition;
+        List<String> partitionValues = new ArrayList<>();
+        for (int i = 0; i < spec.fields().size(); i++) {
+            PartitionField partitionField = spec.fields().get(i);
+            if ((!partitionField.transform().isIdentity() && existPartitionTransformedEvolution) ||
+                    (partitionField.transform().isVoid() && partitionData.get(i) == null)) {
+                continue;
+            }
+
+            Class<?> clazz = spec.javaClasses()[i];
+            String value = partitionField.transform().toHumanString(getPartitionValue(partitionData, i, clazz));
+
+            // currently starrocks date literal only support local datetime
+            org.apache.iceberg.types.Type icebergType = spec.schema().findType(partitionField.sourceId());
+            if (!value.equals(PARTITION_NULL_VALUE) && partitionField.transform().isIdentity() &&
+                    icebergType.equals(Types.TimestampType.withZone())) {
+                value = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
+                        getPartitionValue(partitionData, i, clazz)).toLocalDateTime().toString();
+            }
+
+            partitionValues.add(value);
+        }
+
+        return partitionValues;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static <T> T getPartitionValue(StructLike partition, int position, Class<?> javaClass) {
         return partition.get(position, (Class<T>) javaClass);
     }
 
+<<<<<<< HEAD
     public static LiteralExpr addOffsetForLiteral(LiteralExpr expr, int offset) throws AnalysisException {
         if (expr instanceof DateLiteral) {
             DateLiteral lowerDate = (DateLiteral) expr;
             return new DateLiteral(lowerDate.toLocalDateTime().plusDays(offset), Type.DATE);
+=======
+    public static LiteralExpr addOffsetForLiteral(LiteralExpr expr, int offset, DateTimeInterval dateTimeInterval)
+            throws AnalysisException {
+        if (expr instanceof DateLiteral) {
+            // If expr is date literal, add offset should consider the date interval
+            DateLiteral lowerDate = (DateLiteral) expr;
+            if (dateTimeInterval == DateTimeInterval.YEAR) {
+                return new DateLiteral(lowerDate.toLocalDateTime().plusYears(offset), expr.getType());
+            } else if (dateTimeInterval == DateTimeInterval.MONTH) {
+                return new DateLiteral(lowerDate.toLocalDateTime().plusMonths(offset), expr.getType());
+            } else if (dateTimeInterval == DateTimeInterval.HOUR) {
+                return new DateLiteral(lowerDate.toLocalDateTime().plusHours(offset), expr.getType());
+            } else {
+                return new DateLiteral(lowerDate.toLocalDateTime().plusDays(offset), expr.getType());
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else if (expr instanceof IntLiteral) {
             IntLiteral intLiteral = (IntLiteral) expr;
             return new IntLiteral(intLiteral.getLongValue() + offset);
@@ -588,10 +1114,24 @@ public class PartitionUtil {
         thread.start();
     }
 
+<<<<<<< HEAD
     public static RangePartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
                                                       Map<String, Range<PartitionKey>> basePartitionMap,
                                                       Map<String, Range<PartitionKey>> mvPartitionMap,
                                                       PartitionDiffer differ) {
+=======
+    public static <T> void executeInNewThread(String threadName, Runnable runnable) {
+        Thread thread = new Thread(runnable);
+        thread.setName(threadName);
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    public static PartitionDiff getPartitionDiff(Expr partitionExpr,
+                                                 Map<String, Range<PartitionKey>> basePartitionMap,
+                                                 Map<String, Range<PartitionKey>> mvPartitionMap,
+                                                 RangePartitionDiffer differ) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (partitionExpr instanceof SlotRef) {
             return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap, differ);
         } else if (partitionExpr instanceof FunctionCallExpr) {
@@ -609,4 +1149,26 @@ public class PartitionUtil {
             throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
         }
     }
+<<<<<<< HEAD
+=======
+
+    public static String getPartitionName(String basePath, String partitionPath) {
+        String basePathWithSlash = getPathWithSlash(basePath);
+        String partitionPathWithSlash = getPathWithSlash(partitionPath);
+
+        if (basePathWithSlash.equals(partitionPathWithSlash)) {
+            return "";
+        }
+
+        Preconditions.checkState(partitionPath.startsWith(basePathWithSlash),
+                "Can't infer partition name. base path: %s, partition path: %s", basePath, partitionPath);
+
+        partitionPath = partitionPath.endsWith("/") ? partitionPath.substring(0, partitionPath.length() - 1) : partitionPath;
+        return partitionPath.substring(basePathWithSlash.length());
+    }
+
+    public static String getPathWithSlash(String path) {
+        return path.endsWith("/") ? path : path + "/";
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

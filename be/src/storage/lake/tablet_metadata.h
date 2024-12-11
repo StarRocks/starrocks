@@ -18,10 +18,18 @@
 
 #include "gen_cpp/lake_types.pb.h"
 
+<<<<<<< HEAD
 namespace starrocks::lake {
+=======
+namespace starrocks {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 using TabletMetadata = TabletMetadataPB;
 using TabletMetadataPtr = std::shared_ptr<const TabletMetadata>;
 using MutableTabletMetadataPtr = std::shared_ptr<TabletMetadata>;
 
+<<<<<<< HEAD
 } // namespace starrocks::lake
+=======
+} // namespace starrocks
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

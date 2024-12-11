@@ -54,7 +54,11 @@ expression ::=
 ### Usage notes
 
 - During data loading, StarRocks automatically creates some partitions based on the loaded data, but if the load job fails for some reason, the partitions that are automatically created by StarRocks cannot be automatically deleted.
+<<<<<<< HEAD
 - StarRocks sets the default maximum number of automatically created partitions to 4096, which can be configured by the FE parameter `max_automatic_partition_number`. This parameter can prevent you from accidentally creating too many partitions.
+=======
+- StarRocks sets the default maximum number of automatically created partitions for one load to 4096, which can be configured by the FE parameter `auto_partition_max_creation_number_per_load`. This parameter can prevent you from accidentally creating too many partitions.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - The naming rule for partitions is consistent with the naming rule for dynamic partitioning.
 
 ### **Examples**
@@ -156,7 +160,11 @@ partition_columns ::=
 ### Usage notes
 
 - During data loading, StarRocks automatically creates some partitions based on the loaded data, but if the load job fails for some reason, the partitions that are automatically created by StarRocks cannot be automatically deleted.
+<<<<<<< HEAD
 - StarRocks sets the default maximum number of automatically created partitions to 4096, which can be configured by the FE parameter `max_automatic_partition_number`. This parameter can prevent you from accidentally creating too many partitions.
+=======
+- StarRocks sets the default maximum number of automatically created partitions for one load to 4096, which can be configured by the FE parameter `auto_partition_max_creation_number_per_load`. This parameter can prevent you from accidentally creating too many partitions.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - The naming rule for partitions: if multiple partition columns are specified, the values of different partition columns are connected with an underscore `_` in the partition name, and the format is `p<value in partition column 1>_<value in partition column 2>_...`. For example, if two columns `dt` and `province` are specified as partition columns, both of which are string types, and a data row with values `2022-04-01` and `beijing` is loaded, the corresponding partition automatically created is named `p20220401_beijing`.
 
 ### Examples
@@ -251,8 +259,16 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ## Limits
 
+<<<<<<< HEAD
 - Since v3.1.0, StarRocks's [shared-data mode](../../deployment/shared_data/s3.md) supports the [time function expression](#partitioning-based-on-a-time-function-expression). And since v3.1.1, StarRocks's [shared-data mode](../../deployment/shared_data/s3.md) further supports the [column expression](#partitioning-based-on-the-column-expression-since-v31).
 - Currently, using CTAS to create tables configured expression partitioning is not supported.
 - Currently, using Spark Load to load data to tables that use expression partitioning is not supported.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>` statement is used to delete a partition created by using the column expression, data in the partition is directly removed and cannot be recovered.
 - Currently, you cannot [backup and restore](../../administration/management/Backup_and_restore.md) partitions created by the expression partitioning.
+=======
+- Since v3.1.0, StarRocks's shared-data mode supports the [time function expression](#partitioning-based-on-a-time-function-expression). And since v3.1.1, StarRocks's shared-data mode further supports the [column expression](#partitioning-based-on-the-column-expression-since-v31).
+- Currently, using CTAS to create tables configured expression partitioning is not supported.
+- Currently, using Spark Load to load data to tables that use expression partitioning is not supported.
+- When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>` statement is used to delete a partition created by using the column expression, data in the partition is directly removed and cannot be recovered.
+- Currently, you cannot [backup and restore](../../administration/management/Backup_and_restore.md) tables created with the expression partitioning strategy.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

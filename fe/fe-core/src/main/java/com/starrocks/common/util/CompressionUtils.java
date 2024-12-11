@@ -28,6 +28,10 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -133,4 +137,23 @@ public class CompressionUtils {
         return (compressedStr[0] == (byte) (GZIPInputStream.GZIP_MAGIC)) &&
                 (compressedStr[1] == (byte) (GZIPInputStream.GZIP_MAGIC >> 8));
     }
+<<<<<<< HEAD
+=======
+
+    private static final ImmutableMap<String, TCompressionType> CONNECTOR_SINK_SUPPORTED_COMPRESSION_TYPES =
+            (new ImmutableSortedMap.Builder<String, TCompressionType>(String.CASE_INSENSITIVE_ORDER))
+                    .put("NO_COMPRESSION", TCompressionType.NO_COMPRESSION)
+                    .put("UNCOMPRESSED", TCompressionType.NO_COMPRESSION)
+                    .put("NONE", TCompressionType.NO_COMPRESSION)
+                    .put("LZ4", TCompressionType.LZ4)
+                    .put("SNAPPY", TCompressionType.SNAPPY)
+                    .put("ZSTD", TCompressionType.ZSTD)
+                    .put("GZIP", TCompressionType.GZIP)
+                    .build();
+
+    // return empty if not supported
+    public static Optional<TCompressionType> getConnectorSinkCompressionType(String name) {
+        return Optional.ofNullable(CONNECTOR_SINK_SUPPORTED_COMPRESSION_TYPES.get(name));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -20,7 +20,11 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.time.LocalDateTime;
 
+<<<<<<< HEAD
 public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
+=======
+public class AsyncRefreshSchemeDesc extends RefreshSchemeClause {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private boolean defineStartTime;
 

@@ -15,8 +15,16 @@
 #pragma once
 
 // #define TRACE_SPILL_LOG VLOG_QUERY
+<<<<<<< HEAD
 #define TRACE_SPILL_LOG VLOG(1)
 
 #define AUTO_DEL_SPILL_FILE true
 
 #define AUTO_DEL_SPILL_DIR true
+=======
+#define TRACE_SPILL_LOG VLOG(10)
+
+#define AUTO_DEL_SPILL_FILE true
+
+#define AUTO_DEL_SPILL_DIR true
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

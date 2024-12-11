@@ -24,6 +24,10 @@ import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 
@@ -51,6 +55,10 @@ public class MvRewriteContext {
     private List<TableScanDesc> queryTableScanDescs;
     private List<TableScanDesc> mvTableScanDescs;
 
+<<<<<<< HEAD
+=======
+    private AggregatePushDownContext aggregatePushDownContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
@@ -70,6 +78,13 @@ public class MvRewriteContext {
         this.joinDeriveContexts = Lists.newArrayList();
     }
 
+<<<<<<< HEAD
+=======
+    public String getMVName() {
+        return materializationContext.getMv().getName();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public MaterializationContext getMaterializationContext() {
         return materializationContext;
     }
@@ -141,4 +156,19 @@ public class MvRewriteContext {
     public void setMvTableScanDescs(List<TableScanDesc> mvTableScanDescs) {
         this.mvTableScanDescs = mvTableScanDescs;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean isInAggregatePushDown() {
+        return aggregatePushDownContext != null;
+    }
+
+    public AggregatePushDownContext getAggregatePushDownContext() {
+        return aggregatePushDownContext;
+    }
+
+    public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
+        this.aggregatePushDownContext = aggregatePushDownContext;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -20,7 +20,11 @@ package com.starrocks.common;
 /**
  * Thrown for SQL statements that require as yet unimplemented functionality.
  */
+<<<<<<< HEAD
 public class NotImplementedException extends UserException {
+=======
+public class NotImplementedException extends StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public NotImplementedException(String msg) {
         super(msg);
     }

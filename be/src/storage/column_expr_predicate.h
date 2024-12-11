@@ -1,5 +1,10 @@
 #include <utility>
 
+<<<<<<< HEAD
+=======
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"
@@ -8,7 +13,10 @@ namespace starrocks {
 class ZoneMapDetail;
 class RuntimeState;
 class SlotDescriptor;
+<<<<<<< HEAD
 class SparseRange;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class ExprContext;
 class BitmapIndexIterator;
 class ObjectPool;
@@ -29,7 +37,11 @@ class Column;
 // And this class has a big limitation that it does not support range evaluatation. In another word, `from` supposed to be 0 always.
 // The fundamental reason is `ExprContext` requires `Column*` as a total piece, unless we can create a class to represent `ColumnSlice`.
 // And that task is almost impossible.
+<<<<<<< HEAD
 class ColumnExprPredicate : public ColumnPredicate {
+=======
+class ColumnExprPredicate final : public ColumnPredicate {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public:
     static StatusOr<ColumnExprPredicate*> make_column_expr_predicate(TypeInfoPtr type_info, ColumnId column_id,
                                                                      RuntimeState* state, ExprContext* expr_ctx,
@@ -42,7 +54,13 @@ public:
     Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
+<<<<<<< HEAD
     bool support_bloom_filter() const override { return false; }
+=======
+    bool support_original_bloom_filter() const override { return false; }
+    bool support_ngram_bloom_filter() const override { return _expr_ctxs[0]->support_ngram_bloom_filter(); }
+    bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) const override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     PredicateType type() const override { return PredicateType::kExpr; }
     bool can_vectorized() const override { return true; }
 
@@ -58,11 +76,19 @@ public:
     // otherwise, it will contain one or more predicates which form the conjunction normal form
     Status try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool,
                                               std::vector<const ColumnExprPredicate*>* output) const;
+<<<<<<< HEAD
+=======
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override;
+
+    const std::vector<ExprContext*>& get_expr_ctxs() const { return _expr_ctxs; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                         const SlotDescriptor* slot_desc);
 
+<<<<<<< HEAD
     Status _add_expr_ctxs(const std::vector<ExprContext*>& expr_ctxs);
 
     // Take ownership of this expression, not necessary to clone
@@ -70,6 +96,15 @@ private:
 
     // Share the ownership, is necessary to clone it
     Status _add_expr_ctx(ExprContext* expr_ctx);
+=======
+    void _add_expr_ctxs(const std::vector<ExprContext*>& expr_ctxs);
+
+    // Take ownership of this expression, not necessary to clone
+    void _add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx);
+
+    // Share the ownership, is necessary to clone it
+    void _add_expr_ctx(ExprContext* expr_ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ObjectPool _pool;
     RuntimeState* _state;
@@ -79,7 +114,11 @@ private:
     mutable std::vector<uint8_t> _tmp_select;
 };
 
+<<<<<<< HEAD
 class ColumnTruePredicate : public ColumnPredicate {
+=======
+class ColumnTruePredicate final : public ColumnPredicate {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public:
     ColumnTruePredicate(TypeInfoPtr type_info, ColumnId column_id) : ColumnPredicate(std::move(type_info), column_id) {}
     ~ColumnTruePredicate() override = default;
@@ -87,7 +126,11 @@ public:
     Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
+<<<<<<< HEAD
     bool support_bloom_filter() const override { return false; }
+=======
+    bool support_original_bloom_filter() const override { return false; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     PredicateType type() const override { return PredicateType::kTrue; }
     bool can_vectorized() const override { return true; }
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,

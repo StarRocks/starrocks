@@ -14,7 +14,16 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <cstdint>
+=======
+#include <cstddef>
+#include <cstdint>
+#include <type_traits>
+
+#include "column/vectorized_fwd.h"
+#include "storage/uint24.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
@@ -27,6 +36,7 @@
 
 #include "column/type_traits.h"
 #include "types/logical_type.h"
+<<<<<<< HEAD
 #include "util/hash_util.hpp"
 #include "util/slice.h"
 #include "util/unaligned_access.h"
@@ -233,6 +243,21 @@ public:
 // NOTE: typename T must be uint8_t or int8_t
 template <typename T>
 typename std::enable_if<sizeof(T) == 1, bool>::type memequal(const T* p1, size_t size1, const T* p2, size_t size2) {
+=======
+#include "util/hash.h"
+#include "util/slice.h"
+
+namespace starrocks {
+
+#if defined(__SSE2__) && !defined(ADDRESS_SANITIZER)
+
+// NOTE: This function will access 15 excessive bytes after p1 and p2, which should has padding bytes when allocating
+// memory. if withoud pad, please use memequal.
+// NOTE: typename T must be uint8_t or int8_t
+template <typename T>
+typename std::enable_if<sizeof(T) == 1, bool>::type memequal_padded(const T* p1, size_t size1, const T* p2,
+                                                                    size_t size2) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (size1 != size2) {
         return false;
     }
@@ -251,7 +276,12 @@ typename std::enable_if<sizeof(T) == 1, bool>::type memequal(const T* p1, size_t
 #else
 
 template <typename T>
+<<<<<<< HEAD
 typename std::enable_if<sizeof(T) == 1, bool>::type memequal(const T* p1, size_t size1, const T* p2, size_t size2) {
+=======
+typename std::enable_if<sizeof(T) == 1, bool>::type memequal_padded(const T* p1, size_t size1, const T* p2,
+                                                                    size_t size2) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return (size1 == size2) && (memcmp(p1, p2, size1) == 0);
 }
 #endif
@@ -259,7 +289,11 @@ typename std::enable_if<sizeof(T) == 1, bool>::type memequal(const T* p1, size_t
 static constexpr uint16_t SLICE_MEMEQUAL_OVERFLOW_PADDING = 15;
 class SliceEqual {
 public:
+<<<<<<< HEAD
     bool operator()(const Slice& x, const Slice& y) const { return memequal(x.data, x.size, y.data, y.size); }
+=======
+    bool operator()(const Slice& x, const Slice& y) const { return memequal_padded(x.data, x.size, y.data, y.size); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class SliceNormalEqual {
@@ -269,6 +303,7 @@ public:
     }
 };
 
+<<<<<<< HEAD
 template <class T>
 class StdHash {
 public:
@@ -281,6 +316,8 @@ public:
     std::size_t operator()(T value) const { return phmap_mix_with_seed<sizeof(size_t), seed>()(std::hash<T>()(value)); }
 };
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 inline uint64_t crc_hash_uint64(uint64_t value, uint64_t seed) {
 #if defined(__x86_64__) && defined(__SSE4_2__)
     return _mm_crc32_u64(seed, value);
@@ -329,6 +366,17 @@ struct Hash128WithSeed {
         return phmap_mix_with_seed<sizeof(size_t), seed>()(hash_128(seed, value));
     }
 };
+<<<<<<< HEAD
+=======
+template <typename T>
+struct HashTypeTraits {
+    using HashFunc = StdHashWithSeed<T, PhmapSeed2>;
+};
+template <>
+struct HashTypeTraits<int128_t> {
+    using HashFunc = Hash128WithSeed<PhmapSeed2>;
+};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 template <LogicalType LT, PhmapSeed seed>
 struct PhmapDefaultHashFunc {

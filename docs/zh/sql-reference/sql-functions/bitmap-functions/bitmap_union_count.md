@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_union_count
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算输入的一组 bitmap 值的并集，并返回并集的基数。该函数从 2.3 版本开始支持。
 

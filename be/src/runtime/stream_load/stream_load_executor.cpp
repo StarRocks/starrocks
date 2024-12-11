@@ -36,8 +36,16 @@
 
 #include <fmt/format.h>
 
+<<<<<<< HEAD
 #include "agent/master_info.h"
 #include "common/status.h"
+=======
+#include <string_view>
+
+#include "agent/master_info.h"
+#include "common/status.h"
+#include "common/statusor.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
@@ -45,6 +53,10 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
+<<<<<<< HEAD
+=======
+#include "testutil/sync_point.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
@@ -55,9 +67,21 @@ namespace starrocks {
 TLoadTxnBeginResult k_stream_load_begin_result;
 TLoadTxnCommitResult k_stream_load_commit_result;
 TLoadTxnRollbackResult k_stream_load_rollback_result;
+<<<<<<< HEAD
 Status k_stream_load_plan_status;
 #endif
 
+=======
+#endif
+
+static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms,
+                                  TLoadTxnCommitResult* result);
+static StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db,
+                                                         std::string_view table, int64_t txn_id);
+static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
+                                   int64_t deadline);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
     StarRocksMetrics::instance()->txn_exec_plan_total.increment(1);
 // submit this params
@@ -101,7 +125,11 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 } else {
                     LOG(WARNING) << "fragment execute failed"
                                  << ", query_id=" << UniqueId(ctx->put_result.params.params.query_id)
+<<<<<<< HEAD
                                  << ", err_msg=" << status.get_error_msg() << ", " << ctx->brief();
+=======
+                                 << ", err_msg=" << status.message() << ", " << ctx->brief();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     // cancel body_sink, make sender known it
                     if (ctx->body_sink != nullptr) {
                         ctx->body_sink->cancel(status);
@@ -142,7 +170,13 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
         return st;
     }
 #else
+<<<<<<< HEAD
     ctx->promise.set_value(k_stream_load_plan_status);
+=======
+    Status status;
+    TEST_SYNC_POINT_CALLBACK("StreamLoadExecutor::execute_plan_fragment:1", &status);
+    ctx->promise.set_value(status);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #endif
     return Status::OK();
 }
@@ -155,6 +189,14 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     request.db = ctx->db;
     request.tbl = ctx->table;
     request.label = ctx->label;
+<<<<<<< HEAD
+=======
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        request.__set_backend_id(backend_id.value());
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // set timestamp
     request.__set_timestamp(GetCurrentTimeMicros());
     if (ctx->timeout_second != -1) {
@@ -173,7 +215,11 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
 #endif
     Status status(result.status);
     if (!status.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "begin transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
+=======
+        LOG(WARNING) << "begin transaction failed, errmsg=" << status.message() << ctx->brief();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (result.__isset.job_status) {
             ctx->existing_job_status = result.job_status;
         }
@@ -199,11 +245,21 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.failInfos = true;
+<<<<<<< HEAD
     request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
+=======
+    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
+    if (ctx->timeout_second != -1) {
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
+        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
+    }
+    request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // set attachment if has
     TTxnCommitAttachment attachment;
     if (collect_load_stat(ctx, &attachment)) {
+<<<<<<< HEAD
         request.txnCommitAttachment = attachment;
         request.__isset.txnCommitAttachment = true;
     }
@@ -268,6 +324,100 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     // commit success, set need_rollback to false
     ctx->need_rollback = false;
     return Status::OK();
+=======
+        request.txnCommitAttachment = std::move(attachment);
+        request.__isset.txnCommitAttachment = true;
+    }
+
+    int retry = 0;
+    TLoadTxnCommitResult result;
+    while (true) {
+        RETURN_IF_ERROR(commit_txn_internal(request, rpc_timeout_ms, &result));
+        Status st(result.status);
+        if (st.ok()) {
+            ctx->need_rollback = false;
+            return st;
+        } else if (st.is_publish_timeout()) {
+            ctx->need_rollback = false;
+            bool visible =
+                    wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
+            return visible ? Status::OK() : st;
+        } else if (st.is_eagain()) {
+            LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry after sleeping "
+                         << result.retry_interval_ms << "ms. errmsg=" << st.message();
+            std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
+        } else if (st.is_time_out()) {
+            if (++retry > 1) {
+                ctx->need_rollback = true;
+                return st;
+            }
+            LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry. errmsg=" << st.message();
+            if (ctx->load_deadline_sec > 0) {
+                rpc_timeout_ms = (ctx->load_deadline_sec - UnixSeconds()) * 1000;
+            }
+        } else {
+            ctx->need_rollback = true;
+            return st;
+        }
+    }
+}
+
+Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, TLoadTxnCommitResult* result) {
+    TNetworkAddress master_addr = get_master_address();
+#ifndef BE_TEST
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+            master_addr.hostname, master_addr.port,
+            [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(*result, request); },
+            rpc_timeout_ms));
+#else
+    *result = k_stream_load_commit_result;
+#endif
+    return Status::OK();
+}
+
+StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db, std::string_view table,
+                                                  int64_t txn_id) {
+    TNetworkAddress master_addr = get_master_address();
+    TGetLoadTxnStatusRequest request;
+    TGetLoadTxnStatusResult result;
+
+    set_request_auth(&request, auth);
+    request.db = db;
+    request.tbl = table;
+    request.txnId = txn_id;
+
+    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            master_addr.hostname, master_addr.port,
+            [&request, &result](FrontendServiceConnection& client) { client->getLoadTxnStatus(result, request); },
+            config::txn_commit_rpc_timeout_ms);
+    if (!st.ok()) {
+        return st;
+    } else {
+        return result.status;
+    }
+}
+
+bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
+                            int64_t deadline) {
+    while (deadline > UnixSeconds()) {
+        auto wait_seconds = std::min((int64_t)config::get_txn_status_internal_sec, deadline - UnixSeconds());
+        LOG(WARNING) << "transaction is not visible now, will wait " << wait_seconds
+                     << " seconds before retrieving the status again, txn_id: " << txn_id;
+        // The following sleep might introduce delay to the commit and publish total time
+        sleep(wait_seconds);
+        auto status_or = get_txn_status(auth, db, table, txn_id);
+        if (!status_or.ok()) {
+            return false;
+        } else if (status_or.value() == TTransactionStatus::VISIBLE) {
+            return true;
+        } else if (status_or.value() == TTransactionStatus::COMMITTED) {
+            continue;
+        } else {
+            return false;
+        }
+    }
+    return false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
@@ -283,7 +433,16 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.failInfos = true;
+<<<<<<< HEAD
     request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
+=======
+    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
+    if (ctx->timeout_second != -1) {
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
+        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
+    }
+    request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // set attachment if has
     TTxnCommitAttachment attachment;
@@ -298,7 +457,11 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnPrepare(result, request); },
+<<<<<<< HEAD
             config::txn_commit_rpc_timeout_ms));
+=======
+            rpc_timeout_ms));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #else
     result = k_stream_load_commit_result;
 #endif
@@ -306,7 +469,11 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     // to rollback this transaction.
     Status status(result.status);
     if (!status.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "prepare transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
+=======
+        LOG(WARNING) << "prepare transaction failed, errmsg=" << status.message() << ctx->brief();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return status;
     }
     // commit success, set need_rollback to false
@@ -327,7 +494,11 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.failInfos = true;
+<<<<<<< HEAD
     request.__set_reason(ctx->status.get_error_msg());
+=======
+    request.__set_reason(std::string(ctx->status.message()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // set attachment if has
     TTxnCommitAttachment attachment;
@@ -342,7 +513,11 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnRollback(result, request); });
     if (!rpc_st.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "transaction rollback failed. errmsg=" << rpc_st.get_error_msg() << ctx->brief();
+=======
+        LOG(WARNING) << "transaction rollback failed. errmsg=" << rpc_st.message() << ctx->brief();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return rpc_st;
     }
     if (result.status.status_code != TStatusCode::TXN_NOT_EXISTS) {
@@ -379,6 +554,12 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         manual_load_attach.__set_receivedBytes(ctx->receive_bytes);
         manual_load_attach.__set_loadedBytes(ctx->loaded_bytes);
         manual_load_attach.__set_unselectedRows(ctx->number_unselected_rows);
+<<<<<<< HEAD
+=======
+        manual_load_attach.__set_beginTxnTime(ctx->begin_txn_cost_nanos / 1000 / 1000);
+        manual_load_attach.__set_planTime(ctx->stream_load_put_cost_nanos / 1000 / 1000);
+        manual_load_attach.__set_receiveDataTime(ctx->total_received_data_cost_nanos / 1000 / 1000);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!ctx->error_url.empty()) {
             manual_load_attach.__set_errorLogUrl(ctx->error_url);
         }

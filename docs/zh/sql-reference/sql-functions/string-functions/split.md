@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # split
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 根据分隔符拆分字符串，将拆分后的所有字符串以 ARRAY 的格式返回。
 

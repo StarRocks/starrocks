@@ -47,6 +47,10 @@ public:
     SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~SelectNode() override;
 
+<<<<<<< HEAD
+=======
+    Status init(const TPlanNode& tnode, RuntimeState* state) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
@@ -55,6 +59,11 @@ public:
             pipeline::PipelineBuilderContext* context) override;
 
 private:
+<<<<<<< HEAD
+=======
+    std::map<SlotId, ExprContext*> _common_expr_ctxs;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RuntimeProfile::Counter* _conjunct_evaluate_timer = nullptr;
 };
 

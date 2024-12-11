@@ -61,8 +61,13 @@ public:
             generate_desc_tuple(slot_info, &desc_tbl_builder);
         }
         DescriptorTbl* desc_tbl = nullptr;
+<<<<<<< HEAD
         DescriptorTbl::create(runtime_state, &obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
                               config::vector_chunk_size);
+=======
+        (void)DescriptorTbl::create(runtime_state, &obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return desc_tbl;
     }
 

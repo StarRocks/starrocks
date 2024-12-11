@@ -15,18 +15,33 @@
 #include "exec/schema_scanner/schema_schemata_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
+<<<<<<< HEAD
 #include "runtime/string_value.h"
 #include "types/logical_type.h"
+=======
+#include "runtime/runtime_state.h"
+#include "runtime/string_value.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaSchemataScanner::_s_columns[] = {
         //   name,       type,          size
+<<<<<<< HEAD
         {"CATALOG_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
         {"SCHEMA_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFAULT_CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFAULT_COLLATION_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"SQL_PATH", TYPE_VARCHAR, sizeof(StringValue), true},
+=======
+        {"CATALOG_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"SCHEMA_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFAULT_CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"DEFAULT_COLLATION_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"SQL_PATH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 SchemaSchemataScanner::SchemaSchemataScanner()
@@ -39,6 +54,12 @@ Status SchemaSchemataScanner::start(RuntimeState* state) {
         return Status::InternalError("used before initial.");
     }
     TGetDbsParams db_params;
+<<<<<<< HEAD
+=======
+    if (nullptr != _param->catalog) {
+        db_params.__set_catalog_name(*(_param->catalog));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (nullptr != _param->wild) {
         db_params.__set_pattern(*(_param->wild));
     }
@@ -52,6 +73,7 @@ Status SchemaSchemataScanner::start(RuntimeState* state) {
             db_params.__set_user_ip(*(_param->user_ip));
         }
     }
+<<<<<<< HEAD
 
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
@@ -60,6 +82,12 @@ Status SchemaSchemataScanner::start(RuntimeState* state) {
     }
 
     return Status::OK();
+=======
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
+    return SchemaScanner::start(state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status SchemaSchemataScanner::fill_chunk(ChunkPtr* chunk) {

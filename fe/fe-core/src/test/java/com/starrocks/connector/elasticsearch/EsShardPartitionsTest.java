@@ -47,8 +47,13 @@ public class EsShardPartitionsTest extends EsTestCase {
     @Test
     public void testPartition() throws Exception {
         EsTable esTable = (EsTable) GlobalStateMgr.getCurrentState()
+<<<<<<< HEAD
                 .getDb(GlobalStateMgrTestUtil.testDb1)
                 .getTable(GlobalStateMgrTestUtil.testEsTableId1);
+=======
+                .getLocalMetastore()
+                .getTable(GlobalStateMgrTestUtil.testDb1, GlobalStateMgrTestUtil.testEsTable1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         EsShardPartitions esShardPartitions = EsShardPartitions.findShardPartitions("doe",
                 loadJsonFromFile("data/es/test_search_shards.json"));
         EsTablePartitions esTablePartitions = EsTablePartitions.fromShardPartitions(esTable, esShardPartitions);

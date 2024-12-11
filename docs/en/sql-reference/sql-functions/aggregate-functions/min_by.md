@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # min_by
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the value of `x` associated with the minimum value of `y`.
 

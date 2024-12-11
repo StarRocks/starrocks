@@ -37,20 +37,34 @@ package com.starrocks.load.routineload;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
+<<<<<<< HEAD
 import com.starrocks.common.ClientPool;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.ComputeNode;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TStatus;
@@ -253,7 +267,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                             new ErrorReason(InternalErrorCode.META_NOT_FOUND_ERR, "meta not found: " + e.getMessage()),
                             false);
             throw e;
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             releaseBeSlot(routineLoadTaskInfo);
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
                     .updateState(JobState.PAUSED,
@@ -297,7 +315,12 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private void releaseBeSlot(RoutineLoadTaskInfo routineLoadTaskInfo) {
         // release the BE slot
+<<<<<<< HEAD
         routineLoadManager.releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+=======
+        routineLoadManager.releaseBeTaskSlot(
+                routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // set beId to INVALID_BE_ID to avoid release slot repeatedly,
         // when job set to paused/cancelled, the slot will be release again if beId is not INVALID_BE_ID
         routineLoadTaskInfo.setBeId(RoutineLoadTaskInfo.INVALID_BE_ID);
@@ -326,12 +349,17 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private void submitTask(long beId, TRoutineLoadTask tTask) throws LoadException {
         // TODO: need to refactor after be split into cn + dn
+<<<<<<< HEAD
         ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(beId);
+=======
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(beId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (node == null) {
             throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
         }
 
         TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBePort());
+<<<<<<< HEAD
 
         boolean ok = false;
         BackendService.Client client = null;
@@ -339,6 +367,13 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             client = ClientPool.backendPool.borrowObject(address);
             TStatus tStatus = client.submit_routine_load_task(Lists.newArrayList(tTask));
             ok = true;
+=======
+        try {
+            TStatus tStatus = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.backendPool,
+                    address,
+                    client -> client.submit_routine_load_task(Lists.newArrayList(tTask)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             if (tStatus.getStatus_code() != TStatusCode.OK) {
                 throw new LoadException("failed to submit task. error code: " + tStatus.getStatus_code()
@@ -347,12 +382,15 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             LOG.debug("send routine load task {} to BE: {}", DebugUtil.printId(tTask.id), beId);
         } catch (Exception e) {
             throw new LoadException("failed to send task: " + e.getMessage(), e);
+<<<<<<< HEAD
         } finally {
             if (ok) {
                 ClientPool.backendPool.returnObject(address, client);
             } else {
                 ClientPool.backendPool.invalidateObject(address, client);
             }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -363,7 +401,12 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     // throw exception if unrecoverable errors happen.
     private boolean allocateTaskToBe(RoutineLoadTaskInfo routineLoadTaskInfo) {
         if (routineLoadTaskInfo.getPreviousBeId() != -1L) {
+<<<<<<< HEAD
             if (routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.getPreviousBeId()) != -1L) {
+=======
+            if (routineLoadManager.takeNodeById(routineLoadTaskInfo.getWarehouseId(),
+                    routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getPreviousBeId()) != -1L) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
                             .add("job_id", routineLoadTaskInfo.getJobId())
@@ -377,7 +420,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         // the previous BE is not available, try to find a better one
+<<<<<<< HEAD
         long beId = routineLoadManager.takeBeTaskSlot();
+=======
+        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.warehouseId, routineLoadTaskInfo.getJobId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (beId < 0) {
             return false;
         }

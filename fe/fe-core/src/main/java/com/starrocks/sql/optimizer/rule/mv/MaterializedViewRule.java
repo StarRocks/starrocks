@@ -504,7 +504,11 @@ public class MaterializedViewRule extends Rule {
         for (Long indexId : indexesMatchingBestPrefixIndex) {
             long rowCount = 0;
             for (Partition partition : olapTable.getPartitions()) {
+<<<<<<< HEAD
                 rowCount += partition.getIndex(indexId).getRowCount();
+=======
+                rowCount += partition.getDefaultPhysicalPartition().getIndex(indexId).getRowCount();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             if (rowCount < minRowCount) {
                 minRowCount = rowCount;

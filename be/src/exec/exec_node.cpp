@@ -50,6 +50,10 @@
 #include "exec/aggregate/distinct_streaming_node.h"
 #include "exec/analytic_node.h"
 #include "exec/assert_num_rows_node.h"
+<<<<<<< HEAD
+=======
+#include "exec/capture_version_node.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/connector_scan_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/dict_decode_node.h"
@@ -72,7 +76,13 @@
 #include "exec/table_function_node.h"
 #include "exec/topn_node.h"
 #include "exec/union_node.h"
+<<<<<<< HEAD
 #include "exprs/expr_context.h"
+=======
+#include "exprs/dictionary_get_expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -91,7 +101,11 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _type(tnode.node_type),
           _pool(pool),
           _tuple_ids(tnode.row_tuples),
+<<<<<<< HEAD
           _row_descriptor(descs, tnode.row_tuples, tnode.nullable_tuples),
+=======
+          _row_descriptor(descs, tnode.row_tuples),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
           _resource_profile(tnode.resource_profile),
           _debug_phase(TExecNodePhase::INVALID),
           _debug_action(TDebugAction::WAIT),
@@ -124,8 +138,13 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
     auto iter = expr_ctxs->begin();
     while (iter != expr_ctxs->end()) {
         if ((*iter)->root()->is_bound(_tuple_ids)) {
+<<<<<<< HEAD
             (*iter)->prepare(state);
             (*iter)->open(state);
+=======
+            WARN_IF_ERROR((*iter)->prepare(state), "prepare expression failed");
+            WARN_IF_ERROR((*iter)->open(state), "open expression failed");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             _conjunct_ctxs.push_back(*iter);
             iter = expr_ctxs->erase(iter);
         } else {
@@ -219,7 +238,11 @@ Status ExecNode::prepare(RuntimeState* state) {
     _mem_tracker.reset(new MemTracker(_runtime_profile.get(), std::make_tuple(true, false, false), "", -1,
                                       _runtime_profile->name(), nullptr));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
+<<<<<<< HEAD
     RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), _runtime_profile.get()));
+=======
+    RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, _runtime_profile.get()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // TODO(zc):
     // AddExprCtxsToFree(_conjunct_ctxs);
@@ -321,7 +344,11 @@ Status ExecNode::reset(RuntimeState* state) {
 Status ExecNode::collect_query_statistics(QueryStatistics* statistics) {
     DCHECK(statistics != nullptr);
     for (auto child_node : _children) {
+<<<<<<< HEAD
         child_node->collect_query_statistics(statistics);
+=======
+        (void)child_node->collect_query_statistics(statistics);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return Status::OK();
 }
@@ -331,7 +358,11 @@ void ExecNode::close(RuntimeState* state) {
         return;
     }
     _is_closed = true;
+<<<<<<< HEAD
     exec_debug_action(TExecNodePhase::CLOSE);
+=======
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     if (_rows_returned_counter != nullptr) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
@@ -496,7 +527,12 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::TABLE_FUNCTION_NODE:
         *node = pool->add(new TableFunctionNode(pool, tnode, descs));
         return Status::OK();
+<<<<<<< HEAD
     case TPlanNodeType::HDFS_SCAN_NODE: {
+=======
+    case TPlanNodeType::HDFS_SCAN_NODE:
+    case TPlanNodeType::KUDU_SCAN_NODE: {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
         connector_scan_node.connector_name = connector::Connector::HIVE;
@@ -564,6 +600,13 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new StreamAggregateNode(pool, tnode, descs));
         return Status::OK();
     }
+<<<<<<< HEAD
+=======
+    case TPlanNodeType::CAPTURE_VERSION_NODE: {
+        *node = pool->add(new CaptureVersionNode(pool, tnode, descs));
+        return Status::OK();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
     }

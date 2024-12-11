@@ -15,18 +15,32 @@
 #include <type_traits>
 
 #include "column/column.h"
+<<<<<<< HEAD
 #include "column/nullable_column.h"
+=======
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
+<<<<<<< HEAD
+=======
+#include "types/logical_type.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
 template <LogicalType field_type, typename ItemSet>
+<<<<<<< HEAD
 class ColumnInPredicate : public ColumnPredicate {
+=======
+class ColumnInPredicate final : public ColumnPredicate {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     static_assert(std::is_same_v<ValueType, typename ItemSet::value_type>);
 
@@ -100,14 +114,24 @@ public:
         return false;
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         range->clear();
         for (auto value : _values) {
             bool exact_match = false;
             Status s = iter->seek_dictionary(&value, &exact_match);
             if (s.ok() && exact_match) {
                 rowid_t seeked_ordinal = iter->current_ordinal();
+<<<<<<< HEAD
                 range->add(Range(seeked_ordinal, seeked_ordinal + 1));
+=======
+                range->add(Range<>(seeked_ordinal, seeked_ordinal + 1));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else if (!s.ok() && !s.is_not_found()) {
                 return s;
             }
@@ -115,9 +139,28 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     bool support_bloom_filter() const override { return true; }
 
     bool bloom_filter(const BloomFilter* bf) const override {
+=======
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring indices;
+        for (auto value : _values) {
+            roaring::Roaring index;
+            RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &value, query_type, &index));
+            indices |= index;
+        }
+        *row_bitmap &= indices;
+        return Status::OK();
+    }
+
+    bool support_original_bloom_filter() const override { return true; }
+
+    bool original_bloom_filter(const BloomFilter* bf) const override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         static_assert(field_type != TYPE_HLL, "TODO");
         static_assert(field_type != TYPE_OBJECT, "TODO");
         static_assert(field_type != TYPE_PERCENTILE, "TODO");
@@ -159,7 +202,11 @@ public:
 
     std::string debug_string() const override {
         std::stringstream ss;
+<<<<<<< HEAD
         ss << "(columnId=" << _column_id << ",In(";
+=======
+        ss << "((columnId=" << _column_id << ")IN(";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         int i = 0;
         for (auto& item : _values) {
             if (i++ != 0) {
@@ -167,7 +214,11 @@ public:
             }
             ss << this->type_info()->to_string(&item);
         }
+<<<<<<< HEAD
         ss << ")";
+=======
+        ss << "))";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return ss.str();
     }
 
@@ -177,7 +228,11 @@ private:
 
 // Template specialization for binary column
 template <LogicalType field_type>
+<<<<<<< HEAD
 class BinaryColumnInPredicate : public ColumnPredicate {
+=======
+class BinaryColumnInPredicate final : public ColumnPredicate {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public:
     BinaryColumnInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)
             : ColumnPredicate(type_info, id), _zero_padded_strs(std::move(strings)) {
@@ -269,7 +324,13 @@ public:
         return false;
     }
 
+<<<<<<< HEAD
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         range->clear();
         for (const std::string& s : _zero_padded_strs) {
             Slice padded_value(s);
@@ -277,7 +338,11 @@ public:
             Status st = iter->seek_dictionary(&padded_value, &exact_match);
             if (st.ok() && exact_match) {
                 rowid_t seeked_ordinal = iter->current_ordinal();
+<<<<<<< HEAD
                 range->add(Range(seeked_ordinal, seeked_ordinal + 1));
+=======
+                range->add(Range<>(seeked_ordinal, seeked_ordinal + 1));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else if (!st.ok() && !st.is_not_found()) {
                 return st;
             }
@@ -285,9 +350,29 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     bool support_bloom_filter() const override { return true; }
 
     bool bloom_filter(const BloomFilter* bf) const override {
+=======
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring indices;
+        for (const std::string& s : _zero_padded_strs) {
+            Slice padded_value(s);
+            roaring::Roaring index;
+            RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &index));
+            indices |= index;
+        }
+        *row_bitmap &= indices;
+        return Status::OK();
+    }
+
+    bool support_original_bloom_filter() const override { return true; }
+
+    bool original_bloom_filter(const BloomFilter* bf) const override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (const auto& str : _zero_padded_strs) {
             Slice v(str);
             RETURN_IF(bf->test_bytes(v.data, v.size), true);
@@ -334,6 +419,89 @@ private:
     ItemHashSet<Slice> _slices;
 };
 
+<<<<<<< HEAD
+=======
+class DictionaryCodeInPredicate final : public ColumnPredicate {
+private:
+    enum LogicOp { ASSIGN, AND, OR };
+
+public:
+    DictionaryCodeInPredicate(const TypeInfoPtr& type_info, ColumnId id, const std::vector<int32_t>& operands,
+                              size_t size)
+            : ColumnPredicate(type_info, id), _bit_mask(size) {
+        for (auto item : operands) {
+            DCHECK(item < size);
+            _bit_mask[item] = 1;
+        }
+    }
+
+    ~DictionaryCodeInPredicate() override = default;
+
+    template <LogicOp Op>
+    inline void t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+        const Int32Column* dict_code_column = down_cast<const Int32Column*>(ColumnHelper::get_data_column(column));
+        const auto& data = dict_code_column->get_data();
+        Filter filter(to - from, 1);
+
+        if (column->has_null()) {
+            const NullColumn* null_column = down_cast<const NullableColumn*>(column)->null_column().get();
+            const auto& null_data = null_column->get_data();
+            for (auto i = from; i < to; i++) {
+                auto index = data[i] >= _bit_mask.size() ? 0 : data[i];
+                filter[i - from] = (!null_data[i]) & _bit_mask[index];
+            }
+        } else {
+            for (auto i = from; i < to; i++) {
+                filter[i - from] = _bit_mask[data[i]];
+            }
+        }
+
+        for (auto i = from; i < to; i++) {
+            if constexpr (Op == ASSIGN) {
+                sel[i] = filter[i - from];
+            } else if constexpr (Op == AND) {
+                sel[i] &= filter[i - from];
+            } else {
+                sel[i] |= filter[i - from];
+            }
+        }
+    }
+
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ASSIGN>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<AND>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<OR>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    bool can_vectorized() const override { return false; }
+
+    PredicateType type() const override { return PredicateType::kInList; }
+
+    Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
+                      ObjectPool* obj_pool) const override {
+        const auto to_type = target_type_info->type();
+        if (to_type == LogicalType::TYPE_INT) {
+            *output = this;
+            return Status::OK();
+        }
+        CHECK(false) << "Not support, from_type=" << LogicalType::TYPE_INT << ", to_type=" << to_type;
+        return Status::OK();
+    }
+
+private:
+    std::vector<uint8_t> _bit_mask;
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 template <template <typename, size_t...> typename Set, size_t... Args>
 ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, ColumnId id,
                                                  const std::vector<std::string>& strs) {
@@ -476,4 +644,22 @@ ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type_info, ColumnId 
     }
 }
 
+<<<<<<< HEAD
+=======
+ColumnPredicate* new_dictionary_code_in_predicate(const TypeInfoPtr& type, ColumnId id,
+                                                  const std::vector<int32_t>& operands, size_t size) {
+    DCHECK(is_integer_type(type->type()));
+    if (operands.size() <= 3 || size > 1024) {
+        std::vector<std::string> str_codes;
+        str_codes.reserve(operands.size());
+        for (int code : operands) {
+            str_codes.emplace_back(std::to_string(code));
+        }
+        return new_column_in_predicate(type, id, str_codes);
+    } else {
+        return new DictionaryCodeInPredicate(type, id, operands, size);
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } //namespace starrocks

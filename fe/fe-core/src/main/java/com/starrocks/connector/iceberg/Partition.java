@@ -16,6 +16,11 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.PartitionInfo;
 
+<<<<<<< HEAD
+=======
+import java.util.concurrent.TimeUnit;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class Partition implements PartitionInfo {
     private final long modifiedTime;
 
@@ -24,6 +29,14 @@ public class Partition implements PartitionInfo {
         return modifiedTime;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public TimeUnit getModifiedTimeUnit() {
+        return TimeUnit.MICROSECONDS;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Partition(long modifiedTime) {
         this.modifiedTime = modifiedTime;
     }

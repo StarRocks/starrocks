@@ -14,12 +14,24 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -94,6 +106,7 @@ public class TransactionChecker {
     public static TransactionChecker create(TransactionState txn, Database db) {
         List<PartitionChecker> partitions = new ArrayList<>();
         for (TableCommitInfo tableCommitInfo : txn.getIdToTableCommitInfos().values()) {
+<<<<<<< HEAD
             OlapTable table = (OlapTable) db.getTable(tableCommitInfo.getTableId());
             if (table == null || table.isCloudNativeTableOrMaterializedView()) {
                 continue;
@@ -113,6 +126,37 @@ public class TransactionChecker {
                     }
                 }
                 partitions.add(partitionChecker);
+=======
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), tableCommitInfo.getTableId());
+            if (table == null || table.isCloudNativeTableOrMaterializedView()) {
+                continue;
+            }
+
+            Locker locker = new Locker();
+            try {
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+
+                for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                    long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                    if (partition == null) {
+                        continue;
+                    }
+                    PartitionChecker partitionChecker = new PartitionChecker(partitionId, partitionCommitInfo.getVersion(),
+                            table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum()));
+                    List<MaterializedIndex> allIndices =
+                            txn.getPartitionLoadedTblIndexes(tableCommitInfo.getTableId(), partition);
+                    for (MaterializedIndex index : allIndices) {
+                        for (Tablet tablet : index.getTablets()) {
+                            partitionChecker.tablets.add((LocalTablet) tablet);
+                        }
+                    }
+                    partitions.add(partitionChecker);
+                }
+            } finally {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         return new TransactionChecker(partitions);

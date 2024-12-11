@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # minutes_sub
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Subtracts specified minutes from the date, accurate to the minute.
 
@@ -47,4 +51,8 @@ select minutes_sub('2022-01-01', 1);
 +------------------------------+
 | 2021-12-31 23:59:00          |
 +------------------------------+
+<<<<<<< HEAD
 ```
+=======
+```
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

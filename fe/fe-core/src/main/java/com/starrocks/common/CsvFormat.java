@@ -16,6 +16,11 @@
 package com.starrocks.common;
 
 public class CsvFormat {
+<<<<<<< HEAD
+=======
+    public static final int MAX_COLUMN_SEPARATOR_LENGTH = 50;
+    public static final int MAX_ROW_DELIMITER_LENGTH = 50;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public CsvFormat(byte enclose, byte escape, long skipheader, boolean trimspace) {
         this.enclose = enclose;
         this.escape = escape;

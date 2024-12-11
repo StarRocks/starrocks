@@ -33,6 +33,11 @@ class NullableColumn : public ColumnFactory<Column, NullableColumn> {
     friend class ColumnFactory<Column, NullableColumn>;
 
 public:
+<<<<<<< HEAD
+=======
+    using ValueType = void;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     inline static ColumnPtr wrap_if_necessary(ColumnPtr column) {
         if (column->is_nullable()) {
             return column;
@@ -82,6 +87,11 @@ public:
 
     bool is_nullable() const override { return true; }
     bool is_json() const override { return _data_column->is_json(); }
+<<<<<<< HEAD
+=======
+    bool is_array() const override { return _data_column->is_array(); }
+    bool is_array_view() const override { return _data_column->is_array_view(); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     bool is_null(size_t index) const override {
         DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -148,11 +158,19 @@ public:
 
     bool has_large_column() const override { return _data_column->has_large_column(); }
 
+<<<<<<< HEAD
     bool append_strings(const Buffer<Slice>& strs) override;
 
     bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;
 
     bool append_continuous_strings(const Buffer<Slice>& strs) override;
+=======
+    bool append_strings(const Slice* data, size_t size) override;
+
+    bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;
+
+    bool append_continuous_strings(const Slice* data, size_t size) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
 
@@ -169,7 +187,11 @@ public:
 
     void append_default(size_t count) override { append_nulls(count); }
 
+<<<<<<< HEAD
     Status update_rows(const Column& src, const uint32_t* indexes) override;
+=======
+    void update_rows(const Column& src, const uint32_t* indexes) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     uint32_t max_one_element_serialize_size() const override {
         return sizeof(bool) + _data_column->max_one_element_serialize_size();
@@ -212,7 +234,11 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
+<<<<<<< HEAD
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+=======
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::string get_name() const override { return "nullable-" + _data_column->get_name(); }
 
@@ -248,7 +274,11 @@ public:
         _has_null = true;
         return true;
     }
+<<<<<<< HEAD
     ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+=======
+    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     size_t memory_usage() const override {
         return _data_column->memory_usage() + _null_column->memory_usage() + sizeof(bool);
@@ -311,8 +341,14 @@ public:
         return ss.str();
     }
 
+<<<<<<< HEAD
     bool capacity_limit_reached(std::string* msg = nullptr) const override {
         return _data_column->capacity_limit_reached(msg) || _null_column->capacity_limit_reached(msg);
+=======
+    Status capacity_limit_reached() const override {
+        RETURN_IF_ERROR(_data_column->capacity_limit_reached());
+        return _null_column->capacity_limit_reached();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void check_or_die() const override;

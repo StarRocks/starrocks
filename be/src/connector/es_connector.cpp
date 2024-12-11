@@ -132,7 +132,11 @@ Status ESDataSource::_build_conjuncts() {
         } else {
             status = predicate->get_es_query_status();
             if (!status.ok()) {
+<<<<<<< HEAD
                 LOG(WARNING) << status.get_error_msg();
+=======
+                LOG(WARNING) << status.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return status;
             }
         }

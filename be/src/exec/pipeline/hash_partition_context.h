@@ -59,6 +59,10 @@ private:
     bool _is_sink_complete = false;
 
     ChunksPartitionerPtr _chunks_partitioner;
+<<<<<<< HEAD
+=======
+    std::unique_ptr<MemPool> _mem_pool;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ChunkPipelineAccumulator _acc;
 };

@@ -70,7 +70,11 @@ public class ExceptionChecker {
                 if (!Strings.isNullOrEmpty(exceptionMsg)) {
                     if (!e.getMessage().contains(exceptionMsg)) {
                         AssertionFailedError assertion = new AssertionFailedError(
+<<<<<<< HEAD
                                 "expceted msg: " + exceptionMsg + ", actual: " + e.getMessage());
+=======
+                                "expected msg: " + exceptionMsg + ", actual: " + e.getMessage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         assertion.initCause(e);
                         throw assertion;
                     }

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_name,
@@ -31,6 +32,8 @@ group by
 order by
     o_totalprice desc,
     o_orderdate limit 100;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
     TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])

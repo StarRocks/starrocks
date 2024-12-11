@@ -35,6 +35,16 @@ public class DictMappingExpr extends Expr {
         this.addChild(call);
     }
 
+<<<<<<< HEAD
+=======
+    public DictMappingExpr(Expr ref, Expr call, Expr stringProvideExpr) {
+        super(ref);
+        this.addChild(ref);
+        this.addChild(call);
+        this.addChild(stringProvideExpr);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected DictMappingExpr(DictMappingExpr other) {
         super(other);
     }
@@ -46,7 +56,17 @@ public class DictMappingExpr extends Expr {
 
     @Override
     protected String toSqlImpl() {
+<<<<<<< HEAD
         return "DictExpr(" + this.getChild(0).toSqlImpl() + ",[" + this.getChild(1).toSqlImpl() + "])";
+=======
+        String fnName = this.type.matchesType(this.getChild(1).getType()) ? "DictDecode" : "DictDefine";
+
+        if (children.size() == 2) {
+            return fnName + "(" + this.getChild(0).toSqlImpl() + ", [" + this.getChild(1).toSqlImpl() + "])";
+        }
+        return fnName + "(" + this.getChild(0).toSqlImpl() + ", [" + this.getChild(1).toSqlImpl() + "], " +
+                getChild(2).toSqlImpl() + ")";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

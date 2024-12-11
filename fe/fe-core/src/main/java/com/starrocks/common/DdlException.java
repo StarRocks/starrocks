@@ -17,7 +17,11 @@
 
 package com.starrocks.common;
 
+<<<<<<< HEAD
 public class DdlException extends UserException {
+=======
+public class DdlException extends StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public DdlException(String msg) {
         super(msg);
     }
@@ -25,4 +29,13 @@ public class DdlException extends UserException {
     public DdlException(String msg, Throwable e) {
         super(msg, e);
     }
+<<<<<<< HEAD
+=======
+
+    public static void requireNotNull(String name, Object obj) throws DdlException {
+        if (obj == null) {
+            throw new DdlException(name + " not exists");
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

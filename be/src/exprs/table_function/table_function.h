@@ -39,6 +39,13 @@ public:
 
     int64_t get_offset() { return _offset; }
 
+<<<<<<< HEAD
+=======
+    void set_is_left_join(bool is_left_join) { this->_is_left_join = is_left_join; }
+
+    bool get_is_left_join() { return _is_left_join; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // How many rows of `get_columns()` have been processed/consumed by the table function.
     //
     // If `processed_rows()` < `input_rows()`, the table function will be invoked again with the same parameter columns.
@@ -53,7 +60,11 @@ public:
 
     void set_status(Status status) { _status = std::move(status); }
 
+<<<<<<< HEAD
     const Status& status() const { return _status; }
+=======
+    [[nodiscard]] const Status& status() const { return _status; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     virtual void on_new_params(){};
@@ -72,6 +83,12 @@ private:
     int64_t _offset = 0;
 
     Status _status;
+<<<<<<< HEAD
+=======
+
+    // used to identify left join for table function
+    bool _is_left_join = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class TableFunction {

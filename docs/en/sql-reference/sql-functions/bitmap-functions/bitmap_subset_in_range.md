@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_subset_in_range
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Intercepts elements from a Bitmap value within the range of `start_range` and `end_range` (exclusive). The output elements are a subset of the Bitmap value.
 

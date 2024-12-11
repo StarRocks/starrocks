@@ -34,14 +34,26 @@
 
 #include "storage/tablet_schema.h"
 
+<<<<<<< HEAD
+=======
+#include <gen_cpp/descriptors.pb.h>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <algorithm>
 #include <vector>
 
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+<<<<<<< HEAD
 #include "storage/tablet_schema_map.h"
 #include "storage/type_utils.h"
+=======
+#include "storage/metadata_util.h"
+#include "storage/tablet_schema_map.h"
+#include "storage/type_utils.h"
+#include "tablet_meta.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -97,7 +109,11 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_PERCENTILE:
     case TYPE_JSON:
     case TYPE_VARBINARY:
+<<<<<<< HEAD
         return string_length + sizeof(OLAP_STRING_MAX_LENGTH);
+=======
+        return string_length + sizeof(get_olap_string_max_length());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     case TYPE_ARRAY:
         return string_length;
     }
@@ -133,6 +149,12 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
     if (rhs._extra_fields != nullptr) {
         _extra_fields = new ExtraFields(*rhs._extra_fields);
     }
+<<<<<<< HEAD
+=======
+    if (rhs._agg_state_desc != nullptr) {
+        _agg_state_desc = new AggStateDesc(*rhs._agg_state_desc);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
@@ -145,12 +167,31 @@ TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
           _precision(rhs._precision),
           _scale(rhs._scale),
           _flags(rhs._flags),
+<<<<<<< HEAD
           _extra_fields(rhs._extra_fields) {
     rhs._extra_fields = nullptr;
+=======
+          _extra_fields(rhs._extra_fields),
+          _agg_state_desc(rhs._agg_state_desc) {
+    rhs._extra_fields = nullptr;
+    rhs._agg_state_desc = nullptr;
+}
+
+TabletColumn::TabletColumn(const ColumnPB& column) {
+    init_from_pb(column);
+}
+
+TabletColumn::TabletColumn(const TColumn& column) {
+    init_from_thrift(column);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 TabletColumn::~TabletColumn() {
     delete _extra_fields;
+<<<<<<< HEAD
+=======
+    delete _agg_state_desc;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void TabletColumn::swap(TabletColumn* rhs) {
@@ -165,6 +206,10 @@ void TabletColumn::swap(TabletColumn* rhs) {
     swap(_scale, rhs->_scale);
     swap(_flags, rhs->_flags);
     swap(_extra_fields, rhs->_extra_fields);
+<<<<<<< HEAD
+=======
+    swap(_agg_state_desc, rhs->_agg_state_desc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 TabletColumn& TabletColumn::operator=(const TabletColumn& rhs) {
@@ -231,6 +276,27 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
         sub_column.init_from_pb(column.children_columns(i));
         add_sub_column(std::move(sub_column));
     }
+<<<<<<< HEAD
+=======
+    // agg state type info
+    if (column.has_agg_state_desc()) {
+        VLOG(2) << "column contains agg state type info, add into extra fields";
+        auto& agg_state_desc_pb = column.agg_state_desc();
+        auto desc = AggStateDesc::from_protobuf(agg_state_desc_pb);
+        _agg_state_desc = new AggStateDesc(std::move(desc));
+    }
+}
+
+void TabletColumn::init_from_thrift(const TColumn& tcolumn) {
+    _unique_id = tcolumn.col_unique_id;
+    ColumnPB column_pb;
+    auto shared_tcolumn_desc = std::make_shared<TColumn>(tcolumn);
+    convert_to_new_version(shared_tcolumn_desc.get());
+
+    WARN_IF_ERROR(t_column_to_pb_column(_unique_id, *shared_tcolumn_desc, &column_pb),
+                  "failed to covert TColumn to ColumnPB");
+    init_from_pb(column_pb);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void TabletColumn::to_schema_pb(ColumnPB* column) const {
@@ -257,6 +323,7 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     for (int i = 0; i < subcolumn_count(); i++) {
         subcolumn(i).to_schema_pb(column->add_children_columns());
     }
+<<<<<<< HEAD
 }
 
 void TabletSchema::copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema) {
@@ -264,6 +331,33 @@ void TabletSchema::copy_from(const std::shared_ptr<const TabletSchema>& tablet_s
     tablet_schema->to_schema_pb(&tablet_schema_pb);
     _init_from_pb(tablet_schema_pb);
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
+=======
+    if (has_agg_state_desc()) {
+        auto* agg_state_desc = get_agg_state_desc();
+        auto* agg_state_pb = column->mutable_agg_state_desc();
+        agg_state_desc->to_protobuf(agg_state_pb);
+    }
+}
+
+void TabletSchema::append_column(TabletColumn column) {
+    if (column.is_key()) {
+        _num_key_columns++;
+    }
+    _unique_id_to_index[column.unique_id()] = _num_columns;
+    _cols.push_back(std::move(column));
+    if (_sort_key_uids_set.count(column.unique_id()) > 0) {
+        _cols[_num_columns].set_is_sort_key(true);
+    }
+    _num_columns++;
+}
+
+void TabletSchema::_clear_columns() {
+    _unique_id_to_index.clear();
+    _num_columns = 0;
+    _num_key_columns = 0;
+    _cols.clear();
+    _sort_key_idxes.clear();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void TabletColumn::add_sub_column(const TabletColumn& sub_column) {
@@ -303,6 +397,7 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaPB& schema_
 // When you use this function to create a new partial tablet schema, please make sure `referenced_column_ids` include
 // all sort key column index of `src_tablet_schema`. Otherwise you need to recalculate the short key columns of the
 // partial tablet schema
+<<<<<<< HEAD
 std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_tablet_schema,
                                                    const std::vector<int32_t>& referenced_column_ids) {
     TabletSchemaPB partial_tablet_schema_pb;
@@ -313,13 +408,30 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     partial_tablet_schema_pb.set_keys_type(src_tablet_schema.keys_type());
     if (src_tablet_schema.has_bf_fpp()) {
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema.bf_fpp());
+=======
+std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_tablet_schema,
+                                                   const std::vector<int32_t>& referenced_column_ids) {
+    TabletSchemaPB partial_tablet_schema_pb;
+    partial_tablet_schema_pb.set_id(src_tablet_schema->id());
+    partial_tablet_schema_pb.set_next_column_unique_id(src_tablet_schema->next_column_unique_id());
+    partial_tablet_schema_pb.set_num_rows_per_row_block(src_tablet_schema->num_rows_per_row_block());
+    partial_tablet_schema_pb.set_num_short_key_columns(src_tablet_schema->num_short_key_columns());
+    partial_tablet_schema_pb.set_keys_type(src_tablet_schema->keys_type());
+    if (src_tablet_schema->has_bf_fpp()) {
+        partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema->bf_fpp());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     std::vector<ColumnId> sort_key_idxes;
     uint32_t cid = 0;
     for (const auto referenced_column_id : referenced_column_ids) {
         auto* tablet_column = partial_tablet_schema_pb.add_column();
+<<<<<<< HEAD
         src_tablet_schema.column(referenced_column_id).to_schema_pb(tablet_column);
         if (src_tablet_schema.column(referenced_column_id).is_sort_key()) {
+=======
+        src_tablet_schema->column(referenced_column_id).to_schema_pb(tablet_column);
+        if (src_tablet_schema->column(referenced_column_id).is_sort_key()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             sort_key_idxes.emplace_back(cid);
         }
         cid++;
@@ -328,18 +440,67 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
 
+<<<<<<< HEAD
 std::shared_ptr<TabletSchema> TabletSchema::create_with_uid(const TabletSchema& tablet_schema,
                                                             const std::vector<uint32_t>& unique_column_ids) {
     std::unordered_set<int32_t> unique_cid_filter(unique_column_ids.begin(), unique_column_ids.end());
     std::vector<int32_t> column_indexes;
     for (int cid = 0; cid < tablet_schema.columns().size(); cid++) {
         if (unique_cid_filter.count(tablet_schema.column(cid).unique_id()) > 0) {
+=======
+std::shared_ptr<TabletSchema> TabletSchema::create_with_uid(const TabletSchemaCSPtr& tablet_schema,
+                                                            const std::vector<ColumnUID>& unique_column_ids) {
+    std::unordered_set<int32_t> unique_cid_filter(unique_column_ids.begin(), unique_column_ids.end());
+    std::vector<int32_t> column_indexes;
+    for (int cid = 0; cid < tablet_schema->columns().size(); cid++) {
+        if (unique_cid_filter.count(tablet_schema->column(cid).unique_id()) > 0) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             column_indexes.push_back(cid);
         }
     }
     return TabletSchema::create(tablet_schema, column_indexes);
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<TabletSchemaSPtr> TabletSchema::create(const TabletSchema& ori_schema, int64_t schema_id, int32_t version,
+                                                const POlapTableColumnParam& column_param) {
+    TabletSchemaSPtr new_schema = std::make_shared<TabletSchema>(ori_schema);
+    RETURN_IF_ERROR(new_schema->_build_current_tablet_schema(schema_id, version, column_param, ori_schema));
+    return new_schema;
+}
+
+TabletSchema::TabletSchema(const TabletSchema& tablet_schema) {
+    TabletSchemaPB tablet_schema_pb;
+    tablet_schema.to_schema_pb(&tablet_schema_pb);
+    _init_from_pb(tablet_schema_pb);
+}
+
+TabletSchemaSPtr TabletSchema::copy(const TabletSchema& tablet_schema) {
+    return std::make_shared<TabletSchema>(tablet_schema);
+}
+
+TabletSchemaCSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols) {
+    auto dst_schema = std::make_unique<TabletSchema>(src_schema);
+    dst_schema->_clear_columns();
+    for (const auto& col : cols) {
+        dst_schema->append_column(TabletColumn(col));
+    }
+    dst_schema->_generate_sort_key_idxes();
+    return dst_schema;
+}
+
+void TabletSchema::_fill_index_map(const TabletIndex& index) {
+    const auto idx_type = index.index_type();
+    if (_index_map_col_unique_id.count(idx_type) <= 0) {
+        auto col_unique_id_set = std::make_shared<std::unordered_set<int32_t>>();
+        _index_map_col_unique_id.emplace(idx_type, col_unique_id_set);
+    }
+    std::for_each(index.col_unique_ids().begin(), index.col_unique_ids().end(),
+                  [&](int32_t uid) { _index_map_col_unique_id[idx_type]->insert(uid); });
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void TabletSchema::_init_schema() const {
     starrocks::Fields fields;
     for (ColumnId cid = 0; cid < num_columns(); ++cid) {
@@ -356,16 +517,25 @@ Schema* TabletSchema::schema() const {
 
 TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb) {
     _init_from_pb(schema_pb);
+<<<<<<< HEAD
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
     _init_from_pb(schema_pb);
+<<<<<<< HEAD
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 TabletSchema::~TabletSchema() {
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
+=======
+}
+
+TabletSchema::~TabletSchema() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);
     }
@@ -375,8 +545,17 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _id = schema.has_id() ? schema.id() : invalid_id();
     _keys_type = static_cast<uint8_t>(schema.keys_type());
     _num_key_columns = 0;
+<<<<<<< HEAD
     _cols.clear();
     _compression_type = schema.compression_type();
+=======
+    _num_columns = 0;
+    _indexes.clear();
+    _index_map_col_unique_id.clear();
+    _cols.clear();
+    _compression_type = schema.compression_type();
+    _compression_level = schema.compression_level();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (auto& column_pb : schema.column()) {
         TabletColumn column;
         column.init_from_pb(column_pb);
@@ -384,6 +563,7 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         if (column.is_key()) {
             _num_key_columns++;
         }
+<<<<<<< HEAD
     }
     if (schema.sort_key_idxes().empty()) {
         _sort_key_idxes.reserve(_num_key_columns);
@@ -396,6 +576,45 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
             _sort_key_idxes.push_back(schema.sort_key_idxes(i));
         }
     }
+=======
+        _unique_id_to_index[column.unique_id()] = _num_columns;
+        _num_columns++;
+    }
+
+    for (auto& index_pb : schema.table_indices()) {
+        TabletIndex index;
+        WARN_IF_ERROR(index.init_from_pb(index_pb), "Init from index pb error! ");
+        _indexes.emplace_back(index);
+        _fill_index_map(index);
+    }
+
+    // There are three conditions:
+    // 1. sort_key_unique_ids is not empty, sort key column should be located by unique id
+    // 2. sort_key_unique_ids is empty but sort_key_idxes is not empty. This table maybe create in
+    //    old version and upgrade, sort key column shoud be located by sort key column index
+    // 3. both of them are empty, sort key columns are equal to key columns
+    if (!schema.sort_key_unique_ids().empty()) {
+        for (auto uid : schema.sort_key_unique_ids()) {
+            _sort_key_uids.emplace_back(uid);
+            _sort_key_idxes.emplace_back(_unique_id_to_index.at(uid));
+            _sort_key_uids_set.emplace(uid);
+        }
+    } else if (!schema.sort_key_idxes().empty()) {
+        _sort_key_idxes.reserve(schema.sort_key_idxes_size());
+        for (auto i = 0; i < schema.sort_key_idxes_size(); ++i) {
+            ColumnId cid = schema.sort_key_idxes(i);
+            _sort_key_idxes.push_back(cid);
+            _sort_key_uids_set.emplace(schema.column(cid).unique_id());
+        }
+    } else {
+        _sort_key_idxes.reserve(_num_key_columns);
+        for (auto i = 0; i < _num_key_columns; ++i) {
+            _sort_key_idxes.push_back(i);
+            _sort_key_uids_set.emplace(schema.column(i).unique_id());
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (auto cid : _sort_key_idxes) {
         _cols[cid].set_is_sort_key(true);
     }
@@ -409,6 +628,78 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         _has_bf_fpp = false;
         _bf_fpp = BLOOM_FILTER_DEFAULT_FPP;
     }
+<<<<<<< HEAD
+=======
+    _schema_version = schema.schema_version();
+}
+
+Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t version,
+                                                  const POlapTableColumnParam& column_param,
+                                                  const TabletSchema& ori_tablet_schema) {
+    // copy from ori_tablet_schema
+    _keys_type = ori_tablet_schema.keys_type();
+    _num_short_key_columns = column_param.short_key_column_count();
+    _num_rows_per_row_block = ori_tablet_schema.num_rows_per_row_block();
+    _compression_type = ori_tablet_schema.compression_type();
+    _compression_level = ori_tablet_schema.compression_level();
+
+    // todo(yixiu): unique_id
+    _next_column_unique_id = ori_tablet_schema.next_column_unique_id();
+    // copy from table_schema_param
+    _num_key_columns = 0;
+    _num_columns = 0;
+    bool has_bf_columns = false;
+
+    _cols.clear();
+    _unique_id_to_index.clear();
+    _sort_key_uids.clear();
+
+    _schema_version = version;
+    _id = schema_id;
+    for (auto& pcolumn : column_param.columns_desc()) {
+        TabletColumn column;
+        column.init_from_pb(pcolumn);
+        if (column.is_key()) {
+            _num_key_columns++;
+        }
+        if (column.is_bf_column()) {
+            has_bf_columns = true;
+        }
+        _unique_id_to_index[column.unique_id()] = _num_columns;
+        _cols.emplace_back(std::move(column));
+        _num_columns++;
+    }
+    if (ori_tablet_schema.columns().back().name() == Schema::FULL_ROW_COLUMN) {
+        _cols.emplace_back(ori_tablet_schema.columns().back());
+    }
+
+    if (!column_param.sort_key_uid().empty()) {
+        _sort_key_idxes.clear();
+        for (auto uid : column_param.sort_key_uid()) {
+            auto it = _unique_id_to_index.find(uid);
+            if (it == _unique_id_to_index.end()) {
+                std::string msg = strings::Substitute("sort key column uid: $0 is not exist in columns", uid);
+                LOG(WARNING) << msg;
+                return Status::InternalError(msg);
+            }
+            _sort_key_uids.emplace_back(uid);
+            _sort_key_idxes.emplace_back(it->second);
+            _cols[it->second].set_is_sort_key(true);
+        }
+    } else {
+        for (auto cid : _sort_key_idxes) {
+            _cols[cid].set_is_sort_key(true);
+        }
+    }
+    if (has_bf_columns) {
+        _has_bf_fpp = true;
+        _bf_fpp = ori_tablet_schema.bf_fpp();
+    } else {
+        _has_bf_fpp = false;
+        _bf_fpp = BLOOM_FILTER_DEFAULT_FPP;
+    }
+    return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
@@ -426,7 +717,54 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
     }
     tablet_schema_pb->set_next_column_unique_id(_next_column_unique_id);
     tablet_schema_pb->set_compression_type(_compression_type);
+<<<<<<< HEAD
     tablet_schema_pb->mutable_sort_key_idxes()->Add(_sort_key_idxes.begin(), _sort_key_idxes.end());
+=======
+    tablet_schema_pb->set_compression_level(_compression_level);
+    tablet_schema_pb->mutable_sort_key_idxes()->Add(_sort_key_idxes.begin(), _sort_key_idxes.end());
+    tablet_schema_pb->mutable_sort_key_unique_ids()->Add(_sort_key_uids.begin(), _sort_key_uids.end());
+    tablet_schema_pb->set_schema_version(_schema_version);
+    for (auto& index : _indexes) {
+        auto* tablet_index_pb = tablet_schema_pb->add_table_indices();
+        index.to_schema_pb(tablet_index_pb);
+    }
+}
+
+Status TabletSchema::get_indexes_for_column(int32_t col_unique_id,
+                                            std::unordered_map<IndexType, TabletIndex>* res) const {
+    RETURN_IF(res == nullptr, Status::InternalError("Index map should not be nullptr"));
+    for (const auto& index : _indexes) {
+        if (index.col_unique_ids().size() == 1) {
+            if (index.col_unique_ids()[0] == col_unique_id) {
+                res->emplace(index.index_type(), index);
+            }
+        } else if (index.col_unique_ids().size() > 1) {
+            // TODO: implement multi-column index
+            return Status::NotSupported("Multi-column index is not supported for now. ");
+        }
+    }
+    return Status::OK();
+}
+
+Status TabletSchema::get_indexes_for_column(int32_t col_unique_id, IndexType index_type,
+                                            std::shared_ptr<TabletIndex>& res) const {
+    std::unordered_map<IndexType, TabletIndex> map_res;
+    RETURN_IF_ERROR(get_indexes_for_column(col_unique_id, &map_res));
+    if (!map_res.empty()) {
+        const auto& it = map_res.find(index_type);
+        if (it != map_res.end()) {
+            res = std::make_shared<TabletIndex>(it->second);
+        }
+    }
+    return Status::OK();
+}
+
+bool TabletSchema::has_index(int32_t col_unique_id, IndexType index_type) const {
+    if (auto it = _index_map_col_unique_id.find(index_type); it != _index_map_col_unique_id.end()) {
+        return it->second->count(col_unique_id) > 0;
+    }
+    return false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 size_t TabletSchema::estimate_row_size(size_t variable_len) const {
@@ -448,6 +786,43 @@ size_t TabletSchema::field_index(std::string_view field_name) const {
     return -1;
 }
 
+<<<<<<< HEAD
+=======
+size_t TabletSchema::field_index(std::string_view field_name, std::string_view extra_column_name) const {
+    int ordinal = -1;
+    for (auto& column : _cols) {
+        ordinal++;
+        if (column.name() == field_name) {
+            return ordinal;
+        }
+    }
+    if (field_name == extra_column_name) {
+        return ordinal + 1;
+    }
+    return -1;
+}
+
+int32_t TabletSchema::field_index(int32_t col_unique_id) const {
+    const auto& found = _unique_id_to_index.find(col_unique_id);
+    return (found == _unique_id_to_index.end()) ? -1 : found->second;
+}
+
+void TabletSchema::_generate_sort_key_idxes() {
+    if (!_sort_key_idxes.empty()) {
+        return;
+    }
+    if (!_sort_key_uids.empty()) {
+        for (auto uid : _sort_key_uids) {
+            _sort_key_idxes.emplace_back(_unique_id_to_index.at(uid));
+        }
+    } else {
+        for (int32_t i = 0; i < _num_key_columns; i++) {
+            _sort_key_idxes.emplace_back(i);
+        }
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 const std::vector<TabletColumn>& TabletSchema::columns() const {
     return _cols;
 }
@@ -533,4 +908,18 @@ std::string TabletSchema::debug_string() const {
     return ss.str();
 }
 
+<<<<<<< HEAD
+=======
+int64_t TabletSchema::mem_usage() const {
+    int64_t mem_usage = sizeof(TabletSchema);
+    for (const auto& col : _cols) {
+        mem_usage += col.mem_usage();
+    }
+    for (const auto& index : _indexes) {
+        mem_usage += index.mem_usage();
+    }
+    return mem_usage;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

@@ -14,11 +14,19 @@
 
 package com.starrocks.pseudocluster;
 
+<<<<<<< HEAD
 import com.starrocks.common.GenericPool;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 
 public class PseudoGenericPool<VALUE extends org.apache.thrift.TServiceClient> extends GenericPool<VALUE> {
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.thrift.TNetworkAddress;
+import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
+
+public class PseudoGenericPool<VALUE extends org.apache.thrift.TServiceClient> extends ThriftConnectionPool<VALUE> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public PseudoGenericPool(String name) {
         super(name, new GenericKeyedObjectPoolConfig(), 100);
     }
@@ -29,11 +37,14 @@ public class PseudoGenericPool<VALUE extends org.apache.thrift.TServiceClient> e
     }
 
     @Override
+<<<<<<< HEAD
     public boolean reopen(VALUE object) {
         return true;
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void clearPool(TNetworkAddress addr) {
     }
 

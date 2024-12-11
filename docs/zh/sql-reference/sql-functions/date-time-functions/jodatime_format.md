@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # jodatime_format
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将某一个日期转换成指定的 Joda DateTimeFormat 格式的字符串。
 

@@ -48,7 +48,11 @@ public class ShowAlterStmtAnalyzer {
         new ShowAlterStmtAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class ShowAlterStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ShowAlterStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         private final HashMap<String, Expr> filterMap = new HashMap<>();
 
@@ -68,7 +72,11 @@ public class ShowAlterStmtAnalyzer {
 
         private void handleShowAlterTable(ShowAlterStmt statement, ConnectContext context) throws SemanticException {
             // build proc path
+<<<<<<< HEAD
             @Nonnull Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
+=======
+            @Nonnull Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ShowAlterStmt.AlterType type = statement.getType();
             StringBuilder sb = new StringBuilder();
             sb.append("/jobs/");
@@ -77,6 +85,11 @@ public class ShowAlterStmtAnalyzer {
                 sb.append("/schema_change");
             } else if (type == ShowAlterStmt.AlterType.ROLLUP || type == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
                 sb.append("/rollup");
+<<<<<<< HEAD
+=======
+            } else if (type == ShowAlterStmt.AlterType.OPTIMIZE) {
+                sb.append("/optimize");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
 
             // create show proc stmt
@@ -100,7 +113,11 @@ public class ShowAlterStmtAnalyzer {
             }
             statement.setDbName(dbName);
             // Check db.
+<<<<<<< HEAD
             if (context.getGlobalStateMgr().getDb(dbName) == null) {
+=======
+            if (context.getGlobalStateMgr().getLocalMetastore().getDb(dbName) == null) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
 

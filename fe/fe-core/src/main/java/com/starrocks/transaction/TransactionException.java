@@ -17,9 +17,15 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public class TransactionException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+
+public class TransactionException extends StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private long transactionId = -1;
 

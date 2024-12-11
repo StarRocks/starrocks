@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_append
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Adds a new element to the end of the array. Returns an array.
 

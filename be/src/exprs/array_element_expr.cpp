@@ -74,7 +74,11 @@ public:
             }
         }
 
+<<<<<<< HEAD
         std::vector<uint8_t> null_flags;
+=======
+        NullData null_flags;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         raw::make_room(&null_flags, num_rows);
 
         // Construct null flags.

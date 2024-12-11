@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_returnflag,
@@ -20,6 +21,8 @@ group by
 order by
     l_returnflag,
     l_linestatus ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [planCount]
 1
 [plan-1]

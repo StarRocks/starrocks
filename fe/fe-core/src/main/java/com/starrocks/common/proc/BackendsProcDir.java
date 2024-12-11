@@ -45,18 +45,33 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
+<<<<<<< HEAD
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
+=======
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.datacache.DataCacheMetrics;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.concurrent.TimeUnit;
 
 public class BackendsProcDir implements ProcDirInterface {
@@ -71,12 +86,24 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
+<<<<<<< HEAD
                 .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
+=======
+                .add("DataUsedPct").add("CpuCores").add("MemLimit").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
+                .add("DataCacheMetrics")
+                .add("Location")
+                .add("StatusCode");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TITLE_NAMES = builder.build();
         builder = new ImmutableList.Builder<String>()
                 .addAll(TITLE_NAMES)
                 .add("StarletPort")
+<<<<<<< HEAD
                 .add("WorkerId");
+=======
+                .add("WorkerId")
+                .add("WarehouseName");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TITLE_NAMES_SHARED_DATA = builder.build();
     }
 
@@ -112,7 +139,11 @@ public class BackendsProcDir implements ProcDirInterface {
 
     // get backends of cluster
     public static List<List<String>> getClusterBackendInfos() {
+<<<<<<< HEAD
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> backendInfos = new LinkedList<>();
         List<Long> backendIds = clusterInfoService.getBackendIds(false);
         if (backendIds == null) {
@@ -134,7 +165,11 @@ public class BackendsProcDir implements ProcDirInterface {
                 String workerAddr = backend.getHost() + ":" + backend.getStarletPort();
                 tabletNum = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerTabletNum(workerAddr);
             } else {
+<<<<<<< HEAD
                 tabletNum = GlobalStateMgr.getCurrentInvertedIndex().getTabletNumByBackendId(backendId);
+=======
+                tabletNum = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletNumByBackendId(backendId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
@@ -204,17 +239,51 @@ public class BackendsProcDir implements ProcDirInterface {
             backendInfo.add(String.format("%.2f", dataUsed) + " %");
 
             // Num CPU cores
+<<<<<<< HEAD
             backendInfo.add(BackendCoreStat.getCoresOfBe(backendId));
+=======
+            backendInfo.add(backend.getCpuCores());
+            backendInfo.add(DebugUtil.getPrettyStringBytes(backend.getMemLimitBytes()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             backendInfo.add(backend.getNumRunningQueries());
             double memUsedPct = backend.getMemUsedPct();
             backendInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
             backendInfo.add(String.format("%.1f", backend.getCpuUsedPermille() / 10.0) + " %");
 
+<<<<<<< HEAD
             if (RunMode.isSharedDataMode()) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(backendId);
                 backendInfo.add(String.valueOf(workerId));
+=======
+            Optional<DataCacheMetrics> dataCacheMetrics = backend.getDataCacheMetrics();
+            if (dataCacheMetrics.isPresent()) {
+                DataCacheMetrics.Status status = dataCacheMetrics.get().getStatus();
+                if (status != DataCacheMetrics.Status.DISABLED) {
+                    backendInfo.add(String.format("Status: %s, DiskUsage: %s, MemUsage: %s",
+                            dataCacheMetrics.get().getStatus(),
+                            dataCacheMetrics.get().getDiskUsageStr(),
+                            dataCacheMetrics.get().getMemUsageStr()));
+                } else {
+                    // DataCache is disabled
+                    backendInfo.add(String.format("Status: %s", DataCacheMetrics.Status.DISABLED));
+                }
+            } else {
+                // Didn't receive any datacache report from be
+                backendInfo.add("N/A");
+            }
+
+            backendInfo.add(PropertyAnalyzer.convertLocationMapToString(backend.getLocation()));
+            backendInfo.add(backend.getStatus().name());
+
+            if (RunMode.isSharedDataMode()) {
+                backendInfo.add(String.valueOf(backend.getStarletPort()));
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(backendId);
+                backendInfo.add(String.valueOf(workerId));
+                Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(backend.getWarehouseId());
+                backendInfo.add(wh.getName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
 
             comparableBackendInfos.add(backendInfo);

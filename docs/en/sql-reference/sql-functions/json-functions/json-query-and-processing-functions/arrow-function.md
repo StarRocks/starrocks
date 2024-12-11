@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # Arrow function
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Queries an element that can be located by the `json_path` expression in a JSON object and returns a JSON value. The arrow function `->` is more compact and easier to use than the [json_query](json_query.md) function.
 

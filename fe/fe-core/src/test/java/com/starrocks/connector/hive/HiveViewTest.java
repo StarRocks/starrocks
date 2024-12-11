@@ -20,6 +20,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.MetastoreType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -123,10 +129,18 @@ public class HiveViewTest extends PlanTestBase {
 
     @Test
     public void testRefreshHiveView(@Mocked CachingHiveMetastore hiveMetastore) throws Exception {
+<<<<<<< HEAD
         CacheUpdateProcessor cacheUpdateProcessor = new CacheUpdateProcessor("hive0", hiveMetastore,
                 null, null, true, false);
         HiveMetadata hiveMetadata = new HiveMetadata("hive0", null, null, null, null,
                 Optional.of(cacheUpdateProcessor));
+=======
+        HiveCacheUpdateProcessor hiveCacheUpdateProcessor = new HiveCacheUpdateProcessor("hive0", hiveMetastore,
+                null, null, true, false);
+        HiveMetadata hiveMetadata = new HiveMetadata("hive0", null, null, null, null,
+                Optional.of(hiveCacheUpdateProcessor), null, null,
+                new ConnectorProperties(ConnectorType.HIVE));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         Table hiveView = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer_view");
         new Expectations() {
@@ -143,7 +157,11 @@ public class HiveViewTest extends PlanTestBase {
         } catch (Exception e) {
             Assert.fail();
         }
+<<<<<<< HEAD
         HiveMetastore hiveMetastore1 = new HiveMetastore(null, "hive0");
+=======
+        HiveMetastore hiveMetastore1 = new HiveMetastore(null, "hive0", MetastoreType.HMS);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(hiveMetastore1.refreshView("tpch", "customer_view"));
 
         Table table  = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer");

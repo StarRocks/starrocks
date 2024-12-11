@@ -50,9 +50,16 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJoinDistributionMode;
 import org.apache.logging.log4j.LogManager;
@@ -82,6 +89,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     protected String colocateReason = ""; // if can not do colocate join, set reason here
     // the flag for local bucket shuffle join
     protected boolean isLocalHashBucket = false;
+<<<<<<< HEAD
+=======
+    protected UKFKConstraints.JoinProperty ukfkProperty;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     protected final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     protected final List<Integer> filter_null_value_columns = Lists.newArrayList();
@@ -90,6 +101,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     // contains both the cols required by parent node and cols required by
     // other join conjuncts and predicates
     protected List<Integer> outputSlots;
+<<<<<<< HEAD
+=======
+    protected boolean enableLateMaterialization = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // The partitionByExprs which need to check the probe side for partition join.
     protected List<Expr> probePartitionByExprs;
@@ -169,6 +184,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void setEnableLateMaterialization(boolean enableLateMaterialization) {
+        this.enableLateMaterialization = enableLateMaterialization;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setProbePartitionByExprs(List<Expr> probePartitionByExprs) {
         this.probePartitionByExprs = probePartitionByExprs;
     }
@@ -178,7 +200,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
+<<<<<<< HEAD
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl) {
+=======
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl,
+                                    ExecGroupSets execGroupSets) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         JoinOperator joinOp = getJoinOp();
         PlanNode inner = getChild(1);
@@ -227,7 +254,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 // push down rf to left child node, and build it only when it
                 // can be accepted by left child node.
                 rf.setBuildExpr(left);
+<<<<<<< HEAD
                 if (getChild(0).pushDownRuntimeFilters(descTbl, rf, right, probePartitionByExprs)) {
+=======
+                RuntimeFilterPushDownContext rfPushDownCxt =
+                        new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+                if (getChild(0).pushDownRuntimeFilters(rfPushDownCxt, right, probePartitionByExprs)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     buildRuntimeFilters.add(rf);
                 }
             } else {
@@ -243,7 +276,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
                 rf.setBuildExpr(right);
                 rf.setOnlyLocal(true);
+<<<<<<< HEAD
                 if (getChild(0).pushDownRuntimeFilters(descTbl, rf, left, probePartitionByExprs)) {
+=======
+                RuntimeFilterPushDownContext rfPushDownCxt =
+                        new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+                if (getChild(0).pushDownRuntimeFilters(rfPushDownCxt, left, probePartitionByExprs)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     this.getBuildRuntimeFilters().add(rf);
                 }
             }
@@ -285,15 +324,26 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
+<<<<<<< HEAD
     public boolean pushDownRuntimeFiltersForChild(DescriptorTable descTbl, RuntimeFilterDescription description,
                                                   Expr probeExpr,
                                                   List<Expr> partitionByExprs, int childIdx) {
         return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+=======
+    public boolean pushDownRuntimeFiltersForChild(RuntimeFilterPushDownContext context,
+                                                  Expr probeExpr,
+                                                  List<Expr> partitionByExprs, int childIdx) {
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 candidatesOfSlotExprForChild(probeExpr, childIdx),
                 partitionByExprs, candidatesOfSlotExprsForChild(partitionByExprs, childIdx), childIdx, false);
     }
 
+<<<<<<< HEAD
     private Optional<Boolean> pushDownRuntimeFilterBilaterally(DescriptorTable descTbl, RuntimeFilterDescription rfDesc,
+=======
+    private Optional<Boolean> pushDownRuntimeFilterBilaterally(RuntimeFilterPushDownContext context,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                                                       Expr probeExpr,
                                                                       List<Expr> partitionByExprs) {
         if (joinOp.isCrossJoin() || joinOp.isNullAwareLeftAntiJoin() || eqJoinConjuncts.isEmpty()) {
@@ -315,14 +365,23 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
         // for join types except null-aware-left-anti-join and cross join
         // runtime-filer probe expr uses join column, it can always be push down to both side of the join.
+<<<<<<< HEAD
         boolean hasPushedDown = pushDownRuntimeFiltersForChild(descTbl, rfDesc, probeExpr, partitionByExprs, 0);
         hasPushedDown |= pushDownRuntimeFiltersForChild(descTbl, rfDesc, probeExpr, partitionByExprs, 1);
+=======
+        boolean hasPushedDown = pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, 0);
+        hasPushedDown |= pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, 1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Optional.of(hasPushedDown);
     }
 
 
+<<<<<<< HEAD
     private Optional<Boolean> pushDownRuntimeFilterUnilaterally(DescriptorTable descTbl,
                                                                 RuntimeFilterDescription rfDesc,
+=======
+    private Optional<Boolean> pushDownRuntimeFilterUnilaterally(RuntimeFilterPushDownContext context,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                                                 Expr probeExpr,
                                                                 List<Expr> partitionByExprs) {
         List<Integer> sides = ImmutableList.of();
@@ -337,16 +396,27 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         boolean result = false;
         Optional<List<List<Expr>>> optCandidatePartitionByExprs =
                 canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+<<<<<<< HEAD
         if (!optCandidatePartitionByExprs.isPresent()) {
+=======
+        if (optCandidatePartitionByExprs.isEmpty()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return Optional.of(false);
         }
         List<List<Expr>> candidatePartitionByExprs = optCandidatePartitionByExprs.get();
         for (Integer side : sides) {
             if (candidatePartitionByExprs.isEmpty()) {
+<<<<<<< HEAD
                 result = getChild(side).pushDownRuntimeFilters(descTbl, rfDesc, probeExpr, Lists.newArrayList());
             } else {
                 for (List<Expr> partByExprs : candidatePartitionByExprs) {
                     result = getChild(side).pushDownRuntimeFilters(descTbl, rfDesc, probeExpr, partByExprs);
+=======
+                result = getChild(side).pushDownRuntimeFilters(context, probeExpr, Lists.newArrayList());
+            } else {
+                for (List<Expr> partByExprs : candidatePartitionByExprs) {
+                    result = getChild(side).pushDownRuntimeFilters(context, probeExpr, partByExprs);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (result) {
                         break;
                     }
@@ -360,17 +430,29 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
+<<<<<<< HEAD
     public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription rfDesc, Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+=======
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
 
         if (probeExpr.isBoundByTupleIds(getTupleIds())) {
 
+<<<<<<< HEAD
             Optional<Boolean> pushDownResult = pushDownRuntimeFilterBilaterally(descTbl, rfDesc, probeExpr, partitionByExprs);
             if (!pushDownResult.isPresent()) {
                 pushDownResult = pushDownRuntimeFilterUnilaterally(descTbl, rfDesc, probeExpr, partitionByExprs);
+=======
+            Optional<Boolean> pushDownResult = pushDownRuntimeFilterBilaterally(context, probeExpr, partitionByExprs);
+            if (pushDownResult.isEmpty()) {
+                pushDownResult = pushDownRuntimeFilterUnilaterally(context, probeExpr, partitionByExprs);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
 
             if (pushDownResult.isPresent() && pushDownResult.get()) {
@@ -378,10 +460,17 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
 
             // use runtime filter at this level if rf can not be pushed down to children.
+<<<<<<< HEAD
             if (rfDesc.canProbeUse(this)) {
                 rfDesc.addProbeExpr(id.asInt(), probeExpr);
                 rfDesc.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
                 probeRuntimeFilters.add(rfDesc);
+=======
+            if (description.canProbeUse(this, context)) {
+                description.addProbeExpr(id.asInt(), probeExpr);
+                description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
+                probeRuntimeFilters.add(description);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return true;
             }
         }
@@ -426,7 +515,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -459,6 +552,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         canLocalShuffle = v;
     }
 
+<<<<<<< HEAD
+=======
+    public void setUkfkProperty(UKFKConstraints.JoinProperty ukfkProperty) {
+        this.ukfkProperty = ukfkProperty;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
         String distrModeStr =
@@ -516,11 +616,14 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return output.toString();
     }
 
+<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return Math.max(children.get(0).getNumInstances(), children.get(1).getNumInstances());
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public enum DistributionMode {
         NONE("NONE"),
         BROADCAST("BROADCAST"),
@@ -567,11 +670,14 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void checkRuntimeFilterOnNullValue(RuntimeFilterDescription description, Expr probeExpr) {
         // note(yan): outer join may generate null values, and if runtime filter does not accept null value
         // we have opportunity to filter those values out.
@@ -593,4 +699,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     public void setOutputSlots(List<Integer> outputSlots) {
         this.outputSlots = outputSlots;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

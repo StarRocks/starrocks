@@ -27,8 +27,19 @@ namespace starrocks::io {
 
 class S3InputStream final : public SeekableInputStream {
 public:
+<<<<<<< HEAD
     explicit S3InputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object)
             : _s3client(std::move(client)), _bucket(std::move(bucket)), _object(std::move(object)) {}
+=======
+    explicit S3InputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object,
+                           int64_t read_ahead_size = 5 * 1024 * 1024)
+            : _s3client(std::move(client)), _bucket(std::move(bucket)), _object(std::move(object)) {
+        _read_ahead_size = read_ahead_size;
+        if (_read_ahead_size > 0) {
+            _read_buffer = std::make_unique<uint8_t[]>(_read_ahead_size);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ~S3InputStream() override = default;
 
@@ -52,12 +63,26 @@ public:
 
     StatusOr<std::string> read_all() override;
 
+<<<<<<< HEAD
+=======
+    // only for UT
+    int64_t get_read_ahead_size() const { return _read_ahead_size; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     std::shared_ptr<Aws::S3::S3Client> _s3client;
     std::string _bucket;
     std::string _object;
     int64_t _offset{0};
     int64_t _size{-1};
+<<<<<<< HEAD
+=======
+    int64_t _read_ahead_size{-1};
+    // _read_buffer start offset, indicate buffer[0]'s offset in s3 file.
+    int64_t _buffer_start_offset{-1};
+    int64_t _buffer_data_length{-1};
+    std::unique_ptr<uint8_t[]> _read_buffer;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks::io

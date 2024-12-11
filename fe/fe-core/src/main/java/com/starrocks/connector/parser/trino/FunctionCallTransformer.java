@@ -61,7 +61,11 @@ public class FunctionCallTransformer {
         new PlaceholderCollector(placeholderExprs, variableArgument).visit(targetCall);
     }
 
+<<<<<<< HEAD
     private static class PlaceholderCollector extends AstVisitor<Void, Void> {
+=======
+    private static class PlaceholderCollector implements AstVisitor<Void, Void> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         private final List<PlaceholderExpr> placeholderExprs;
         private final boolean variableArgument;
         public PlaceholderCollector(List<PlaceholderExpr> placeholderExprs, boolean vararg) {
@@ -113,7 +117,11 @@ public class FunctionCallTransformer {
         return new FunctionCallRewriter(placeholderExprs, variableArgument, sourceArguments).visit(targetCall.clone());
     }
 
+<<<<<<< HEAD
     private static class FunctionCallRewriter extends AstVisitor<Expr, Void> {
+=======
+    private static class FunctionCallRewriter implements AstVisitor<Expr, Void> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         private final List<Expr> sourceArguments;
         private boolean variableArgument;
 

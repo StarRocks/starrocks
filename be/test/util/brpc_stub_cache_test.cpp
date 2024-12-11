@@ -52,4 +52,22 @@ TEST_F(BrpcStubCacheTest, invalid) {
     ASSERT_EQ(nullptr, stub1);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(BrpcStubCacheTest, reset) {
+    BrpcStubCache cache;
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub1);
+    auto istub1 = stub1->stub();
+
+    stub1->reset_channel();
+    auto istub2 = stub1->stub();
+
+    ASSERT_NE(istub1, istub2);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

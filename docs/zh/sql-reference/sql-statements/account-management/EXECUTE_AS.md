@@ -33,7 +33,11 @@ EXECUTE AS test2 WITH NO REVERT;
 
 语句执行成功后，可以通过 `select current_user()` 命令获取当前用户。
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plain
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 select current_user();
 +-----------------------------+
 | CURRENT_USER()              |

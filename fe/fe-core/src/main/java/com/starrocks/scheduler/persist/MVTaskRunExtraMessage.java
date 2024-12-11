@@ -52,6 +52,16 @@ public class MVTaskRunExtraMessage implements Writable {
     @SerializedName("basePartitionsToRefreshMap")
     private Map<String, Set<String>> basePartitionsToRefreshMap = Maps.newHashMap();
 
+<<<<<<< HEAD
+=======
+    @SerializedName("nextPartitionStart")
+    private String nextPartitionStart;
+    @SerializedName("nextPartitionEnd")
+    private String nextPartitionEnd;
+    @SerializedName("nextPartitionValues")
+    private String nextPartitionValues;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // task run starts to process time
     // NOTE: finishTime - processStartTime = process task run time(exclude pending time)
     @SerializedName("processStartTime")
@@ -60,6 +70,12 @@ public class MVTaskRunExtraMessage implements Writable {
     @SerializedName("executeOption")
     private ExecuteOption executeOption = new ExecuteOption(true);
 
+<<<<<<< HEAD
+=======
+    @SerializedName("planBuilderMessage")
+    public Map<String, String> planBuilderMessage = Maps.newHashMap();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public MVTaskRunExtraMessage() {
     }
 
@@ -133,6 +149,14 @@ public class MVTaskRunExtraMessage implements Writable {
                 Config.max_mv_task_run_meta_message_values_length);
     }
 
+<<<<<<< HEAD
+=======
+    public static MVTaskRunExtraMessage read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, MVTaskRunExtraMessage.class);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ExecuteOption getExecuteOption() {
         return executeOption;
     }
@@ -141,11 +165,37 @@ public class MVTaskRunExtraMessage implements Writable {
         this.executeOption = executeOption;
     }
 
+<<<<<<< HEAD
     public static MVTaskRunExtraMessage read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, MVTaskRunExtraMessage.class);
     }
 
+=======
+    public String getNextPartitionStart() {
+        return nextPartitionStart;
+    }
+
+    public void setNextPartitionStart(String nextPartitionStart) {
+        this.nextPartitionStart = nextPartitionStart;
+    }
+
+    public String getNextPartitionEnd() {
+        return nextPartitionEnd;
+    }
+
+    public void setNextPartitionEnd(String nextPartitionEnd) {
+        this.nextPartitionEnd = nextPartitionEnd;
+    }
+
+    public String getNextPartitionValues() {
+        return nextPartitionValues;
+    }
+
+    public void setNextPartitionValues(String nextPartitionValues) {
+        this.nextPartitionValues = nextPartitionValues;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public long getProcessStartTime() {
         return processStartTime;
@@ -155,6 +205,14 @@ public class MVTaskRunExtraMessage implements Writable {
         this.processStartTime = processStartTime;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPlanBuilderMessage(Map<String, String> planBuilderMessage) {
+        this.planBuilderMessage = MvUtils.shrinkToSize(planBuilderMessage,
+                Config.max_mv_task_run_meta_message_values_length);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);

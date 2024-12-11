@@ -20,10 +20,16 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -48,6 +54,7 @@ public class UseMaterializedViewTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+<<<<<<< HEAD
 
         FeConstants.runningUnitTest = true;
         Config.alter_scheduler_interval_millisecond = 100;
@@ -57,6 +64,15 @@ public class UseMaterializedViewTest {
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
+=======
+        UtFrameUtils.createMinStarRocksCluster();
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
@@ -124,6 +140,7 @@ public class UseMaterializedViewTest {
     public void testDropMaterializedView() {
         String sql = "drop materialized view mv_to_drop";
         try {
+<<<<<<< HEAD
             Database database = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
             Assert.assertTrue(database != null);
             Table table = database.getTable("mv_to_drop");
@@ -131,11 +148,24 @@ public class UseMaterializedViewTest {
             MaterializedView materializedView = (MaterializedView) table;
             long baseTableId = materializedView.getBaseTableInfos().iterator().next().getTableId();
             OlapTable baseTable = ((OlapTable) database.getTable(baseTableId));
+=======
+            Database database = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
+            Assert.assertTrue(database != null);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "mv_to_drop");
+            Assert.assertTrue(table != null);
+            MaterializedView materializedView = (MaterializedView) table;
+            long baseTableId = materializedView.getBaseTableInfos().iterator().next().getTableId();
+            OlapTable baseTable = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), baseTableId));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.assertEquals(2, baseTable.getRelatedMaterializedViews().size());
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
             stmtExecutor.execute();
+<<<<<<< HEAD
             table = database.getTable("mv_to_drop");
+=======
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "mv_to_drop");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.assertTrue(table == null);
             Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
         } catch (Exception e) {

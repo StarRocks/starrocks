@@ -50,7 +50,11 @@ public class ReplicaMinReadableVersionTest {
 
     @Test
     public void testReplicaMinReadableVersionReported() throws Exception {
+<<<<<<< HEAD
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable(tableName);
+=======
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable(tableName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         long tableId = olapTable.getId();
         PseudoBackend be = cluster.getBackend(10001);
         Tablet tablet = be.getTabletsByTable(tableId).get(0);

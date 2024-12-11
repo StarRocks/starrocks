@@ -95,7 +95,11 @@ TEST_F(LakeMetacacheTest, test_txn_log_cache) {
 TEST_F(LakeMetacacheTest, test_tablet_schema_cache) {
     auto* metacache = _tablet_mgr->metacache();
 
+<<<<<<< HEAD
     auto schema1 = std::make_shared<TabletSchema>(TabletSchemaPB());
+=======
+    auto schema1 = std::make_shared<TabletSchema>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     metacache->cache_tablet_schema("schema1", schema1, 0);
 
     auto schema2 = metacache->lookup_tablet_schema("schema1");
@@ -191,7 +195,11 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     // no segment
     auto sz0 = metacache->memory_usage();
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
+=======
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
@@ -245,7 +253,11 @@ TEST_F(LakeMetacacheTest, test_prune) {
 TEST_F(LakeMetacacheTest, test_cache_segment_if_absent) {
     // intend empty value for the following two variables
     std::shared_ptr<FileSystem> fs;
+<<<<<<< HEAD
     std::shared_ptr<const TabletSchema> schema;
+=======
+    TabletSchemaCSPtr schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     auto* metacache = _tablet_mgr->metacache();
     metacache->prune();
@@ -301,7 +313,11 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent_concurrency) {
     metacache->prune();
 
     std::shared_ptr<FileSystem> fs;
+<<<<<<< HEAD
     std::shared_ptr<const TabletSchema> schema;
+=======
+    TabletSchemaCSPtr schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     uint32_t segment_id = 10001;
     std::string segment_path("test_cache_segment_if_absent_concurrent.dat");
@@ -342,4 +358,26 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent_concurrency) {
     }
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(LakeMetacacheTest, test_combined_txn_log_cache) {
+    auto* metacache = _tablet_mgr->metacache();
+
+    auto log = std::make_shared<CombinedTxnLogPB>();
+    metacache->cache_combined_txn_log("combined1", log);
+
+    auto log2 = metacache->lookup_combined_txn_log("combined1");
+    EXPECT_EQ(log.get(), log2.get());
+
+    auto log3 = metacache->lookup_combined_txn_log("combined2");
+    ASSERT_TRUE(log3 == nullptr);
+
+    auto meta = std::make_shared<TabletMetadataPB>();
+    metacache->cache_tablet_metadata("meta1", meta);
+
+    auto log4 = metacache->lookup_combined_txn_log("meta1");
+    ASSERT_TRUE(log4 == nullptr);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::lake

@@ -47,11 +47,23 @@ import com.starrocks.thrift.TStringLiteral;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 public class StringLiteral extends LiteralExpr {
     private String value;
+=======
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
+
+
+public class StringLiteral extends LiteralExpr {
+    protected String value;
+
+    protected String sqlStr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public StringLiteral() {
         super(NodePosition.ZERO);
@@ -135,6 +147,7 @@ public class StringLiteral extends LiteralExpr {
 
     @Override
     public String toSqlImpl() {
+<<<<<<< HEAD
         String sql = value;
         if (value != null) {
             if (value.contains("\\")) {
@@ -143,6 +156,19 @@ public class StringLiteral extends LiteralExpr {
             sql = sql.replace("'", "\\'");
         }
         return "'" + sql + "'";
+=======
+        if (sqlStr == null) {
+            String sql = value;
+            if (value != null) {
+                if (value.contains("\\")) {
+                    sql = value.replace("\\", "\\\\");
+                }
+                sql = sql.replace("'", "\\'");
+            }
+            sqlStr =  "'" + sql + "'";
+        }
+        return sqlStr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -267,4 +293,26 @@ public class StringLiteral extends LiteralExpr {
     public boolean equals(Object obj) {
         return super.equals(obj);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public void parseMysqlParam(ByteBuffer data) {
+        int strLen = getParamLen(data);
+        if (strLen > data.remaining()) {
+            strLen = data.remaining();
+        }
+        byte[] bytes = new byte[strLen];
+        data.get(bytes);
+        value = new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    public static StringLiteral create(String value) {
+        if (value.length() > LargeStringLiteral.LEN_LIMIT) {
+            return new LargeStringLiteral(value, NodePosition.ZERO);
+        } else {
+            return new StringLiteral(value);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

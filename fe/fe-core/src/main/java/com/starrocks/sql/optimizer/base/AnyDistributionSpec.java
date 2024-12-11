@@ -18,7 +18,13 @@ package com.starrocks.sql.optimizer.base;
 import java.util.Objects;
 
 public class AnyDistributionSpec extends DistributionSpec {
+<<<<<<< HEAD
     public AnyDistributionSpec() {
+=======
+
+    public static final AnyDistributionSpec INSTANCE = new AnyDistributionSpec();
+    private AnyDistributionSpec() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(DistributionType.ANY);
     }
 

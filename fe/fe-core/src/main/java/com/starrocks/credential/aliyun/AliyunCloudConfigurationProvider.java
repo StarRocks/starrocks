@@ -20,9 +20,15 @@ import com.starrocks.credential.CloudConfigurationProvider;
 
 import java.util.Map;
 
+<<<<<<< HEAD
 import static com.starrocks.credential.CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY;
+=======
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class AliyunCloudConfigurationProvider implements CloudConfigurationProvider {
 

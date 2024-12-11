@@ -23,9 +23,15 @@ PARTITION p20230109 VALUES [("2023-01-09"), ("2023-01-10")))
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 4 
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
+=======
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "compression" = "LZ4"
 );
 -- result:

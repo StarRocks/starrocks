@@ -71,6 +71,11 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_struct_column_writer(const Column
         value_options.need_zone_map = false;
         value_options.need_bloom_filter = field_column.is_bf_column();
         value_options.need_bitmap_index = field_column.has_bitmap_index();
+<<<<<<< HEAD
+=======
+        value_options.need_flat = opts.need_flat;
+        value_options.is_compaction = opts.is_compaction;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSIGN_OR_RETURN(auto field_writer, ColumnWriter::create(value_options, &field_column, wfile));
         field_writers.emplace_back(std::move(field_writer));
     }

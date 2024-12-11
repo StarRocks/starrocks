@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 commands_restrictions:
   backport:
@@ -6,6 +7,20 @@ commands_restrictions:
   rebase:
     conditions:
       - sender-permission>=read
+=======
+commands_restrictions:
+  backport:
+    conditions:
+      - or:
+        - sender-permission>=read
+        - sender=github-actions[bot]
+
+  rebase:
+    conditions:
+      - or:
+        - sender-permission>=read
+        - sender=github-actions[bot]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 pull_request_rules:
   - name: assign PRs with the pr author
@@ -16,6 +31,7 @@ pull_request_rules:
         add_users: 
           - "{{author}}"
 
+<<<<<<< HEAD
   - name: assign backport PRs with the pr author
     conditions:
       - merged
@@ -25,6 +41,8 @@ pull_request_rules:
         assignees: 
           - "{{author}}"
   
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   - name: close pr when conflict
     conditions:
       - label=conflicts

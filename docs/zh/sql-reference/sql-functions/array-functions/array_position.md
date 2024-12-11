@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_position
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 获取数组中某个元素位置，是的话返回位置，否则返回0.
 

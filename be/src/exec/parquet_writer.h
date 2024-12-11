@@ -42,12 +42,20 @@ struct TableInfo {
     bool enable_dictionary = true;
     std::string partition_location = "";
     std::shared_ptr<::parquet::schema::GroupNode> schema;
+<<<<<<< HEAD
+=======
+    int64_t max_file_size = 1024 * 1024 * 1024; // 1GB
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TCloudConfiguration cloud_conf;
 };
 
 class RollingAsyncParquetWriter {
 public:
+<<<<<<< HEAD
     RollingAsyncParquetWriter(TableInfo tableInfo, const std::vector<ExprContext*>& output_expr_ctxs,
+=======
+    RollingAsyncParquetWriter(TableInfo tableInfo, std::vector<ExprContext*> output_expr_ctxs,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                               RuntimeProfile* parent_profile,
                               std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func,
                               RuntimeState* state, int32_t driver_id);
@@ -60,10 +68,25 @@ public:
     bool writable() const { return _writer == nullptr || _writer->writable(); }
     bool closed();
 
+<<<<<<< HEAD
 private:
     std::string _new_file_location();
 
     Status _new_file_writer();
+=======
+    void set_io_status(const Status& status) {
+        if (_io_status.ok()) {
+            _io_status = status;
+        }
+    }
+
+    Status get_io_status() const { return _io_status; }
+
+private:
+    std::string _new_file_location();
+
+    Status _new_file_writer(RuntimeState* state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status close_current_writer(RuntimeState* state);
 
 private:
@@ -75,8 +98,14 @@ private:
     TableInfo _table_info;
     int32_t _file_cnt = 0;
     std::string _outfile_location;
+<<<<<<< HEAD
     std::vector<std::shared_ptr<starrocks::parquet::AsyncFileWriter>> _pending_commits;
     int64_t _max_file_size = 1 * 1024 * 1024 * 1024; // 1GB
+=======
+    Status _io_status;
+    std::vector<std::shared_ptr<starrocks::parquet::AsyncFileWriter>> _pending_commits;
+    int64_t _max_file_size;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::vector<ExprContext*> _output_expr_ctxs;
     RuntimeProfile* _parent_profile;
     std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func;

@@ -29,9 +29,15 @@ namespace starrocks {
 // Compare the row of index |m| in |lhs|, with the row of index |n| in |rhs|.
 inline int compare_chunk(size_t key_columns, const std::vector<uint32_t>& sort_key_idxes, const Chunk& lhs, size_t m,
                          const Chunk& rhs, size_t n, const std::string& merge_condition) {
+<<<<<<< HEAD
     for (size_t i = 0; i < sort_key_idxes.size(); i++) {
         const ColumnPtr& lc = lhs.get_column_by_index(sort_key_idxes[i]);
         const ColumnPtr& rc = rhs.get_column_by_index(sort_key_idxes[i]);
+=======
+    for (unsigned int sort_key_idx : sort_key_idxes) {
+        const ColumnPtr& lc = lhs.get_column_by_index(sort_key_idx);
+        const ColumnPtr& rc = rhs.get_column_by_index(sort_key_idx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (int r = lc->compare_at(m, n, *rc, -1); r != 0) {
             return r;
         }
@@ -157,14 +163,24 @@ public:
     size_t merged_rows() const override { return _merged_rows; }
 
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+<<<<<<< HEAD
         ChunkIterator::init_encoded_schema(dict_maps);
+=======
+        RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (auto& i : _children) {
             RETURN_IF_ERROR(i->init_encoded_schema(dict_maps));
         }
         return Status::OK();
     }
+<<<<<<< HEAD
     Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         ChunkIterator::init_output_schema(unused_output_column_ids);
+=======
+
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (auto& i : _children) {
             RETURN_IF_ERROR(i->init_output_schema(unused_output_column_ids));
         }

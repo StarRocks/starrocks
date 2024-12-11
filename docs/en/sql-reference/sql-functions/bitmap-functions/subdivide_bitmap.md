@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # subdivide_bitmap
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Splits a large bitmap into multiple sub-bitmaps.
 

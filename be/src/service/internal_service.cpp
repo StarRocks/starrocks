@@ -49,20 +49,34 @@
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
+<<<<<<< HEAD
 #include "common/status.h"
 #include "exec/orc_scanner.h"
 #include "exec/parquet_scanner.h"
+=======
+#include "common/process_exit.h"
+#include "common/status.h"
+#include "exec/file_scanner.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
+<<<<<<< HEAD
+=======
+#include "exec/short_circuit.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
+=======
+#include "runtime/batch_write/batch_write_mgr.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/buffer_control_block.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
@@ -75,8 +89,16 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/types.h"
 #include "service/brpc.h"
+<<<<<<< HEAD
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
+=======
+#include "storage/dictionary_cache_manager.h"
+#include "storage/storage_engine.h"
+#include "storage/txn_manager.h"
+#include "util/arrow/row_batch.h"
+#include "util/failpoint/fail_point.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 #include "util/time.h"
@@ -84,9 +106,12 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 extern std::atomic<bool> k_starrocks_exit;
 extern std::atomic<bool> k_starrocks_exit_quick;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
@@ -229,7 +254,11 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
         if (!st.ok()) {
             st.to_protobuf(response->mutable_status());
             done->Run();
+<<<<<<< HEAD
             LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
+=======
+            LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return;
         }
         this->_transmit_chunk(cntl_base, params.get(), response, done);
@@ -295,15 +324,25 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
                                                       google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+<<<<<<< HEAD
     if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
+=======
+    if (process_exit_in_progress()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         LOG(WARNING) << "reject exec plan fragment because of exit";
         return;
     }
 
+<<<<<<< HEAD
     auto st = _exec_plan_fragment(cntl);
     if (!st.ok()) {
         LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
+=======
+    auto st = _exec_plan_fragment(cntl, request);
+    if (!st.ok()) {
+        LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     st.to_protobuf(response->mutable_status());
 }
@@ -327,6 +366,15 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+<<<<<<< HEAD
+=======
+    if (process_exit_in_progress()) {
+        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        LOG(WARNING) << "reject exec plan fragment because of exit";
+        return;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
     {
@@ -379,6 +427,27 @@ void PInternalServiceImplBase<T>::tablet_writer_add_chunks(google::protobuf::Rpc
 }
 
 template <typename T>
+<<<<<<< HEAD
+=======
+void PInternalServiceImplBase<T>::tablet_writer_add_chunk_via_http(google::protobuf::RpcController* controller,
+                                                                   const PHttpRequest* request,
+                                                                   PTabletWriterAddBatchResult* response,
+                                                                   google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_chunks_via_http(google::protobuf::RpcController* controller,
+                                                                    const PHttpRequest* request,
+                                                                    PTabletWriterAddBatchResult* response,
+                                                                    google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void PInternalServiceImplBase<T>::tablet_writer_add_segment(google::protobuf::RpcController* controller,
                                                             const PTabletWriterAddSegmentRequest* request,
                                                             PTabletWriterAddSegmentResult* response,
@@ -394,18 +463,32 @@ void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcCont
                                                        google::protobuf::Closure* done) {}
 
 template <typename T>
+<<<<<<< HEAD
 Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) {
+=======
+Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
+                                                        const PExecPlanFragmentRequest* request) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto ser_request = cntl->request_attachment().to_string();
     TExecPlanFragmentParams t_request;
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
+<<<<<<< HEAD
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
+=======
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
+    }
+    // incremental scan ranges deployment.
+    if (!t_request.__isset.fragment) {
+        return pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
         return Status::InvalidArgument("batch_size is not set");
     }
+<<<<<<< HEAD
     // Before version 2.5, broker load/export was not executed in the pipeline engine.
     // The batch_size params may not be set in the request sent by FE.
     // During the grayscale upgrade process, the request sent by the old version of FE will report an error.
@@ -426,6 +509,31 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
         return _exec_plan_fragment_by_pipeline(t_request, t_request);
     } else {
         return _exec_plan_fragment_by_non_pipeline(t_request);
+=======
+    auto batch_size = t_request.query_options.batch_size;
+    if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
+        return Status::InvalidArgument(
+                fmt::format("batch_size is out of range, it must be in the range (0, {}], current value is [{}]",
+                            MAX_CHUNK_SIZE, batch_size));
+    }
+
+    bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
+    VLOG(1) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
+            << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num << ", is_pipeline=" << is_pipeline
+            << ", chunk_size=" << t_request.query_options.batch_size;
+    if (is_pipeline) {
+        return _exec_plan_fragment_by_pipeline(t_request, t_request);
+    } else {
+        bool has_schema_table_sink = t_request.__isset.fragment && t_request.fragment.__isset.output_sink &&
+                                     t_request.fragment.output_sink.type == TDataSinkType::SCHEMA_TABLE_SINK;
+        // SchemaTableSink is not supported on the Pipeline engine, we have to allow it to be executed on non-pipeline engine temporarily,
+        // this will be removed in the future.
+        if (has_schema_table_sink) {
+            return _exec_plan_fragment_by_non_pipeline(t_request);
+        }
+        return Status::InvalidArgument(
+                "non-pipeline engine is no longer supported since 3.2, please set enable_pipeline_engine=true.");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -456,6 +564,11 @@ inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReaso
         return "InternalError";
     case TIMEOUT:
         return "TimeOut";
+<<<<<<< HEAD
+=======
+    case QUERY_FINISHED:
+        return "QueryFinished";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     default:
         return "UnknownReason";
     }
@@ -486,7 +599,17 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
     Status st;
     auto reason_string =
             request->has_cancel_reason() ? cancel_reason_to_string(request->cancel_reason()) : "UnknownReason";
+<<<<<<< HEAD
     LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+=======
+    bool cancel_query_ctx = tid.hi == 0 && tid.lo == 0;
+    if (cancel_query_ctx) {
+        DCHECK(request->has_query_id());
+        LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
+    } else {
+        LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     if (request->has_is_pipeline() && request->is_pipeline()) {
         TUniqueId query_id;
@@ -498,6 +621,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         }
         query_id.__set_hi(request->query_id().hi());
         query_id.__set_lo(request->query_id().lo());
+<<<<<<< HEAD
         auto&& query_ctx = _exec_env->query_context_mgr()->get(query_id);
         if (!query_ctx) {
             LOG(INFO) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
@@ -511,6 +635,29 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
                                              print_id(query_id), print_id(tid));
         } else {
             fragment_ctx->cancel(Status::Cancelled(reason_string));
+=======
+
+        auto query_ctx = _exec_env->query_context_mgr()->get(query_id);
+        if (!query_ctx) {
+            VLOG(1) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
+                                           print_id(query_id), print_id(tid));
+            st.to_protobuf(result->mutable_status());
+            return;
+        }
+        if (cancel_query_ctx) {
+            // cancel query_id
+            query_ctx->cancel(Status::Cancelled(reason_string));
+        } else {
+            // cancel fragment
+            auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
+            if (!fragment_ctx) {
+                LOG(INFO) << strings::Substitute(
+                        "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
+                        print_id(tid));
+            } else {
+                fragment_ctx->cancel(Status::Cancelled(reason_string));
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     } else {
         if (request->has_cancel_reason()) {
@@ -520,7 +667,11 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
             st = _exec_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.get_error_msg();
+=======
+            LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     st.to_protobuf(result->mutable_status());
@@ -578,7 +729,11 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
             result->mutable_status()->set_status_code(TStatusCode::NOT_FOUND);
             return;
         }
+<<<<<<< HEAD
         pipeline::DriverExecutor* driver_executor = _exec_env->wg_driver_executor();
+=======
+        pipeline::DriverExecutor* driver_executor = fragment_ctx->workgroup()->executors()->driver_executor();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false, true);
     }
 }
@@ -786,6 +941,88 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
 }
 
 template <typename T>
+<<<<<<< HEAD
+=======
+void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::RpcController* controller,
+                                                           const PProcessDictionaryCacheRequest* request,
+                                                           PProcessDictionaryCacheResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    PProcessDictionaryCacheRequestType request_type = request->type();
+    switch (request_type) {
+    case PProcessDictionaryCacheRequestType::BEGIN: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::REFRESH: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->refresh(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::COMMIT: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::CLEAR: {
+        StorageEngine::instance()->dictionary_cache_manager()->clear(request->dict_id(), request->is_cancel());
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::STATISTIC: {
+        StorageEngine::instance()->dictionary_cache_manager()->get_info(request->dict_id(), *response);
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    default: {
+        std::stringstream ss;
+        ss << "invalid request type for process_dictionary_cache";
+        LOG(WARNING) << ss.str();
+        Status::InternalError(ss.str()).to_protobuf(response->mutable_status());
+        break;
+    }
+    }
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::fetch_arrow_schema(google::protobuf::RpcController* controller,
+                                                     const PFetchArrowSchemaRequest* request,
+                                                     PFetchArrowSchemaResult* result, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    std::shared_ptr<arrow::Schema> schema =
+            ExecEnv::GetInstance()->result_mgr()->get_arrow_schema(UniqueId(request->finst_id()).to_thrift());
+    if (schema == nullptr) {
+        const auto status = Status::NotFound("arrow schema not found");
+        status.to_protobuf(result->mutable_status());
+        return;
+    }
+
+    std::string schema_as_str;
+    const auto status = serialize_arrow_schema(&schema, &schema_as_str);
+    if (status.ok()) {
+        result->set_schema(std::move(schema_as_str));
+    }
+    status.to_protobuf(result->mutable_status());
+}
+
+template <typename T>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcController* controller,
                                                    const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
                                                    google::protobuf::Closure* done) {
@@ -813,6 +1050,7 @@ void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcControll
     }
 
     RuntimeState state(_exec_env);
+<<<<<<< HEAD
     RuntimeProfile profile{"dummy_profile", false};
     ScannerCounter counter{};
     std::unique_ptr<FileScanner> p_scanner;
@@ -846,6 +1084,11 @@ void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcControll
 
     std::vector<SlotDescriptor> schema;
     st = p_scanner->get_schema(&schema);
+=======
+
+    std::vector<SlotDescriptor> schema;
+    st = FileScanner::sample_schema(&state, scan_range, &schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (!st.ok()) {
         LOG(WARNING) << "get schema failed: " << st;
         return;
@@ -866,7 +1109,11 @@ void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::R
     auto* cntl = static_cast<brpc::Controller*>(controller);
     Status st = _submit_mv_maintenance_task(cntl);
     if (!st.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.get_error_msg();
+=======
+        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     st.to_protobuf(response->mutable_status());
     return;
@@ -1098,7 +1345,96 @@ void PInternalServiceImplBase<T>::execute_command(google::protobuf::RpcControlle
     st.to_protobuf(response->mutable_status());
 }
 
+<<<<<<< HEAD
 template class PInternalServiceImplBase<PInternalService>;
 template class PInternalServiceImplBase<doris::PBackendService>;
+=======
+template <typename T>
+void PInternalServiceImplBase<T>::update_fail_point_status(google::protobuf::RpcController* controller,
+                                                           const PUpdateFailPointStatusRequest* request,
+                                                           PUpdateFailPointStatusResponse* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+#ifdef FIU_ENABLE
+    const auto name = request->fail_point_name();
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(name);
+    if (fp == nullptr) {
+        Status::InvalidArgument(fmt::format("FailPoint {} is not existed.", name))
+                .to_protobuf(response->mutable_status());
+        return;
+    }
+    fp->setMode(request->trigger_mode());
+    Status::OK().to_protobuf(response->mutable_status());
+#else
+    Status::NotSupported("FailPoint is not supported, need re-compile BE with ENABLE_FAULT_INJECTION")
+            .to_protobuf(response->mutable_status());
+#endif
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::list_fail_point(google::protobuf::RpcController* controller,
+                                                  const PListFailPointRequest* request,
+                                                  PListFailPointResponse* response, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+#ifdef FIU_ENABLE
+    starrocks::failpoint::FailPointRegistry::GetInstance()->iterate([&](starrocks::failpoint::FailPoint* fp) {
+        auto fp_info = response->add_fail_points();
+        *fp_info = fp->to_pb();
+    });
+#endif
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
+                                                        PExecShortCircuitResult* response) {
+    auto ser_request = cntl->request_attachment().to_string();
+    std::shared_ptr<TExecShortCircuitParams> t_requests = std::make_shared<TExecShortCircuitParams>();
+    {
+        const auto* buf = (const uint8_t*)ser_request.data();
+        uint32_t len = ser_request.size();
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), t_requests.get()));
+    }
+    ShortCircuitExecutor executor{_exec_env};
+    RETURN_IF_ERROR(executor.prepare(*t_requests));
+    RETURN_IF_ERROR(executor.execute());
+    RETURN_IF_ERROR(executor.fetch_data(cntl, *response));
+    return Status::OK();
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcController* cntl_base,
+                                                     const PExecShortCircuitRequest* request,
+                                                     PExecShortCircuitResult* response,
+                                                     google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+
+    StarRocksMetrics::instance()->short_circuit_request_total.increment(1);
+    MonotonicStopWatch watch;
+    watch.start();
+
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    if (process_exit_in_progress()) {
+        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        return;
+    }
+
+    auto st = _exec_short_circuit(cntl, request, response);
+    st.to_protobuf(response->mutable_status());
+    uint64_t elapsed_time_ns = watch.elapsed_time();
+    StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* cntl_base,
+                                              const PStreamLoadRequest* request, PStreamLoadResponse* response,
+                                              google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    BatchWriteMgr::receive_stream_load_rpc(_exec_env, cntl, request, response);
+}
+
+template class PInternalServiceImplBase<PInternalService>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 } // namespace starrocks

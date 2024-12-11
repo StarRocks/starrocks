@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # time_to_sec
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将 `time` 时间值转换为秒数，转换公式为:
 

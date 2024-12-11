@@ -61,6 +61,14 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public boolean isEmptyOutputRows() {
+        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean hasUnknownColumn() {
         return hasUnknownColumn;
     }

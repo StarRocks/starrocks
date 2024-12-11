@@ -123,10 +123,17 @@ namespace starrocks {
 
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \
+<<<<<<< HEAD
         return fun.template operator()<type>(args...);
 
 template <class Functor, class... Args>
 auto field_type_dispatch_basic(LogicalType ftype, Functor fun, Args... args) {
+=======
+        return fun.template operator()<type>(std::forward<Args>(args)...);
+
+template <class Functor, class... Args>
+auto field_type_dispatch_basic(LogicalType ftype, Functor fun, Args&&... args) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     switch (ftype) {
         APPLY_FOR_BASIC_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
     default:
@@ -137,13 +144,21 @@ auto field_type_dispatch_basic(LogicalType ftype, Functor fun, Args... args) {
 
 // Types could built into columns
 template <class Functor, class... Args>
+<<<<<<< HEAD
 auto field_type_dispatch_column(LogicalType ftype, Functor fun, Args... args) {
+=======
+auto field_type_dispatch_column(LogicalType ftype, Functor fun, Args&&... args) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     switch (ftype) {
         APPLY_FOR_BASIC_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
         APPLY_FOR_METRIC_FIELD_TYPE(_TYPE_DISPATCH_CASE)
         _TYPE_DISPATCH_CASE(TYPE_ARRAY)
         _TYPE_DISPATCH_CASE(TYPE_MAP)
         _TYPE_DISPATCH_CASE(TYPE_STRUCT)
+<<<<<<< HEAD
+=======
+        _TYPE_DISPATCH_CASE(TYPE_UNSIGNED_SMALLINT)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     default:
         CHECK(false) << "unknown type " << ftype;
         __builtin_unreachable();
@@ -151,7 +166,11 @@ auto field_type_dispatch_column(LogicalType ftype, Functor fun, Args... args) {
 }
 
 template <class Functor, class... Args>
+<<<<<<< HEAD
 auto field_type_dispatch_all_extra(LogicalType ftype, Functor fun, Args... args) {
+=======
+auto field_type_dispatch_all_extra(LogicalType ftype, Functor fun, Args&&... args) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     switch (ftype) {
         APPLY_FOR_BASIC_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
         APPLY_FOR_COMPLEX_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
@@ -167,7 +186,11 @@ auto field_type_dispatch_all_extra(LogicalType ftype, Functor fun, Args... args)
 }
 
 template <class Functor, class... Args>
+<<<<<<< HEAD
 auto field_type_dispatch_bitmap_index(LogicalType ftype, Functor fun, Args... args) {
+=======
+auto field_type_dispatch_bitmap_index(LogicalType ftype, Functor fun, Args&&... args) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     switch (ftype) {
         APPLY_FOR_BITMAP_INDEX_TYPE(_TYPE_DISPATCH_CASE)
     default:
@@ -177,7 +200,11 @@ auto field_type_dispatch_bitmap_index(LogicalType ftype, Functor fun, Args... ar
 }
 
 template <class Functor, class... Args>
+<<<<<<< HEAD
 auto field_type_dispatch_bloomfilter(LogicalType ftype, Functor fun, Args... args) {
+=======
+auto field_type_dispatch_bloomfilter(LogicalType ftype, Functor fun, Args&&... args) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // tinyint is not supported specially
     if (ftype == TYPE_TINYINT) {
         return Status::NotSupported("unsupported type for bloom filter: " + std::to_string(ftype));
@@ -191,7 +218,11 @@ auto field_type_dispatch_bloomfilter(LogicalType ftype, Functor fun, Args... arg
 }
 
 template <class Functor, class... Args>
+<<<<<<< HEAD
 auto field_type_dispatch_zonemap_index(LogicalType ftype, Functor fun, Args... args) {
+=======
+auto field_type_dispatch_zonemap_index(LogicalType ftype, Functor fun, Args&&... args) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     switch (ftype) {
         APPLY_FOR_BASIC_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
     default:
@@ -201,7 +232,11 @@ auto field_type_dispatch_zonemap_index(LogicalType ftype, Functor fun, Args... a
 }
 
 template <class Functor, class... Args>
+<<<<<<< HEAD
 auto field_type_dispatch_supported(LogicalType ftype, Functor fun, Args... args) {
+=======
+auto field_type_dispatch_supported(LogicalType ftype, Functor fun, Args&&... args) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     switch (ftype) {
         APPLY_FOR_SUPPORTED_FIELD_TYPE(_TYPE_DISPATCH_CASE)
     default:

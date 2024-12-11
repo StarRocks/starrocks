@@ -19,12 +19,19 @@ import com.google.common.base.Strings;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.TruncateTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class TruncateTableAnalyzer {
 
     public static void analyze(TruncateTableStmt statement, ConnectContext context) {
+<<<<<<< HEAD
         MetaUtils.normalizationTableName(context, statement.getTblRef().getName());
+=======
+        statement.getTblRef().getName().normalization(context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (statement.getTblRef().hasExplicitAlias()) {
             throw new SemanticException("Not support truncate table with alias");
         }

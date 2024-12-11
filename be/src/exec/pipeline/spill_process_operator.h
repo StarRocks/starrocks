@@ -63,7 +63,11 @@ public:
 
     void close(RuntimeState* state) override { SourceOperatorFactory::close(state); }
 
+<<<<<<< HEAD
     SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+=======
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     SpillProcessChannelFactoryPtr _process_ctx;

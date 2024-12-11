@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_union
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Aggregates PERCENTILE data.
 
@@ -50,7 +54,11 @@ group by store_id;
 
 Example 2: Load PERCENTILE data.
 
+<<<<<<< HEAD
 Create an aggregate table that contains a PERCENTILE column `sale_amt_per`.
+=======
+Create an Aggregate table that contains a PERCENTILE column `sale_amt_per`.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```sql
 CREATE TABLE sales_records(

@@ -19,11 +19,19 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/hash_set.h"
+<<<<<<< HEAD
+=======
+#include "column/type_traits.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/object_pool.h"
 #include "exprs/function_helper.h"
 #include "exprs/literal.h"
 #include "exprs/predicate.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
+=======
+#include "runtime/types.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "simd/simd.h"
 
 namespace starrocks {
@@ -63,8 +71,12 @@ class VectorizedInConstPredicate final : public Predicate {
 public:
     using ValueType = typename RunTimeTypeTraits<Type>::CppType;
 
+<<<<<<< HEAD
     VectorizedInConstPredicate(const TExprNode& node)
             : Predicate(node), _is_not_in(node.in_predicate.is_not_in), _is_prepare(false), _null_in_set(false) {}
+=======
+    VectorizedInConstPredicate(const TExprNode& node) : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     VectorizedInConstPredicate(const VectorizedInConstPredicate& other)
             : Predicate(other),
@@ -107,7 +119,11 @@ public:
     }
 
     Status prepare(RuntimeState* state, ExprContext* context) override {
+<<<<<<< HEAD
         Expr::prepare(state, context);
+=======
+        RETURN_IF_ERROR(Expr::prepare(state, context));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         if (_is_prepare) {
             return Status::OK();
@@ -326,6 +342,38 @@ public:
         return evaluate_with_filter(context, ptr, nullptr);
     }
 
+<<<<<<< HEAD
+=======
+    ColumnPtr get_all_values() const {
+        ColumnPtr values = ColumnHelper::create_column(TypeDescriptor{Type}, true);
+        if constexpr (isSliceLT<Type>) {
+            for (auto v : _hash_set) {
+                // v -> SliceWithHash
+                Slice s{v.data, v.size};
+                values->append_datum(s);
+            }
+        } else {
+            for (auto v : _hash_set) {
+                values->append_datum(v);
+            }
+            if constexpr (can_use_array()) {
+                if (is_use_array()) {
+                    for (size_t i = 0; i < _array_size; i++) {
+                        if (_array_buffer[i]) {
+                            values->append_datum(static_cast<ValueType>(i)); //NOLINT
+                        }
+                    }
+                }
+            }
+        }
+
+        if (_null_in_set) {
+            values->append_nulls(1);
+        }
+        return values;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void insert(const ValueType& value) { _hash_set.emplace(value); }
 
     void insert_array(const ValueType& value) {
@@ -380,9 +428,15 @@ private:
         }
     }
 
+<<<<<<< HEAD
     const bool _is_not_in;
     bool _is_prepare;
     bool _null_in_set;
+=======
+    const bool _is_not_in{false};
+    bool _is_prepare{false};
+    bool _null_in_set{false};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool _is_join_runtime_filter = false;
     bool _eq_null = false;
     int _array_size = 0;
@@ -514,6 +568,7 @@ private:
 class VectorizedInConstPredicateBuilder {
 public:
     VectorizedInConstPredicateBuilder(RuntimeState* state, ObjectPool* pool, Expr* expr)
+<<<<<<< HEAD
             : _state(state),
               _pool(pool),
               _expr(expr),
@@ -526,6 +581,12 @@ public:
 
     Status create();
     Status add_values(const ColumnPtr& column, size_t column_offset);
+=======
+            : _state(state), _pool(pool), _expr(expr) {}
+
+    Status create();
+    void add_values(const ColumnPtr& column, size_t column_offset);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void use_array_set(size_t array_size) { _array_size = array_size; }
     void use_as_join_runtime_filter() { _is_join_runtime_filter = true; }
     void set_eq_null(bool v) { _eq_null = v; }
@@ -538,12 +599,21 @@ private:
     RuntimeState* _state;
     ObjectPool* _pool;
     Expr* _expr;
+<<<<<<< HEAD
     bool _eq_null;
     bool _null_in_set;
     bool _is_not_in;
     bool _is_join_runtime_filter;
     int _array_size;
     ExprContext* _in_pred_ctx;
+=======
+    bool _eq_null{false};
+    bool _null_in_set{false};
+    bool _is_not_in{false};
+    bool _is_join_runtime_filter{false};
+    int _array_size{0};
+    ExprContext* _in_pred_ctx{nullptr};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status _st;
 };
 

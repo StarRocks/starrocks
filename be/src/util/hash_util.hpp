@@ -46,6 +46,10 @@
 #endif
 #include <zlib.h>
 
+<<<<<<< HEAD
+=======
+#include "boost/container_hash/hash.hpp"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/Types_types.h"
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
@@ -400,4 +404,18 @@ struct hash<std::pair<starrocks::TUniqueId, int64_t>> {
     }
 };
 
+<<<<<<< HEAD
+=======
+template <typename T>
+struct hash<std::vector<T>> {
+    size_t operator()(const std::vector<T>& ts) const noexcept {
+        std::size_t hash_value = 0; // seed
+        for (auto& t : ts) {
+            boost::hash_combine<T>(hash_value, t);
+        }
+        return hash_value;
+    }
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace std

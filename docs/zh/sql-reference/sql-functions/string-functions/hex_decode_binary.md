@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hex_decode_binary
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将一个十六进制编码的字符串解码为 VARBINARY 类型的值。
 

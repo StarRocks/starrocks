@@ -17,6 +17,10 @@ package com.starrocks.service;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.BasicTable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -28,13 +32,22 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.PartitionsProcDir;
+<<<<<<< HEAD
 import com.starrocks.common.util.PropertyAnalyzer;
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
@@ -42,18 +55,31 @@ import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.server.RunMode;
+=======
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
+<<<<<<< HEAD
 import com.starrocks.thrift.TCompressionType;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
+import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
@@ -64,10 +90,18 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
+<<<<<<< HEAD
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+=======
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class InformationSchemaDataSource {
 
@@ -80,7 +114,10 @@ public class InformationSchemaDataSource {
 
     @NotNull
     private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
         boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
@@ -93,8 +130,18 @@ public class InformationSchemaDataSource {
             }
         }
 
+<<<<<<< HEAD
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<String> dbNames = globalStateMgr.getDbNames();
+=======
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        if (authInfo.isSetCatalog_name()) {
+            catalogName = authInfo.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        List<String> dbNames = metadataMgr.listDbNames(catalogName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG.debug("get db names: {}", dbNames);
 
         UserIdentity currentUser;
@@ -106,8 +153,12 @@ public class InformationSchemaDataSource {
         for (String fullName : dbNames) {
 
             try {
+<<<<<<< HEAD
                 Authorizer.checkAnyActionOnOrInDb(currentUser, null,
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
+=======
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, catalogName, fullName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -135,23 +186,39 @@ public class InformationSchemaDataSource {
     // tables_config
     public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
             throws TException {
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
         List<TTableConfigInfo> tList = new ArrayList<>();
 
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
                 try {
                     List<Table> allTables = db.getTables();
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+                try {
+                    List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     for (Table table : allTables) {
                         try {
                             Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
                                     null, dbName, table);
                         } catch (AccessDeniedException e) {
+<<<<<<< HEAD
+=======
+                            LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             continue;
                         }
 
@@ -171,7 +238,11 @@ public class InformationSchemaDataSource {
                         tList.add(tableConfigInfo);
                     }
                 } finally {
+<<<<<<< HEAD
                     db.readUnlock();
+=======
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         }
@@ -184,6 +255,7 @@ public class InformationSchemaDataSource {
             MaterializedView mv = (MaterializedView) table;
             return mv.getMaterializedViewPropMap();
         }
+<<<<<<< HEAD
 
         OlapTable olapTable = (OlapTable) table;
         Map<String, String> propsMap = new HashMap<>();
@@ -244,20 +316,31 @@ public class InformationSchemaDataSource {
             propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, sv);
         }
         return propsMap;
+=======
+        return table.getProperties();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private static TTableConfigInfo genNormalTableConfigInfo(Table table, TTableConfigInfo tableConfigInfo) {
         OlapTable olapTable = (OlapTable) table;
         tableConfigInfo.setTable_engine(olapTable.getType().toString());
         tableConfigInfo.setTable_model(olapTable.getKeysType().toString());
+<<<<<<< HEAD
         // Distribution info
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
         String distributeKey = distributionInfo.getDistributionKey();
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
         int idx = 0;
+<<<<<<< HEAD
         for (Column column : partitionInfo.getPartitionColumns()) {
+=======
+        for (Column column : partitionInfo.getPartitionColumns(table.getIdToColumn())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (idx != 0) {
                 partitionKeySb.append(", ");
             }
@@ -276,9 +359,18 @@ public class InformationSchemaDataSource {
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
                 || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
         tableConfigInfo.setPartition_key(partitionKeySb.length() > 0 ? partitionKeySb.toString() : DEFAULT_EMPTY_STRING);
+<<<<<<< HEAD
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
         tableConfigInfo.setDistribute_key(distributeKey);
+=======
+
+        // Distribution info
+        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+        tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
+        tableConfigInfo.setDistribute_type(distributionInfo.getType().name());
+        tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey(olapTable.getIdToColumn()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // SORT KEYS
         MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -305,16 +397,28 @@ public class InformationSchemaDataSource {
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db == null) {
                 continue;
             }
             List<Table> allTables = db.getTables();
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (db == null) {
+                continue;
+            }
+            List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (Table table : allTables) {
                 try {
                     Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
                             null, dbName, table);
                 } catch (AccessDeniedException e) {
+<<<<<<< HEAD
+=======
+                    LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     continue;
                 }
                 if (!table.isNativeTableOrMaterializedView()) {
@@ -323,12 +427,18 @@ public class InformationSchemaDataSource {
                 // only olap table/mv or cloud table/mv will reach here;
                 // use the same lock level with `SHOW PARTITIONS FROM XXX` to ensure other modification to
                 // partition does not trigger crash
+<<<<<<< HEAD
                 db.readLock();
+=======
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 try {
                     OlapTable olapTable = (OlapTable) table;
                     PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
                     // normal partition
                     for (Partition partition : olapTable.getPartitions()) {
+<<<<<<< HEAD
                         TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
                         partitionMetaInfo.setDb_name(dbName);
                         partitionMetaInfo.setTable_name(olapTable.getName());
@@ -347,6 +457,30 @@ public class InformationSchemaDataSource {
                     }
                 } finally {
                     db.readUnlock();
+=======
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
+                            partitionMetaInfo.setDb_name(dbName);
+                            partitionMetaInfo.setTable_name(olapTable.getName());
+                            genPartitionMetaInfo(db, olapTable, tblPartitionInfo, partition, physicalPartition,
+                                    partitionMetaInfo, false /* isTemp */);
+                            pList.add(partitionMetaInfo);
+                        }
+                    }
+                    // temp partition
+                    for (Partition partition : olapTable.getTempPartitions()) {
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
+                            partitionMetaInfo.setDb_name(dbName);
+                            partitionMetaInfo.setTable_name(olapTable.getName());
+                            genPartitionMetaInfo(db, olapTable, tblPartitionInfo, partition, physicalPartition,
+                                    partitionMetaInfo, true /* isTemp */);
+                            pList.add(partitionMetaInfo);
+                        }
+                    }
+                } finally {
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         }
@@ -356,10 +490,15 @@ public class InformationSchemaDataSource {
 
     private static void genPartitionMetaInfo(Database db, OlapTable table,
                                              PartitionInfo partitionInfo, Partition partition,
+<<<<<<< HEAD
+=======
+                                             PhysicalPartition physicalPartition,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                              TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
         // PARTITION_NAME
         partitionMetaInfo.setPartition_name(partition.getName());
         // PARTITION_ID
+<<<<<<< HEAD
         partitionMetaInfo.setPartition_id(partition.getId());
         // VISIBLE_VERSION
         partitionMetaInfo.setVisible_version(partition.getVisibleVersion());
@@ -368,18 +507,36 @@ public class InformationSchemaDataSource {
         // PARTITION_KEY
         partitionMetaInfo.setPartition_key(
                 Joiner.on(", ").join(PartitionsProcDir.findPartitionColNames(partitionInfo)));
+=======
+        partitionMetaInfo.setPartition_id(physicalPartition.getId());
+        // VISIBLE_VERSION
+        partitionMetaInfo.setVisible_version(physicalPartition.getVisibleVersion());
+        // VISIBLE_VERSION_TIME
+        partitionMetaInfo.setVisible_version_time(physicalPartition.getVisibleVersionTime() / 1000);
+        // PARTITION_KEY
+        partitionMetaInfo.setPartition_key(
+                Joiner.on(", ").join(partitionInfo.getPartitionColumns(table.getIdToColumn())));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // PARTITION_VALUE
         partitionMetaInfo.setPartition_value(
                 PartitionsProcDir.findRangeOrListValues(partitionInfo, partition.getId()));
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         // DISTRIBUTION_KEY
+<<<<<<< HEAD
         partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(distributionInfo));
+=======
+        partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(table, distributionInfo));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // BUCKETS
         partitionMetaInfo.setBuckets(distributionInfo.getBucketNum());
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
+<<<<<<< HEAD
         ByteSizeValue byteSizeValue = new ByteSizeValue(partition.getDataSize());
+=======
+        ByteSizeValue byteSizeValue = new ByteSizeValue(physicalPartition.storageDataSize());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         partitionMetaInfo.setData_size(byteSizeValue.toString());
         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
         // STORAGE_MEDIUM
@@ -391,6 +548,7 @@ public class InformationSchemaDataSource {
         // IS_IN_MEMORY
         partitionMetaInfo.setIs_in_memory(partitionInfo.getIsInMemory(partition.getId()));
         // ROW_COUNT
+<<<<<<< HEAD
         partitionMetaInfo.setRow_count(partition.getRowCount());
         // IS_TEMP
         partitionMetaInfo.setIs_temp(isTemp);
@@ -398,6 +556,15 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setNext_version(partition.getNextVersion());
         if (table.isCloudNativeTableOrMaterializedView()) {
             PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), partition.getId());
+=======
+        partitionMetaInfo.setRow_count(physicalPartition.storageRowCount());
+        // IS_TEMP
+        partitionMetaInfo.setIs_temp(isTemp);
+        // NEXT_VERSION
+        partitionMetaInfo.setNext_version(physicalPartition.getNextVersion());
+        if (table.isCloudNativeTableOrMaterializedView()) {
+            PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), physicalPartition.getId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
             Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
             // COMPACT_VERSION
@@ -413,12 +580,22 @@ public class InformationSchemaDataSource {
             partitionMetaInfo.setMax_cs(compactionScore != null ? compactionScore.getMax() : 0.0);
             // STORAGE_PATH
             partitionMetaInfo.setStorage_path(
+<<<<<<< HEAD
                     table.getPartitionFilePathInfo(partition.getId()).getFullPath());
         }
+=======
+                    table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
+        }
+
+        partitionMetaInfo.setData_version(physicalPartition.getDataVersion());
+        partitionMetaInfo.setVersion_epoch(physicalPartition.getVersionEpoch());
+        partitionMetaInfo.setVersion_txn_type(physicalPartition.getVersionTxnType().toThrift());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // tables
     public static TGetTablesInfoResponse generateTablesInfoResponse(TGetTablesInfoRequest request) throws TException {
+<<<<<<< HEAD
 
         TGetTablesInfoResponse response = new TGetTablesInfoResponse();
         List<TTableInfo> infos = new ArrayList<>();
@@ -431,12 +608,56 @@ public class InformationSchemaDataSource {
 
                 List<Table> allTables = db.getTables();
                 for (Table table : allTables) {
+=======
+        TGetTablesInfoResponse response = new TGetTablesInfoResponse();
+        List<TTableInfo> infos = new ArrayList<>();
+
+        TAuthInfo authInfo = request.getAuth_info();
+        AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        if (authInfo.isSetCatalog_name()) {
+            catalogName = authInfo.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        for (String dbName : result.authorizedDbs) {
+            Database db = metadataMgr.getDb(catalogName, dbName);
+            if (db == null) {
+                continue;
+            }
+
+            List<BasicTable> tables = new ArrayList<>();
+            Locker locker = new Locker();
+            try {
+                locker.lockDatabase(db.getId(), LockType.READ);
+                List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+                for (String tableName : tableNames) {
+                    if (request.isSetTable_name()) {
+                        if (!tableName.equals(request.getTable_name())) {
+                            continue;
+                        }
+                    }
+
+                    BasicTable table = null;
+                    try {
+                        table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
+                    } catch (Exception e) {
+                        LOG.warn(e.getMessage(), e);
+                    }
+                    if (table == null) {
+                        continue;
+                    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     try {
                         Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
                     } catch (AccessDeniedException e) {
                         continue;
                     }
 
+<<<<<<< HEAD
                     if (request.isSetTable_name()) {
                         if (!table.getName().equals(request.getTable_name())) {
                             continue;
@@ -486,6 +707,66 @@ public class InformationSchemaDataSource {
 
                     } finally {
                         db.readUnlock();
+=======
+                    tables.add(table);
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+            }
+
+            for (BasicTable table : tables) {
+                Locker tableLocker = new Locker();
+                try {
+                    if (table.isNativeTableOrMaterializedView()) {
+                        tableLocker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(((OlapTable) table).getId()),
+                                LockType.READ);
+                    }
+
+                    TTableInfo info = new TTableInfo();
+
+                    // refer to https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html
+                    // the catalog name is always `def`
+                    info.setTable_catalog(DEF);
+                    info.setTable_schema(dbName);
+                    info.setTable_name(table.getName());
+                    info.setTable_type(table.getMysqlType());
+                    info.setEngine(table.getEngine());
+                    info.setVersion(DEFAULT_EMPTY_NUM);
+                    // TABLE_ROWS (depend on the table type)
+                    // AVG_ROW_LENGTH (depend on the table type)
+                    // DATA_LENGTH (depend on the table type)
+                    info.setMax_data_length(DEFAULT_EMPTY_NUM);
+                    info.setIndex_length(DEFAULT_EMPTY_NUM);
+                    info.setData_free(DEFAULT_EMPTY_NUM);
+                    info.setAuto_increment(DEFAULT_EMPTY_NUM);
+                    info.setCreate_time(table.getCreateTime());
+                    // UPDATE_TIME (depend on the table type)
+                    info.setCheck_time(table.getLastCheckTime() / 1000);
+                    info.setTable_collation(UTF8_GENERAL_CI);
+                    info.setChecksum(DEFAULT_EMPTY_NUM);
+                    info.setTable_comment(table.getComment());
+
+                    if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
+                        // OLAP (done)
+                        // OLAP_EXTERNAL (done)
+                        // MATERIALIZED_VIEW (done)
+                        // LAKE (done)
+                        // LAKE_MATERIALIZED_VIEW (done)
+                        genNormalTableInfo(table, info);
+                    } else {
+                        // SCHEMA (use default)
+                        // INLINE_VIEW (use default)
+                        // VIEW (use default)
+                        // BROKER (use default)
+                        // EXTERNAL TABLE (use default)
+                        genDefaultConfigInfo(info);
+                    }
+                    infos.add(info);
+                } finally {
+                    if (table.isNativeTableOrMaterializedView()) {
+                        tableLocker.unLockTablesWithIntensiveDbLock(db.getId(),
+                                Lists.newArrayList(((OlapTable) table).getId()), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     }
                 }
             }
@@ -494,6 +775,7 @@ public class InformationSchemaDataSource {
         return response;
     }
 
+<<<<<<< HEAD
     public static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
 
         OlapTable olapTable = (OlapTable) table;
@@ -502,6 +784,98 @@ public class InformationSchemaDataSource {
         long totalRowsOfTable = 0L;
         long totalBytesOfTable = 0L;
         for (Partition partition : partitions) {
+=======
+    public static TGetTemporaryTablesInfoResponse generateTemporaryTablesInfoResponse(TGetTemporaryTablesInfoRequest request)
+            throws TException {
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        TAuthInfo authInfo = request.getAuth_info();
+        AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        if (authInfo.isSetCatalog_name()) {
+            catalogName = authInfo.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        Set<Long> requiredDbIds = new HashSet<>();
+        for (String dbName : result.authorizedDbs) {
+            Database db = metadataMgr.getDb(catalogName, dbName);
+            if (db != null) {
+                requiredDbIds.add(db.getId());
+            }
+        }
+
+        com.google.common.collect.Table<Long, Long, UUID> allTables = temporaryTableMgr.getAllTemporaryTables(requiredDbIds);
+
+        List<TTableInfo> tableInfos = new ArrayList<>();
+        for (Long databaseId : allTables.rowKeySet()) {
+            Database db = metadataMgr.getDb(databaseId);
+            if (db != null) {
+                Map<Long, UUID> tableMap = allTables.row(databaseId);
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+                try {
+                    for (Map.Entry<Long, UUID> entry : tableMap.entrySet()) {
+                        UUID sessionId = entry.getValue();
+                        Long tableId = entry.getKey();
+                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                        if (table != null) {
+                            TTableInfo info = new TTableInfo();
+
+                            // the catalog name is always `def`
+                            info.setTable_catalog(DEF);
+                            info.setTable_schema(db.getFullName());
+                            info.setTable_name(table.getName());
+                            info.setTable_type(table.getMysqlType());
+                            info.setEngine(table.getEngine());
+                            info.setVersion(DEFAULT_EMPTY_NUM);
+                            // TABLE_ROWS (depend on the table type)
+                            // AVG_ROW_LENGTH (depend on the table type)
+                            // DATA_LENGTH (depend on the table type)
+                            info.setMax_data_length(DEFAULT_EMPTY_NUM);
+                            info.setIndex_length(DEFAULT_EMPTY_NUM);
+                            info.setData_free(DEFAULT_EMPTY_NUM);
+                            info.setAuto_increment(DEFAULT_EMPTY_NUM);
+                            info.setCreate_time(table.getCreateTime());
+                            // UPDATE_TIME (depend on the table type)
+                            info.setCheck_time(table.getLastCheckTime() / 1000);
+                            info.setTable_collation(UTF8_GENERAL_CI);
+                            info.setChecksum(DEFAULT_EMPTY_NUM);
+                            info.setTable_comment(table.getComment());
+                            info.setSession_id(sessionId.toString());
+                            info.setTable_id(table.getId());
+                            genNormalTableInfo(table, info);
+                            tableInfos.add(info);
+                            if (request.isSetLimit() && tableInfos.size() >= request.getLimit()) {
+                                break;
+                            }
+                        }
+                    }
+                    if (request.isSetLimit() && tableInfos.size() >= request.getLimit()) {
+                        break;
+                    }
+                } finally {
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+                }
+            }
+        }
+
+        TGetTemporaryTablesInfoResponse response = new TGetTemporaryTablesInfoResponse();
+        response.setTables_infos(tableInfos);
+        return response;
+    }
+
+
+    public static TTableInfo genNormalTableInfo(BasicTable table, TTableInfo info) {
+
+        OlapTable olapTable = (OlapTable) table;
+        Collection<PhysicalPartition> partitions = olapTable.getPhysicalPartitions();
+        long lastUpdateTime = 0L;
+        long totalRowsOfTable = 0L;
+        long totalBytesOfTable = 0L;
+        for (PhysicalPartition partition : partitions) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (partition.getVisibleVersionTime() > lastUpdateTime) {
                 lastUpdateTime = partition.getVisibleVersionTime();
             }

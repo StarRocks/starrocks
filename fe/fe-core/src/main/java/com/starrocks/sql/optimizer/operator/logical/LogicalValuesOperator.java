@@ -26,6 +26,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
+=======
+import java.util.Collections;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -40,6 +44,15 @@ public class LogicalValuesOperator extends LogicalOperator {
         this.rows = rows;
     }
 
+<<<<<<< HEAD
+=======
+    public LogicalValuesOperator(List<ColumnRefOperator> columnRefSet) {
+        super(OperatorType.LOGICAL_VALUES);
+        this.columnRefSet = columnRefSet;
+        this.rows = Collections.emptyList();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private LogicalValuesOperator() {
         super(OperatorType.LOGICAL_VALUES);
     }
@@ -110,5 +123,19 @@ public class LogicalValuesOperator extends LogicalOperator {
             builder.rows = valuesOperator.rows;
             return this;
         }
+<<<<<<< HEAD
+=======
+
+        public Builder setColumnRefSet(List<ColumnRefOperator> columnRefSet) {
+            builder.columnRefSet = columnRefSet;
+            return this;
+        }
+
+        public Builder setRows(List<List<ScalarOperator>> rows) {
+            builder.rows = rows;
+            return this;
+        }
+        
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

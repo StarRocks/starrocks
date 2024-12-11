@@ -28,6 +28,7 @@ import com.staros.proto.WorkerInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -35,10 +36,24 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
+<<<<<<< HEAD
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
@@ -56,18 +71,27 @@ import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+<<<<<<< HEAD
 import java.sql.SQLSyntaxErrorException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+<<<<<<< HEAD
 import java.util.HashSet;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+<<<<<<< HEAD
 import java.util.Set;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 
 public class PseudoCluster {
@@ -97,12 +121,23 @@ public class PseudoCluster {
 
     static {
         try {
+<<<<<<< HEAD
             Class.forName("com.mysql.cj.jdbc.Driver").newInstance();
+=======
+            Class.forName("org.mariadb.jdbc.Driver").newInstance();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } catch (Exception ex) {
             ex.printStackTrace();
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void setServerPrepareStatement() {
+        dataSource.setConnectionProperties("useServerPrepStmts=true");
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setQueryTimeout(int timeout) {
         dataSource.setDefaultQueryTimeout(timeout);
     }
@@ -190,24 +225,41 @@ public class PseudoCluster {
         }
 
         @Override
+<<<<<<< HEAD
         public void removeWorker(String hostAndPort) throws DdlException {
+=======
+        public void removeWorker(String hostAndPort, long workergroupid) throws DdlException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             workers.removeIf(w -> Objects.equals(w.hostAndPort, hostAndPort));
         }
 
         @Override
+<<<<<<< HEAD
         public long getWorkerIdByBackendId(long backendId) {
             Optional<Worker> worker = workers.stream().filter(w -> w.backendId == backendId).findFirst();
+=======
+        public long getWorkerIdByNodeId(long nodeId) {
+            Optional<Worker> worker = workers.stream().filter(w -> w.backendId == nodeId).findFirst();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return worker.map(value -> value.workerId).orElse(-1L);
         }
 
         @Override
+<<<<<<< HEAD
         public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+=======
+        public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return partitionId;
         }
 
         @Override
         public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+<<<<<<< HEAD
                                        long groupId, List<Long> matchShardIds, Map<String, String> properties)
+=======
+                                       long groupId, List<Long> matchShardIds, Map<String, String> properties, long workerGroupId)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 throws DdlException {
             List<Long> shardIds = new ArrayList<>();
             for (int i = 0; i < numShards; i++) {
@@ -242,11 +294,16 @@ public class PseudoCluster {
         }
 
         @Override
+<<<<<<< HEAD
         public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
+=======
+        public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
 
         @Override
+<<<<<<< HEAD
         public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
             Set<Long> results = new HashSet<>();
             shardInfos.stream().filter(x -> x.getShardId() == shardId).forEach(y -> {
@@ -255,13 +312,21 @@ public class PseudoCluster {
                 }
             });
             return results;
+=======
+        public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
+            return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     public ClusterConfig getConfig() {
         return config;
     }
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public PseudoBackend getBackend(long beId) {
         String host = backendIdToHost.get(beId);
         if (host == null) {
@@ -287,6 +352,7 @@ public class PseudoCluster {
     }
 
     public List<Long> listTablets(String dbName, String tableName) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             return null;
@@ -294,12 +360,26 @@ public class PseudoCluster {
         db.readLock();
         try {
             Table table = db.getTable(tableName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            return null;
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (table == null) {
                 return null;
             }
             OlapTable olapTable = (OlapTable) table;
             List<Long> ret = Lists.newArrayList();
+<<<<<<< HEAD
             for (Partition partition : olapTable.getPartitions()) {
+=======
+            for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 for (MaterializedIndex index : partition.getMaterializedIndices(
                         MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
@@ -309,7 +389,11 @@ public class PseudoCluster {
             }
             return ret;
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -323,8 +407,13 @@ public class PseudoCluster {
                     System.out.printf("runSql(%.3fs): %s\n", (end - start) / 1e9, sql);
                 }
                 break;
+<<<<<<< HEAD
             } catch (SQLSyntaxErrorException e) {
                 if (e.getMessage().startsWith("rpc failed, host")) {
+=======
+            } catch (SQLException e) {
+                if (e.getMessage().contains("rpc failed, host")) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     try {
                         Thread.sleep(1000);
                     } catch (InterruptedException ie) {
@@ -332,7 +421,11 @@ public class PseudoCluster {
                     System.out.println("retry execute " + sql);
                     continue;
                 }
+<<<<<<< HEAD
                 LOG.error(e);
+=======
+                LOG.error(e.getMessage(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 throw e;
             }
         }
@@ -390,6 +483,13 @@ public class PseudoCluster {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void shutdown() {
+        shutdown(true);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * build cluster at specified dir
      *
@@ -406,7 +506,11 @@ public class PseudoCluster {
 
         BasicDataSource dataSource = new BasicDataSource();
         dataSource.setUrl(
+<<<<<<< HEAD
                 "jdbc:mysql://127.0.0.1:" + queryPort + "/?permitMysqlScheme" +
+=======
+                "jdbc:mariadb://127.0.0.1:" + queryPort + "/?permitMysqlScheme" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         "&usePipelineAuth=false&useBatchMultiSend=false&" +
                         "autoReconnect=true&failOverReadOnly=false&maxReconnects=10");
         dataSource.setUsername("root");
@@ -415,8 +519,13 @@ public class PseudoCluster {
         dataSource.setMaxIdle(40);
         cluster.dataSource = dataSource;
 
+<<<<<<< HEAD
         ClientPool.beHeartbeatPool = cluster.heartBeatPool;
         ClientPool.backendPool = cluster.backendThriftPool;
+=======
+        ThriftConnectionPool.beHeartbeatPool = cluster.heartBeatPool;
+        ThriftConnectionPool.backendPool = cluster.backendThriftPool;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         BrpcProxy.setInstance(cluster.brpcProxy);
 
         GlobalStateMgr.getCurrentState().setStarOSAgent(new PseudoStarOSAgent());
@@ -446,13 +555,22 @@ public class PseudoCluster {
                     cluster.frontend.getFrontendService());
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
             GlobalStateMgr.getCurrentStarOSAgent()
+=======
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend.be);
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1), 0);
             LOG.info("add PseudoBackend {} {}", beId, host);
         }
         int retry = 0;
+<<<<<<< HEAD
         while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+=======
+        while (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001).getBePort() == -1 &&
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 retry++ < 600) {
             Thread.sleep(100);
         }
@@ -471,14 +589,23 @@ public class PseudoCluster {
                     this.frontend.getFrontendService());
             this.backends.put(backend.getHost(), backend);
             this.backendIdToHost.put(beId, backend.getHost());
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
             GlobalStateMgr.getCurrentStarOSAgent()
+=======
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend.be);
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1), 0);
             LOG.info("add PseudoBackend {} {}", beId, host);
             beIds.add(beId);
         }
         int retry = 0;
+<<<<<<< HEAD
         while (GlobalStateMgr.getCurrentSystemInfo().getBackend(beIds.get(0)).getBePort() == -1 &&
+=======
+        while (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beIds.get(0)).getBePort() == -1 &&
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 retry++ < 600) {
             try {
                 Thread.sleep(100);
@@ -593,7 +720,11 @@ public class PseudoCluster {
     public static void main(String[] args) throws Exception {
         PseudoCluster.getOrCreate("pseudo_cluster", false, 9030, 4);
         for (int i = 0; i < 4; i++) {
+<<<<<<< HEAD
             System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
+=======
+            System.out.println(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001 + i).getBePort());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         while (true) {
             Thread.sleep(1000);

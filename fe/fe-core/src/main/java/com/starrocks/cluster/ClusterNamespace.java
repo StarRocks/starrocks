@@ -36,7 +36,10 @@ package com.starrocks.cluster;
 
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.system.SystemInfoService;
 
 /**
@@ -73,8 +76,12 @@ public class ClusterNamespace {
         if (Strings.isNullOrEmpty(cluster) || Strings.isNullOrEmpty(name)) {
             return null;
         }
+<<<<<<< HEAD
         if (name.contains(CLUSTER_DELIMITER) || name.equalsIgnoreCase(AuthenticationMgr.ROOT_USER)
                 || name.equalsIgnoreCase(Auth.ADMIN_USER)) {
+=======
+        if (name.contains(CLUSTER_DELIMITER) || name.equalsIgnoreCase(AuthenticationMgr.ROOT_USER)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return name;
         }
         return cluster + CLUSTER_DELIMITER + name;

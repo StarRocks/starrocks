@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_append
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 在数组末尾添加一个新的元素。返回 ARRAY 类型的值。
 

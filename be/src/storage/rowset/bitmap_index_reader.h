@@ -39,6 +39,10 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
+<<<<<<< HEAD
+=======
+#include "storage/range.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "util/once.h"
@@ -47,7 +51,10 @@ namespace starrocks {
 
 class FileSystem;
 class TypeInfo;
+<<<<<<< HEAD
 class SparseRange;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class BitmapIndexIterator;
 class IndexedColumnReader;
 class IndexedColumnIterator;
@@ -147,7 +154,11 @@ public:
     // for (size_t i = 0; i < range.size(); i++) {
     //     read_union_bitmap(range[i].begin(), range[i].end(), &result);
     // }
+<<<<<<< HEAD
     Status read_union_bitmap(const SparseRange& range, Roaring* result);
+=======
+    Status read_union_bitmap(const SparseRange<>& range, Roaring* result);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     rowid_t bitmap_nums() const { return _num_bitmap; }
 

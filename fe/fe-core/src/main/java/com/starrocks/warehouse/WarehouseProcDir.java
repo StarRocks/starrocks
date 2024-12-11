@@ -14,20 +14,29 @@
 
 package com.starrocks.warehouse;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
+<<<<<<< HEAD
 import com.starrocks.server.WarehouseManager;
 import org.apache.parquet.Strings;
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 
 public class WarehouseProcDir implements ProcDirInterface {
     public static final ImmutableList<String> WAREHOUSE_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Id")
+<<<<<<< HEAD
             .add("Warehouse")
             .add("State")
             .add("ClusterCount")
@@ -39,6 +48,23 @@ public class WarehouseProcDir implements ProcDirInterface {
         this.warehouseManager = manager;
     }
 
+=======
+            .add("Name")
+            .add("State")
+            .add("NodeCount")
+            .add("CurrentClusterCount")
+            .add("MaxClusterCount")
+            .add("StartedClusters")
+            .add("RunningSql")
+            .add("QueuedSql")
+            .add("CreatedOn")
+            .add("ResumedOn")
+            .add("UpdatedOn")
+            .add("Property")
+            .add("Comment")
+            .build();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public boolean register(String name, ProcNodeInterface node) {
         return true;
@@ -47,6 +73,7 @@ public class WarehouseProcDir implements ProcDirInterface {
     @Override
     public ProcNodeInterface lookup(String idOrName) throws AnalysisException {
         if (Strings.isNullOrEmpty(idOrName)) {
+<<<<<<< HEAD
             throw new AnalysisException("warehouse id or name is null or empty");
         }
         Warehouse warehouse;
@@ -59,17 +86,40 @@ public class WarehouseProcDir implements ProcDirInterface {
             throw new AnalysisException("Unknown warehouse id or name \"" + idOrName + "\"");
         }
         return new WarehouseClusterProcNode(warehouse);
+=======
+            throw new AnalysisException("Warehouse id or name is null or empty.");
+        }
+        Warehouse warehouse;
+        try {
+            warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(Long.parseLong(idOrName));
+        } catch (NumberFormatException e) {
+            warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(idOrName);
+        }
+        if (warehouse == null) {
+            throw new AnalysisException("Unknown warehouse id or name \"" + idOrName + ".\"");
+        }
+
+        Warehouse finalWarehouse = warehouse;
+        return finalWarehouse::fetchResult;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public ProcResult fetchResult() {
         BaseProcResult result = new BaseProcResult();
         result.setNames(WAREHOUSE_PROC_NODE_TITLE_NAMES);
+<<<<<<< HEAD
         List<Long> warehouseIds = warehouseManager.getWarehouseIds();
         warehouseIds.forEach(x -> {
             Warehouse wh = warehouseManager.getWarehouse(x);
             if (wh != null) {
                 wh.getProcNodeData(result);
+=======
+        List<Warehouse> warehouseIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses();
+        warehouseIds.forEach(x -> {
+            if (x != null) {
+                result.addRow(x.getWarehouseInfo());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         });
         return result;

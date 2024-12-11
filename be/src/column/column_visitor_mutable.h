@@ -80,6 +80,10 @@ public:
     virtual Status visit(FixedLengthColumnBase<uint24_t>* column);
     virtual Status visit(FixedLengthColumnBase<decimal12_t>* column);
     virtual Status visit(ObjectColumn<JsonValue>* column);
+<<<<<<< HEAD
+=======
+    virtual Status visit(ArrayViewColumn* column) { return Status::NotSupported("ArrayViewColumn is not supported"); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

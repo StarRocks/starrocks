@@ -6,6 +6,7 @@ displayed_sidebar: docs
 
 Create a new table in StarRocks.
 
+<<<<<<< HEAD
 > **NOTE**
 >
 > This operation requires the CREATE TABLE privilege on the destination database.
@@ -14,6 +15,16 @@ Create a new table in StarRocks.
 
 ```plaintext
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
+=======
+:::tip
+This operation requires the CREATE TABLE privilege on the destination database.
+:::
+
+## Syntax
+
+```SQL
+CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 (column_definition1[, column_definition2, ...]
 [, index_definition1[, index_definition12,]])
 [ENGINE = [olap|mysql|elasticsearch|hive|hudi|iceberg|jdbc]]
@@ -29,6 +40,16 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 ## Parameters
 
+<<<<<<< HEAD
+=======
+:::tip
+
+- The table name, partition name, column name, and index name you create must follow the naming conventions in [System limits](../../System_limit.md).
+- When you specify database name, table name, column name, or partition name, note that some literals are used as reserved keywords in StarRocks. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../keywords.md) for these reserved keywords.
+
+:::
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ### column_definition
 
 Syntax:
@@ -37,7 +58,11 @@ Syntax:
 col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
 ```
 
+<<<<<<< HEAD
 **col_name**: Column name.
+=======
+**col_name**: column name.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) to `TRUE`.
 
@@ -95,12 +120,20 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 
 ### index_definition
 
+<<<<<<< HEAD
 You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../using_starrocks/Bitmap_index.md#create-a-bitmap-index).
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ```SQL
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 ```
 
+<<<<<<< HEAD
+=======
+For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../table_design/indexes/Bitmap_index.md#create-an-index).
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ### ENGINE type
 
 Default value: `olap`. If this parameter is not specified, an OLAP table (StarRocks native table) is created by default.
@@ -111,6 +144,11 @@ Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `icebe
 
 **From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using INSERT INTO.**
 
+<<<<<<< HEAD
+=======
+**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and supports sinking data to these Parquet-formatted Hive tables by using INSERT INTO. From v3.3 onwards, StarRocks supports creating ORC- and Textfile-formatted tables in Hive catalogs, and supports sinking data to these ORC- and Textfile-formatted Hive tables by using INSERT INTO**
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - For MySQL, specify the following properties:
 
     ```plaintext
@@ -246,8 +284,13 @@ Note:
 
 Please use specified key columns and specified value ranges for partitioning.
 
+<<<<<<< HEAD
 - Partition name only supports [A-z0-9_]
 - Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
+=======
+- For the naming conventions of partitions, see [System limits](../../System_limit.md).
+- Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/data_distribution/Data_distribution.md#manually-create-partitions).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
@@ -318,7 +361,11 @@ Description
 
 You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions in a batch.
 
+<<<<<<< HEAD
 - The partitioning column can be of a date or integer type.
+=======
+- Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/data_distribution/Data_distribution.md#manually-create-partitions).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
 For more information, see [Data distribution](../../../table_design/data_distribution/Data_distribution.md).
@@ -329,7 +376,11 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
 
 - Random bucketing (since v3.1)
 
+<<<<<<< HEAD
   For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. And if you want StarRocks to automatically determine the number of buckets, you do not need to specify any bucketing configurations. If you choose to manually specify the number of buckets, the syntax is as follows:
+=======
+  For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. And if you want StarRocks to automatically set the number of buckets, you do not need to specify any bucketing configurations. If you choose to manually specify the number of buckets, the syntax is as follows:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
   ```SQL
   DISTRIBUTED BY RANDOM BUCKETS <num>
@@ -370,6 +421,7 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - **When you create a table, you must specify its bucketing columns**.
   - The values of bucketing columns cannot be updated.
   - Bucketing columns cannot be modified after they are specified.
+<<<<<<< HEAD
   - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/data_distribution/Data_distribution.md#determine-the-number-of-buckets).
 
 ### ORDER BY
@@ -379,6 +431,23 @@ Since version 3.0, the primary key and sort key are decoupled in the Primary Key
 > **NOTICE**
 >
 > If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
+=======
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+
+### ORDER BY
+
+Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`. Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`.
+
+For more descriptions of sort keys, see [Sort keys and prefix indexes](../../../table_design/indexes/Prefix_index_sort_key.md).
+
+### TEMPORARY
+
+Creates a temporary table. From v3.3.1, StarRocks supports creating temporary tables in the Default Catalog. For more information, see [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table).
+
+:::note
+When creating a temporary table, you must set `ENGINE` to `olap`.
+:::
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ### PROPERTIES
 
@@ -465,7 +534,11 @@ The following limits apply when you use bloom filter index:
 - TINYINT, FLOAT, DOUBLE, and DECIMAL columns do not support creating bloom filter indexes.
 - Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`. More discrete values in this column will result in more precise queries.
 
+<<<<<<< HEAD
 For more information, see [Bloom filter indexing](../../../using_starrocks/Bloomfilter_index.md)
+=======
+For more information, see [Bloom filter indexing](../../../table_design/indexes/Bloomfilter_index.md)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```SQL
 PROPERTIES (
@@ -509,6 +582,19 @@ PROPERTIES (
 | dynamic_partition.prefix    | No       | The prefix added to the names of dynamic partitions. Default value: `p`. |
 | dynamic_partition.buckets   | No       | The number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word `BUCKETS` or automatically set by StarRocks. |
 
+<<<<<<< HEAD
+=======
+#### Specify the bucket size (`bucket_size`) for tables configured with random bucketing
+
+Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation to enable the on-demand and dynamic increase of the number of buckets. Unit: B.
+
+```sql
+PROPERTIES (
+    "bucket_size" = "1073741824"
+)
+```
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #### Set data compression algorithm
 
 You can specify a data compression algorithm for a table by adding property `compression` when you create a table.
@@ -520,6 +606,25 @@ The valid values of `compression` are:
 - `ZLIB`: the zlib algorithm.
 - `SNAPPY`: the Snappy algorithm.
 
+<<<<<<< HEAD
+=======
+From v3.3.2 onwards, StarRocks supports specifying the compression level for zstd compression format during table creation.
+
+Syntax:
+
+```sql
+PROPERTIES ("compression" = "zstd(<compression_level>)")
+```
+
+`compression_level`: the compression level for ZSTD compression format. Type: Integer. Range: [1,22]. Default: `3` (Recommended). The greater the number, the higher the compression ratio. The higher the compression level, the more time consumption for compression and decompression.
+
+Example:
+
+```sql
+PROPERTIES ("compression" = "zstd(3)")
+```
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../table_design/data_compression.md).
 
 #### Set write quorum for data loading
@@ -595,7 +700,11 @@ PROPERTIES (
 
 #### Create cloud-native tables for StarRocks Shared-data cluster
 
+<<<<<<< HEAD
 To [use your StarRocks Shared-data cluster](../../../deployment/shared_data/s3.md#use-your-shared-data-starrocks-cluster), you must create cloud-native tables with the following properties:
+=======
+To use your StarRocks Shared-data cluster, you must create cloud-native tables with the following properties:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```SQL
 PROPERTIES (
@@ -622,6 +731,57 @@ PROPERTIES (
   >
   > This property is available only when `datacache.enable` is set to `true`.
 
+<<<<<<< HEAD
+=======
+#### Set fast schema evolution
+
+`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
+  > **NOTE**
+  >
+  > - This parameter is only supported for shared-nothing clusters since v3.2.0.
+  > - If you need to enable fast schema evolution for tables in a shared-data cluster, you must configure fast schema evolution at the cluster level using FE dynamic parameter `enable_fast_schema_evolution`.
+
+#### Forbid Base Compaction
+
+`base_compaction_forbidden_time_ranges`: The time range within which Base Compaction is forbidden for the table. When this property is set, the system performs Base Compaction on eligible tablets only outside the specified time range. This property is supported from v3.2.13.
+
+> **NOTE**
+>
+> Make sure that the number of data loading to the table does not exceed 500 during the period when Base Compaction is forbidden.
+
+The value of `base_compaction_forbidden_time_ranges` follows the [Quartz cron syntax](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm), and only supports these fields: `<minute> <hour> <day-of-the-month> <month> <day-of-the-week>`, where `<minute>` must be `*`.
+
+```Plain
+crontab_param_value ::= [ "" | crontab ]
+
+crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
+```
+
+- When this property is not set or set to `""` (an empty string), Base Compaction is not forbidden at any time.
+- When this property is set to `* * * * *`, Base Compaction is always forbidden.
+- Other values follow the Quartz cron syntax.
+  - An independent value indicates the unit time of a field. For example, `8` in the `<hour>` field means 8:00-8:59.
+  - A value range indicates the time range of a field. For example, `8-9` in the `<hour>` field means 8:00-9:59.
+  - Multiple value ranges separated by commas indicate multiple time ranges of the field.
+  - `<day of the week>` has a starting value of `1` for Sunday, and `7` stands for Saturday.
+
+Example:
+
+```SQL
+-- Forbid Base Compaction from 8:00 am to 9:00 pm every day.
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * *'
+
+-- Forbid Base Compaction from 0:00 am to 5:00 am and from 9:00 pm to 11:00 pm every day.
+'base_compaction_forbidden_time_ranges' = '* 0-4,21-22 * * *'
+
+-- Forbid Base Compaction from Monday to Friday (that is, allow it on Saturday and Sunday).
+'base_compaction_forbidden_time_ranges' = '* * * * 2-6'
+
+-- Forbid Base Compaction from 8:00 am to 9:00 pm every working day (that is, Monday to Friday).
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
+```
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ## Examples
 
 ### Create an Aggregate table that uses Hash bucketing and columnar storage
@@ -962,6 +1122,31 @@ PROPERTIES(
 );
 ```
 
+<<<<<<< HEAD
+=======
+### Create a partitioned temporary table
+
+```SQL
+CREATE TEMPORARY TABLE example_db.temp_table
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    v1 VARCHAR(2048),
+    v2 DATETIME DEFAULT "2014-02-04 15:36:00"
+)
+ENGINE=olap
+DUPLICATE KEY(k1, k2, k3)
+PARTITION BY RANGE (k1)
+(
+    PARTITION p1 VALUES LESS THAN ("2014-01-01"),
+    PARTITION p2 VALUES LESS THAN ("2014-06-01"),
+    PARTITION p3 VALUES LESS THAN ("2014-12-01")
+)
+DISTRIBUTED BY HASH(k2);
+```
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ## References
 
 - [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)

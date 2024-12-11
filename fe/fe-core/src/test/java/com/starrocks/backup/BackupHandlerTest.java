@@ -36,11 +36,22 @@ package com.starrocks.backup;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.FunctionName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.BrokerMgr;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
+=======
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -48,6 +59,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -59,11 +71,35 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.BackupRestoreAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+=======
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.analyzer.BackupRestoreAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AbstractBackupStmt;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.RestoreStmt;
+=======
+import com.starrocks.sql.ast.FunctionRef;
+import com.starrocks.sql.ast.RestoreStmt;
+import com.starrocks.sql.parser.NodePosition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
 import com.starrocks.task.SnapshotTask;
@@ -96,6 +132,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class BackupHandlerTest {
 
@@ -118,8 +158,24 @@ public class BackupHandlerTest {
 
         MetricRepo.init();
 
+<<<<<<< HEAD
         new Expectations() {
             {
+=======
+        try {
+            db = CatalogMocker.mockDb();
+        } catch (AnalysisException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 globalStateMgr.getBrokerMgr();
                 minTimes = 0;
                 result = brokerMgr;
@@ -132,15 +188,20 @@ public class BackupHandlerTest {
                 minTimes = 0;
                 result = editLog;
 
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
 
                 GlobalStateMgr.getCurrentInvertedIndex();
+=======
+                globalStateMgr.getTabletInvertedIndex();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
                 result = invertedIndex;
             }
         };
+<<<<<<< HEAD
 
         try {
             db = CatalogMocker.mockDb();
@@ -156,6 +217,8 @@ public class BackupHandlerTest {
                 result = db;
             }
         };
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @After
@@ -175,7 +238,11 @@ public class BackupHandlerTest {
     @Test
     public void testInit(@Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) {
         setUpMocker(globalStateMgr, brokerMgr, editLog);
+<<<<<<< HEAD
         handler = new BackupHandler(globalStateMgr);
+=======
+        BackupHandler handler = new BackupHandler(globalStateMgr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         handler.runAfterCatalogReady();
 
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
@@ -203,6 +270,13 @@ public class BackupHandlerTest {
 
                     }
                 };
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = db;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 
@@ -220,12 +294,22 @@ public class BackupHandlerTest {
 
             @Mock
             public Status getSnapshotInfoFile(String label, String backupTimestamp, List<BackupJobInfo> infos) {
+<<<<<<< HEAD
                 OlapTable tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
+=======
+                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getFullName(), CatalogMocker.TEST_TBL_NAME);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 List<Table> tbls = Lists.newArrayList();
                 tbls.add(tbl);
                 Map<Long, SnapshotInfo> snapshotInfos = Maps.newHashMap();
                 for (Partition part : tbl.getPartitions()) {
+<<<<<<< HEAD
                     for (MaterializedIndex idx : part.getMaterializedIndices(IndexExtState.VISIBLE)) {
+=======
+                    for (MaterializedIndex idx : part.getDefaultPhysicalPartition()
+                            .getMaterializedIndices(IndexExtState.VISIBLE)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         for (Tablet tablet : idx.getTablets()) {
                             List<String> files = Lists.newArrayList();
                             SnapshotInfo sinfo = new SnapshotInfo(db.getId(), tbl.getId(), part.getId(), idx.getId(),
@@ -251,8 +335,51 @@ public class BackupHandlerTest {
             }
         };
 
+<<<<<<< HEAD
         // add repo
         handler = new BackupHandler(globalStateMgr);
+=======
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getBrokerMgr();
+                minTimes = 0;
+                result = brokerMgr;
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = idGen++;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = invertedIndex;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            Database database = CatalogMocker.mockDb();
+
+            @Mock
+            public Database getDb(String dbName) {
+                return database;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return database.getTable(tblName);
+            }
+        };
+
+        // add repo
+        BackupHandler handler = new BackupHandler(globalStateMgr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", "broker", "bos://location",
                 Maps.newHashMap());
         try {
@@ -266,7 +393,11 @@ public class BackupHandlerTest {
         List<TableRef> tblRefs = Lists.newArrayList();
         tblRefs.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
         BackupStmt backupStmt = new BackupStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label1"), "repo", tblRefs,
+<<<<<<< HEAD
                 null);
+=======
+                                               Lists.newArrayList(), null, null, false, "", null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             handler.process(backupStmt);
         } catch (DdlException e1) {
@@ -324,8 +455,13 @@ public class BackupHandlerTest {
         List<TableRef> tblRefs1 = Lists.newArrayList();
         tblRefs1.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL3_NAME), null));
         BackupStmt backupStmt1 =
+<<<<<<< HEAD
                 new BackupStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", tblRefs1,
                         null);
+=======
+                    new BackupStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", tblRefs1, Lists.newArrayList(),
+                                null, null, false, "", null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             handler.process(backupStmt1);
         } catch (DdlException e1) {
@@ -385,7 +521,11 @@ public class BackupHandlerTest {
         Map<String, String> properties = Maps.newHashMap();
         properties.put("backup_timestamp", "2018-08-08-08-08-08");
         RestoreStmt restoreStmt = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "ss2"), "repo", tblRefs2,
+<<<<<<< HEAD
                 properties);
+=======
+                    Lists.newArrayList(), null, null, false, "", properties);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
         } catch (SemanticException e2) {
@@ -463,7 +603,11 @@ public class BackupHandlerTest {
         Map<String, String> properties1 = Maps.newHashMap();
         properties1.put("backup_timestamp", "2018-08-08-08-08-08");
         RestoreStmt restoreStmt1 = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", tblRefs3,
+<<<<<<< HEAD
                 properties1);
+=======
+                    Lists.newArrayList(), null, null, false, "", properties1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             BackupRestoreAnalyzer.analyze(restoreStmt1, new ConnectContext());
         } catch (SemanticException e2) {
@@ -530,7 +674,54 @@ public class BackupHandlerTest {
 
         TSnapshotRequest requestSnapshot = snapshotTask1.toThrift();
 
+<<<<<<< HEAD
         // drop repo
+=======
+        // process FUNCTION restore
+        List<TableRef> emptyTableRef = Lists.newArrayList();
+        List<FunctionRef> fnRefs = Lists.newArrayList();
+        FunctionRef fnRef = new FunctionRef(new FunctionName(db.getFullName(), "test_function"), "new_name", NodePosition.ZERO);
+        fnRefs.add(fnRef);
+        Map<String, String> properties2 = Maps.newHashMap();
+        properties2.put("backup_timestamp", "2018-08-08-08-08-08");
+        RestoreStmt restoreStmt2 = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", emptyTableRef,
+                                                   fnRefs, null, null, false, "", properties2);
+        BackupMeta backupMeta = new BackupMeta(Lists.newArrayList());
+        List<Function> fns = Lists.newArrayList();
+        Function f1 = new Function(new FunctionName(db.getFullName(), "wrong_name"),
+                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+        fns.add(f1);
+        backupMeta.setFunctions(fns);
+
+        ExceptionChecker.expectThrows(DdlException.class, () ->
+                handler.checkAndFilterRestoreFunctionsInBackupMeta(restoreStmt2, backupMeta));
+
+        Function f2 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+        fns.clear();
+        fns.add(f2);
+        backupMeta.setFunctions(fns);
+        handler.checkAndFilterRestoreFunctionsInBackupMeta(restoreStmt2, backupMeta);
+
+        // process EXTERNAL CATALOG restore
+        Map<String, String> properties3 = Maps.newHashMap();
+        properties3.put("backup_timestamp", "2018-08-08-08-08-08");
+        RestoreStmt restoreStmt3 = new RestoreStmt(new LabelName(null, "label2"), "repo", Lists.newArrayList(),
+                                                   Lists.newArrayList(), null, null, false, "", properties3);
+        BackupMeta newBackupMeta = new BackupMeta(Lists.newArrayList());
+        Catalog catalog = new Catalog(1111111, "test_catalog", Maps.newHashMap(), "");
+        newBackupMeta.setCatalogs(Lists.newArrayList(catalog));
+        handler.checkAndFilterRestoreCatalogsInBackupMeta(restoreStmt3, newBackupMeta);
+
+        // drop repo
+        DDLStmtExecutor ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getDdlStmtExecutor();
+                result = ddlStmtExecutor;
+            }
+        };
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         DDLStmtExecutor.execute(new DropRepositoryStmt("repo"), new ConnectContext());
     }
 
@@ -587,11 +778,18 @@ public class BackupHandlerTest {
         BackupJob runningJob = new BackupJob("running_job", 1, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
         handler.dbIdToBackupOrRestoreJob.put(runningJob.getDbId(), runningJob);
 
+<<<<<<< HEAD
 
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
         handler.saveBackupHandlerV2(pseudoImage.getDataOutputStream());
         BackupHandler followerHandler = new BackupHandler(globalStateMgr);
         SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream());
+=======
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        handler.saveBackupHandlerV2(pseudoImage.getImageWriter());
+        BackupHandler followerHandler = new BackupHandler(globalStateMgr);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(pseudoImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         followerHandler.loadBackupHandlerV2(reader);
         reader.close();
 
@@ -599,4 +797,176 @@ public class BackupHandlerTest {
 
         UtFrameUtils.tearDownForPersisTest();
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCreateDbInRestore(
+                @Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) throws Exception {
+        setUpMocker(globalStateMgr, brokerMgr, editLog);
+
+        new Expectations() {
+            {
+                editLog.logCreateRepository((Repository) any);
+                minTimes = 0;
+                result = new Delegate() {
+                    public void logCreateRepository(Repository repo) {
+
+                    }
+                };
+
+                editLog.logDropRepository(anyString);
+                minTimes = 0;
+                result = new Delegate() {
+                    public void logDropRepository(String repoName) {
+
+                    }
+                };
+
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = db;
+            }
+        };
+
+        new MockUp<Repository>() {
+            @Mock
+            public Status initRepository() {
+                return Status.OK;
+            }
+
+            @Mock
+            public Status listSnapshots(List<String> snapshotNames) {
+                snapshotNames.add("ss2");
+                return Status.OK;
+            }
+
+            @Mock
+            public Status getSnapshotInfoFile(String label, String backupTimestamp, List<BackupJobInfo> infos) {
+                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getFullName(), CatalogMocker.TEST_TBL_NAME);
+                List<Table> tbls = Lists.newArrayList();
+                tbls.add(tbl);
+                Map<Long, SnapshotInfo> snapshotInfos = Maps.newHashMap();
+                for (Partition part : tbl.getPartitions()) {
+                    for (MaterializedIndex idx : part.getDefaultPhysicalPartition()
+                            .getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        for (Tablet tablet : idx.getTablets()) {
+                            List<String> files = Lists.newArrayList();
+                            SnapshotInfo sinfo = new SnapshotInfo(db.getId(), tbl.getId(), part.getId(), idx.getId(),
+                                        tablet.getId(), -1, 0, "./path", files);
+                            snapshotInfos.put(tablet.getId(), sinfo);
+                        }
+                    }
+                }
+
+                BackupJobInfo info = BackupJobInfo.fromCatalog(System.currentTimeMillis(),
+                            "ss2", "xxxxx",
+                            CatalogMocker.TEST_DB_ID, tbls, snapshotInfos);
+                infos.add(info);
+                return Status.OK;
+            }
+        };
+
+        new Expectations() {
+            {
+                brokerMgr.containsBroker(anyString);
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getBrokerMgr();
+                minTimes = 0;
+                result = brokerMgr;
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = idGen++;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = invertedIndex;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            Database database = CatalogMocker.mockDb();
+
+            @Mock
+            public Database getDb(String dbName) {
+                return dbName.equals(CatalogMocker.TEST_DB_NAME) ? database : null;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return database.getTable(tblName);
+            }
+        };
+
+        new MockUp<BackupHandler>() {
+            @Mock
+            protected BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {
+                return new BackupMeta(Lists.newArrayList());
+            }
+        };
+
+        BackupHandler handler = new BackupHandler(globalStateMgr);
+        CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", "broker", "bos://location",
+                    Maps.newHashMap());
+        try {
+            handler.createRepository(stmt);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        // process restore
+        List<TableRef> tblRefs2 = Lists.newArrayList();
+        tblRefs2.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("backup_timestamp", "2018-08-08-08-08-08");
+        RestoreStmt restoreStmt = new RestoreStmt(new LabelName(null, "ss2"), "repo", tblRefs2,
+                    Lists.newArrayList(), null, null, false, "", properties);
+        try {
+            BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
+        } catch (SemanticException e2) {
+            e2.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            handler.process(restoreStmt);
+        } catch (DdlException e1) {
+        }
+
+        Set<AbstractBackupStmt.BackupObjectType> allMarker = Sets.newHashSet();
+        allMarker.add(AbstractBackupStmt.BackupObjectType.TABLE);
+        allMarker.add(AbstractBackupStmt.BackupObjectType.MV);
+        allMarker.add(AbstractBackupStmt.BackupObjectType.VIEW);
+        restoreStmt = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "ss2"), "repo", tblRefs2,
+                          Lists.newArrayList(), null, allMarker, true, "", properties);
+        try {
+            BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
+        } catch (SemanticException e2) {
+            e2.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            handler.process(restoreStmt);
+        } catch (Exception e1) {
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

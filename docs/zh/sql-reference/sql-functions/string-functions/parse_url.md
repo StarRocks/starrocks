@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # parse_url
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 从目标 URL 中提取一部分信息。
 

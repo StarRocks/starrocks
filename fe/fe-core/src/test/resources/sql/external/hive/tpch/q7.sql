@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     supp_nation,
@@ -38,6 +39,8 @@ order by
     supp_nation,
     cust_nation,
     l_year ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment statistics]
 PLAN FRAGMENT 0(F16)
 Output Exprs:42: n_name | 46: n_name | 49: year | 51: sum
@@ -157,7 +160,11 @@ TABLE: customer
 NON-PARTITION PREDICATES: 33: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 15000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
@@ -266,10 +273,17 @@ OutPut Exchange Id: 14
 2:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 18: l_shipdate >= '1995-01-01', 18: l_shipdate <= '1996-12-31'
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 56: l_shipdate >= '1995-01-01', 57: l_shipdate <= '1996-12-31'
 partitions=1/1
 avgRowSize=32.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 18: l_shipdate >= '1995-01-01', 18: l_shipdate <= '1996-12-31'
+partitions=1/1
+avgRowSize=32.0
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 173476304
 probe runtime filters:
 - filter_id = 1, probe_expr = (10: l_suppkey)
@@ -323,7 +337,11 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 1: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (4: s_nationkey)
@@ -354,10 +372,17 @@ OutPut Exchange Id: 08
 4:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 42: n_name IN ('CANADA', 'IRAN')
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 54: n_name >= 'CANADA', 55: n_name <= 'IRAN'
 partitions=1/1
 avgRowSize=29.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 42: n_name >= 'CANADA', 42: n_name <= 'IRAN'
+partitions=1/1
+avgRowSize=29.0
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 25
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
@@ -372,10 +397,17 @@ OutPut Exchange Id: 06
 5:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 46: n_name IN ('IRAN', 'CANADA')
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 52: n_name >= 'CANADA', 53: n_name <= 'IRAN'
 partitions=1/1
 avgRowSize=29.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 46: n_name >= 'CANADA', 46: n_name <= 'IRAN'
+partitions=1/1
+avgRowSize=29.0
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 25
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
@@ -392,7 +424,11 @@ TABLE: orders
 NON-PARTITION PREDICATES: 24: o_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 150000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (24: o_orderkey)
@@ -400,5 +436,9 @@ probe runtime filters:
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

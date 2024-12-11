@@ -16,10 +16,14 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.FunctionName;
+<<<<<<< HEAD
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.PrivBitSet;
+=======
+import com.starrocks.common.Pair;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
@@ -36,11 +40,14 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected String objectTypeUnResolved;
     protected List<String> privilegeTypeUnResolved;
 
+<<<<<<< HEAD
     // the following fields is set by analyzer for old privilege framework and will be removed after 2.5 released
     private PrivBitSet privBitSet = null;
     private TablePattern tblPattern = null;
     private ResourcePattern resourcePattern = null;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // the following fields is set by analyzer, for new RBAC privilege framework
     private ObjectType objectType;
     private List<PrivilegeType> privilegeTypes;
@@ -67,6 +74,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.role = clause.getRoleName();
     }
 
+<<<<<<< HEAD
     public void setAnalysedTable(PrivBitSet privBitSet, TablePattern tablePattern) {
         this.privBitSet = privBitSet;
         this.tblPattern = tablePattern;
@@ -77,6 +85,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.resourcePattern = resourcePattern;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * old privilege framework only support grant/revoke on one single object
      */
@@ -104,10 +114,13 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         isGrantOnAll = true;
     }
 
+<<<<<<< HEAD
     public void setPrivBitSet(PrivBitSet privBitSet) {
         this.privBitSet = privBitSet;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setRole(String role) {
         this.role = role;
     }
@@ -128,6 +141,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return privilegeTypeUnResolved;
     }
 
+<<<<<<< HEAD
     public TablePattern getTblPattern() {
         return tblPattern;
     }
@@ -140,6 +154,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return privBitSet;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ObjectType getObjectType() {
         return objectType;
     }

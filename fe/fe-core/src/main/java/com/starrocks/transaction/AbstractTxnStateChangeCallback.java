@@ -17,7 +17,11 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCallback {
     @Override
@@ -31,7 +35,11 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
+<<<<<<< HEAD
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+=======
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     }
 
@@ -42,7 +50,11 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
 
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     }
 
@@ -67,7 +79,11 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
+<<<<<<< HEAD
     public void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException {
+=======
+    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     }
 

@@ -96,7 +96,11 @@ static void AtomicOps_Internalx86CPUFeaturesInit() {
     // ecx bit 13 indicates whether the cmpxchg16b instruction is supported
     GutilAtomicOps_Internalx86CPUFeatures.has_cmpxchg16b = ((ecx >> 13) & 1);
 
+<<<<<<< HEAD
     VLOG(1) << "vendor " << vendor << "  family " << family << "  model " << model << "  sse2 "
+=======
+    VLOG(2) << "vendor " << vendor << "  family " << family << "  model " << model << "  sse2 "
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             << GutilAtomicOps_Internalx86CPUFeatures.has_sse2 << "  cmpxchg16b "
             << GutilAtomicOps_Internalx86CPUFeatures.has_cmpxchg16b;
 }

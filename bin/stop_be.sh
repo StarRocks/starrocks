@@ -38,6 +38,10 @@ export PID_DIR=`cd "$curdir"; pwd`
 source $STARROCKS_HOME/bin/common.sh
 
 export_env_from_conf $STARROCKS_HOME/conf/be.conf
+<<<<<<< HEAD
+=======
+export_shared_envvars
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 pidfile=$PID_DIR/be.pid
 
@@ -68,6 +72,19 @@ do
     esac
 done
 
+<<<<<<< HEAD
+=======
+# kill all python worker process
+find "${UDF_RUNTIME_DIR}" -maxdepth 1 -name 'pyworker*' -print0 | while IFS= read -r -d $'\0' worker; do
+    pid=$(echo "$worker" | sed -n 's/.*pyworker_\([0-9]*\).*/\1/p')
+    if [[ ! -z "$pid" ]]; then
+        kill -9 "$pid" > /dev/null
+        rm -- "$worker"
+    fi
+done
+
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 if [ -f $pidfile ]; then
     pid=`cat $pidfile`
     pidcomm=`ps -p $pid -o comm=`

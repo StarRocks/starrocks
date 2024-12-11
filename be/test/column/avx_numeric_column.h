@@ -22,7 +22,11 @@
 namespace starrocks {
 class AvxNumericColumn {
 public:
+<<<<<<< HEAD
     void avx256_filter(const std::vector<int32_t>& data, const std::vector<uint8_t>& filter, size_t result_size_hint,
+=======
+    void avx256_filter(const std::vector<int32_t>& data, const Filter& filter, size_t result_size_hint,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                        std::vector<int32_t>& result) {
         const int32_t* d_data = data.data();
         const uint8_t* f_data = filter.data();

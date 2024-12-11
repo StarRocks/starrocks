@@ -64,7 +64,11 @@ class CacheManager {
 public:
     explicit CacheManager(size_t capacity);
     ~CacheManager() = default;
+<<<<<<< HEAD
     Status populate(const std::string& key, const CacheValue& value);
+=======
+    void populate(const std::string& key, const CacheValue& value);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     StatusOr<CacheValue> probe(const std::string& key);
     size_t memory_usage();
     size_t capacity();

@@ -157,7 +157,11 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
 
     if (!ctx->status.ok()) {
         if (ctx->need_rollback) {
+<<<<<<< HEAD
             _exec_env->transaction_mgr()->_rollback_transaction(ctx);
+=======
+            (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -166,7 +170,12 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
     // For JSON, now the buffer contains a complete json.
     if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
         ctx->buffer->flip();
+<<<<<<< HEAD
         ctx->body_sink->append(std::move(ctx->buffer));
+=======
+        WARN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)),
+                      "append MessageBodySink failed when handle TransactionStreamLoad");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ctx->buffer = nullptr;
     }
 
@@ -233,7 +242,11 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
     if (!st.ok()) {
         ctx->status = st;
         if (ctx->need_rollback) {
+<<<<<<< HEAD
             _exec_env->transaction_mgr()->_rollback_transaction(ctx);
+=======
+            (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
         _send_reply(req, resp);
@@ -313,6 +326,13 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     request.formatType = ctx->format;
     request.__set_loadId(ctx->id.to_thrift());
     request.fileType = TFileType::FILE_STREAM;
+<<<<<<< HEAD
+=======
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        request.__set_backend_id(backend_id.value());
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     if (!http_req->header(HTTP_COLUMNS).empty()) {
         request.__set_columns(http_req->header(HTTP_COLUMNS));
@@ -415,6 +435,19 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
         request.__set_timeout(ctx->timeout_second);
     }
 
+<<<<<<< HEAD
+=======
+    if (!http_req->header(HttpHeaders::CONTENT_ENCODING).empty() && !http_req->header(HTTP_COMPRESSION).empty()) {
+        return Status::InvalidArgument("Only one of http header content-encoding and compression can be set");
+    }
+
+    if (!http_req->header(HttpHeaders::CONTENT_ENCODING).empty()) {
+        request.__set_payload_compression_type(http_req->header(HttpHeaders::CONTENT_ENCODING));
+    } else if (!http_req->header(HTTP_COMPRESSION).empty()) {
+        request.__set_payload_compression_type(http_req->header(HTTP_COMPRESSION));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -461,7 +494,11 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
 #endif
     Status plan_status(ctx->put_result.status);
     if (!plan_status.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.get_error_msg() << " " << ctx->brief();
+=======
+        LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.message() << " " << ctx->brief();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return plan_status;
     }
     VLOG(3) << "params is " << apache::thrift::ThriftDebugString(ctx->put_result.params);
@@ -495,8 +532,16 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (ctx->buffer == nullptr) {
             // Initialize buffer.
+<<<<<<< HEAD
             ctx->buffer = ByteBuffer::allocate(
                     ctx->format == TFileFormatType::FORMAT_JSON ? std::max(len, ctx->kDefaultBufferSize) : len);
+=======
+            ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                    ctx->status, ctx->buffer,
+                    ByteBuffer::allocate_with_tracker(ctx->format == TFileFormatType::FORMAT_JSON
+                                                              ? std::max(len, ctx->kDefaultBufferSize)
+                                                              : len));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         } else if (ctx->buffer->remaining() < len) {
             if (ctx->format == TFileFormatType::FORMAT_JSON) {
@@ -510,7 +555,13 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
                     ctx->status = Status::MemoryLimitExceeded(err_msg);
                     return;
                 }
+<<<<<<< HEAD
                 ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(data_sz));
+=======
+                ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                        ctx->status, ByteBufferPtr buf,
+                        ByteBuffer::allocate_with_tracker(BitUtil::RoundUpToPowerOfTwo(data_sz)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 buf->put_bytes(ctx->buffer->ptr, ctx->buffer->pos);
                 std::swap(buf, ctx->buffer);
 
@@ -525,7 +576,13 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
                     return;
                 }
 
+<<<<<<< HEAD
                 ctx->buffer = ByteBuffer::allocate(std::max(len, ctx->kDefaultBufferSize));
+=======
+                ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                        ctx->status, ctx->buffer,
+                        ByteBuffer::allocate_with_tracker(std::max(len, ctx->kDefaultBufferSize)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 

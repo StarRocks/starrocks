@@ -39,13 +39,23 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.TraceManager;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TTabletVersionPair;
 import com.starrocks.thrift.TTaskType;
+<<<<<<< HEAD
 import com.starrocks.thrift.TTxnType;
 import com.starrocks.transaction.TransactionState;
+=======
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import io.opentelemetry.api.trace.Span;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -66,6 +76,7 @@ public class PublishVersionTask extends AgentTask {
     private final TransactionState txnState;
     private Span span;
     private boolean enableSyncPublish;
+<<<<<<< HEAD
     private TTxnType txnType;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
@@ -73,6 +84,26 @@ public class PublishVersionTask extends AgentTask {
                               long createTime, TransactionState state, boolean enableSyncPublish, TTxnType txnType) {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
+=======
+    private TransactionType txnType;
+    private final long globalTransactionId;
+    private boolean isVersionOverwrite = false;
+
+    public PublishVersionTask(long backendId, long transactionId, long globalTransactionId, long dbId, long commitTimestamp,
+                              List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
+                              long createTime, TransactionState state, boolean enableSyncPublish, TransactionType txnType) {
+        this(backendId, transactionId, globalTransactionId, dbId, commitTimestamp, partitionVersionInfos,
+                traceParent, txnSpan, createTime, state, enableSyncPublish, txnType, false);
+    }
+
+    public PublishVersionTask(long backendId, long transactionId, long globalTransactionId, long dbId, long commitTimestamp,
+                              List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
+                              long createTime, TransactionState state, boolean enableSyncPublish,
+                              TransactionType txnType, boolean isVersionOverwrite) {
+        super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
+        this.transactionId = transactionId;
+        this.globalTransactionId = globalTransactionId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.partitionVersionInfos = partitionVersionInfos;
         this.errorTablets = new ArrayList<>();
         this.isFinished = false;
@@ -80,6 +111,10 @@ public class PublishVersionTask extends AgentTask {
         this.txnState = state;
         this.enableSyncPublish = enableSyncPublish;
         this.txnType = txnType;
+<<<<<<< HEAD
+=======
+        this.isVersionOverwrite = isVersionOverwrite;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (txnSpan != null) {
             span = TraceManager.startSpan("publish_version_task", txnSpan);
             span.setAttribute("backend_id", backendId);
@@ -95,7 +130,16 @@ public class PublishVersionTask extends AgentTask {
         publishVersionRequest.setCommit_timestamp(commitTimestamp);
         publishVersionRequest.setTxn_trace_parent(traceParent);
         publishVersionRequest.setEnable_sync_publish(enableSyncPublish);
+<<<<<<< HEAD
         publishVersionRequest.setTxn_type(txnType);
+=======
+        publishVersionRequest.setTxn_type(txnType.toThrift());
+        publishVersionRequest.setGtid(globalTransactionId);
+        if (isVersionOverwrite) {
+            publishVersionRequest.setIs_version_overwrite(isVersionOverwrite);
+        }
+        LOG.debug("publish version request: {}", publishVersionRequest);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return publishVersionRequest;
     }
 
@@ -103,6 +147,13 @@ public class PublishVersionTask extends AgentTask {
         return transactionId;
     }
 
+<<<<<<< HEAD
+=======
+    public long getGlobalTransactionId() {
+        return globalTransactionId;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public TransactionState getTxnState() {
         return txnState;
     }
@@ -133,7 +184,11 @@ public class PublishVersionTask extends AgentTask {
     }
 
     private Set<Long> collectErrorReplicas() {
+<<<<<<< HEAD
         TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Set<Long> errorReplicas = Sets.newHashSet();
         List<Long> errorTablets = this.getErrorTablets();
         if (errorTablets != null && !errorTablets.isEmpty()) {
@@ -159,14 +214,22 @@ public class PublishVersionTask extends AgentTask {
             span.addEvent("update_replica_version_start");
             span.setAttribute("num_replicas", tabletVersions.size());
         }
+<<<<<<< HEAD
         TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<Long> tabletIds = tabletVersions.stream().map(tv -> tv.tablet_id).collect(Collectors.toList());
         List<Replica> replicas = tablets.getReplicasOnBackendByTabletIds(tabletIds, backendId);
         if (replicas == null) {
             LOG.warn("backend not found or no replicas on backend, backendid={}", backendId);
             return;
         }
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             LOG.warn("db not found dbid={}", dbId);
             return;
@@ -180,7 +243,12 @@ public class PublishVersionTask extends AgentTask {
         if (!droppedTablets.isEmpty()) {
             LOG.info("during publish version some tablets were dropped(maybe by alter), tabletIds={}", droppedTablets);
         }
+<<<<<<< HEAD
         db.writeLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             // TODO: persistent replica version
             for (int i = 0; i < tabletVersions.size(); i++) {
@@ -192,7 +260,11 @@ public class PublishVersionTask extends AgentTask {
                 replica.updateVersion(tabletVersion.version);
             }
         } finally {
+<<<<<<< HEAD
             db.writeUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (span != null) {
                 span.addEvent("update_replica_version_finish");
             }

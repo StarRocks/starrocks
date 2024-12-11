@@ -69,6 +69,13 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
         this.hasUnknownColumn = hasUnknownColumn;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEmptyOutputRows() {
+        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalHiveScan(this, context);

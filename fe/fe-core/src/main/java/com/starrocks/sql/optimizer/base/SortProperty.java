@@ -22,10 +22,17 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections4.CollectionUtils;
+
+import java.util.List;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class SortProperty implements PhysicalProperty {
     private final OrderSpec spec;
 
+<<<<<<< HEAD
     public static final SortProperty EMPTY = new SortProperty();
 
     public SortProperty() {
@@ -33,6 +40,17 @@ public class SortProperty implements PhysicalProperty {
     }
 
     public SortProperty(OrderSpec spec) {
+=======
+
+    public static SortProperty createProperty(List<Ordering> orderDescs) {
+        if (CollectionUtils.isEmpty(orderDescs)) {
+            return EmptySortProperty.INSTANCE;
+        } else {
+            return new SortProperty(new OrderSpec(orderDescs));
+        }
+    }
+    protected SortProperty(OrderSpec spec) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.spec = spec;
     }
 
@@ -41,7 +59,11 @@ public class SortProperty implements PhysicalProperty {
     }
 
     public boolean isEmpty() {
+<<<<<<< HEAD
         return spec.getOrderDescs().isEmpty();
+=======
+        return false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -73,7 +95,18 @@ public class SortProperty implements PhysicalProperty {
         return new GroupExpression(new PhysicalTopNOperator(spec,
                 Operator.DEFAULT_LIMIT, Operator.DEFAULT_OFFSET, null, Operator.DEFAULT_LIMIT, SortPhase.FINAL,
                 TopNType.ROW_NUMBER, false,
+<<<<<<< HEAD
                 true, null, null),
                 Lists.newArrayList(child));
     }
+=======
+                true, null, null, null),
+                Lists.newArrayList(child));
+    }
+
+    @Override
+    public String toString() {
+        return spec.getOrderDescs().toString();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # sum
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the sum of non-null values for `expr`. You can use the DISTINCT keyword to compute the sum of distinct non-null values.
 

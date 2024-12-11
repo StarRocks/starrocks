@@ -54,6 +54,10 @@ import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.validator.routines.UrlValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
+=======
+import org.owasp.encoder.Encode;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -77,7 +81,13 @@ public class SystemAction extends WebBaseAction {
         if (Strings.isNullOrEmpty(currentPath)) {
             currentPath = "/";
         }
+<<<<<<< HEAD
         appendSystemInfo(response.getContent(), currentPath, currentPath);
+=======
+        // HTML encode the path to prevent XSS
+        String encodePath = Encode.forHtml(currentPath);
+        appendSystemInfo(response.getContent(), encodePath, encodePath);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         getPageFooter(response.getContent());
         writeResponse(request, response);

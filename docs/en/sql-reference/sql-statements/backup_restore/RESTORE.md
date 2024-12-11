@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## Description
 
+<<<<<<< HEAD
 Restores data to a specified database, table, or partition. Currently, StarRocks only supports restoring data to OLAP tables. For more information, see [data backup and restoration](../../../administration/management/Backup_and_restore.md).
+=======
+Restores data to a specified database, table, or partition. Currently, StarRocks only supports restoring data to OLAP tables.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](./SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](./CANCEL_RESTORE.md).
 
@@ -38,7 +42,11 @@ PROPERTIES ("key"="value", ...)
 
 ## Examples
 
+<<<<<<< HEAD
 Example 1: Restores the table `backup_tbl` in the snapshot `snapshot_label1` from `example_repo` repository to the database `example_db`, and the backup timestamp is `2018-05-04-16-45-08`. Restores one replica.
+=======
+Example 1: Restores the table `backup_tbl` in the snapshot `snapshot_label1` from the `example_repo` repository to the database `example_db`, and the backup timestamp is `2018-05-04-16-45-08`. Restores one replica.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```SQL
 RESTORE SNAPSHOT example_db.snapshot_label1

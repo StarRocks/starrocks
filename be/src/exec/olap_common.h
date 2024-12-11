@@ -123,8 +123,16 @@ public:
 
     void set_index_filter_only(bool is_index_only) { _is_index_filter_only = is_index_only; }
 
+<<<<<<< HEAD
     void to_olap_filter(std::vector<TCondition>& filters);
 
+=======
+    template <bool Negative = false>
+    void to_olap_filter(std::vector<TCondition>& filters);
+
+    TCondition to_olap_not_null_filter() const;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void clear();
 
 private:

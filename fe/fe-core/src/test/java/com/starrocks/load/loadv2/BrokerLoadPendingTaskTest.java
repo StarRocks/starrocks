@@ -37,7 +37,11 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
@@ -62,7 +66,11 @@ public class BrokerLoadPendingTaskTest {
                                 @Injectable BrokerFileGroup brokerFileGroup,
                                 @Injectable BrokerDesc brokerDesc,
                                 @Mocked GlobalStateMgr globalStateMgr,
+<<<<<<< HEAD
                                 @Injectable TBrokerFileStatus tBrokerFileStatus) throws UserException {
+=======
+                                @Injectable TBrokerFileStatus tBrokerFileStatus) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Map<FileGroupAggKey, List<BrokerFileGroup>> aggKeyToFileGroups = Maps.newHashMap();
         List<BrokerFileGroup> brokerFileGroups = Lists.newArrayList();
         brokerFileGroups.add(brokerFileGroup);

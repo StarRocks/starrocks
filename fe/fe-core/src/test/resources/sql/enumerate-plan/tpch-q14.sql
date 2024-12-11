@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
             100.00 * sum(case
@@ -12,6 +13,8 @@ where
         l_partkey = p_partkey
   and l_shipdate >= date '1997-02-01'
   and l_shipdate < date '1997-03-01';
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [planCount]
 3
 [plan-1]

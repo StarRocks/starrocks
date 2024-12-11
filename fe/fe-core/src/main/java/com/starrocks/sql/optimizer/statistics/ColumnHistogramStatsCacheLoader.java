@@ -16,11 +16,14 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.catalog.Column;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -28,7 +31,10 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
 import com.starrocks.common.util.DateUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
@@ -40,7 +46,10 @@ import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.Collections;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,8 +58,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
+<<<<<<< HEAD
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<Histogram>> {
     private static final Logger LOG = LogManager.getLogger(ColumnBasicStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
@@ -127,6 +139,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
     }
 
     private Histogram convert2Histogram(TStatisticData statisticData) throws AnalysisException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(statisticData.dbId);
         MetaUtils.checkDbNullAndReport(db, String.valueOf(statisticData.dbId));
         Table table = db.getTable(statisticData.tableId);
@@ -196,4 +209,18 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         }
         return mcv;
     }
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statisticData.dbId);
+        MetaUtils.checkDbNullAndReport(db, String.valueOf(statisticData.dbId));
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), statisticData.tableId);
+        if (!(table instanceof OlapTable)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, statisticData.tableId);
+        }
+        Type columnType = StatisticUtils.getQueryStatisticsColumnType(table, statisticData.columnName);
+
+        List<Bucket> buckets = HistogramUtils.convertBuckets(statisticData.histogram, columnType);
+        Map<String, Long> mcv = HistogramUtils.convertMCV(statisticData.histogram);
+        return new Histogram(buckets, mcv);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

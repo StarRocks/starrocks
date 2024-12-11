@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # curdate,current_date
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 获取当前的日期，以 DATE 类型返回。
 

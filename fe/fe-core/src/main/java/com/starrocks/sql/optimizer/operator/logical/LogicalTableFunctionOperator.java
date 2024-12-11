@@ -27,9 +27,18 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
 
 import java.util.ArrayList;
 import java.util.List;
+=======
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Objects;
 
 public class LogicalTableFunctionOperator extends LogicalOperator {
@@ -112,6 +121,19 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        return inputs.get(0).getDomainProperty();
+    }
+
+
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalTableFunction(this, context);
     }
@@ -155,6 +177,20 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public LogicalTableFunctionOperator.Builder setFnResultColRefs(List<ColumnRefOperator> fnResultColRefs) {
+            builder.fnResultColRefs = fnResultColRefs;
+            return this;
+        }
+
+        public LogicalTableFunctionOperator.Builder setFnParamColumnProject(
+                List<Pair<ColumnRefOperator, ScalarOperator>> fnParamColumnProject) {
+            builder.fnParamColumnProject = fnParamColumnProject;
+            return this;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         @Override
         public LogicalTableFunctionOperator.Builder withOperator(LogicalTableFunctionOperator tableFunctionOperator) {
             super.withOperator(tableFunctionOperator);

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_empty
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns an empty bitmap. It is mainly used to fill in the default value during insert or stream load. For example:
 

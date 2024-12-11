@@ -16,8 +16,13 @@
 package com.starrocks.external.starrocks;
 
 import com.starrocks.catalog.ExternalOlapTable;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.rpc.FrontendServiceProxy;
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.common.MetaNotFoundException;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
@@ -39,9 +44,15 @@ public class TableMetaSyncer {
         request.setDb_name(table.getSourceTableDbName());
         request.setTable_name(table.getSourceTableName());
         try {
+<<<<<<< HEAD
             TGetTableMetaResponse response = FrontendServiceProxy.call(addr,
                     Config.thrift_rpc_timeout_ms,
                     Config.thrift_rpc_retry_times,
+=======
+            TGetTableMetaResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    addr,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     client -> client.getTableMeta(request));
             if (response.status.getStatus_code() != TStatusCode.OK) {
                 String errMsg;

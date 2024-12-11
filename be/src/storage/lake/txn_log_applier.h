@@ -20,11 +20,22 @@
 #include "gutil/macros.h"
 #include "storage/lake/tablet_metadata.h"
 
+<<<<<<< HEAD
 namespace starrocks::lake {
 
 class Tablet;
 class TxnLogPB;
 class TabletMetadataPB;
+=======
+namespace starrocks {
+class TxnLogPB;
+class TabletMetadataPB;
+} // namespace starrocks
+
+namespace starrocks::lake {
+
+class Tablet;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 class TxnLogApplier {
 public:
@@ -36,6 +47,7 @@ public:
 
     virtual Status finish() = 0;
 
+<<<<<<< HEAD
     virtual std::shared_ptr<std::vector<std::string>> trash_files() = 0;
 };
 
@@ -43,3 +55,15 @@ std::unique_ptr<TxnLogApplier> new_txn_log_applier(Tablet tablet, MutableTabletM
                                                    int64_t new_version);
 
 } // namespace starrocks::lake
+=======
+    void observe_empty_compaction() { _has_empty_compaction = true; }
+
+protected:
+    bool _has_empty_compaction = false;
+};
+
+std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
+                                                   int64_t new_version);
+
+} // namespace starrocks::lake
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

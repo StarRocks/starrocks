@@ -25,10 +25,13 @@ public class UserAuthOption implements ParseNode {
 
     private final NodePosition pos;
 
+<<<<<<< HEAD
     public UserAuthOption(String password, String authPlugin, String authString, boolean passwordPlain) {
         this(password, authPlugin, authString, passwordPlain, NodePosition.ZERO);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public UserAuthOption(String password, String authPlugin, String authString, boolean passwordPlain,
                           NodePosition pos) {
         this.pos = pos;

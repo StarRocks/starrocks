@@ -257,11 +257,19 @@ public:
     // Pre-commit the result of BinlogBuilder, and binlog files are guaranteed to be persisted,
     // but it's not visible for reading. BinlogBuildResult includes the information of persisted
     // binlog files.
+<<<<<<< HEAD
     void precommit_ingestion(int64_t version, BinlogBuildResultPtr result);
 
     // Abort the ingestion if error happens when building(persisting) binlog files.
     // The BinlogBuildResult includes the information of
     void abort_ingestion(int64_t version, BinlogBuildResultPtr result);
+=======
+    void precommit_ingestion(int64_t version, const BinlogBuildResultPtr& result);
+
+    // Abort the ingestion if error happens when building(persisting) binlog files.
+    // The BinlogBuildResult includes the information of
+    void abort_ingestion(int64_t version, const BinlogBuildResultPtr& result);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Delete the result of pre-commit. This can happen when pre-commit successes,
     // but fail to persist RowsetMetaPB in Tablet#add_inc_rowset
@@ -287,7 +295,11 @@ public:
     void delete_all_binlog();
 
     // Register the reader, and return a unique id allocated for this reader.
+<<<<<<< HEAD
     StatusOr<int64_t> register_reader(std::shared_ptr<BinlogReader> reader);
+=======
+    StatusOr<int64_t> register_reader(const std::shared_ptr<BinlogReader>& reader);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Unregister the reader with the given id.
     void unregister_reader(int64_t reader_id);

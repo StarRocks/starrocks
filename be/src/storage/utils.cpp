@@ -35,24 +35,34 @@
 #include "storage/utils.h"
 
 #include <bvar/bvar.h>
+<<<<<<< HEAD
 #include <dirent.h>
 #include <fmt/format.h>
 #include <lz4/lz4.h>
 #include <sys/stat.h>
 #include <unistd.h>
+=======
+#include <fmt/format.h>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #include <atomic>
 #include <boost/regex.hpp>
 #include <cerrno>
 #include <chrono>
+<<<<<<< HEAD
 #include <cstdarg>
 #include <cstdint>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
+<<<<<<< HEAD
 #include <mutex>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <string>
 #include <vector>
 
@@ -61,6 +71,10 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
+=======
+#include "runtime/mem_tracker.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/olap_define.h"
 #include "util/errno.h"
 #include "util/string_parser.hpp"
@@ -82,11 +96,19 @@ Status gen_timestamp_string(string* out_string) {
     tm local_tm;
 
     if (localtime_r(&now, &local_tm) == nullptr) {
+<<<<<<< HEAD
         return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
     }
     char time_suffix[16] = {0}; // Example: 20150706111404
     if (strftime(time_suffix, sizeof(time_suffix), "%Y%m%d%H%M%S", &local_tm) == 0) {
         return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
+=======
+        return Status::InternalError(fmt::format("localtime_r: {} ", std::strerror(errno)));
+    }
+    char time_suffix[16] = {0}; // Example: 20150706111404
+    if (strftime(time_suffix, sizeof(time_suffix), "%Y%m%d%H%M%S", &local_tm) == 0) {
+        return Status::InternalError(fmt::format("localtime_r: {}", std::strerror(errno)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     *out_string = time_suffix;
@@ -397,4 +419,13 @@ std::string file_name(const std::string& fullpath) {
     return path.filename().string();
 }
 
+<<<<<<< HEAD
+=======
+bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio) {
+    hard_limit_ratio = std::max(hard_limit_ratio, 1.0);
+    return tracker->limit_exceeded_by_ratio((int64_t)(hard_limit_ratio * 100)) ||
+           (tracker->parent() != nullptr && tracker->parent()->limit_exceeded());
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

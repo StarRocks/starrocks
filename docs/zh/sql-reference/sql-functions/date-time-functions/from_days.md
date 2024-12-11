@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # from_days
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 通过计算当前时间距离 `0000-01-01` 的天数计算出是哪一天。
 

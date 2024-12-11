@@ -16,22 +16,65 @@
 
 #include <queue>
 
+<<<<<<< HEAD
+=======
+#include "exec/analytor.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/chunks_sorter.h"
 #include "exec/partition/chunks_partitioner.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
 class RuntimeFilterBuildDescriptor;
+<<<<<<< HEAD
 }
 
 namespace starrocks::pipeline {
 
+=======
+
+struct FunctionTypes;
+} // namespace starrocks
+
+namespace starrocks::pipeline {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class LocalPartitionTopnContext;
 class LocalPartitionTopnContextFactory;
 
 using LocalPartitionTopnContextPtr = std::shared_ptr<LocalPartitionTopnContext>;
 using LocalPartitionTopnContextFactoryPtr = std::shared_ptr<LocalPartitionTopnContextFactory>;
 
+<<<<<<< HEAD
+=======
+using AggDataPtr = uint8_t*;
+
+struct PreAggState {
+    PreAggState(const std::vector<TExpr>& t_pre_agg_exprs, const std::vector<TSlotId>& t_pre_agg_output_slot_id)
+            : _t_pre_agg_exprs(t_pre_agg_exprs), _t_pre_agg_output_slot_id(t_pre_agg_output_slot_id) {}
+
+    bool _is_first_chunk_of_current_sorter = true;
+    const std::vector<TExpr>& _t_pre_agg_exprs;
+    const std::vector<TSlotId>& _t_pre_agg_output_slot_id;
+
+    // The offset of the n-th aggregate function in a row of aggregate functions.
+    std::vector<size_t> _agg_states_offsets;
+    // The total size of the row for the aggregate function state.
+    size_t _agg_states_total_size = 0;
+    // The max align size for all aggregate state
+    size_t _max_agg_state_align_size = 1;
+    // The followings are aggregate function information:
+    std::vector<FunctionContext*> _agg_fn_ctxs;
+    std::vector<const AggregateFunction*> _agg_functions;
+    std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
+    std::vector<std::vector<ColumnPtr>> _agg_input_columns;
+    //raw pointers in order to get multi-column values
+    std::vector<std::vector<const Column*>> _agg_input_raw_columns;
+    std::vector<FunctionTypes> _agg_fn_types;
+    // every partition has one Agg State
+    std::vector<ManagedFunctionStatesPtr<PreAggState>> _managed_fn_states;
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // LocalPartitionTopnContext is the bridge of each pair of LocalPartitionTopn{Sink/Source}Operators
 // The purpose of LocalPartitionTopn{Sink/Source}Operator is to reduce the amount of data,
 // so the output chunks are still remain unordered
@@ -43,10 +86,22 @@ using LocalPartitionTopnContextFactoryPtr = std::shared_ptr<LocalPartitionTopnCo
 //                                   │               │
 //                                   └────► topn ────┘
 class LocalPartitionTopnContext {
+<<<<<<< HEAD
 public:
     LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, const std::vector<ExprContext*>& sort_exprs,
                               std::vector<bool> is_asc_order, std::vector<bool> is_null_first, std::string sort_keys,
                               int64_t offset, int64_t partition_limit, const TTopNType::type topn_type);
+=======
+    friend class ManagedFunctionStates<LocalPartitionTopnContext>;
+
+public:
+    LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, bool enable_pre_agg,
+                              const std::vector<TExpr>& t_pre_agg_exprs,
+                              const std::vector<TSlotId>& t_pre_agg_output_slot_id,
+                              const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order,
+                              std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
+                              int64_t partition_limit, const TTopNType::type topn_type);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
 
@@ -81,11 +136,55 @@ private:
     // The output chunk stream is unordered
     StatusOr<ChunkPtr> pull_one_chunk_from_sorters();
 
+<<<<<<< HEAD
+=======
+    // prepare all stuff for pre agg
+    Status prepare_pre_agg(RuntimeState* state);
+
+    // calculate agg for the ‘partition_idx' partition
+    Status compute_agg_state(Chunk* chunk, size_t partition_idx);
+
+    // when call chunk_sorter->get_next(), if this is first chunk it has, is_first_chunk is true
+    void output_agg_result(Chunk* chunk, bool eos, bool is_first_chunk);
+
+    Status output_agg_streaming(Chunk* chunk);
+
+    Status _evaluate_agg_input_columns(Chunk* chunk);
+
+    Columns _create_agg_result_columns(size_t num_rows);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;
     std::vector<PartitionColumnType> _partition_types;
     bool _has_nullable_key = false;
 
+<<<<<<< HEAD
+=======
+    // only set when _enable_pre_agg=true
+    bool _enable_pre_agg;
+    std::unique_ptr<PreAggState> _pre_agg;
+    // bool _is_first_chunk_of_current_sorter = true;
+    // const std::vector<TExpr>& _t_pre_agg_exprs;
+    // const std::vector<TSlotId>& _t_pre_agg_output_slot_id;
+
+    // // The offset of the n-th aggregate function in a row of aggregate functions.
+    // std::vector<size_t> _agg_states_offsets;
+    // // The total size of the row for the aggregate function state.
+    // size_t _agg_states_total_size = 0;
+    // // The max align size for all aggregate state
+    // size_t _max_agg_state_align_size = 1;
+    // // The followings are aggregate function information:
+    // std::vector<FunctionContext*> _agg_fn_ctxs;
+    // std::vector<const AggregateFunction*> _agg_functions;
+    // std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
+    // std::vector<std::vector<ColumnPtr>> _agg_input_columns;
+    // //raw pointers in order to get multi-column values
+    // std::vector<std::vector<const Column*>> _agg_input_raw_columns;
+    // std::vector<FunctionTypes> _agg_fn_types;
+    // // every partition has one Agg State
+    // std::vector<ManagedFunctionStatesPtr<LocalPartitionTopnContext>> _managed_fn_states;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // No more input chunks if after _is_sink_complete is set to true
     bool _is_sink_complete = false;
 
@@ -104,6 +203,11 @@ private:
     const TTopNType::type _topn_type;
 
     int32_t _sorter_index = 0;
+<<<<<<< HEAD
+=======
+
+    std::unique_ptr<MemPool> _mem_pool = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 using LocalPartitionTopnContextPtr = std::shared_ptr<LocalPartitionTopnContext>;
@@ -113,7 +217,13 @@ public:
     LocalPartitionTopnContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
                                      const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order,
                                      std::vector<bool> is_null_first, const std::vector<TExpr>& t_partition_exprs,
+<<<<<<< HEAD
                                      int64_t offset, int64_t limit, std::string sort_keys,
+=======
+                                     bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
+                                     const std::vector<TSlotId>& t_pre_agg_output_slot_id, int64_t offset,
+                                     int64_t limit, std::string sort_keys,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                      const std::vector<OrderByType>& order_by_types,
                                      const std::vector<RuntimeFilterBuildDescriptor*>& rfs);
 
@@ -130,6 +240,12 @@ private:
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
     const std::vector<TExpr>& _t_partition_exprs;
+<<<<<<< HEAD
+=======
+    bool enable_pre_agg;
+    const std::vector<TExpr>& _t_pre_agg_exprs;
+    const std::vector<TSlotId>& _t_pre_agg_output_slot_id;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t _offset;
     int64_t _partition_limit;
     const std::string _sort_keys;

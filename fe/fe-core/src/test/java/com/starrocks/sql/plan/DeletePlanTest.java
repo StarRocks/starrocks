@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.UUIDUtil;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.StatementPlanner;
@@ -43,6 +47,11 @@ public class DeletePlanTest extends PlanTestBase {
     }
 
     private void testExplain(String explainStmt) throws Exception {
+<<<<<<< HEAD
+=======
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         connectContext.getState().reset();
         List<StatementBase> statements =
                 com.starrocks.sql.parser.SqlParser.parse(explainStmt, connectContext.getSessionVariable().getSqlMode());
@@ -52,6 +61,11 @@ public class DeletePlanTest extends PlanTestBase {
     }
 
     private static String getDeleteExecPlan(String originStmt) throws Exception {
+<<<<<<< HEAD
+=======
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())

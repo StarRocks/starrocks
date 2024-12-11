@@ -15,10 +15,20 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 
 #include <memory>
+<<<<<<< HEAD
 
 #include "column/chunk.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
+=======
+#include <unordered_map>
+
+#include "column/chunk.h"
+#include "connector/utils.h"
+#include "exec/pipeline/exchange/shuffler.h"
+#include "exprs/expr_context.h"
+#include "gutil/hash/hash.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
@@ -266,11 +276,26 @@ KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMe
                                              std::vector<ExprContext*> partition_expr_ctxs, const size_t num_sinks)
         : LocalExchanger(strings::Substitute("KeyPartition"), memory_manager, source),
           _source(source),
+<<<<<<< HEAD
           _partition_expr_ctxs(std::move(partition_expr_ctxs)) {
     _channel_partitions_columns.reserve(num_sinks);
     for (int i = 0; i < num_sinks; ++i) {
         _channel_partitions_columns.emplace_back(_partition_expr_ctxs.size());
     }
+=======
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
+
+Status KeyPartitionExchanger::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(LocalExchanger::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
+    return Status::OK();
+}
+
+void KeyPartitionExchanger::close(RuntimeState* state) {
+    Expr::close(_partition_expr_ctxs, state);
+    LocalExchanger::close(state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
@@ -281,6 +306,7 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
         return Status::OK();
     }
 
+<<<<<<< HEAD
     auto& partitions_columns = _channel_partitions_columns[sink_driver_sequence];
     for (size_t i = 0; i < partitions_columns.size(); ++i) {
         ASSIGN_OR_RETURN(partitions_columns[i], _partition_expr_ctxs[i]->evaluate(chunk.get()))
@@ -315,6 +341,35 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
 
         RETURN_IF_ERROR(_source->get_sources()[shuffle_channel_id]->add_chunk(
                 chunk, std::move(indexes), 0, indexes->size(), partitions_columns, _partition_expr_ctxs, memory_usage));
+=======
+    std::vector<ColumnPtr> partition_columns;
+    for (size_t i = 0; i < _partition_expr_ctxs.size(); i++) {
+        ASSIGN_OR_RETURN(auto partition_column, _partition_expr_ctxs[i]->evaluate(chunk.get()));
+        partition_columns.push_back(std::move(partition_column));
+    }
+
+    std::unordered_map<std::vector<std::string>, std::vector<uint32_t>> key2indices;
+    for (int i = 0; i < num_rows; i++) {
+        std::vector<std::string> partition_key;
+        for (int j = 0; j < partition_columns.size(); j++) {
+            auto type = _partition_expr_ctxs[j]->root()->type();
+            ASSIGN_OR_RETURN(auto partition_value, connector::HiveUtils::column_value(type, partition_columns[j], i));
+            partition_key.push_back(std::move(partition_value));
+        }
+        key2indices[partition_key].push_back(i);
+    }
+
+    std::vector<uint32_t> hash_values(chunk->num_rows(), HashUtil::FNV_SEED);
+    for (auto& column : partition_columns) {
+        column->fnv_hash(hash_values.data(), 0, num_rows);
+    }
+
+    for (auto& [key, indices] : key2indices) {
+        uint32_t shuffle_channel_id = hash_values[indices[0]] % source_op_cnt;
+        auto partial_chunk = chunk->clone_empty_with_slot();
+        partial_chunk->append_selective(*chunk, indices.data(), 0, indices.size());
+        RETURN_IF_ERROR(_source->get_sources()[shuffle_channel_id]->add_chunk(key, std::move(partial_chunk)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     return Status::OK();
@@ -338,6 +393,35 @@ Status PassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_dr
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status ConnectorSinkPassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    size_t sources_num = _source->get_sources().size();
+    if (sources_num == 1) {
+        _source->get_sources()[0]->add_chunk(chunk);
+    } else {
+        // Scale up writers when current buffer memory utilization is more than 50% of the maximum and data processed
+        // is greater than current writer count * connector_sink_scaling_min_size. This also mean that we won't scale
+        // local writers if the writing speed can cope up with incoming data. In another word, buffer utilization is
+        // below 50%.
+        if (_writer_count < sources_num && _memory_manager->is_half_full() &&
+            _data_processed > _writer_count * config::writer_scaling_min_size_mb * 1024 * 1024) {
+            _writer_count++;
+        }
+        // set to default value in case of _source vector out of bound in multi thread
+        if (_writer_count > sources_num) {
+            _writer_count = sources_num;
+        }
+        _source->get_sources()[(_next_accept_source++) % _writer_count.load()]->add_chunk(chunk);
+        if (_writer_count < sources_num) {
+            _data_processed += chunk->bytes_usage();
+        }
+    }
+
+    return Status::OK();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 bool LocalExchanger::need_input() const {
     return !_memory_manager->is_full() && !is_all_sources_finished();
 }

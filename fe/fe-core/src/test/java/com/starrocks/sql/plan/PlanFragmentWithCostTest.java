@@ -21,7 +21,10 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Reference;
 import com.starrocks.planner.OlapScanNode;
@@ -33,7 +36,10 @@ import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TQueryPlanInfo;
+<<<<<<< HEAD
 import com.starrocks.utframe.StarRocksAssert;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -41,7 +47,10 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+<<<<<<< HEAD
 import org.junit.BeforeClass;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -53,6 +62,7 @@ import java.util.stream.Collectors;
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
 
+<<<<<<< HEAD
 public class PlanFragmentWithCostTest extends PlanTestBase {
     private static final int NUM_TABLE2_ROWS = 10000;
     private static final int NUM_TABLE0_ROWS = 10000;
@@ -138,6 +148,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 ");");
         FeConstants.runningUnitTest = true;
     }
+=======
+public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @Before
     public void before() {
@@ -152,9 +165,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testCrossJoinBroadCast() throws Exception {
         // check cross join generate plan without exception
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
         setTableStatistics(table2, 20000000);
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+=======
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
+        setTableStatistics(table2, 20000000);
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(t0, 20000000);
 
         String sql = "select t1a,v1 from test_all_type, t0";
@@ -395,9 +414,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table1 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(table1, 10000);
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
+=======
+        OlapTable table1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(table1, 10000);
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(table2, 5000);
         String sql = "SELECT v2,t1d from t0 join test_all_type on t0.v2 = test_all_type.t1d ;";
         String plan = getFragmentPlan(sql);
@@ -440,7 +465,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testBroadcastInnerJoinWithCommutativity() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+=======
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(table, 1000);
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d ;";
         String plan = getFragmentPlan(sql);
@@ -700,11 +729,47 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testThriftWaitingNodeIds() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000);
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+=======
+    public void testPushDownIsoZonedDateTimePredicate() throws Exception {
+        String sql = "SELECT COUNT(1)\n" +
+                "  FROM test_dict\n" +
+                "  WHERE dt >= '2022-12-06T00:00:00Z'\n" +
+                "  AND dt < '2022-12-08T00:00:00Z'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: test_dict\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=2/12\n" +
+                "     rollup: test_dict");
+    }
+
+    @Test
+    public void testPushDownIsoOffsetDateTimePredicate() throws Exception {
+        String sql = "SELECT COUNT(1)\n" +
+                "  FROM test_dict\n" +
+                "  WHERE dt >= '2022-12-06T00:00:00+01:00'\n" +
+                "  AND dt < '2022-12-08T00:00:00+01:00'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: test_dict\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=2/12\n" +
+                "     rollup: test_dict");
+    }
+
+    @Test
+    public void testThriftWaitingNodeIds() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(t1, 10000);
 
         String sql = "select * from t0 inner join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
@@ -717,11 +782,19 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testIntersectReorder() throws Exception {
         // check cross join generate plan without exception
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 1000);
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 100);
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 1000);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 100);
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(t2, 1);
 
         String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
@@ -745,10 +818,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testNotPushDownRuntimeFilterToSortNode() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10);
 
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(t1, 1000000000L);
 
         String sql = "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x " +
@@ -780,10 +860,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setGlobalRuntimeFilterBuildMaxSize(0);
         connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSize(0);
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000L);
 
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000L);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(t1, 1000000000L);
 
         String sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6";
@@ -806,6 +893,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setGlobalRuntimeFilterBuildMaxSize(0);
         connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSize(0);
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000L);
 
@@ -813,6 +901,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t1, 10000000L);
 
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000L);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 10000000L);
+
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(t2, 10000000L);
 
         String sql = "select * from (select t1.v5 as v5, t0.v3 as v3 from t0 join[shuffle] t1 on t0.v2 = " +
@@ -849,6 +946,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testPushDownRuntimeFilterAcrossSetOperationNode() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 1000);
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
@@ -858,6 +956,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
                 .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0))
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 1000);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 100);
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
+        List<OlapTable> tables = new ArrayList<>(Arrays.asList(t0, t1, t2));
+        List<String> tabletIdsStrList = new ArrayList<>();
+        tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
+                .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0)).getDefaultPhysicalPartition()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         ArrayList<String> plans = new ArrayList<>();
@@ -1022,12 +1131,21 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
 
+<<<<<<< HEAD
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
         List<OlapTable> tables = new ArrayList<>(Arrays.asList(t1, t2));
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
                 .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0))
+=======
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
+        List<OlapTable> tables = new ArrayList<>(Arrays.asList(t1, t2));
+        List<String> tabletIdsStrList = new ArrayList<>();
+        tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
+                .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0)).getDefaultPhysicalPartition()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         setTableStatistics(t1, 400000);
@@ -1090,10 +1208,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testOverflowFilterOnColocateJoin() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate1");
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate2");
 
         StatisticStorage ss = globalStateMgr.getCurrentStatisticStorage();
+=======
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("colocate1");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("colocate2");
+
+        StatisticStorage ss = globalStateMgr.getCurrentState().getStatisticStorage();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         new Expectations(ss) {
             {
                 ss.getColumnStatistic((Table) any, "k1");
@@ -1121,10 +1246,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPruneShuffleColumns() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
 
         StatisticStorage ss = globalStateMgr.getCurrentStatisticStorage();
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+
+        StatisticStorage ss = globalStateMgr.getCurrentState().getStatisticStorage();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         new Expectations(ss) {
             {
                 ss.getColumnStatistic(t0, "v1");
@@ -1198,8 +1330,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testToDateToDays() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
         StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
+        StatisticStorage ss = GlobalStateMgr.getCurrentState().getStatisticStorage();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         new Expectations(ss) {
             {
                 ss.getColumnStatistic(t0, "id_datetime");
@@ -1220,10 +1357,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testMultiJoinColumnPruneShuffleColumnsAndGRF() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
 
         StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+
+        StatisticStorage ss = GlobalStateMgr.getCurrentState().getStatisticStorage();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         new Expectations(ss) {
             {
                 ss.getColumnStatistic(t0, "v1");
@@ -1492,7 +1636,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
 
         boolean prevEnableLocalShuffleAgg = connectContext.getSessionVariable().isEnableLocalShuffleAgg();
+<<<<<<< HEAD
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+=======
+        boolean prevEliminateAgg = connectContext.getSessionVariable().isEnableEliminateAgg();
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         String sql;
         String plan;
@@ -1550,7 +1700,16 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             Assert.assertTrue(execPlan.getFragments().get(2).isAssignScanRangesPerDriverSeq());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+<<<<<<< HEAD
             assertContains(plan, "  2:Project\n" +
+=======
+            assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(4: count)\n" +
+                    "  |  group by: 4: count\n" +
+                    "  |  \n" +
+                    "  2:Project\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  <slot 4> : 4: count\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
@@ -1666,6 +1825,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  2:EXCHANGE");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
+<<<<<<< HEAD
+=======
+            connectContext.getSessionVariable().setEnableEliminateAgg(prevEliminateAgg);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -1939,7 +2102,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Ignore
     public void testDeepTreePredicate() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_dict");
+=======
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_dict");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(table2, 20000000);
 
         String sql = getSQLFile("optimized-plan/large_predicate");
@@ -1953,12 +2120,21 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testJoinUnreorder() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000);
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 10000);
 
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 10000);
+
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(t1, 10);
 
         String sql = "Select * " +
@@ -2000,7 +2176,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPruneLimit() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
+=======
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem_partition");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(table2, 10);
 
         new MockUp<LocalTablet>() {
@@ -2020,7 +2200,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPruneInvalidPredicate() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
+=======
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem_partition");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(table2, 10);
 
         new MockUp<LocalTablet>() {
@@ -2058,6 +2242,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 2: v2, 4: max\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  4:PARTITION-TOP-N\n" +
@@ -2085,6 +2273,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 2: v2, 4: max\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  4:PARTITION-TOP-N\n" +
@@ -2115,6 +2307,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  6:SORT\n" +
                     "  |  order by: <slot 4> 4: max ASC, <slot 2> 2: v2 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 4: max\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  5:EXCHANGE");
@@ -2137,6 +2333,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  6:SORT\n" +
                     "  |  order by: <slot 4> 4: max ASC, <slot 2> 2: v2 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 4: max\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  5:EXCHANGE");
@@ -2163,6 +2363,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1, 2: v2\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:PARTITION-TOP-N\n" +
@@ -2189,6 +2393,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1, 2: v2\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:PARTITION-TOP-N\n" +
@@ -2216,6 +2424,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 2: v2, 3: v3\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  2:EXCHANGE");
@@ -2243,6 +2455,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 2: v2, 3: v3\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0");
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 2: v2 , 3: v3 \n" +
@@ -2254,6 +2470,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testPlanCost() throws Exception {
+<<<<<<< HEAD
         String plan = getVerboseExplain("select t1a, v1 " +
                 "from t0 join [broadcast] test_all_type " +
                 "join [shuffle] (select 1 as v1_c1 where false) v1 on t1a=v1 and t1a=v1_c1");
@@ -2279,6 +2496,44 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
         Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
 
+=======
+        final boolean prevShowFragmentCost = FeConstants.showFragmentCost;
+        try {
+            FeConstants.showFragmentCost = true;
+
+            String sql = "select t1a, v1 " +
+                    "from t0 join [broadcast] test_all_type " +
+                    "join [shuffle] (select 1 as v1_c1 where abs(1) = 2) v1 on t1a=v1 and t1a=v1_c1";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "10:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN\n" +
+                    "  |  cardinality: 10000\n" +
+                    "  |  \n" +
+                    "  |----9:EXCHANGE\n" +
+                    "  |       distribution type: BROADCAST\n" +
+                    "  |       cardinality: 1\n" +
+                    "  |    \n" +
+                    "  5:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                    "  |  4 <-> [4: t1a, VARCHAR, true]\n" +
+                    "  |  cardinality: 10000");
+            System.out.println(plan);
+            assertContains(plan, "PLAN COST\n" +
+                    "  CPU: 4.80001312001E11\n" +
+                    "  Memory: 320201.0");
+
+            assertContains(getCostExplain(sql), "PLAN COST\n" +
+                    "  CPU: 4.80001312001E11\n" +
+                    "  Memory: 320201.0");
+
+            AuditEvent event = connectContext.getAuditEventBuilder().build();
+            Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
+            Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
+        } finally {
+            FeConstants.showFragmentCost = prevShowFragmentCost;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -2302,6 +2557,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
 
+<<<<<<< HEAD
+=======
+        connectContext.getSessionVariable().setEnableShortCircuit(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String sql = "SELECT t1a from test_all_type where t1a in ('a', 'b', 'c');";
         String plan = getCostExplain(sql);
         assertContains(plan, "cardinality: 10000");
@@ -2338,4 +2597,19 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertEquals(4, tQueryPlanInfo.output_names.size());
         Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testListPartitionTable() throws Exception {
+        String sql = "select * from t1_single";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "province-->[-Infinity, Infinity, 0.0, 1.0, 4.0]");
+
+        sql = "select * from t1_multi_col";
+        plan = getCostExplain(sql);
+        assertContains(plan, "province-->[-Infinity, Infinity, 0.0, 1.0, 2.0]");
+        assertContains(plan, "dt-->[-Infinity, Infinity, 0.0, 1.0, 2.0]");
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

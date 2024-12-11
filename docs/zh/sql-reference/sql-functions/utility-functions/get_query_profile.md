@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # get_query_profile
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 通过 `query_id` 来获取指定查询的 Profile。如果 `query_id` 不存在或不准确，返回空。
 

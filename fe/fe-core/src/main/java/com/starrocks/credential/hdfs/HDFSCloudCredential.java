@@ -14,18 +14,32 @@
 
 package com.starrocks.credential.hdfs;
 
+<<<<<<< HEAD
 import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.HDFSFileStoreInfo;
+=======
+import com.google.common.base.Preconditions;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.HDFSFileStoreInfo;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
 
 public class HDFSCloudCredential implements CloudCredential {
+<<<<<<< HEAD
     public static final String EMPTY = "empty";
     private String authentication;
+=======
+    public static final String SIMPLE_AUTH = "simple";
+    public static final String KERBEROS_AUTH = "kerberos";
+    protected String authentication;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private String userName;
     private String password;
     private String krbPrincipal;
@@ -65,6 +79,7 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public boolean validate() {
+<<<<<<< HEAD
         if (authentication.equals(EMPTY)) {
             return true;
         }
@@ -78,6 +93,16 @@ public class HDFSCloudCredential implements CloudCredential {
                 return false;
             }
             return !(krbKeyTabData.isEmpty() && krbKeyTabFile.isEmpty());
+=======
+        if (SIMPLE_AUTH.equals(authentication)) {
+            return true;
+        }
+        if (KERBEROS_AUTH.equals(authentication)) {
+            if (krbPrincipal.isEmpty()) {
+                return false;
+            }
+            return !(krbKeyTabFile.isEmpty() && krbKeyTabData.isEmpty());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         return false;
@@ -104,6 +129,16 @@ public class HDFSCloudCredential implements CloudCredential {
         FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
         fileStore.setFsType(FileStoreType.HDFS);
         HDFSFileStoreInfo.Builder hdfsFileStoreInfo = HDFSFileStoreInfo.newBuilder();
+<<<<<<< HEAD
+=======
+        if (!authentication.isEmpty()) {
+            hdfsFileStoreInfo.putConfiguration(CloudConfigurationConstants.HDFS_AUTHENTICATION, authentication);
+            if (authentication.equals(SIMPLE_AUTH) && !userName.isEmpty()) {
+                hdfsFileStoreInfo.setUsername(userName);
+            }
+        }
+        hdfsFileStoreInfo.putAllConfiguration(hadoopConfiguration);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         fileStore.setHdfsFsInfo(hdfsFileStoreInfo.build());
         return fileStore.build();
     }

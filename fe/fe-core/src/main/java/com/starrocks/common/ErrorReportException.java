@@ -28,13 +28,21 @@ public class ErrorReportException extends RuntimeException {
         return errorCode;
     }
 
+<<<<<<< HEAD
     public static String report(ErrorCode errorCode, Object... objs) {
+=======
+    public static ErrorReportException report(ErrorCode errorCode, Object... objs) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String errMsg = errorCode.formatErrorMsg(objs);
         ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
             ctx.getState().setError(errMsg);
             ctx.getState().setErrorCode(errorCode);
         }
+<<<<<<< HEAD
         throw new ErrorReportException(errorCode, errMsg);
+=======
+        return new ErrorReportException(errorCode, errMsg);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

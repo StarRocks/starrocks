@@ -37,6 +37,7 @@ package com.starrocks.server;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -100,12 +101,52 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
+=======
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.SystemHandler;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.TableName;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.backup.BackupHandler;
+import com.starrocks.binlog.BinlogManager;
+import com.starrocks.catalog.BrokerMgr;
+import com.starrocks.catalog.CatalogIdGenerator;
+import com.starrocks.catalog.CatalogRecycleBin;
+import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DictionaryMgr;
+import com.starrocks.catalog.DomainResolver;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.GlobalFunctionMgr;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MetaReplayState;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
+import com.starrocks.catalog.ResourceGroupMgr;
+import com.starrocks.catalog.ResourceMgr;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletStatMgr;
+import com.starrocks.catalog.Type;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
+<<<<<<< HEAD
 import com.starrocks.cluster.Cluster;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -115,15 +156,21 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
+<<<<<<< HEAD
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
@@ -131,21 +178,45 @@ import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.connector.ConnectorMetadata;
+=======
+import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.SmallFileMgr;
+import com.starrocks.common.util.Util;
+import com.starrocks.common.util.concurrent.QueryableReentrantLock;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.elasticsearch.EsRepository;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
+<<<<<<< HEAD
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
 import com.starrocks.credential.CredentialUtil;
+=======
+import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
+import com.starrocks.consistency.ConsistencyChecker;
+import com.starrocks.consistency.LockChecker;
+import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.encryption.KeyMgr;
+import com.starrocks.encryption.KeyRotationDaemon;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.healthchecker.SafeModeChecker;
+<<<<<<< HEAD
+=======
+import com.starrocks.journal.CheckpointWorker;
+import com.starrocks.journal.GlobalStateCheckpointWorker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
@@ -158,9 +229,16 @@ import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
+<<<<<<< HEAD
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.Checkpoint;
+=======
+import com.starrocks.lake.compaction.CompactionControlScheduler;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.vacuum.AutovacuumDaemon;
+import com.starrocks.leader.CheckpointController;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.leader.TaskRunStateSynchronizer;
 import com.starrocks.listener.GlobalLoadJobListenerBus;
 import com.starrocks.load.DeleteMgr;
@@ -168,17 +246,29 @@ import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.Load;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.batchwrite.BatchWriteMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.LoadTimeoutChecker;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.loadv2.LoadsHistorySyncer;
+import com.starrocks.load.pipe.PipeListener;
+import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.load.pipe.PipeScheduler;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.memory.ProcProfileCollector;
+<<<<<<< HEAD
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -212,11 +302,25 @@ import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.gson.GsonUtils;
+=======
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.BackendIdsUpdateInfo;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageHeader;
+import com.starrocks.persist.ImageLoader;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.Storage;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.gson.SubtypeNotFoundException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+<<<<<<< HEAD
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AccessDeniedException;
@@ -228,10 +332,30 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
+=======
+import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AccessControlProvider;
+import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.DefaultAuthorizationProvider;
+import com.starrocks.privilege.NativeAccessController;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
+import com.starrocks.qe.AuditEventProcessor;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.JournalObservable;
+import com.starrocks.qe.QueryStatisticsInfo;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
+import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.replication.ReplicationMgr;
+<<<<<<< HEAD
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
@@ -285,16 +409,44 @@ import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.scheduler.MVActiveChecker;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.history.TableKeeper;
+import com.starrocks.scheduler.mv.MVJobExecutor;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
+import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.staros.StarMgrServer;
+import com.starrocks.statistic.AnalyzeMgr;
+import com.starrocks.statistic.StatisticAutoCollector;
+import com.starrocks.statistic.StatisticsMetaManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.PortConnectivityChecker;
 import com.starrocks.system.SystemInfoService;
+<<<<<<< HEAD
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TCompressionType;
+=======
+import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.task.PriorityLeaderTaskExecutor;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNodeInfo;
 import com.starrocks.thrift.TNodesInfo;
@@ -302,6 +454,7 @@ import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+<<<<<<< HEAD
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -311,16 +464,26 @@ import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.collections.CollectionUtils;
+=======
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.GtidGenerator;
+import com.starrocks.transaction.PublishVersionDaemon;
+import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.BufferedInputStream;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -333,6 +496,20 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+=======
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -353,8 +530,12 @@ public class GlobalStateMgr {
      * Meta and Image context
      */
     private String imageDir;
+<<<<<<< HEAD
     private final MetaContext metaContext;
     private long epoch = 0;
+=======
+    private volatile long epoch = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
     // These maps are all thread safe, we only use lock to perform atomic operations.
@@ -377,6 +558,7 @@ public class GlobalStateMgr {
 
     private final PortConnectivityChecker portConnectivityChecker;
 
+<<<<<<< HEAD
     private Load load;
     private LoadMgr loadMgr;
     private RoutineLoadMgr routineLoadMgr;
@@ -389,10 +571,26 @@ public class GlobalStateMgr {
     private PublishVersionDaemon publishVersionDaemon;
     private DeleteMgr deleteMgr;
     private UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
+=======
+    private final Load load;
+    private final LoadMgr loadMgr;
+    private final RoutineLoadMgr routineLoadMgr;
+    private final StreamLoadMgr streamLoadMgr;
+    private final BatchWriteMgr batchWriteMgr;
+    private final ExportMgr exportMgr;
+    private final MaterializedViewMgr materializedViewMgr;
+
+    private final ConsistencyChecker consistencyChecker;
+    private final BackupHandler backupHandler;
+    private final PublishVersionDaemon publishVersionDaemon;
+    private final DeleteMgr deleteMgr;
+    private final UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private FrontendDaemon txnTimeoutChecker; // To abort timeout txns
     private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
+<<<<<<< HEAD
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
@@ -410,6 +608,23 @@ public class GlobalStateMgr {
 
     // false if default_cluster is not created.
     private boolean isDefaultClusterCreated = false;
+=======
+    private FrontendDaemon tableKeeper;   // Maintain internal history tables
+    private JournalWriter journalWriter; // leader only: write journal log
+    private Daemon replayer;
+    private Daemon timePrinter;
+    private final EsRepository esRepository;  // it is a daemon, so add it here
+    private final MetastoreEventsProcessor metastoreEventsProcessor;
+    private final ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
+
+    // set to true after finished replay all meta and ready to serve
+    // set to false when globalStateMgr is not ready.
+    private final AtomicBoolean isReady = new AtomicBoolean(false);
+    // set to true if FE can offer READ service.
+    // canRead can be true even if isReady is false.
+    // for example: OBSERVER transfer to UNKNOWN, then isReady will be set to false, but canRead can still be true
+    private final AtomicBoolean canRead = new AtomicBoolean(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
     private volatile boolean isInTransferringToLeader = false;
@@ -425,11 +640,16 @@ public class GlobalStateMgr {
     // replica and observer use this value to decide provide read service or not
     private long synchronizedTimeMs;
 
+<<<<<<< HEAD
     private CatalogIdGenerator idGenerator = new CatalogIdGenerator(NEXT_ID_INIT_VALUE);
+=======
+    private final CatalogIdGenerator idGenerator = new CatalogIdGenerator(NEXT_ID_INIT_VALUE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private EditLog editLog;
     private Journal journal;
     // For checkpoint and observer memory replayed marker
+<<<<<<< HEAD
     private AtomicLong replayedJournalId;
 
     private static GlobalStateMgr CHECKPOINT = null;
@@ -462,12 +682,40 @@ public class GlobalStateMgr {
 
     // change to true in UT
     private AtomicBoolean usingNewPrivilege;
+=======
+    private final AtomicLong replayedJournalId;
+
+    private static GlobalStateMgr CHECKPOINT = null;
+    private static long checkpointThreadId = -1;
+    private CheckpointController checkpointController;
+    private CheckpointWorker checkpointWorker;
+    private boolean checkpointWorkerStarted = false;
+
+    private HAProtocol haProtocol = null;
+
+    private final JournalObservable journalObservable;
+
+    private final TabletInvertedIndex tabletInvertedIndex;
+    private ColocateTableIndex colocateTableIndex;
+
+    private final CatalogRecycleBin recycleBin;
+    private final FunctionSet functionSet;
+
+    private final MetaReplayState metaReplayState;
+
+    private final ResourceMgr resourceMgr;
+
+    private final GlobalTransactionMgr globalTransactionMgr;
+
+    private final TabletStatMgr tabletStatMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private AuthenticationMgr authenticationMgr;
     private AuthorizationMgr authorizationMgr;
 
     private DomainResolver domainResolver;
 
+<<<<<<< HEAD
     private TabletSchedulerStat stat;
 
     private TabletScheduler tabletScheduler;
@@ -497,6 +745,38 @@ public class GlobalStateMgr {
     private PluginMgr pluginMgr;
 
     private AuditEventProcessor auditEventProcessor;
+=======
+    private final TabletSchedulerStat stat;
+
+    private final TabletScheduler tabletScheduler;
+
+    private final TabletChecker tabletChecker;
+
+    // Thread pools for pending and loading task, separately
+    private final LeaderTaskExecutor pendingLoadTaskScheduler;
+    private final PriorityLeaderTaskExecutor loadingLoadTaskScheduler;
+
+    private final LoadJobScheduler loadJobScheduler;
+
+    private final LoadTimeoutChecker loadTimeoutChecker;
+    private final LoadsHistorySyncer loadsHistorySyncer;
+    private final LoadEtlChecker loadEtlChecker;
+    private final LoadLoadingChecker loadLoadingChecker;
+    private final LockChecker lockChecker;
+
+    private final RoutineLoadScheduler routineLoadScheduler;
+    private final RoutineLoadTaskScheduler routineLoadTaskScheduler;
+
+    private final MVJobExecutor mvMVJobExecutor;
+
+    private final SmallFileMgr smallFileMgr;
+
+    private final DynamicPartitionScheduler dynamicPartitionScheduler;
+
+    private final PluginMgr pluginMgr;
+
+    private final AuditEventProcessor auditEventProcessor;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private final StatisticsMetaManager statisticsMetaManager;
 
@@ -504,7 +784,11 @@ public class GlobalStateMgr {
 
     private final SafeModeChecker safeModeChecker;
 
+<<<<<<< HEAD
     private AnalyzeMgr analyzeMgr;
+=======
+    private final AnalyzeMgr analyzeMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private StatisticStorage statisticStorage;
 
@@ -514,6 +798,7 @@ public class GlobalStateMgr {
 
     private boolean isSafeMode = false;
 
+<<<<<<< HEAD
     private ResourceGroupMgr resourceGroupMgr;
 
     private StarOSAgent starOSAgent;
@@ -560,16 +845,99 @@ public class GlobalStateMgr {
     private final SlotProvider slotProvider = new SlotProvider();
     private final GlobalLoadJobListenerBus operationListenerBus = new GlobalLoadJobListenerBus();
 
+=======
+    private final ResourceGroupMgr resourceGroupMgr;
+
+    private StarOSAgent starOSAgent;
+
+    private final StarMgrMetaSyncer starMgrMetaSyncer;
+
+    private MetadataMgr metadataMgr;
+    private final CatalogMgr catalogMgr;
+    private final ConnectorMgr connectorMgr;
+    private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
+    private ConnectorTableTriggerAnalyzeMgr connectorTableTriggerAnalyzeMgr;
+
+    private final TaskManager taskManager;
+    private final InsertOverwriteJobMgr insertOverwriteJobMgr;
+
+    private final LocalMetastore localMetastore;
+    private final GlobalFunctionMgr globalFunctionMgr;
+
+    @Deprecated
+    private final ShardManager shardManager;
+
+    private final StateChangeExecution execution;
+
+    private TaskRunStateSynchronizer taskRunStateSynchronizer;
+
+    private final BinlogManager binlogManager;
+
+    // For LakeTable
+    private final CompactionMgr compactionMgr;
+
+    // For compaction forbidden policy
+    private final CompactionControlScheduler compactionControlScheduler;
+
+    private final WarehouseManager warehouseMgr;
+
+    private final ConfigRefreshDaemon configRefreshDaemon;
+
+    private final StorageVolumeMgr storageVolumeMgr;
+
+    private AutovacuumDaemon autovacuumDaemon;
+
+    private final PipeManager pipeManager;
+    private final PipeListener pipeListener;
+    private final PipeScheduler pipeScheduler;
+    private final MVActiveChecker mvActiveChecker;
+
+    private final ReplicationMgr replicationMgr;
+
+    private final KeyMgr keyMgr;
+    private final KeyRotationDaemon keyRotationDaemon;
+
+    private LockManager lockManager;
+
+    private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
+    private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
+    private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
+    private final SlotProvider localSlotProvider = new LocalSlotProvider();
+    private final GlobalLoadJobListenerBus operationListenerBus = new GlobalLoadJobListenerBus();
+
+    private final DictionaryMgr dictionaryMgr = new DictionaryMgr();
+    private final RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private MemoryUsageTracker memoryUsageTracker;
 
     private ProcProfileCollector procProfileCollector;
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
 
+<<<<<<< HEAD
+=======
+    private TemporaryTableMgr temporaryTableMgr;
+    private TemporaryTableCleaner temporaryTableCleaner;
+
+    private final GtidGenerator gtidGenerator;
+    private final GlobalConstraintManager globalConstraintManager;
+
+    private final VariableMgr variableMgr;
+
+    private final SqlParser sqlParser;
+    private final Analyzer analyzer;
+    private final Authorizer authorizer;
+    private final DDLStmtExecutor ddlStmtExecutor;
+    private final ShowExecutor showExecutor;
+    private final ExecutorService queryDeployExecutor;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
 
+<<<<<<< HEAD
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -578,10 +946,13 @@ public class GlobalStateMgr {
         return nodeMgr.getRemovedFrontendNames();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public JournalObservable getJournalObservable() {
         return journalObservable;
     }
 
+<<<<<<< HEAD
     public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
         return nodeMgr.getOrCreateSystemInfo(clusterId);
     }
@@ -595,6 +966,13 @@ public class GlobalStateMgr {
         if (warehouse != null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
             for (Long cnId : cluster.getComputeNodeIds()) {
+=======
+    public TNodesInfo createNodesInfo(long warehouseId, SystemInfoService systemInfoService) {
+        TNodesInfo nodesInfo = new TNodesInfo();
+        if (RunMode.isSharedDataMode()) {
+            List<Long> computeNodeIds = warehouseMgr.getAllComputeNodeIds(warehouseId);
+            for (Long cnId : computeNodeIds) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
                 nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
             }
@@ -608,10 +986,13 @@ public class GlobalStateMgr {
         return nodesInfo;
     }
 
+<<<<<<< HEAD
     public SystemInfoService getClusterInfo() {
         return nodeMgr.getClusterInfo();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public HeartbeatMgr getHeartbeatMgr() {
         return heartbeatMgr;
     }
@@ -650,14 +1031,35 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
+<<<<<<< HEAD
+=======
+    public TemporaryTableMgr getTemporaryTableMgr() {
+        return temporaryTableMgr;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public CompactionMgr getCompactionMgr() {
         return compactionMgr;
     }
 
+<<<<<<< HEAD
+=======
+    public CompactionControlScheduler getCompactionControlScheduler() {
+        return compactionControlScheduler;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ConfigRefreshDaemon getConfigRefreshDaemon() {
         return configRefreshDaemon;
     }
 
+<<<<<<< HEAD
+=======
+    public RefreshDictionaryCacheTaskDaemon getRefreshDictionaryCacheTaskDaemon() {
+        return refreshDictionaryCacheTaskDaemon;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static class SingletonHolder {
         private static final GlobalStateMgr INSTANCE = new GlobalStateMgr();
     }
@@ -687,16 +1089,32 @@ public class GlobalStateMgr {
         }
 
         // System Manager
+<<<<<<< HEAD
         this.nodeMgr = nodeMgr == null ? new NodeMgr() : nodeMgr;
+=======
+        this.nodeMgr = Objects.requireNonNullElseGet(nodeMgr, NodeMgr::new);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
         this.portConnectivityChecker = new PortConnectivityChecker();
 
         // Alter Job Manager
+<<<<<<< HEAD
         this.alterJobMgr = new AlterJobMgr();
+=======
+        // Alter Job Manager
+        this.alterJobMgr = new AlterJobMgr(
+                new SchemaChangeHandler(),
+                new MaterializedViewHandler(),
+                new SystemHandler());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
         this.routineLoadMgr = new RoutineLoadMgr();
+<<<<<<< HEAD
+=======
+        this.batchWriteMgr = new BatchWriteMgr();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.exportMgr = new ExportMgr();
         this.materializedViewMgr = new MaterializedViewMgr();
 
@@ -725,13 +1143,22 @@ public class GlobalStateMgr {
 
         this.metaReplayState = new MetaReplayState();
 
+<<<<<<< HEAD
         this.isDefaultClusterCreated = false;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.resourceMgr = new ResourceMgr();
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
+<<<<<<< HEAD
         initAuth(USING_NEW_PRIVILEGE);
+=======
+        this.authenticationMgr = new AuthenticationMgr();
+        this.domainResolver = new DomainResolver(authenticationMgr);
+        this.authorizationMgr = new AuthorizationMgr(this, new DefaultAuthorizationProvider());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         this.resourceGroupMgr = new ResourceGroupMgr();
 
@@ -739,9 +1166,12 @@ public class GlobalStateMgr {
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
+<<<<<<< HEAD
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.stat = new TabletSchedulerStat();
 
         this.globalFunctionMgr = new GlobalFunctionMgr();
@@ -760,6 +1190,10 @@ public class GlobalStateMgr {
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadMgr = new LoadMgr(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
+<<<<<<< HEAD
+=======
+        this.loadsHistorySyncer = new LoadsHistorySyncer();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.loadEtlChecker = new LoadEtlChecker(loadMgr);
         this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
         this.lockChecker = new LockChecker();
@@ -778,20 +1212,42 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeMgr = new AnalyzeMgr();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
+<<<<<<< HEAD
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
+=======
+        this.temporaryTableMgr = new TemporaryTableMgr();
+        this.warehouseMgr = new WarehouseManager();
+        this.connectorMgr = new ConnectorMgr();
+        this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
+        this.metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
+        this.catalogMgr = new CatalogMgr(connectorMgr);
+        this.connectorTableTriggerAnalyzeMgr = new ConnectorTableTriggerAnalyzeMgr();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         this.taskManager = new TaskManager();
         this.insertOverwriteJobMgr = new InsertOverwriteJobMgr();
         this.shardManager = new ShardManager();
         this.compactionMgr = new CompactionMgr();
+<<<<<<< HEAD
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.starMgrMetaSyncer = new StarMgrMetaSyncer();
 
         this.binlogManager = new BinlogManager();
+=======
+        this.compactionControlScheduler = new CompactionControlScheduler();
+        this.configRefreshDaemon = new ConfigRefreshDaemon();
+        this.starMgrMetaSyncer = new StarMgrMetaSyncer();
+        this.refreshDictionaryCacheTaskDaemon = new RefreshDictionaryCacheTaskDaemon();
+
+        this.binlogManager = new BinlogManager();
+        this.pipeManager = new PipeManager();
+        this.pipeListener = new PipeListener(this.pipeManager);
+        this.pipeScheduler = new PipeScheduler(this.pipeManager);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.mvActiveChecker = new MVActiveChecker();
 
         if (RunMode.isSharedDataMode()) {
@@ -801,6 +1257,14 @@ public class GlobalStateMgr {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
 
+<<<<<<< HEAD
+=======
+        this.lockManager = new LockManager();
+
+        this.gtidGenerator = new GtidGenerator();
+        this.globalConstraintManager = new GlobalConstraintManager();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
             @Override
@@ -824,16 +1288,51 @@ public class GlobalStateMgr {
                 if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
                     loadingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
                 }
+<<<<<<< HEAD
+=======
+                if (Config.max_broker_load_job_concurrency != pendingLoadTaskScheduler.getCorePoolSize()) {
+                    pendingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } catch (Exception e) {
                 LOG.warn("check config failed", e);
             }
         });
 
         this.replicationMgr = new ReplicationMgr();
+<<<<<<< HEAD
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
         this.procProfileCollector = new ProcProfileCollector();
+=======
+
+        this.keyMgr = new KeyMgr();
+        this.keyRotationDaemon = new KeyRotationDaemon(keyMgr);
+
+        this.variableMgr = new VariableMgr();
+
+        nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
+
+        this.memoryUsageTracker = new MemoryUsageTracker();
+        this.procProfileCollector = new ProcProfileCollector();
+
+        this.sqlParser = new SqlParser(AstBuilder.getInstance());
+        this.analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        AccessControlProvider accessControlProvider;
+        if (Config.access_control.equals("ranger")) {
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
+        } else {
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
+        }
+        this.authorizer = new Authorizer(accessControlProvider);
+        this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
+        this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
+        this.temporaryTableCleaner = new TemporaryTableCleaner();
+        this.queryDeployExecutor =
+                ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
+                        "query-deploy", true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static void destroyCheckpoint() {
@@ -863,10 +1362,13 @@ public class GlobalStateMgr {
         this.isSafeMode = isSafeMode;
     }
 
+<<<<<<< HEAD
     public ConcurrentHashMap<Long, Database> getIdToDb() {
         return localMetastore.getIdToDb();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // NOTICE: in most case, we should use getCurrentState() to get the right globalStateMgr.
     // but in some cases, we should get the serving globalStateMgr explicitly.
     public static GlobalStateMgr getServingState() {
@@ -885,10 +1387,13 @@ public class GlobalStateMgr {
         return globalFunctionMgr;
     }
 
+<<<<<<< HEAD
     public static GlobalTransactionMgr getCurrentGlobalTransactionMgr() {
         return getCurrentState().globalTransactionMgr;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public GlobalTransactionMgr getGlobalTransactionMgr() {
         return globalTransactionMgr;
     }
@@ -901,18 +1406,35 @@ public class GlobalStateMgr {
         return analyzeMgr;
     }
 
+<<<<<<< HEAD
     public Auth getAuth() {
         return auth;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public AuthenticationMgr getAuthenticationMgr() {
         return authenticationMgr;
     }
 
+<<<<<<< HEAD
+=======
+    public void setAuthenticationMgr(AuthenticationMgr authenticationMgr) {
+        this.authenticationMgr = authenticationMgr;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public AuthorizationMgr getAuthorizationMgr() {
         return authorizationMgr;
     }
 
+<<<<<<< HEAD
+=======
+    public void setAuthorizationMgr(AuthorizationMgr authorizationMgr) {
+        this.authorizationMgr = authorizationMgr;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ResourceGroupMgr getResourceGroupMgr() {
         return resourceGroupMgr;
     }
@@ -925,14 +1447,18 @@ public class GlobalStateMgr {
         return tabletChecker;
     }
 
+<<<<<<< HEAD
     public ConcurrentHashMap<String, Database> getFullNameToDb() {
         return localMetastore.getFullNameToDb();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public AuditEventProcessor getAuditEventProcessor() {
         return auditEventProcessor;
     }
 
+<<<<<<< HEAD
     // use this to get correct ClusterInfoService instance
     public static SystemInfoService getCurrentSystemInfo() {
         return getCurrentState().getClusterInfo();
@@ -972,10 +1498,13 @@ public class GlobalStateMgr {
         return MetaContext.get().getStarRocksMetaVersion();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static boolean isCheckpointThread() {
         return Thread.currentThread().getId() == checkpointThreadId;
     }
 
+<<<<<<< HEAD
     public static PluginMgr getCurrentPluginMgr() {
         return getCurrentState().getPluginMgr();
     }
@@ -990,6 +1519,18 @@ public class GlobalStateMgr {
 
     public static TabletStatMgr getCurrentTabletStatMgr() {
         return getCurrentState().tabletStatMgr;
+=======
+    public StatisticStorage getStatisticStorage() {
+        return statisticStorage;
+    }
+
+    public StatisticAutoCollector getStatisticAutoCollector() {
+        return statisticAutoCollector;
+    }
+
+    public TabletStatMgr getTabletStatMgr() {
+        return tabletStatMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // Only used in UT
@@ -997,10 +1538,13 @@ public class GlobalStateMgr {
         this.statisticStorage = statisticStorage;
     }
 
+<<<<<<< HEAD
     public static AuditEventProcessor getCurrentAuditEventProcessor() {
         return getCurrentState().getAuditEventProcessor();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public StarOSAgent getStarOSAgent() {
         return starOSAgent;
     }
@@ -1021,8 +1565,13 @@ public class GlobalStateMgr {
         return metadataMgr;
     }
 
+<<<<<<< HEAD
     public ConnectorMetadata getMetadata() {
         return localMetastore;
+=======
+    public ConnectorTableTriggerAnalyzeMgr getConnectorTableTriggerAnalyzeMgr() {
+        return connectorTableTriggerAnalyzeMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @VisibleForTesting
@@ -1051,14 +1600,34 @@ public class GlobalStateMgr {
         return warehouseMgr;
     }
 
+<<<<<<< HEAD
     public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
         return nodeMgr.getWarehouseInfosFromOtherFEs();
+=======
+    public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {
+        return nodeMgr.getQueryStatisticsInfoFromOtherFEs();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public StorageVolumeMgr getStorageVolumeMgr() {
         return storageVolumeMgr;
     }
 
+<<<<<<< HEAD
+=======
+    public PipeManager getPipeManager() {
+        return pipeManager;
+    }
+
+    public PipeScheduler getPipeScheduler() {
+        return pipeScheduler;
+    }
+
+    public PipeListener getPipeListener() {
+        return pipeListener;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public MVActiveChecker getMvActiveChecker() {
         return mvActiveChecker;
     }
@@ -1075,6 +1644,53 @@ public class GlobalStateMgr {
         return replicationMgr;
     }
 
+<<<<<<< HEAD
+=======
+    public KeyMgr getKeyMgr() {
+        return keyMgr;
+    }
+
+    public LockManager getLockManager() {
+        return lockManager;
+    }
+
+    public void setLockManager(LockManager lockManager) {
+        this.lockManager = lockManager;
+    }
+
+    public SqlParser getSqlParser() {
+        return sqlParser;
+    }
+
+    public Analyzer getAnalyzer() {
+        return analyzer;
+    }
+
+    public Authorizer getAuthorizer() {
+        return authorizer;
+    }
+
+    public DDLStmtExecutor getDdlStmtExecutor() {
+        return ddlStmtExecutor;
+    }
+
+    public ShowExecutor getShowExecutor() {
+        return showExecutor;
+    }
+
+    public ExecutorService getQueryDeployExecutor() {
+        return queryDeployExecutor;
+    }
+
+    public GtidGenerator getGtidGenerator() {
+        return gtidGenerator;
+    }
+
+    public GlobalConstraintManager getGlobalConstraintManager() {
+        return globalConstraintManager;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Use tryLock to avoid potential deadlock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -1083,7 +1699,11 @@ public class GlobalStateMgr {
                     // to see which thread held this lock for long time.
                     Thread owner = lock.getOwner();
                     if (owner != null) {
+<<<<<<< HEAD
                         LOG.warn("globalStateMgr lock is held by: {}", Util.dumpThread(owner, 50));
+=======
+                        LOG.warn("globalStateMgr lock is held by: {}", LogUtil.dumpThread(owner, 50));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     }
 
                     if (mustLock) {
@@ -1139,6 +1759,13 @@ public class GlobalStateMgr {
                 if (!imageDir.exists()) {
                     imageDir.mkdirs();
                 }
+<<<<<<< HEAD
+=======
+                File imageV2Dir = new File(this.imageDir + "/v2");
+                if (!imageV2Dir.exists()) {
+                    imageV2Dir.mkdirs();
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 LOG.error("Invalid edit log type: {}", Config.edit_log_type);
                 System.exit(-1);
@@ -1163,6 +1790,10 @@ public class GlobalStateMgr {
 
             // 6. start task cleaner thread
             createTaskCleaner();
+<<<<<<< HEAD
+=======
+            createTableKeeper();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             // 7. init starosAgent
             if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
@@ -1183,6 +1814,7 @@ public class GlobalStateMgr {
         }
     }
 
+<<<<<<< HEAD
     // set usingNewPrivilege = true in UT
     public void initAuth(boolean usingNewPrivilege) {
         this.auth = new Auth();
@@ -1212,6 +1844,8 @@ public class GlobalStateMgr {
         return !authorizationMgr.isLoaded() || !authenticationMgr.isLoaded();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected void initJournal() throws JournalException, InterruptedException {
         BlockingQueue<JournalTask> journalQueue =
                 new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
@@ -1228,6 +1862,7 @@ public class GlobalStateMgr {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
                 feStartTime = System.currentTimeMillis();
+<<<<<<< HEAD
 
                 // For follower/observer, defer setting auth to null when we have replayed all the journal,
                 // because we may encounter old auth journal when replaying log in which case we still
@@ -1237,6 +1872,8 @@ public class GlobalStateMgr {
                     auth = null;
                 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             }
 
@@ -1314,6 +1951,7 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
+<<<<<<< HEAD
             // Log meta_version
             int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
             if (starrocksMetaVersion < FeConstants.STARROCKS_META_VERSION) {
@@ -1321,6 +1959,8 @@ public class GlobalStateMgr {
                 MetaContext.get().setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
             }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // Log the first frontend
             if (nodeMgr.isFirstTimeStartUp()) {
                 // if isFirstTimeStartUp is true, frontends must contain this Node.
@@ -1330,14 +1970,20 @@ public class GlobalStateMgr {
                 editLog.logAddFirstFrontend(self);
             }
 
+<<<<<<< HEAD
             if (!isDefaultClusterCreated) {
                 initDefaultCluster();
+=======
+            if (Config.bdbje_reset_election_group) {
+                nodeMgr.resetFrontends();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
 
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
 
+<<<<<<< HEAD
             if (USING_NEW_PRIVILEGE) {
                 if (needUpgradedToNewPrivilege()) {
                     reInitializeNewPrivilegeOnUpgrade();
@@ -1351,6 +1997,8 @@ public class GlobalStateMgr {
                 auth = null;  // remove references to useless objects to release memory
             }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // start all daemon threads that only running on MASTER FE
             startLeaderOnlyDaemonThreads();
             // start other daemon threads that should run on all FEs
@@ -1378,12 +2026,20 @@ public class GlobalStateMgr {
                 // configuration. If it is upgraded from an old version, the original
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
+<<<<<<< HEAD
                 VariableMgr.setSystemVariable(VariableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
+=======
+                variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                 SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
                                 LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
             LOG.warn("transfer to leader failed with error", t);
@@ -1392,6 +2048,11 @@ public class GlobalStateMgr {
         }
 
         createBuiltinStorageVolume();
+<<<<<<< HEAD
+=======
+        resourceGroupMgr.createBuiltinResourceGroupsIfNotExist();
+        keyMgr.initDefaultMasterKey();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void setFrontendNodeType(FrontendNodeType newType) {
@@ -1406,6 +2067,7 @@ public class GlobalStateMgr {
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
             }
+<<<<<<< HEAD
         }
 
         // start checkpoint thread
@@ -1420,6 +2082,20 @@ public class GlobalStateMgr {
 
         // heartbeat mgr
         heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
+=======
+
+            StarMgrServer.getCurrentState().startCheckpointController();
+        }
+
+        // start checkpoint thread
+        checkpointController = new CheckpointController("global_state_checkpoint_controller", journal, "");
+        checkpointController.start();
+
+        keyRotationDaemon.start();
+
+        // heartbeat mgr
+        heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), getEpoch());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         heartbeatMgr.start();
         // New load scheduler
         pendingLoadTaskScheduler.start();
@@ -1427,6 +2103,10 @@ public class GlobalStateMgr {
         loadMgr.prepareJobs();
         loadJobScheduler.start();
         loadTimeoutChecker.start();
+<<<<<<< HEAD
+=======
+        loadsHistorySyncer.start();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         loadEtlChecker.start();
         loadLoadingChecker.start();
         // Export checker
@@ -1455,6 +2135,10 @@ public class GlobalStateMgr {
         // start routine load scheduler
         routineLoadScheduler.start();
         routineLoadTaskScheduler.start();
+<<<<<<< HEAD
+=======
+        batchWriteMgr.start();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // start dynamic partition task
         dynamicPartitionScheduler.start();
         // start daemon thread to update db used data quota for db txn manager periodically
@@ -1464,6 +2148,11 @@ public class GlobalStateMgr {
         taskManager.start();
         taskCleaner.start();
         mvMVJobExecutor.start();
+<<<<<<< HEAD
+=======
+        pipeListener.start();
+        pipeScheduler.start();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         mvActiveChecker.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
@@ -1486,10 +2175,29 @@ public class GlobalStateMgr {
             LOG.info("run system in recovery mode");
             metaRecoveryDaemon.start();
         }
+<<<<<<< HEAD
+=======
+        temporaryTableCleaner.start();
+
+        connectorTableTriggerAnalyzeMgr.start();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // start threads that should run on all FE
     private void startAllNodeTypeDaemonThreads() {
+<<<<<<< HEAD
+=======
+        if (!checkpointWorkerStarted) {
+            checkpointWorker = new GlobalStateCheckpointWorker(journal);
+            // set "checkpointThreadId" before the checkpoint thread start, because the thread
+            // need to check the "checkpointThreadId" when running.
+            checkpointThreadId = checkpointWorker.getId();
+            checkpointWorker.start();
+            checkpointWorkerStarted = true;
+            LOG.info("global state mgr checkpoint worker thread started. thread id is {}", checkpointThreadId);
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         portConnectivityChecker.start();
         tabletStatMgr.start();
         // load and export job label cleaner thread
@@ -1507,6 +2215,10 @@ public class GlobalStateMgr {
         domainResolver.start();
         if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
+<<<<<<< HEAD
+=======
+            StarMgrServer.getCurrentState().startCheckpointWorker();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         configRefreshDaemon.start();
 
@@ -1514,7 +2226,14 @@ public class GlobalStateMgr {
 
         lockChecker.start();
 
+<<<<<<< HEAD
         procProfileCollector.start();
+=======
+        refreshDictionaryCacheTaskDaemon.start();
+
+        procProfileCollector.start();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
     }
@@ -1552,15 +2271,22 @@ public class GlobalStateMgr {
 
     // The manager that loads meta from image must be a member of GlobalStateMgr and cannot be SINGLETON,
     // since Checkpoint uses a separate memory.
+<<<<<<< HEAD
     public void loadImage(String imageDir) throws IOException, DdlException {
         Storage storage = new Storage(imageDir);
         nodeMgr.setClusterId(storage.getClusterID());
         File curFile = storage.getCurrentImageFile();
+=======
+    public void loadImage(String imageDir) throws IOException {
+        ImageLoader imageLoader = new ImageLoader(imageDir);
+        File curFile = imageLoader.getImageFile();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!curFile.exists()) {
             // image.0 may not exist
             LOG.info("image does not exist: {}", curFile.getAbsolutePath());
             return;
         }
+<<<<<<< HEAD
         replayedJournalId.set(storage.getImageJournalId());
         LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(),
                 GlobalStateMgr.isCheckpointThread());
@@ -1732,6 +2458,106 @@ public class GlobalStateMgr {
             usingNewPrivilege.set(false);
             domainResolver = new DomainResolver(auth);
         }
+=======
+        replayedJournalId.set(imageLoader.getImageJournalId());
+        LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(),
+                GlobalStateMgr.isCheckpointThread());
+        long loadImageStartTime = System.currentTimeMillis();
+
+        Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()
+                .put(SRMetaBlockID.NODE_MGR, nodeMgr::load)
+                .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
+                .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
+                .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
+                .put(SRMetaBlockID.VARIABLE_MGR, variableMgr::load)
+                .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
+                .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
+                .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
+                .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
+                .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
+                .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
+                .put(SRMetaBlockID.LOAD_MGR, loadMgr::loadLoadJobsV2JsonFormat)
+                .put(SRMetaBlockID.SMALL_FILE_MGR, smallFileMgr::loadSmallFilesV2)
+                .put(SRMetaBlockID.PLUGIN_MGR, pluginMgr::load)
+                .put(SRMetaBlockID.DELETE_MGR, deleteMgr::load)
+                .put(SRMetaBlockID.ANALYZE_MGR, analyzeMgr::load)
+                .put(SRMetaBlockID.RESOURCE_GROUP_MGR, resourceGroupMgr::load)
+                .put(SRMetaBlockID.AUTHENTICATION_MGR, authenticationMgr::loadV2)
+                .put(SRMetaBlockID.AUTHORIZATION_MGR, authorizationMgr::loadV2)
+                .put(SRMetaBlockID.TASK_MGR, taskManager::loadTasksV2)
+                .put(SRMetaBlockID.CATALOG_MGR, catalogMgr::load)
+                .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
+                .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
+                .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
+                .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, materializedViewMgr::load)
+                .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
+                .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
+                .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
+                .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
+                .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
+                .put(SRMetaBlockID.WAREHOUSE_MGR, warehouseMgr::load)
+                .build();
+
+        Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
+        InputStream in = Files.newInputStream(curFile.toPath());
+        try {
+            imageLoader.setInputStream(in);
+            loadHeader(new DataInputStream(imageLoader.getCheckedInputStream()));
+            while (true) {
+                SRMetaBlockReader reader = imageLoader.getBlockReader();
+                SRMetaBlockID srMetaBlockID = reader.getHeader().getSrMetaBlockID();
+
+                try {
+                    SRMetaBlockLoader metaBlockLoader = loadImages.get(srMetaBlockID);
+                    if (metaBlockLoader == null) {
+                        /*
+                         * The expected read module does not match the module stored in the image,
+                         * and the json chunk is skipped directly. This usually occurs in several situations.
+                         * 1. When the obsolete image code is deleted.
+                         * 2. When the new version rolls back to the old version,
+                         *    the old version ignores the functions of the new version
+                         */
+                        LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
+                                "(expect sr meta block id %s)", srMetaBlockID));
+                        continue;
+                    }
+
+                    metaBlockLoader.apply(reader);
+                    metaMgrMustExists.remove(srMetaBlockID);
+                    LOG.info("Success load StarRocks meta block " + srMetaBlockID + " from image");
+                } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
+                    /*
+                     * The number of json expected to be read is more than the number of json actually stored in the image
+                     */
+                    metaMgrMustExists.remove(srMetaBlockID);
+                    LOG.warn("Got EOF exception, ignore, ", srMetaBlockEOFException);
+                } catch (Throwable t) {
+                    LOG.warn("load meta block {} failed", srMetaBlockID, t);
+                    // throw the exception again, because the following steps will depend on this error.
+                    throw t;
+                } finally {
+                    reader.close();
+                }
+            }
+        } catch (EOFException exception) {
+            if (!metaMgrMustExists.isEmpty()) {
+                LOG.warn("Miss meta block [" + Joiner.on(",").join(new ArrayList<>(metaMgrMustExists)) + "], " +
+                        "This may not be a fatal error. It may be because there are new features in the version " +
+                        "you upgraded this time, but there is no relevant metadata.");
+            } else {
+                LOG.info("Load meta-image EOF, successful loading all requires meta module");
+            }
+        } catch (SRMetaBlockException e) {
+            LOG.error("load meta block failed ", e);
+            throw new IOException("load meta block failed ", e);
+        } finally {
+            imageLoader.readTheRemainingBytes();
+            in.close();
+        }
+
+        imageLoader.checkCheckSum();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         try {
             postLoadImage();
@@ -1740,7 +2566,11 @@ public class GlobalStateMgr {
         }
 
         long loadImageEndTime = System.currentTimeMillis();
+<<<<<<< HEAD
         this.imageJournalId = storage.getImageJournalId();
+=======
+        this.imageJournalId = imageLoader.getImageJournalId();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
     }
 
@@ -1763,28 +2593,44 @@ public class GlobalStateMgr {
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
     }
 
+<<<<<<< HEAD
     public long loadVersion(DataInputStream dis, long checksum) throws IOException {
+=======
+    public void loadHeader(DataInputStream dis) throws IOException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // for new format, version schema is [starrocksMetaVersion], and the int value must be positive
         // for old format, version schema is [-1, metaVersion, starrocksMetaVersion]
         // so we can check the first int to determine the version schema
         int flag = dis.readInt();
+<<<<<<< HEAD
         checksum = checksum ^ flag;
         int starrocksMetaVersion;
         if (flag < 0) {
             checksum ^= dis.readInt();
             starrocksMetaVersion = dis.readInt();
             checksum ^= starrocksMetaVersion;
+=======
+        int starrocksMetaVersion;
+        if (flag < 0) {
+            dis.readInt();
+            starrocksMetaVersion = dis.readInt();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             // when flag is positive, this is new version format
             starrocksMetaVersion = flag;
         }
 
+<<<<<<< HEAD
         if (!MetaVersion.isCompatible(starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION)) {
+=======
+        if (starrocksMetaVersion != FeConstants.STARROCKS_META_VERSION) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG.error("Not compatible with meta version {}, current version is {}",
                     starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION);
             System.exit(-1);
         }
 
+<<<<<<< HEAD
         MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
 
         return checksum;
@@ -1932,6 +2778,36 @@ public class GlobalStateMgr {
         File curFile = storage.getImageFile(replayedJournalId.get());
         File ckpt = new File(this.imageDir, Storage.IMAGE_NEW);
         saveImage(ckpt, replayedJournalId.get());
+=======
+        ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
+        idGenerator.setId(header.getBatchEndId());
+        LOG.info("finished to replay header from image");
+    }
+
+    // Only called by checkpoint thread
+    public void saveImage() throws IOException {
+        try {
+            saveImage(ImageFormatVersion.v1);
+        } catch (Throwable t) {
+            // image v1 may fail because of byte[] size overflow, ignore
+            LOG.warn("save image v1 failed, ignore", t);
+        }
+        saveImage(ImageFormatVersion.v2);
+    }
+
+    public void saveImage(ImageFormatVersion formatVersion) throws IOException {
+        String destDir;
+        if (formatVersion == ImageFormatVersion.v1) {
+            destDir = this.imageDir;
+        } else {
+            destDir = this.imageDir + "/v2";
+        }
+        // Write image.ckpt
+        Storage storage = new Storage(destDir);
+        File curFile = storage.getImageFile(replayedJournalId.get());
+        File ckpt = new File(destDir, Storage.IMAGE_NEW);
+        saveImage(new ImageWriter(destDir, formatVersion, replayedJournalId.get()), ckpt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // Move image.ckpt to image.dataVersion
         LOG.info("Move " + ckpt.getAbsolutePath() + " to " + curFile.getAbsolutePath());
@@ -1945,7 +2821,11 @@ public class GlobalStateMgr {
 
     // The manager that saves meta to image must be a member of GlobalStateMgr and cannot be SINGLETON,
     // since Checkpoint uses a separate memory.
+<<<<<<< HEAD
     public void saveImage(File curFile, long replayedJournalId) throws IOException {
+=======
+    public void saveImage(ImageWriter imageWriter, File curFile) throws IOException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!curFile.exists()) {
             if (!curFile.createNewFile()) {
                 LOG.warn("Failed to create file, filepath={}", curFile.getAbsolutePath());
@@ -1956,6 +2836,7 @@ public class GlobalStateMgr {
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
         long saveImageStartTime = System.currentTimeMillis();
+<<<<<<< HEAD
         try (DataOutputStream dos = new DataOutputStream(Files.newOutputStream(curFile.toPath()))) {
             // ** NOTICE **: always add new code at the end
             if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
@@ -2153,6 +3034,65 @@ public class GlobalStateMgr {
         VariableMgr.replayGlobalVariableV2(info);
     }
 
+=======
+        try (OutputStream outputStream = Files.newOutputStream(curFile.toPath())) {
+            imageWriter.setOutputStream(outputStream);
+            try {
+                saveHeader(imageWriter.getDataOutputStream());
+                nodeMgr.save(imageWriter);
+                localMetastore.save(imageWriter);
+                alterJobMgr.save(imageWriter);
+                recycleBin.save(imageWriter);
+                variableMgr.save(imageWriter);
+                resourceMgr.saveResourcesV2(imageWriter);
+                exportMgr.saveExportJobV2(imageWriter);
+                backupHandler.saveBackupHandlerV2(imageWriter);
+                globalTransactionMgr.saveTransactionStateV2(imageWriter);
+                colocateTableIndex.saveColocateTableIndexV2(imageWriter);
+                routineLoadMgr.saveRoutineLoadJobsV2(imageWriter);
+                loadMgr.saveLoadJobsV2JsonFormat(imageWriter);
+                smallFileMgr.saveSmallFilesV2(imageWriter);
+                pluginMgr.save(imageWriter);
+                deleteMgr.save(imageWriter);
+                analyzeMgr.save(imageWriter);
+                resourceGroupMgr.save(imageWriter);
+                authenticationMgr.saveV2(imageWriter);
+                authorizationMgr.saveV2(imageWriter);
+                taskManager.saveTasksV2(imageWriter);
+                catalogMgr.save(imageWriter);
+                insertOverwriteJobMgr.save(imageWriter);
+                compactionMgr.save(imageWriter);
+                streamLoadMgr.save(imageWriter);
+                materializedViewMgr.save(imageWriter);
+                globalFunctionMgr.save(imageWriter);
+                storageVolumeMgr.save(imageWriter);
+                dictionaryMgr.save(imageWriter);
+                replicationMgr.save(imageWriter);
+                keyMgr.save(imageWriter);
+                pipeManager.getRepo().save(imageWriter);
+                warehouseMgr.save(imageWriter);
+            } catch (SRMetaBlockException e) {
+                LOG.error("Save meta block failed ", e);
+                throw new IOException("Save meta block failed ", e);
+            }
+
+            imageWriter.saveChecksum();
+
+            long saveImageEndTime = System.currentTimeMillis();
+            LOG.info("Finished save meta block {} in {} ms.",
+                    curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime));
+        }
+    }
+
+    public void saveHeader(DataOutputStream dos) throws IOException {
+        dos.writeInt(FeConstants.STARROCKS_META_VERSION);
+        ImageHeader header = new ImageHeader();
+        long id = idGenerator.getBatchEndId();
+        header.setBatchEndId(id);
+        Text.writeString(dos, GsonUtils.GSON.toJson(header));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void createLabelCleaner() {
         labelCleaner = new FrontendDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
             @Override
@@ -2167,10 +3107,21 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 doTaskBackgroundJob();
+<<<<<<< HEAD
+=======
+                setInterval(Config.task_check_interval_second * 1000L);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
     }
 
+<<<<<<< HEAD
+=======
+    public void createTableKeeper() {
+        tableKeeper = TableKeeper.startDaemon();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void createTxnTimeoutChecker() {
         txnTimeoutChecker = new FrontendDaemon("txnTimeoutChecker",
                 Config.transaction_clean_interval_second * 1000L) {
@@ -2279,8 +3230,11 @@ public class GlobalStateMgr {
                 }
             }
         };
+<<<<<<< HEAD
 
         replayer.setMetaContext(metaContext);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     /**
@@ -2352,7 +3306,11 @@ public class GlobalStateMgr {
                 readSucc = true;
 
                 // apply
+<<<<<<< HEAD
                 EditLog.loadJournal(this, entity);
+=======
+                editLog.loadJournal(this, entity);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal(e)) {
                     LOG.error("!!! DANGER: SKIP JOURNAL, id: {}, data: {} !!!",
@@ -2396,7 +3354,11 @@ public class GlobalStateMgr {
 
         }
         if (replayedJournalId.get() - startReplayId > 0) {
+<<<<<<< HEAD
             LOG.info("replayed journal from {} - {}", startReplayId, replayedJournalId);
+=======
+            LOG.debug("replayed journal from {} - {}", startReplayId, replayedJournalId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return true;
         }
         return false;
@@ -2416,11 +3378,19 @@ public class GlobalStateMgr {
     }
 
     protected boolean canSkipBadReplayedJournal(Throwable t) {
+<<<<<<< HEAD
+=======
+        // 1. metadata_enable_recovery_mode = true will skip all kind of failure
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (Config.metadata_enable_recovery_mode) {
             LOG.warn("skip journal load failure because cluster is in recovery mode");
             return true;
         }
 
+<<<<<<< HEAD
+=======
+        // 2. metadata_journal_skip_bad_journal_ids will skip the failure of specified journal ids
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.parseLong(idStr) == replayedJournalId.get() + 1) {
@@ -2434,6 +3404,16 @@ public class GlobalStateMgr {
                     Config.metadata_journal_skip_bad_journal_ids, e);
         }
 
+<<<<<<< HEAD
+=======
+        // 3. ignore_unknown_subtype = true will skip the subtype not found failure which happens on downgrading
+        if (t.getCause() != null && t.getCause() instanceof SubtypeNotFoundException) {
+            LOG.warn("ignore unknown subtype: {}", (((SubtypeNotFoundException) t.getCause()).getSubtype()));
+            return true;
+        }
+
+        // 4. metadata_journal_ignore_replay_failure = true will skip the failure of ignorable operations.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         short opCode = OperationType.OP_INVALID;
         if (t instanceof JournalException) {
             opCode = ((JournalException) t).getOpCode();
@@ -2467,6 +3447,7 @@ public class GlobalStateMgr {
         };
     }
 
+<<<<<<< HEAD
     public void addFrontend(FrontendNodeType role, String host, int editLogPort) throws DdlException {
         nodeMgr.addFrontend(role, host, editLogPort);
     }
@@ -3191,6 +4172,8 @@ public class GlobalStateMgr {
         return localMetastore.getReplicationNumIncludeRecycleBin(info, partitionId);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public EditLog getEditLog() {
         return editLog;
     }
@@ -3204,6 +4187,7 @@ public class GlobalStateMgr {
         return idGenerator.getNextId();
     }
 
+<<<<<<< HEAD
     public List<String> getDbNames() {
         return localMetastore.listDbNames();
     }
@@ -3234,6 +4218,22 @@ public class GlobalStateMgr {
 
     public MaterializedViewHandler getRollupHandler() {
         return (MaterializedViewHandler) this.alterJobMgr.getMaterializedViewHandler();
+=======
+    public ConsistencyChecker getConsistencyChecker() {
+        return consistencyChecker;
+    }
+
+    public AlterJobMgr getAlterJobMgr() {
+        return alterJobMgr;
+    }
+
+    public SchemaChangeHandler getSchemaChangeHandler() {
+        return this.alterJobMgr.getSchemaChangeHandler();
+    }
+
+    public MaterializedViewHandler getRollupHandler() {
+        return this.alterJobMgr.getMaterializedViewHandler();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public BackupHandler getBackupHandler() {
@@ -3241,11 +4241,19 @@ public class GlobalStateMgr {
     }
 
     public DeleteMgr getDeleteMgr() {
+<<<<<<< HEAD
         return this.deleteMgr;
     }
 
     public Load getLoadInstance() {
         return this.load;
+=======
+        return deleteMgr;
+    }
+
+    public Load getLoadInstance() {
+        return load;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public LoadMgr getLoadMgr() {
@@ -3268,6 +4276,13 @@ public class GlobalStateMgr {
         return streamLoadMgr;
     }
 
+<<<<<<< HEAD
+=======
+    public BatchWriteMgr getBatchWriteMgr() {
+        return batchWriteMgr;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
         return routineLoadTaskScheduler;
     }
@@ -3297,6 +4312,7 @@ public class GlobalStateMgr {
     }
 
     public long getEpoch() {
+<<<<<<< HEAD
         return this.epoch;
     }
 
@@ -3342,12 +4358,34 @@ public class GlobalStateMgr {
 
     public EsRepository getEsRepository() {
         return this.esRepository;
+=======
+        return haProtocol.getLatestEpoch();
+    }
+
+    public FrontendNodeType getFeType() {
+        return feType;
+    }
+
+    public EsRepository getEsRepository() {
+        return esRepository;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
     }
 
+<<<<<<< HEAD
+=======
+    public CheckpointWorker getCheckpointWorker() {
+        return checkpointWorker;
+    }
+
+    public CheckpointController getCheckpointController() {
+        return checkpointController;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setLeader(LeaderInfo info) {
         nodeMgr.setLeader(info);
     }
@@ -3463,6 +4501,7 @@ public class GlobalStateMgr {
         return shortKeyColumnCount;
     }
 
+<<<<<<< HEAD
     /*
      * used for handling AlterTableStmt (for client is the ALTER TABLE command).
      * including SchemaChangeHandler and RollupHandler
@@ -3712,14 +4751,20 @@ public class GlobalStateMgr {
         ctx.setDatabase(dbName);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // for test only
     @VisibleForTesting
     public void clear() {
         localMetastore.clear();
+<<<<<<< HEAD
     }
 
     public void createView(CreateViewStmt stmt) throws DdlException {
         localMetastore.createView(stmt);
+=======
+        temporaryTableMgr.clear();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void triggerNewImage() {
@@ -3748,6 +4793,7 @@ public class GlobalStateMgr {
         return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
     }
 
+<<<<<<< HEAD
     public void replayCreateCluster(Cluster cluster) {
         localMetastore.replayCreateCluster(cluster);
     }
@@ -3772,6 +4818,25 @@ public class GlobalStateMgr {
 
             resultMap.put(fe.getHost(), refreshOtherFesTable(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
                     stmt.getTableName(), stmt.getPartitions()));
+=======
+    public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
+        TableName tableName = stmt.getTableName();
+        List<String> partitionNames = stmt.getPartitions();
+        refreshExternalTable(tableName, partitionNames);
+        refreshOthersFeTable(tableName, partitionNames, true);
+    }
+
+    public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isSync) throws DdlException {
+        List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
+        Map<String, Future<TStatus>> resultMap = Maps.newHashMapWithExpectedSize(allFrontends.size() - 1);
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
+                continue;
+            }
+
+            resultMap.put(fe.getHost(), refreshOtherFesTable(
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         String errMsg = "";
@@ -3789,15 +4854,35 @@ public class GlobalStateMgr {
                 errMsg += "refresh fe " + entry.getKey() + " failed: " + e.getMessage();
             }
         }
+<<<<<<< HEAD
         if (!errMsg.equals("")) {
             ErrorReport.reportDdlException(ErrorCode.ERROR_REFRESH_EXTERNAL_TABLE_FAILED, errMsg);
+=======
+
+        if (!errMsg.equals("")) {
+            if (isSync) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_REFRESH_EXTERNAL_TABLE_FAILED, errMsg);
+            } else {
+                LOG.error("Background refresh others fe failed, {}", errMsg);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, TableName tableName,
                                                 List<String> partitions) {
+<<<<<<< HEAD
         int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
                 + Config.thrift_rpc_timeout_ms;
+=======
+        int timeout;
+        if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable() == null) {
+            timeout = Config.thrift_rpc_timeout_ms * 10;
+        } else {
+            timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
             TRefreshTableRequest request = new TRefreshTableRequest();
             request.setCatalog_name(tableName.getCatalog());
@@ -3805,9 +4890,16 @@ public class GlobalStateMgr {
             request.setTable_name(tableName.getTbl());
             request.setPartitions(partitions);
             try {
+<<<<<<< HEAD
                 TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress,
                         timeout,
                         Config.thrift_rpc_retry_times,
+=======
+                TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        thriftAddress,
+                        timeout,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         client -> client.refreshTable(request));
                 return response.getStatus();
             } catch (Exception e) {
@@ -3823,6 +4915,14 @@ public class GlobalStateMgr {
         return task;
     }
 
+<<<<<<< HEAD
+=======
+    private boolean supportRefreshTableType(Table table) {
+        return table.isHiveTable() || table.isHudiTable() || table.isHiveView() || table.isIcebergTable()
+                || table.isJDBCTable() || table.isDeltalakeTable();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void refreshExternalTable(TableName tableName, List<String> partitions) {
         String catalogName = tableName.getCatalog();
         String dbName = tableName.getDb();
@@ -3833,6 +4933,7 @@ public class GlobalStateMgr {
         }
 
         Table table;
+<<<<<<< HEAD
         db.readLock();
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
@@ -3847,16 +4948,35 @@ public class GlobalStateMgr {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             Preconditions.checkState(table instanceof HiveMetaStoreTable);
             catalogName = ((HiveMetaStoreTable) table).getCatalogName();
+=======
+        table = metadataMgr.getTable(catalogName, dbName, tblName);
+        if (table == null) {
+            throw new StarRocksConnectorException("table %s.%s.%s not exists", catalogName, dbName,
+                    tblName);
+        }
+        if (!supportRefreshTableType(table)) {
+            throw new StarRocksConnectorException("can not refresh external table %s.%s.%s, " +
+                    "do not support refresh external table which type is %s", catalogName, dbName,
+                    tblName, table.getType());
+        }
+
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Preconditions.checkState(table.isHMSTable());
+            catalogName = (table).getCatalogName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
     }
 
+<<<<<<< HEAD
     // TODO [meta-format-change] deprecated
     public void initDefaultCluster() {
         localMetastore.initDefaultCluster();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void initDefaultWarehouse() {
         warehouseMgr.initDefaultWarehouse();
         isDefaultWarehouseCreated = true;
@@ -3871,17 +4991,29 @@ public class GlobalStateMgr {
         String dumpFilePath;
         Map<Long, Database> lockedDbMap = Maps.newTreeMap();
         tryLock(true);
+<<<<<<< HEAD
         try {
             // sort all dbs
             for (long dbId : getDbIds()) {
                 Database db = getDb(dbId);
+=======
+        Locker locker = new Locker();
+        try {
+            // sort all dbs
+            for (long dbId : localMetastore.getDbIds()) {
+                Database db = localMetastore.getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Preconditions.checkNotNull(db);
                 lockedDbMap.put(dbId, db);
             }
 
             // lock all dbs
             for (Database db : lockedDbMap.values()) {
+<<<<<<< HEAD
                 db.readLock();
+=======
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             LOG.info("acquired all the dbs' read lock.");
 
@@ -3890,14 +5022,22 @@ public class GlobalStateMgr {
             dumpFilePath = dumpFile.getAbsolutePath();
             try {
                 LOG.info("begin to dump {}", dumpFilePath);
+<<<<<<< HEAD
                 saveImage(dumpFile, journalId);
+=======
+                saveImage(new ImageWriter(Config.meta_dir, ImageFormatVersion.v2, journalId), dumpFile);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } catch (IOException e) {
                 LOG.error("failed to dump image to {}", dumpFilePath, e);
             }
         } finally {
             // unlock all
             for (Database db : lockedDbMap.values()) {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             unlock();
         }
@@ -3906,6 +5046,7 @@ public class GlobalStateMgr {
         return dumpFilePath;
     }
 
+<<<<<<< HEAD
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
                                                               List<Long> tmpPartitionIds) {
@@ -4109,6 +5250,8 @@ public class GlobalStateMgr {
         localMetastore.onErasePartition(partition);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public long getImageJournalId() {
         return imageJournalId;
     }
@@ -4150,7 +5293,11 @@ public class GlobalStateMgr {
             LOG.warn("backup handler clean old jobs failed", t);
         }
         try {
+<<<<<<< HEAD
             streamLoadMgr.cleanOldStreamLoadTasks();
+=======
+            streamLoadMgr.cleanOldStreamLoadTasks(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } catch (Throwable t) {
             LOG.warn("delete handler remove old delete info failed", t);
         }
@@ -4183,10 +5330,13 @@ public class GlobalStateMgr {
         return execution;
     }
 
+<<<<<<< HEAD
     public MetaContext getMetaContext() {
         return metaContext;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void createBuiltinStorageVolume() {
         try {
             String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
@@ -4207,8 +5357,17 @@ public class GlobalStateMgr {
         return slotManager;
     }
 
+<<<<<<< HEAD
     public SlotProvider getSlotProvider() {
         return slotProvider;
+=======
+    public GlobalSlotProvider getGlobalSlotProvider() {
+        return globalSlotProvider;
+    }
+
+    public SlotProvider getLocalSlotProvider() {
+        return localSlotProvider;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public GlobalLoadJobListenerBus getOperationListenerBus() {
@@ -4219,6 +5378,13 @@ public class GlobalStateMgr {
         return resourceUsageMonitor;
     }
 
+<<<<<<< HEAD
+=======
+    public DictionaryMgr getDictionaryMgr() {
+        return dictionaryMgr;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isInTransferringToLeader() {
         return isInTransferringToLeader;
     }
@@ -4230,4 +5396,11 @@ public class GlobalStateMgr {
     public MetaRecoveryDaemon getMetaRecoveryDaemon() {
         return metaRecoveryDaemon;
     }
+<<<<<<< HEAD
+=======
+
+    public VariableMgr getVariableMgr() {
+        return variableMgr;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

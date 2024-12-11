@@ -50,6 +50,17 @@ You can use the SQL client provided in the Docker environment, or use one on you
 
 `curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
 
+<<<<<<< HEAD
+=======
+### `/etc/hosts`
+
+The ingest method used in this guide is Stream Load. Stream Load connects to the FE service to start the ingest job. The FE then assigns the job to a backend node, the CN in this guide. In order for the ingest job to connect to the CN the name of the CN must be available to your operating system. Add this line to `/etc/hosts`:
+
+```bash
+127.0.0.1 starrocks-cn
+```
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ---
 
 ## Terminology
@@ -72,6 +83,7 @@ This guide does not use BEs, this information is included here so that you under
 
 ---
 
+<<<<<<< HEAD
 ## Launch StarRocks
 
 To run StarRocks with shared-data using Object Storage we need:
@@ -83,10 +95,24 @@ To run StarRocks with shared-data using Object Storage we need:
 This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
 
 In order to provide an environment with the three necessary containers StarRocks provides a Docker compose file. 
+=======
+## Download the lab files
+
+There are three files to download:
+
+- The Docker Compose file that deploys the StarRocks and MinIO environment
+- New York City crash data
+- Weather data
+
+This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
+
+### Create a directory to store the lab files:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```bash
 mkdir quickstart
 cd quickstart
+<<<<<<< HEAD
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/docker-compose.yml
 ```
 
@@ -107,10 +133,35 @@ SERVICE        CREATED          STATUS                    PORTS
 starrocks-cn   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8040->8040/tcp
 starrocks-fe   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8030->8030/tcp, 0.0.0.0:9020->9020/tcp, 0.0.0.0:9030->9030/tcp
 minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->9000-9001/tcp
+=======
+```
+
+### Download the Docker Compose file
+
+```bash
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/docker-compose.yml
+```
+
+### Download the data
+
+Download these two datasets:
+
+#### New York City crash data
+
+```bash
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
+```
+
+#### Weather data
+
+```bash
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ```
 
 ---
 
+<<<<<<< HEAD
 ## Generate MinIO credentials
 
 In order to use MinIO for Object Storage with StarRocks you need to generate an **access key**.
@@ -125,6 +176,50 @@ MinIO will generate a key, click **Create** and download the key.
 
 :::note
 The access key is not saved until you click on **Create**, do not just copy the key and navigate away from the page
+=======
+## Deploy StarRocks and MinIO
+
+```bash
+docker compose up --detach --wait --wait-timeout 120
+```
+
+It should take around 30 seconds for the FE, CN, and MinIO services to become healthy. The `quickstart-minio_mc-1` container will show a status of `Waiting` and also an exit code. An exit code of `0` indicates success.
+
+```bash
+[+] Running 4/5
+ ✔ Network quickstart_default       Created    0.0s
+ ✔ Container minio                  Healthy    6.8s
+ ✔ Container starrocks-fe           Healthy    29.3s
+ ⠼ Container quickstart-minio_mc-1  Waiting    29.3s
+ ✔ Container starrocks-cn           Healthy    29.2s
+container quickstart-minio_mc-1 exited (0)
+```
+
+---
+
+## Examine MinIO credentials
+
+To use MinIO for Object Storage with StarRocks, StarRocks needs a MinIO access key. The access key was generated during the startup of the Docker services. To help you better understand the way that StarRocks connects to MinIO you should verify that the key exists.
+
+### Open the MinIO web UI
+
+Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
+
+![View the MinIO access key](../_assets/quick-start/MinIO-view-key.png)
+
+:::tip
+If there are no access keys showing in the MinIO web UI, check the logs of the `minio_mc` service:
+
+```bash
+docker compose logs minio_mc
+```
+
+Try rerunning the `minio_mc` pod:
+
+```bash
+docker compose run minio_mc
+```
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 :::
 
 ---
@@ -135,6 +230,7 @@ The access key is not saved until you click on **Create**, do not just copy the 
 
 ---
 
+<<<<<<< HEAD
 ## Download the data
 
 Download these two datasets to your FE container.
@@ -170,6 +266,40 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio.
 
+=======
+
+## StarRocks configuration for shared-data
+
+At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio. When StarRocks started up it established the connection with MinIO and created the default storage volume in MinIO.
+
+This is the configuration used to set the default storage volume to use MinIO (this is also in the Docker compose file). The configuration will be described in detail at the end of this guide, for now just note that the `aws_s3_access_key` is set to the string that you saw in the MinIO Console and that the `run_mode` is set to `shared_data`:
+
+```plaintext
+#highlight-start
+# enable shared data, set storage type, set endpoint
+run_mode = shared_data
+#highlight-end
+cloud_native_storage_type = S3
+aws_s3_endpoint = minio:9000
+
+# set the path in MinIO
+aws_s3_path = starrocks
+
+#highlight-start
+# credentials for MinIO object read/write
+aws_s3_access_key = AAAAAAAAAAAAAAAAAAAA
+aws_s3_secret_key = BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+#highlight-end
+aws_s3_use_instance_profile = false
+aws_s3_use_aws_sdk_default_behavior = false
+
+# Set this to false if you do not want default
+# storage created in the object storage using
+# the details provided above
+enable_load_volume_from_conf = true
+```
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ### Connect to StarRocks with a SQL client
 
 :::tip
@@ -184,6 +314,7 @@ docker compose exec starrocks-fe \
 mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
 ```
 
+<<<<<<< HEAD
 ### Create a storage volume
 
 Details for the configuration shown below:
@@ -224,6 +355,25 @@ SET shared AS DEFAULT STORAGE VOLUME;
 
 ```sql
 DESC STORAGE VOLUME shared\G
+=======
+#### Examine the storage volume
+
+```sql
+SHOW STORAGE VOLUMES;
+```
+
+```plaintext
++------------------------+
+| Storage Volume         |
++------------------------+
+| builtin_storage_volume |
++------------------------+
+1 row in set (0.00 sec)
+```
+
+```sql
+DESC STORAGE VOLUME builtin_storage_volume\G
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ```
 
 :::tip
@@ -235,6 +385,7 @@ Many SQL clients do not interpret vertical formatting output, so you should repl
 
 ```plaintext
 *************************** 1. row ***************************
+<<<<<<< HEAD
      Name: shared
      Type: S3
 IsDefault: true
@@ -242,13 +393,29 @@ IsDefault: true
  Location: s3://starrocks/shared/
    Params: {"aws.s3.access_key":"******","aws.s3.secret_key":"******","aws.s3.endpoint":"http://minio:9000","aws.s3.region":"us-east-1","aws.s3.use_instance_profile":"false","aws.s3.use_aws_sdk_default_behavior":"false"}
 # highlight-end
+=======
+     Name: builtin_storage_volume
+     Type: S3
+IsDefault: true
+#highlight-start
+ Location: s3://starrocks
+   Params: {"aws.s3.access_key":"******","aws.s3.secret_key":"******","aws.s3.endpoint":"minio:9000","aws.s3.region":"","aws.s3.use_instance_profile":"false","aws.s3.use_aws_sdk_default_behavior":"false"}
+#highlight-end
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   Enabled: true
   Comment:
 1 row in set (0.03 sec)
 ```
 
+<<<<<<< HEAD
 :::note
 The folder `shared` will not be visible in the MinIO object list until data is written to the bucket.
+=======
+Verify that the parameters match the configuration.
+
+:::note
+The folder `builtin_storage_volume` will not be visible in the MinIO object list until data is written to the bucket.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 :::
 
 ---
@@ -265,7 +432,11 @@ There are many ways to load data into StarRocks. For this tutorial the simplest 
 
 :::tip
 
+<<<<<<< HEAD
 Run these curl commands from the FE shell in the directory where you downloaded the dataset.
+=======
+Run these curl commands from the directory where you downloaded the dataset.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 You will be prompted for a password. You probably have not assigned a password to the MySQL `root` user, so just hit enter.
 
@@ -310,16 +481,24 @@ Enter host password for user 'root':
     "WriteDataTimeMs": 870,
     "CommitAndPublishTimeMs": 57,
     # highlight-start
+<<<<<<< HEAD
     "ErrorURL": "http://10.5.0.3:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f"
+=======
+    "ErrorURL": "http://starrocks-cn:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     # highlight-end
 }%
 ```
 
+<<<<<<< HEAD
 If there was an error the output provides a URL to see the error messages. Because the container has a private IP address you will have to view it by running curl from the container.
 
 ```bash
 curl http://10.5.0.3:8040/api/_load_error_log<details from ErrorURL>
 ```
+=======
+If there was an error the output provides a URL to see the error messages. The error message also contains the backend node that the Stream Load job was assigned to (`starrocks-cn`). Because you added an entry for `starrocks-cn` to the `/etc/hosts` file, you should be able to nvigate to it and read the error message.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Expand the summary for the content seen while developing this tutorial:
 
@@ -383,10 +562,18 @@ The CN configuration used here is the default, as the CN is designed for shared-
 ```bash
 sys_log_level = INFO
 
+<<<<<<< HEAD
+=======
+# ports for admin, web, heartbeat service
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 be_port = 9060
 be_http_port = 8040
 heartbeat_service_port = 9050
 brpc_port = 8060
+<<<<<<< HEAD
+=======
+starlet_port = 9070
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ```
 
 ### FE configuration
@@ -395,6 +582,7 @@ The FE configuration is slightly different from the default as the FE must be co
 
 The `docker-compose.yml` file generates the FE configuration in the `command`.
 
+<<<<<<< HEAD
 ```yml
     command: >
       bash -c "echo run_mode=shared_data >> /opt/starrocks/fe/conf/fe.conf &&
@@ -437,6 +625,31 @@ aws_s3_use_aws_sdk_default_behavior=false
 
 :::note
 This config file contains the default entries and the additions for shared-data. The entries for shared-data are highlighted.
+=======
+```plaintext
+# enable shared data, set storage type, set endpoint
+run_mode = shared_data
+cloud_native_storage_type = S3
+aws_s3_endpoint = minio:9000
+
+# set the path in MinIO
+aws_s3_path = starrocks
+
+# credentials for MinIO object read/write
+aws_s3_access_key = AAAAAAAAAAAAAAAAAAAA
+aws_s3_secret_key = BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+aws_s3_use_instance_profile = false
+aws_s3_use_aws_sdk_default_behavior = false
+
+# Set this to false if you do not want default
+# storage created in the object storage using
+# the details provided above
+enable_load_volume_from_conf = true
+```
+
+:::note
+This config file does not contain the default entries for an FE, only the shared-data configuration is shown.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 :::
 
 The non-default FE configuration settings:
@@ -449,26 +662,67 @@ Many configuration parameters are prefixed with `s3_`. This prefix is used for a
 
 This enables shared-data use.
 
+<<<<<<< HEAD
 #### `aws_s3_path=starrocks`
 
 The bucket name.
+=======
+#### `cloud_native_storage_type=S3`
+
+This specifies whether S3 compatible storage or Azure Blob Storage is used. For MinIO this is always S3.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #### `aws_s3_endpoint=minio:9000`
 
 The MinIO endpoint, including port number.
 
+<<<<<<< HEAD
+=======
+#### `aws_s3_path=starrocks`
+
+The bucket name.
+
+#### `aws_s3_access_key=AA`
+
+The MinIO access key.
+
+#### `aws_s3_secret_key=BB`
+
+The MinIO access key secret.
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #### `aws_s3_use_instance_profile=false`
 
 When using MinIO an access key is used, and so instance profiles are not used with MinIO.
 
+<<<<<<< HEAD
 #### `cloud_native_storage_type=S3`
 
 This specifies whether S3 compatible storage or Azure Blob Storage is used. For MinIO this is always S3.
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #### `aws_s3_use_aws_sdk_default_behavior=false`
 
 When using MinIO this parameter is always set to false.
 
+<<<<<<< HEAD
+=======
+#### `enable_load_volume_from_conf=true`
+
+When this is true, a StarRocks storage volume named `builtin_storage_volume` is created using MinIO object storage, and it is set to be the default storage volume for the tables that you create.
+
+### Configuring FQDN mode
+
+The command to start the FE is also changed. The FE service command in the Docker Compose file has the option `--host_type FQDN` added. By setting `host_type` to `FQDN` the Stream Load job is forwarded to the fully qualified domain name of the CN pod, rather than the IP address. This is done because the IP address is in a range assigned to the Docker environment, and is not typically available from the host machine.
+
+These three changes allow the CN to be forwarded to from the host network:
+
+- setting `--host_type` to `FQDN`
+- exposing the CN port 8040 to the host network
+- adding an entry to the hosts file for `starrocks-cn` pointing to `127.0.0.1`
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ---
 
 ## Summary

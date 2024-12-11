@@ -43,7 +43,14 @@ public class ColumnType {
         DATETIME_MICROS,
         // INT64 timestamp type, TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS)
         DATETIME_MILLIS,
+<<<<<<< HEAD
         DECIMAL,
+=======
+        DECIMALV2,
+        DECIMAL32,
+        DECIMAL64,
+        DECIMAL128,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ARRAY,
         MAP,
         STRUCT,
@@ -56,14 +63,31 @@ public class ColumnType {
     List<ColumnType> childTypes;
     List<Integer> fieldIndex;
     String rawTypeValue;
+<<<<<<< HEAD
     private static final Map<String, TypeValue> PRIMITIVE_TYPE_VALUE_MAPPING = new HashMap<>();
     private static final Map<TypeValue, Integer> PRIMITIVE_TYPE_VALUE_SIZE = new HashMap<>();
     private static final Map<TypeValue, String> PRIMITIVE_TYPE_VALUE_STRING_MAPPING = new HashMap<>();
     
+=======
+
+    int precision = -1;
+    int scale = -1;
+    private static final Map<String, TypeValue> PRIMITIVE_TYPE_VALUE_MAPPING = new HashMap<>();
+    private static final Map<TypeValue, Integer> PRIMITIVE_TYPE_VALUE_SIZE = new HashMap<>();
+    private static final Map<TypeValue, String> PRIMITIVE_TYPE_VALUE_STRING_MAPPING = new HashMap<>();
+
+    private static final int MAX_DECIMAL32_PRECISION = 9;
+    private static final int MAX_DECIMAL64_PRECISION = 18;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("byte", TypeValue.BYTE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("boolean", TypeValue.BOOLEAN);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("short", TypeValue.SHORT);
+<<<<<<< HEAD
+=======
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("smallint", TypeValue.SHORT);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         PRIMITIVE_TYPE_VALUE_MAPPING.put("int", TypeValue.INT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("float", TypeValue.FLOAT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("bigint", TypeValue.LONG);
@@ -74,7 +98,14 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-micros", TypeValue.DATETIME_MICROS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-millis", TypeValue.DATETIME_MILLIS);
+<<<<<<< HEAD
         PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal", TypeValue.DECIMAL);
+=======
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimalv2", TypeValue.DECIMALV2);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal32", TypeValue.DECIMAL32);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal64", TypeValue.DECIMAL64);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal128", TypeValue.DECIMAL128);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         PRIMITIVE_TYPE_VALUE_MAPPING.put("tinyint", TypeValue.TINYINT);
 
         for (String k : PRIMITIVE_TYPE_VALUE_MAPPING.keySet()) {
@@ -84,6 +115,14 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.MAP, "map");
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.ARRAY, "array");
 
+<<<<<<< HEAD
+=======
+        // varchar and char for hive, must put after PRIMITIVE_TYPE_VALUE_STRING_MAPPING is generated
+        // so it won't trouble hudi reader to map hudi type to hive type
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("varchar", TypeValue.STRING);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("char", TypeValue.STRING);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BOOLEAN, 1);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.SHORT, 2);
@@ -92,6 +131,17 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.LONG, 8);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DOUBLE, 8);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.TINYINT, 1);
+<<<<<<< HEAD
+=======
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMALV2, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL32, 4);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL64, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL128, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATE, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME_MICROS, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME_MILLIS, 16);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -210,12 +260,20 @@ public class ColumnType {
             }
             break;
             default: {
+<<<<<<< HEAD
                 // convert decimal(x,y) to decimal
                 if (t.startsWith("decimal")) {
                     rawTypeValue = t;
                     t = "decimal";
                 }
                 typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
+=======
+                if (t.startsWith("decimal")) {
+                    typeValue = parseDecimal(t);
+                } else {
+                    typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
@@ -240,9 +298,13 @@ public class ColumnType {
     }
 
     public boolean isByteStorageType() {
+<<<<<<< HEAD
         return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE || typeValue == TypeValue.DECIMAL
                 || typeValue == TypeValue.BINARY || typeValue == TypeValue.DATETIME
                 || typeValue == TypeValue.DATETIME_MICROS || typeValue == TypeValue.DATETIME_MILLIS;
+=======
+        return typeValue == TypeValue.STRING || typeValue == TypeValue.BINARY;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public boolean isArray() {
@@ -270,7 +332,13 @@ public class ColumnType {
     }
 
     public boolean isDecimal() {
+<<<<<<< HEAD
         return typeValue == TypeValue.DECIMAL;
+=======
+        return typeValue == TypeValue.DECIMALV2 || typeValue == TypeValue.DECIMAL32 ||
+                typeValue == TypeValue.DECIMAL64 ||
+                typeValue == TypeValue.DECIMAL128;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public int computeColumnSize() {
@@ -296,7 +364,14 @@ public class ColumnType {
             }
             case STRING:
             case BINARY:
+<<<<<<< HEAD
             case DECIMAL:
+=======
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             case DATE:
             case DATETIME:
             case DATETIME_MICROS:
@@ -399,7 +474,45 @@ public class ColumnType {
         }
     }
 
+<<<<<<< HEAD
     public String getRawTypeValue() {
         return rawTypeValue;
     }
+=======
+    public void setScale(int scale) {
+        this.scale = scale;
+    }
+
+    public int getScale() {
+        return scale;
+    }
+
+    public String getRawTypeValue() {
+        return rawTypeValue;
+    }
+
+    // convert decimal(x,y) to decimal
+    private TypeValue parseDecimal(String rawType) {
+        String type = rawType;
+        int precision = -1;
+        int scale = -1;
+        int s = type.indexOf('(');
+        int e = type.indexOf(')');
+        if (s != -1 && e != -1) {
+            String[] ps = type.substring(s + 1, e).split(",");
+            precision = Integer.parseInt(ps[0].trim());
+            scale = Integer.parseInt(ps[1].trim());
+            // this logic is the same as FE's ScalarType.createUnifiedDecimalType
+            if (precision <= MAX_DECIMAL64_PRECISION) {
+                type = "decimal64";
+            } else {
+                type = "decimal128";
+            }
+        }
+        TypeValue value = PRIMITIVE_TYPE_VALUE_MAPPING.get(type);
+        rawTypeValue = rawType;
+        setScale(scale);
+        return value;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

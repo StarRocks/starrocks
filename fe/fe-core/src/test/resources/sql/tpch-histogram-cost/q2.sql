@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_acctbal,
@@ -42,6 +43,8 @@ order by
     n_name,
     s_name,
     p_partkey limit 100;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment statistics]
 PLAN FRAGMENT 0(F10)
 Output Exprs:16: S_ACCTBAL | 12: S_NAME | 26: N_NAME | 1: P_PARTKEY | 3: P_MFGR | 13: S_ADDRESS | 15: S_PHONE | 17: S_COMMENT
@@ -149,6 +152,10 @@ OutPut Exchange Id: 25
 |
 20:SORT
 |  order by: [1, INT, false] ASC
+<<<<<<< HEAD
+=======
+|  analytic partition by: [1: P_PARTKEY, INT, false]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 |  offset: 0
 |  cardinality: 80240
 |  column statistics:
@@ -358,8 +365,13 @@ cardinality: 100300
 column statistics:
 * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
 * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+<<<<<<< HEAD
 * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
 * P_SIZE-->[12.0, 12.0, 0.0, 4.0, 1.0] ESTIMATE
+=======
+* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+* P_SIZE-->[12.0, 12.0, 0.0, 4.0, 1.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 5(F01)
 
@@ -402,8 +414,13 @@ cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (27: N_REGIONKEY)
 column statistics:
+<<<<<<< HEAD
 * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+=======
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 6(F02)
@@ -428,6 +445,11 @@ actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+<<<<<<< HEAD
 * R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 [end]
 
+=======
+* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[EUROPE:1][AFRICA:1][AMERICA:1][ASIA:1][MIDDLE EAST:1]] ESTIMATE
+[end]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

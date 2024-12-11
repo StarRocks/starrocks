@@ -49,6 +49,10 @@ include "MasterService.thrift"
 include "AgentService.thrift"
 include "ResourceUsage.thrift"
 include "MVMaintenance.thrift"
+<<<<<<< HEAD
+=======
+include "DataCache.thrift"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -81,6 +85,10 @@ struct TColumnDesc {
   // Let FE control the type, which makes it easier to modify and display complex types
   26: optional string columnTypeStr
   27: optional string dataType
+<<<<<<< HEAD
+=======
+  28: optional string generatedColumnExprStr
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 // A column definition; used by CREATE TABLE and DESCRIBE <table> statements. A column
@@ -100,6 +108,12 @@ struct TDescribeTableParams {
   4: optional string user_ip    // deprecated
   5: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
   6: optional i64 limit
+<<<<<<< HEAD
+=======
+
+  // If not set, match default_catalog
+  7: optional string catalog_name
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 // Results of a call to describeTable()
@@ -112,12 +126,15 @@ struct TShowVariableRequest {
     2: required Types.TVarType varType
 }
 
+<<<<<<< HEAD
 // Results of a call to describeTable()
 struct TShowVariableResult {
     1: required map<string, string> variables
     2: optional list<TVerboseVariableRecord> verbose_variables
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TVerboseVariableRecord {
     1: optional string variable_name
     2: optional string value
@@ -125,6 +142,15 @@ struct TVerboseVariableRecord {
     4: optional bool is_changed
 }
 
+<<<<<<< HEAD
+=======
+// Results of a call to describeTable()
+struct TShowVariableResult {
+    1: required map<string, string> variables
+    2: optional list<TVerboseVariableRecord> verbose_variables
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // Valid table file formats
 enum TFileFormat {
   PARQUETFILE,
@@ -325,6 +351,12 @@ struct TGetDbsParams {
   2: optional string user   // deprecated
   3: optional string user_ip    // deprecated
   4: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
+<<<<<<< HEAD
+=======
+
+  // If not set, match default_catalog
+  5: optional string catalog_name
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 // getDbNames returns a list of database names
@@ -345,6 +377,13 @@ struct TGetTablesParams {
   5: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
   20: optional Types.TTableType type // getting a certain type of tables
   21: optional i64 limit
+<<<<<<< HEAD
+=======
+
+  // If not set, match default_catalog
+  22: optional string catalog_name
+  23: optional string table_name
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TTableStatus {
@@ -365,8 +404,13 @@ struct TMaterializedViewStatus {
     1: optional string id
     2: optional string database_name
     3: optional string name
+<<<<<<< HEAD
     4: optional string refresh_type 
     5: optional string is_active 
+=======
+    4: optional string refresh_type
+    5: optional string is_active
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     6: optional string last_refresh_start_time
     7: optional string last_refresh_finished_time
     8: optional string last_refresh_duration
@@ -376,7 +420,11 @@ struct TMaterializedViewStatus {
     12: optional string text
     13: optional string rows
 
+<<<<<<< HEAD
     14: optional string partition_type 
+=======
+    14: optional string partition_type
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     15: optional string last_refresh_force_refresh
     16: optional string last_refresh_start_partition
     17: optional string last_refresh_end_partition
@@ -390,6 +438,78 @@ struct TMaterializedViewStatus {
     23: optional string task_id
     24: optional string task_name
     25: optional string inactive_reason
+<<<<<<< HEAD
+=======
+
+    26: optional string extra_message
+    27: optional string query_rewrite_status
+
+    28: optional string creator
+}
+
+struct TListPipesParams {
+    1: optional Types.TUserIdentity user_ident
+}
+
+struct TListPipesInfo {
+    // pipe entity
+    1: optional i64 pipe_id
+    2: optional string pipe_name
+    3: optional string properties
+
+    // schema info
+    10: optional string database_name
+    11: optional string table_name
+
+    // pipe status and statistics
+    20: optional string state
+
+    // pipe statistics
+    30: optional i64 loaded_files
+    31: optional i64 loaded_rows
+    32: optional i64 loaded_bytes
+    33: optional string load_status
+    34: optional string last_error
+    35: optional i64 created_time
+}
+
+struct TListPipesResult {
+    1: optional list<TListPipesInfo> pipes;
+}
+
+struct TListPipeFilesParams {
+    1: optional Types.TUserIdentity user_ident
+}
+
+struct TListPipeFilesInfo {
+    // pipe entity
+    1: optional i64 pipe_id
+    2: optional string pipe_name
+    3: optional string database_name
+
+
+    // file entity
+    10: optional string file_name
+    11: optional string file_version
+    12: optional string state
+    13: optional i64 file_size
+    14: optional i64 file_rows
+    15: optional string last_modified
+
+    // load status
+    20: optional string staged_time
+    21: optional string start_load
+    22: optional string finish_load
+
+    // error information
+    30: optional string first_error_msg
+    31: optional i64 error_count
+    32: optional i64 error_line
+}
+
+struct TListPipeFilesResult {
+    1: optional list<TListPipeFilesInfo> pipe_files
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TListMaterializedViewStatusResult {
@@ -400,6 +520,15 @@ struct TListMaterializedViewStatusResult {
 struct TGetTasksParams {
     1: optional string db
     2: optional Types.TUserIdentity current_user_ident
+<<<<<<< HEAD
+=======
+    // task's name
+    3: optional string task_name
+    // task run's query_id
+    4: optional string query_id
+    // task's state
+    5: optional string state
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TTaskInfo {
@@ -409,6 +538,12 @@ struct TTaskInfo {
     4: optional string database
     5: optional string definition
     6: optional i64 expire_time
+<<<<<<< HEAD
+=======
+    7: optional string properties
+    8: optional string catalog
+    9: optional string creator
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TGetTaskInfoResult {
@@ -430,6 +565,11 @@ struct TTaskRunInfo {
 
     12: optional string extra_message
     13: optional string properties
+<<<<<<< HEAD
+=======
+
+    14: optional string catalog
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TGetTaskRunInfoResult {
@@ -441,10 +581,26 @@ struct TGetLoadsParams {
     2: optional i64 job_id
     3: optional i64 txn_id
     4: optional string label
+<<<<<<< HEAD
 }
 
 struct TGetLoadsResult {
     1: optional list<TLoadInfo> loads
+=======
+    5: optional string load_type
+}
+
+struct TTrackingLoadInfo {
+    1: optional i64 job_id
+    2: optional string label
+    3: optional string db
+    4: optional list<string> urls
+    5: optional string load_type
+}
+
+struct TGetTrackingLoadsResult {
+    1: optional list<TTrackingLoadInfo> trackingLoads;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TLoadInfo {
@@ -472,6 +628,81 @@ struct TLoadInfo {
     22: optional i64 num_unselected_rows
     23: optional i64 num_sink_rows
     24: optional string rejected_record_path
+<<<<<<< HEAD
+=======
+    25: optional string load_id
+    26: optional string profile_id
+    27: optional string table
+    28: optional string user
+    29: optional string load_commit_time
+    30: optional string warehouse
+    31: optional string runtime_details
+    32: optional string properties
+    33: optional i64 num_scan_bytes
+}
+
+struct TGetLoadsResult {
+    1: optional list<TLoadInfo> loads
+}
+
+struct TRoutineLoadJobInfo {
+    1: optional i64 id
+    2: optional string name
+    3: optional string create_time
+    4: optional string pause_time
+    5: optional string end_time
+    6: optional string db_name
+    7: optional string table_name
+    8: optional string state
+    9: optional string data_source_type
+    10: optional i64 current_task_num
+    11: optional string job_properties
+    12: optional string data_source_properties
+    13: optional string custom_properties
+    14: optional string statistic
+    15: optional string progress
+    16: optional string reasons_of_state_changed
+    17: optional string error_log_urls
+    18: optional string tracking_sql
+    19: optional string other_msg
+}
+
+struct TGetRoutineLoadJobsResult {
+    1: optional list<TRoutineLoadJobInfo> loads
+}
+
+struct TStreamLoadInfo {
+    1: string label,
+    2: i64 id,
+    3: string load_id,
+    4: i64 txn_id,
+    5: string db_name,
+    6: string table_name,
+    7: string state,
+    8: string error_msg,
+    9: string tracking_url,
+    10: i64 channel_num,
+    11: i64 prepared_channel_num,
+    12: i64 num_rows_normal,
+    13: i64 num_rows_ab_normal,
+    14: i64 num_rows_unselected,
+    15: i64 num_load_bytes,
+    16: i64 timeout_second,
+    17: string create_time_ms,
+    18: string before_load_time_ms,
+    19: string start_loading_time_ms,
+    20: string start_preparing_time_ms,
+    21: string finish_preparing_time_ms,
+    22: string end_time_ms,
+    23: string channel_state,
+    24: string type
+    25: string tracking_sql,
+
+}
+
+struct TGetStreamLoadsResult {
+    1: optional list<TStreamLoadInfo> loads
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 // getTableNames returns a list of unqualified table names
@@ -499,10 +730,13 @@ enum FrontendServiceVersion {
   V1
 }
 
+<<<<<<< HEAD
 struct TBatchReportExecStatusParams {
   1: required list<TReportExecStatusParams> params_list
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // The results of an INSERT query, sent to the coordinator as part of
 // TReportExecStatusParams
 struct TReportExecStatusParams {
@@ -532,7 +766,11 @@ struct TReportExecStatusParams {
 
   // New errors that have not been reported to the coordinator
   // optional in V1
+<<<<<<< HEAD
   9: optional list<string> error_log
+=======
+  9: optional list<string> error_log // Decrepated
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
   // URL of files need to load
   // optional
@@ -568,6 +806,33 @@ struct TReportExecStatusParams {
   25: optional list<Types.TSinkCommitInfo> sink_commit_infos
 
   27: optional string rejected_record_path
+<<<<<<< HEAD
+=======
+
+  28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
+
+  29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
+}
+
+struct TBatchReportExecStatusParams {
+  1: required list<TReportExecStatusParams> params_list
+}
+
+struct TReportFragmentFinishParams {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId fragment_instance_id
+    4: optional i32 backend_num
+}
+
+struct TReportFragmentFinishResponse {
+    1: optional Status.TStatus status
+}
+
+struct TAuditStatisticsItem {
+    1: optional i64 scan_rows
+    2: optional i64 scan_bytes
+    3: optional i64 table_id
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TAuditStatistics {
@@ -586,12 +851,15 @@ struct TReportAuditStatisticsParams {
     3: optional TAuditStatistics audit_statistics
 }
 
+<<<<<<< HEAD
 struct TAuditStatisticsItem {
     1: optional i64 scan_rows
     2: optional i64 scan_bytes
     3: optional i64 table_id
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TFeResult {
     1: required FrontendServiceVersion protocolVersion
     2: required Status.TStatus status
@@ -630,6 +898,13 @@ struct TMasterOpRequest {
     32: optional string modified_variables_sql
     33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
+<<<<<<< HEAD
+=======
+    35: optional string session_id
+    36: optional i32 connectionId
+
+    101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TColumnDefinition {
@@ -690,6 +965,13 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
+<<<<<<< HEAD
+=======
+
+    // begin from 101, in case of conflict with other's change
+    101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
+    102: optional i64 backend_id
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TLoadTxnBeginResult {
@@ -755,6 +1037,14 @@ struct TStreamLoadPutRequest {
     // only valid when file type is CSV
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
+<<<<<<< HEAD
+=======
+    56: optional string payload_compression_type
+
+    // begin from 101, in case of conflict with other's change
+    101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
+    102: optional i64 backend_id
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TStreamLoadPutResult {
@@ -763,6 +1053,26 @@ struct TStreamLoadPutResult {
     2: optional InternalService.TExecPlanFragmentParams params
 }
 
+<<<<<<< HEAD
+=======
+struct TMergeCommitRequest {
+    1: optional string db
+    2: optional string tbl
+    3: optional string user
+    4: optional string passwd
+    5: optional string user_ip
+    6: optional i64 backend_id
+    7: optional string backend_host;
+    8: optional map<string, string> params;
+}
+
+struct TMergeCommitResult {
+    1: optional Status.TStatus status;
+    // only valid for success
+    2: optional string label;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TKafkaRLTaskProgress {
     1: required map<i32,i64> partitionCmtOffset
     2: optional map<i32,i64> partitionCmtOffsetTimestamp
@@ -800,6 +1110,12 @@ struct TManualLoadTxnCommitAttachment {
     4: optional i64 receivedBytes
     5: optional i64 loadedBytes
     6: optional i64 unselectedRows
+<<<<<<< HEAD
+=======
+    7: optional i64 planTime
+    8: optional i64 receiveDataTime
+    9: optional i64 beginTxnTime
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TTxnCommitAttachment {
@@ -827,6 +1143,12 @@ struct TLoadTxnCommitRequest {
 
 struct TLoadTxnCommitResult {
     1: required Status.TStatus status
+<<<<<<< HEAD
+=======
+    // If the error code is SR_EAGAIN, the BE will retry
+    // the commit after waiting for retry_interval_ms
+    2: optional i64 retry_interval_ms
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TLoadTxnRollbackRequest {
@@ -1176,6 +1498,10 @@ struct TCreatePartitionRequest {
     3: optional i64 table_id
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
+<<<<<<< HEAD
+=======
+    5: optional bool is_temp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TCreatePartitionResult {
@@ -1185,22 +1511,51 @@ struct TCreatePartitionResult {
     4: optional list<Descriptors.TNodeInfo> nodes
 }
 
+<<<<<<< HEAD
+=======
+struct TImmutablePartitionRequest {
+    1: optional i64 txn_id
+    2: optional i64 db_id
+    3: optional i64 table_id
+    4: optional list<i64> partition_ids
+
+    // begin from 101, in case of conflict with other's change
+    101: optional i64 backend_id
+}
+
+struct TImmutablePartitionResult {
+    1: optional Status.TStatus status
+    2: optional list<Descriptors.TOlapTablePartition> partitions
+    3: optional list<Descriptors.TTabletLocation> tablets
+    4: optional list<Descriptors.TNodeInfo> nodes
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TAuthInfo {
     // If not set, match every database
     1: optional string pattern
     2: optional string user   // deprecated
     3: optional string user_ip    // deprecated
     4: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
+<<<<<<< HEAD
+=======
+
+    // If not set, match default_catalog
+    5: optional string catalog_name
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TGetTablesConfigRequest {
     1: optional TAuthInfo auth_info
 }
 
+<<<<<<< HEAD
 struct TGetTablesConfigResponse {
     1: optional list<TTableConfigInfo> tables_config_infos
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TTableConfigInfo {
     1: optional string table_schema
     2: optional string table_name
@@ -1216,12 +1571,21 @@ struct TTableConfigInfo {
     12: optional i64 table_id
 }
 
+<<<<<<< HEAD
 struct TGetPartitionsMetaRequest {
     1: optional TAuthInfo auth_info
 }
 
 struct TGetPartitionsMetaResponse {
     1: optional list<TPartitionMetaInfo> partitions_meta_infos
+=======
+struct TGetTablesConfigResponse {
+    1: optional list<TTableConfigInfo> tables_config_infos
+}
+
+struct TGetPartitionsMetaRequest {
+    1: optional TAuthInfo auth_info
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TPartitionMetaInfo {
@@ -1250,6 +1614,16 @@ struct TPartitionMetaInfo {
     23: optional double p50_cs
     24: optional double max_cs
     25: optional string storage_path
+<<<<<<< HEAD
+=======
+    26: optional i64 data_version
+    27: optional i64 version_epoch
+    28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
+}
+
+struct TGetPartitionsMetaResponse {
+    1: optional list<TPartitionMetaInfo> partitions_meta_infos
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TGetTablesInfoRequest {
@@ -1257,10 +1631,52 @@ struct TGetTablesInfoRequest {
     2: optional string table_name;
 }
 
+<<<<<<< HEAD
+=======
+struct TTableInfo {
+    1: optional string table_catalog
+    2: optional string table_schema
+    3: optional string table_name
+    4: optional string table_type
+    5: optional string engine
+    6: optional i64 version
+    7: optional string row_format
+    8: optional i64 table_rows
+    9: optional i64 avg_row_length
+    10: optional i64 data_length
+    11: optional i64 max_data_length
+    12: optional i64 index_length
+    13: optional i64 data_free
+    14: optional i64 auto_increment
+    15: optional i64 create_time
+    16: optional i64 update_time
+    17: optional i64 check_time
+    18: optional string table_collation
+    19: optional i64 checksum
+    20: optional string create_options
+    21: optional string table_comment
+    22: optional string session_id
+    23: optional i64 table_id
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TGetTablesInfoResponse {
     1: optional list<TTableInfo> tables_infos
 }
 
+<<<<<<< HEAD
+=======
+struct TGetTemporaryTablesInfoRequest {
+    1: optional TAuthInfo auth_info
+    // only for no predicate and limit parameter is set
+    2: optional i64 limit
+}
+
+struct TGetTemporaryTablesInfoResponse {
+    1: optional list<TTableInfo> tables_infos
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TTabletSchedule {
     1: optional i64 table_id
     2: optional i64 partition_id
@@ -1302,6 +1718,7 @@ struct TUpdateResourceUsageResponse {
     1: optional Status.TStatus status
 }
 
+<<<<<<< HEAD
 struct TGetWarehousesRequest {
 }
 
@@ -1318,6 +1735,32 @@ struct TWarehouseInfo {
 struct TGetWarehousesResponse {
     1: optional Status.TStatus status
     2: optional list<TWarehouseInfo> warehouse_infos;
+=======
+struct TGetQueryStatisticsRequest {
+}
+
+struct TQueryStatisticsInfo {
+    1: optional i64 queryStartTime
+    2: optional string feIp
+    3: optional string queryId
+    4: optional string connId
+    5: optional string db
+    6: optional string user
+    7: optional i64 cpuCostNs
+    8: optional i64 scanBytes
+    9: optional i64 scanRows
+    10: optional i64 memUsageBytes
+    11: optional i64 spillBytes
+    12: optional i64 execTime
+    13: optional string wareHouseName
+    14: optional string customQueryId
+    15: optional string resourceGroupName
+}
+
+struct TGetQueryStatisticsResponse {
+    1: optional Status.TStatus status
+    2: optional list<TQueryStatisticsInfo> queryStatistics_infos;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TResourceLogicalSlot {
@@ -1338,7 +1781,11 @@ struct TRequireSlotRequest {
 }
 
 struct TRequireSlotResponse {
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TFinishSlotRequirementRequest {
@@ -1360,6 +1807,7 @@ struct TReleaseSlotResponse {
     1: optional Status.TStatus status
 }
 
+<<<<<<< HEAD
 struct TTableInfo {
     1: optional string table_catalog
     2: optional string table_schema
@@ -1382,6 +1830,24 @@ struct TTableInfo {
     19: optional i64 checksum
     20: optional string create_options
     21: optional string table_comment
+=======
+struct TGetWarehousesRequest {
+}
+
+struct TWarehouseInfo {
+    1: optional string warehouse
+    2: optional i64 id
+    3: optional i64 num_unfinished_query_jobs
+    4: optional i64 num_unfinished_load_jobs
+    5: optional i64 num_unfinished_backup_jobs
+    6: optional i64 num_unfinished_restore_jobs
+    7: optional i64 last_finished_job_timestamp_ms
+}
+
+struct TGetWarehousesResponse {
+    1: optional Status.TStatus status
+    2: optional list<TWarehouseInfo> warehouse_infos;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TAllocateAutoIncrementIdParam {
@@ -1450,11 +1916,14 @@ struct TFeLocksRes {
     1: optional list<TFeLocksItem> items
 }
 
+<<<<<<< HEAD
 enum TGrantsToType {
     ROLE,
     USER,
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TFeMemoryItem {
     1: optional string module_name
     2: optional string class_name
@@ -1471,6 +1940,14 @@ struct TFeMemoryRes {
     1: optional list<TFeMemoryItem> items
 }
 
+<<<<<<< HEAD
+=======
+enum TGrantsToType {
+    ROLE,
+    USER,
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TGetGrantsToRolesOrUserRequest {
     1: optional TGrantsToType type;
 }
@@ -1498,6 +1975,21 @@ struct TGetProfileResponse {
     2: optional list<string> query_result
 }
 
+<<<<<<< HEAD
+=======
+struct TGetDictQueryParamRequest {
+    1: optional string db_name
+    2: optional string table_name
+}
+
+struct TGetDictQueryParamResponse {
+  1: required Descriptors.TOlapTableSchemaParam schema
+  2: required Descriptors.TOlapTablePartitionParam partition
+  3: required Descriptors.TOlapTableLocationParam location
+  4: required Descriptors.TNodesInfo nodes_info
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct TReplicaReplicationInfo {
     1: optional Types.TBackend src_backend
 }
@@ -1518,6 +2010,10 @@ struct TPartitionReplicationInfo {
     1: optional i64 partition_id
     2: optional i64 src_version
     3: optional map<i64, TIndexReplicationInfo> index_replication_infos
+<<<<<<< HEAD
+=======
+    4: optional i64 src_version_epoch
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TTableReplicationRequest {
@@ -1536,6 +2032,63 @@ struct TTableReplicationResponse {
     1: optional Status.TStatus status
 }
 
+<<<<<<< HEAD
+=======
+struct TReportLakeCompactionRequest {
+    1: optional i64 txn_id
+}
+
+struct TReportLakeCompactionResponse {
+    1: optional bool valid
+}
+
+struct TListSessionsOptions {
+    1: optional bool temporary_table_only;
+}
+
+struct TListSessionsRequest {
+    1: optional TListSessionsOptions options;
+}
+
+struct TSessionInfo {
+    1: optional string session_id;
+}
+
+struct TListSessionsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TSessionInfo> sessions;
+}
+
+struct TGetKeysRequest {
+}
+
+struct TGetKeysResponse {
+    1: optional list<binary> key_metas;
+}
+
+struct TStartCheckpointRequest {
+    1: optional i64 epoch;
+    2: optional i64 journal_id;
+    3: optional bool is_global_state_mgr;
+}
+
+struct TStartCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
+struct TFinishCheckpointRequest {
+    1: optional i64 journal_id;
+    2: optional string node_name;
+    3: optional bool is_success;
+    4: optional string message;
+    5: optional bool is_global_state_mgr;
+}
+
+struct TFinishCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1548,7 +2101,17 @@ service FrontendService {
     TGetDBPrivsResult getDBPrivs(1:TGetDBPrivsParams params)
     TGetTablePrivsResult getTablePrivs(1:TGetTablePrivsParams params)
 
+<<<<<<< HEAD
     TGetLoadsResult getLoads(1:TGetLoadsParams params)
+=======
+    TGetKeysResponse getKeys(1:TGetKeysRequest params);
+
+    TGetLoadsResult getLoads(1:TGetLoadsParams params)
+    TGetTrackingLoadsResult getTrackingLoads(1:TGetLoadsParams params)
+    TGetRoutineLoadJobsResult getRoutineLoadJobs(1:TGetLoadsParams params)
+    TGetStreamLoadsResult getStreamLoads(1:TGetLoadsParams params)
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TGetProfileResponse getQueryProfile(1:TGetProfileRequest request)
 
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
@@ -1571,6 +2134,11 @@ service FrontendService {
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
+<<<<<<< HEAD
+=======
+    TListPipesResult listPipes(1: TListPipesParams params)
+    TListPipeFilesResult listPipeFiles(1: TListPipeFilesParams params)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     TGetTaskInfoResult getTasks(1:TGetTasksParams params)
     TGetTaskRunInfoResult getTaskRuns(1:TGetTasksParams params)
@@ -1584,6 +2152,11 @@ service FrontendService {
 
     TStreamLoadPutResult streamLoadPut(1: TStreamLoadPutRequest request)
 
+<<<<<<< HEAD
+=======
+    TMergeCommitResult requestMergeCommit(1: TMergeCommitRequest request)
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status.TStatus snapshotLoaderReport(1: TSnapshotLoaderReportRequest request)
 
     TRefreshTableResponse refreshTable(1:TRefreshTableRequest request)
@@ -1596,11 +2169,21 @@ service FrontendService {
 
     TSetConfigResponse setConfig(1: TSetConfigRequest request)
     TCreatePartitionResult createPartition(1: TCreatePartitionRequest request)
+<<<<<<< HEAD
+=======
+    TImmutablePartitionResult updateImmutablePartition(1: TImmutablePartitionRequest request)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
 
     TGetWarehousesResponse getWarehouses(1: TGetWarehousesRequest request)
+<<<<<<< HEAD
     
+=======
+
+    TGetQueryStatisticsResponse getQueryStatistics(1: TGetQueryStatisticsRequest request)
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // For Materialized View
     MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)
 
@@ -1610,8 +2193,11 @@ service FrontendService {
 
     TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
     TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
+<<<<<<< HEAD
     
     TGetLoadTxnStatusResult getLoadTxnStatus(1: TGetLoadTxnStatusRequest request)
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // sys.object_dependencies
     TObjectDependencyRes listObjectDependencies(1: TObjectDependencyReq request)
@@ -1626,8 +2212,29 @@ service FrontendService {
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)
     TReleaseSlotResponse releaseSlot(1: TReleaseSlotRequest request)
 
+<<<<<<< HEAD
     TTableReplicationResponse startTableReplication(1: TTableReplicationRequest request)
 
     TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
+=======
+    TGetLoadTxnStatusResult getLoadTxnStatus(1: TGetLoadTxnStatusRequest request)
+
+    TGetDictQueryParamResponse getDictQueryParam(1: TGetDictQueryParamRequest request)
+
+    TTableReplicationResponse startTableReplication(1: TTableReplicationRequest request)
+
+    TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
+
+    TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
+
+    TListSessionsResponse listSessions(1: TListSessionsRequest request)
+    TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
+
+    TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
+
+    TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
+
+    TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 

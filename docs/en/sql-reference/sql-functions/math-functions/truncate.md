@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # truncate
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Rounds the input down to the nearest equal or smaller value with the specified number of places after the decimal point.
 

@@ -16,7 +16,10 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.util.PrintableMap;
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfigurationConstants;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -103,6 +106,7 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         }
         return sb.toString();
     }
+<<<<<<< HEAD
 
     @Override
     public boolean needAuditEncryption() {
@@ -114,4 +118,6 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         }
         return false;
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

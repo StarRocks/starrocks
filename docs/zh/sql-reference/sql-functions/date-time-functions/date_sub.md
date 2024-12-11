@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_sub,subdate
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 从日期中减去指定的时间间隔。
 

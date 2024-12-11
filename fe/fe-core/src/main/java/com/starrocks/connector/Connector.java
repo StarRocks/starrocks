@@ -14,9 +14,22 @@
 
 package com.starrocks.connector;
 
+<<<<<<< HEAD
 import com.starrocks.connector.config.ConnectorConfig;
 
 public interface Connector {
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.connector.config.ConnectorConfig;
+import com.starrocks.memory.MemoryTrackable;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public interface Connector extends MemoryTrackable {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Get the connector meta of connector
      *
@@ -39,4 +52,19 @@ public interface Connector {
      */
     default void bindConfig(ConnectorConfig config) {
     }
+<<<<<<< HEAD
+=======
+
+    default boolean supportMemoryTrack() {
+        return false;
+    }
+
+    default Map<String, Long> estimateCount() {
+        return new HashMap<>();
+    }
+
+    default List<Pair<List<Object>, Long>> getSamples() {
+        return new ArrayList<>();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

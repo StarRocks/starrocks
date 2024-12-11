@@ -14,9 +14,20 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <functional>
 #include <memory>
 
+=======
+#include <stddef.h>
+#include <stdint.h>
+
+#include <functional>
+#include <memory>
+#include <vector>
+
+#include "column/vectorized_fwd.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/status.h"
 #include "gen_cpp/parquet_types.h"
 #include "utils.h"
@@ -56,8 +67,12 @@ public:
 
     virtual Status get_dict_values(Column* column) { return Status::NotSupported("get_dict_values is not supported"); }
 
+<<<<<<< HEAD
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                                    Column* column) {
+=======
+    virtual Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::NotSupported("get_dict_values is not supported");
     }
 

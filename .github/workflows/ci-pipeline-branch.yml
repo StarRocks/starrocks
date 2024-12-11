@@ -43,6 +43,15 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-blacklist.sh
 
+<<<<<<< HEAD
+=======
+      - name: Check Feature Issue
+        id: check_issue
+        run: |
+          cd ci-tool
+          python3 scripts/get_pr_issue.py check_issue ${GITHUB_REPOSITORY} ${PR_NUMBER}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   be-checker:
     runs-on: ubuntu-latest
     needs: basic-checker
@@ -155,6 +164,10 @@ jobs:
           path: image_cache.info
           retention-days: 1
           overwrite: true
+<<<<<<< HEAD
+=======
+          if-no-files-found: ignore
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
       - name: Clean ENV
         if: always()
@@ -375,14 +388,22 @@ jobs:
           distribution: 'adopt'
 
       - name: Cache SonarCloud packages
+<<<<<<< HEAD
         uses: actions/cache@v3
+=======
+        uses: actions/cache@v4
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         with:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
       - name: Cache Maven packages
+<<<<<<< HEAD
         uses: actions/cache@v3
+=======
+        uses: actions/cache@v4
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         with:
           path: ~/.m2
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -500,4 +521,8 @@ jobs:
 
       - name: Clean
         run: |
+<<<<<<< HEAD
           rm -rf ${{ github.workspace }}/*
+=======
+          rm -rf ${{ github.workspace }}/*
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

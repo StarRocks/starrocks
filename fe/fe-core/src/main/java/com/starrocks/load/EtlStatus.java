@@ -45,6 +45,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.LoadConstants;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
@@ -579,6 +583,20 @@ public class EtlStatus implements Writable {
             return gson.toJson(details);
         }
 
+<<<<<<< HEAD
+=======
+        public synchronized Map<String, Object> toRuntimeDetails() {
+            TreeMap<String, Object> details = Maps.newTreeMap();
+
+            details.put(LoadConstants.RUNTIME_DETAILS_FILE_SIZE, totalFileSizeB);
+            details.put(LoadConstants.RUNTIME_DETAILS_TASK_NUM, counterTbl.rowMap().size());
+            details.put(LoadConstants.RUNTIME_DETAILS_UNFINISHED_BACKENDS, unfinishedBackendIds);
+            details.put(LoadConstants.RUNTIME_DETAILS_BACKENDS, allBackendIds);
+
+            return details;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public String toJson() throws IOException {
             return GsonUtils.GSON.toJson(this);
         }

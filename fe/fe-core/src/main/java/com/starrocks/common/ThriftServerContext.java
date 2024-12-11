@@ -50,4 +50,18 @@ public class ThriftServerContext implements ServerContext {
     public TNetworkAddress getClient() {
         return client;
     }
+<<<<<<< HEAD
+=======
+
+
+    @Override
+    public <T> T unwrap(Class<T> aClass) {
+        throw new UnsupportedOperationException("Unimplemented method 'unwrap'");
+    }
+
+    @Override
+    public boolean isWrapperFor(Class<?> aClass) {
+        return false;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

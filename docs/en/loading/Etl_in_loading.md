@@ -74,7 +74,11 @@ If you choose [Routine Load](./RoutineLoad.md), make sure that topics are create
 
    > **NOTE**
    >
+<<<<<<< HEAD
    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/data_distribution/Data_distribution.md#determine-the-number-of-buckets).
+=======
+   > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
    a. Create a table named `table1`, which consists of three columns: `event_date`, `event_type`, and `user_id`.
 

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_name,
@@ -38,6 +39,8 @@ group by
 order by
     numwait desc,
     s_name limit 100;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment statistics]
 PLAN FRAGMENT 0(F16)
 Output Exprs:2: s_name | 71: count
@@ -108,7 +111,11 @@ OutPut Exchange Id: 28
 |  other join predicates: [39: l_suppkey, INT, true] != [10: l_suppkey, INT, true]
 |  build runtime filters:
 |  - filter_id = 4, build_expr = (8: l_orderkey), remote = true
+<<<<<<< HEAD
 |  output columns: 2, 10, 39
+=======
+|  output columns: 2
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 |  cardinality: 1600098
 |  column statistics:
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
@@ -148,7 +155,11 @@ OutPut Exchange Id: 24
 |  other join predicates: [56: l_suppkey, INT, true] != [10: l_suppkey, INT, true]
 |  build runtime filters:
 |  - filter_id = 3, build_expr = (8: l_orderkey), remote = true
+<<<<<<< HEAD
 |  output columns: 2, 8, 10, 56
+=======
+|  output columns: 2, 8, 10
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 |  cardinality: 1600099
 |  column statistics:
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
@@ -245,7 +256,11 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 20: l_receiptdate > 19: l_commitdate
 partitions=1/1
 avgRowSize=20.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 300018951
 probe runtime filters:
 - filter_id = 1, probe_expr = (10: l_suppkey)
@@ -292,7 +307,11 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 1: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (4: s_nationkey)
@@ -317,10 +336,17 @@ OutPut Exchange Id: 13
 11:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 34: n_name = 'CANADA'
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 72: n_name <= 'CANADA', 73: n_name >= 'CANADA'
 partitions=1/1
 avgRowSize=29.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 34: n_name <= 'CANADA', 34: n_name >= 'CANADA'
+partitions=1/1
+avgRowSize=29.0
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 1
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
@@ -342,10 +368,17 @@ OutPut Exchange Id: 07
 5:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 26: o_orderstatus = 'F'
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 74: o_orderstatus <= 'F', 75: o_orderstatus >= 'F'
 partitions=1/1
 avgRowSize=9.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 26: o_orderstatus <= 'F', 26: o_orderstatus >= 'F'
+partitions=1/1
+avgRowSize=9.0
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 50000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (24: o_orderkey)
@@ -373,7 +406,11 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 66: l_receiptdate > 65: l_commitdate
 partitions=1/1
 avgRowSize=20.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 300018951
 probe runtime filters:
 - filter_id = 3, probe_expr = (54: l_orderkey)
@@ -394,7 +431,11 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 37: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 4, probe_expr = (37: l_orderkey)

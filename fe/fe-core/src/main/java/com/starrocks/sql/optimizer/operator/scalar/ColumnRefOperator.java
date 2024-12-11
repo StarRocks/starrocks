@@ -15,7 +15,11 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.common.util.StringUtils;
+=======
+import com.starrocks.common.util.SRStringUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
@@ -93,7 +97,11 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefSet getUsedColumns() {
+<<<<<<< HEAD
         if (getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
+=======
+        if (OperatorType.LAMBDA_ARGUMENT.equals(getOpType())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return new ColumnRefSet();
         }
         return new ColumnRefSet(id);
@@ -101,6 +109,12 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     @Override
     public void getColumnRefs(List<ColumnRefOperator> columns) {
+<<<<<<< HEAD
+=======
+        if (OperatorType.LAMBDA_ARGUMENT.equals(getOpType())) {
+            return;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         columns.add(this);
     }
 
@@ -172,7 +186,11 @@ public final class ColumnRefOperator extends ScalarOperator {
         }
 
         ColumnRefOperator rightColumn = (ColumnRefOperator) obj;
+<<<<<<< HEAD
         return StringUtils.areColumnNamesEqual(this.getName(), rightColumn.getName())
+=======
+        return SRStringUtils.areColumnNamesEqual(this.getName(), rightColumn.getName())
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 && this.getType().equals(rightColumn.getType())
                 && this.isNullable() == rightColumn.isNullable();
     }

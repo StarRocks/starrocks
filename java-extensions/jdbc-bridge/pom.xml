@@ -12,17 +12,34 @@
     <artifactId>jdbc-bridge</artifactId>
 
     <properties>
+<<<<<<< HEAD
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         <java-extensions.home>${basedir}/../</java-extensions.home>
     </properties>
 
     <dependencies>
         <dependency>
+<<<<<<< HEAD
+=======
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+        </dependency>
+
+        <dependency>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
             <version>${hikaricp.version}</version>
         </dependency>
+<<<<<<< HEAD
         <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
@@ -35,12 +52,22 @@
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
             <version>${log4j.version}</version>
+=======
+
+        <!-- https://mvnrepository.com/artifact/org.lz4/lz4-java -->
+        <!-- we need lz4 because clickhouse return data compressed in lz4. -->
+        <dependency>
+            <groupId>org.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+            <version>1.8.0</version>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         </dependency>
     </dependencies>
 
     <build>
         <finalName>starrocks-jdbc-bridge</finalName>
         <plugins>
+<<<<<<< HEAD
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -50,6 +77,8 @@
                     <target>${java.version}</target>
                 </configuration>
             </plugin>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             <!-- copy all dependency libs to target lib dir -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -75,13 +104,19 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>3.1.1</version>
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 <configuration>
                     <descriptorRefs>
                         <descriptorRef>jar-with-dependencies</descriptorRef>
                     </descriptorRefs>
                 </configuration>
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 <executions>
                     <execution>
                         <id>make-assembly</id>
@@ -94,5 +129,8 @@
             </plugin>
         </plugins>
     </build>
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 </project>

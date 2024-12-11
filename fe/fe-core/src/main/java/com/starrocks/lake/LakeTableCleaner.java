@@ -15,6 +15,7 @@
 package com.starrocks.lake;
 
 import com.staros.client.StarClientException;
+<<<<<<< HEAD
 import com.staros.proto.StatusCode;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -33,6 +34,19 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+=======
+import com.staros.proto.ShardInfo;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.Warehouse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.HashSet;
+import java.util.Set;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 class LakeTableCleaner {
     private static final Logger LOG = LogManager.getLogger(LakeTableCleaner.class);
@@ -47,6 +61,7 @@ class LakeTableCleaner {
     // Delete all data on remote storage. Successful deletion is *NOT* guaranteed.
     // If failed, manual removal of directories may be required by user.
     public boolean cleanTable() {
+<<<<<<< HEAD
         Map<String, LakeTablet> storagePathToTablet = findUniquePartitionDirectories();
         if (storagePathToTablet == null) {
             return false;
@@ -125,5 +140,27 @@ class LakeTableCleaner {
             LOG.warn("Fail to remove {} on node {}: {}", path, node.getHost(), e.getMessage());
             return false;
         }
+=======
+        boolean allRemoved = true;
+        Set<String> removedPaths = new HashSet<>();
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            try {
+                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                Warehouse warehouse = manager.getBackgroundWarehouse();
+                ShardInfo shardInfo = LakeTableHelper.getAssociatedShardInfo(partition, warehouse.getId()).orElse(null);
+                if (shardInfo == null || removedPaths.contains(shardInfo.getFilePath().getFullPath())) {
+                    continue;
+                }
+                removedPaths.add(shardInfo.getFilePath().getFullPath());
+                if (!LakeTableHelper.removeShardRootDirectory(shardInfo)) {
+                    allRemoved = false;
+                }
+            } catch (StarClientException e) {
+                LOG.warn("Fail to get shard info of partition {}: {}", partition.getId(), e.getMessage());
+                allRemoved = false;
+            }
+        }
+        return allRemoved;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

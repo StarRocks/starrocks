@@ -100,7 +100,11 @@ class RandomPartitioner final : public Partitioner {
 public:
     RandomPartitioner(LocalExchangeSourceOperatorFactory* source) : Partitioner(source) {}
 
+<<<<<<< HEAD
     virtual ~RandomPartitioner() override = default;
+=======
+    ~RandomPartitioner() override = default;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Status shuffle_channel_ids(const ChunkPtr& chunk, int32_t num_partitions) override;
 };
@@ -115,7 +119,11 @@ public:
 
     virtual ~LocalExchanger() = default;
 
+<<<<<<< HEAD
     enum class PassThroughType { CHUNK = 0, RANDOM = 1, ADPATIVE = 2 };
+=======
+    enum class PassThroughType { CHUNK = 0, RANDOM = 1, ADPATIVE = 2, SCALE = 3 };
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     virtual Status prepare(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
@@ -125,7 +133,11 @@ public:
     virtual void finish(RuntimeState* state) {
         if (decr_sinker() == 1) {
             for (auto* source : _source->get_sources()) {
+<<<<<<< HEAD
                 source->set_finishing(state);
+=======
+                static_cast<void>(source->set_finishing(state));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
@@ -143,7 +155,11 @@ public:
     void epoch_finish(RuntimeState* state) {
         if (incr_epoch_finished_sinker() == _sink_number) {
             for (auto* source : _source->get_sources()) {
+<<<<<<< HEAD
                 source->set_epoch_finishing(state);
+=======
+                static_cast<void>(source->set_epoch_finishing(state));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             // reset the number to be reused in the next epoch.
             _epoch_finished_sinker = 0;
@@ -228,20 +244,32 @@ private:
 // For external table sinks, the chunk received by operators after exchange need to ensure that
 // the values of the partition columns are the same.
 class KeyPartitionExchanger final : public LocalExchanger {
+<<<<<<< HEAD
     using RowIndexPtr = std::shared_ptr<std::vector<uint32_t>>;
     using Partition2RowIndexes = std::map<PartitionKeyPtr, RowIndexPtr, PartitionKeyComparator>;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public:
     KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                           LocalExchangeSourceOperatorFactory* source, std::vector<ExprContext*> _partition_expr_ctxs,
                           size_t num_sinks);
 
+<<<<<<< HEAD
+=======
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 
 private:
     LocalExchangeSourceOperatorFactory* _source;
     const std::vector<ExprContext*> _partition_expr_ctxs;
+<<<<<<< HEAD
     std::vector<Columns> _channel_partitions_columns;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 // Exchange the local data for broadcast
@@ -271,6 +299,26 @@ private:
     std::atomic<size_t> _next_accept_source = 0;
 };
 
+<<<<<<< HEAD
+=======
+// Scale local source for connector sink
+class ConnectorSinkPassthroughExchanger final : public LocalExchanger {
+public:
+    ConnectorSinkPassthroughExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
+                                      LocalExchangeSourceOperatorFactory* source)
+            : LocalExchanger("ConnectorSinkPassthrough", memory_manager, source) {}
+
+    ~ConnectorSinkPassthroughExchanger() override = default;
+
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+
+private:
+    std::atomic<size_t> _next_accept_source = 0;
+    std::atomic<size_t> _writer_count = 1;
+    std::atomic<size_t> _data_processed = 0;
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // Random shuffle for each chunk of source.
 class RandomPassthroughExchanger final : public LocalExchanger {
 public:

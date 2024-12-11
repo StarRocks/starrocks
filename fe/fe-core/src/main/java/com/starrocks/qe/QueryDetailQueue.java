@@ -49,7 +49,11 @@ import java.util.concurrent.atomic.AtomicLong;
 // Queue of QueryDetail.
 // It's used to collect queries for monitor.
 public class QueryDetailQueue {
+<<<<<<< HEAD
     private static final ConcurrentLinkedDeque<QueryDetail> TOTAL_QUERIES = new ConcurrentLinkedDeque<>();
+=======
+    public static final ConcurrentLinkedDeque<QueryDetail> TOTAL_QUERIES = new ConcurrentLinkedDeque<>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static final ScheduledExecutorService SCHEDULED = Executors.newSingleThreadScheduledExecutor();
 
     private static final AtomicLong LATEST_MS = new AtomicLong();

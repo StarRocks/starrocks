@@ -16,9 +16,15 @@ package com.starrocks.planner;
 
 import com.starrocks.sql.plan.TPCDSPlanTestBase;
 import com.starrocks.sql.plan.TPCDSTestUtil;
+<<<<<<< HEAD
 import org.junit.Ignore;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
+=======
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Test;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.jupiter.api.TestMethodOrder;
 
 @TestMethodOrder(MethodOrderer.MethodName.class)
@@ -26,13 +32,20 @@ public class MaterializedViewTPCDSTest extends MaterializedViewTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
+<<<<<<< HEAD
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TPCDSTestUtil.prepareTables(starRocksAssert);
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
     }
 
+<<<<<<< HEAD
     @Ignore
+=======
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testQuery87() {
         String mv = "SELECT\n" +
                 "  _ta0000.d_month_seq\n" +

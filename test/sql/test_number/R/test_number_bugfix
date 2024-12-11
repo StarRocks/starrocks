@@ -126,7 +126,10 @@ CREATE TABLE `test_decimal_type6` (
              DISTRIBUTED BY HASH(`dec_1_2`) BUCKETS 10
              PROPERTIES (
              "replication_num" = "1",
+<<<<<<< HEAD
              "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
              "enable_persistent_index" = "false"
              );
 -- result:
@@ -146,4 +149,8 @@ select dec_18_0 + dec_18_2 from test_decimal_type6 order by 1;
 -- !result
 drop database test_number_bf8e9ab6_6183_11ed_b695_00163e0b9de0;
 -- result:
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

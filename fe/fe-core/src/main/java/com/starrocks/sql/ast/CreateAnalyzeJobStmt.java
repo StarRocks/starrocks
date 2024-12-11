@@ -16,22 +16,45 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
+=======
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Type;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.StatsConstants;
 
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 
 public class CreateAnalyzeJobStmt extends DdlStmt {
     private long dbId;
     private long tableId;
     private final TableName tbl;
     private final List<String> columnNames;
+=======
+import java.util.stream.Collectors;
+
+public class CreateAnalyzeJobStmt extends DdlStmt {
+    private String catalogName;
+    private long dbId;
+    private long tableId;
+    private final TableName tbl;
+    private final StatsConstants.AnalyzeType analyzeType;
+    private final AnalyzeTypeDesc analyzeTypeDesc;
+
+    private List<Expr> columns;
+    private List<String> columnNames = Lists.newArrayList();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final boolean isSample;
     private Map<String, String> properties;
 
     public CreateAnalyzeJobStmt(boolean isSample, Map<String, String> properties, NodePosition pos) {
+<<<<<<< HEAD
         this(null, Lists.newArrayList(), isSample, properties, pos);
     }
 
@@ -48,6 +71,33 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         this.columnNames = columnNames;
         this.isSample = isSample;
         this.properties = properties;
+=======
+        this(null, Lists.newArrayList(), isSample, properties,
+                isSample ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                null,
+                pos);
+    }
+
+    public CreateAnalyzeJobStmt(String db, boolean isSample, Map<String, String> properties, NodePosition pos) {
+        this(new TableName(db, null), Lists.newArrayList(), isSample, properties,
+                isSample ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL, null, pos);
+    }
+
+    public CreateAnalyzeJobStmt(TableName tbl, List<Expr> columns, boolean isSample,
+                                Map<String, String> properties, StatsConstants.AnalyzeType analyzeType,
+                                AnalyzeTypeDesc analyzeTypeDesc,
+                                NodePosition pos) {
+        super(pos);
+        this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        this.tbl = tbl;
+        this.dbId = StatsConstants.DEFAULT_ALL_ID;
+        this.tableId = StatsConstants.DEFAULT_ALL_ID;
+        this.columns = columns;
+        this.isSample = isSample;
+        this.properties = properties;
+        this.analyzeType = analyzeType;
+        this.analyzeTypeDesc = analyzeTypeDesc;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void setDbId(long dbId) {
@@ -74,6 +124,22 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         return columnNames;
     }
 
+<<<<<<< HEAD
+=======
+    public void setColumnNames(List<String> columnNames) {
+        this.columnNames = columnNames;
+    }
+
+    public List<Expr> getColumns() {
+        return columns;
+    }
+
+    public List<Type> getColumnTypes() {
+        return columns.stream().map(Expr::getType).collect(Collectors.toList());
+    }
+
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isSample() {
         return isSample;
     }
@@ -86,6 +152,25 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         this.properties = properties;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isNative() {
+        return this.catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
+    }
+
+    public StatsConstants.AnalyzeType getAnalyzeType() {
+        return analyzeType;
+    }
+
+    public AnalyzeTypeDesc getAnalyzeTypeDesc() {
+        return analyzeTypeDesc;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateAnalyzeJobStatement(this, context);

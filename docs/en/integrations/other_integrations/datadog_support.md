@@ -4,7 +4,11 @@ description: Monitor with Datadog
 sidebar_label: Datadog
 ---
 
+<<<<<<< HEAD
 # Integrate Datadog with StarRocks
+=======
+# Monitor with Datadog
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This topic describes how to integrate your StarRocks cluster with [Datadog](https://www.datadoghq.com/), a monitoring and security platform.
 

@@ -34,6 +34,10 @@ public class ReplayFromDumpForSharedDataTest extends ReplayFromDumpTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+<<<<<<< HEAD
+=======
+        Config.show_execution_groups = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // Should disable Dynamic Partition in replay dump test
         Config.dynamic_partition_enable = false;
         Config.tablet_sched_disable_colocate_overall_balance = true;

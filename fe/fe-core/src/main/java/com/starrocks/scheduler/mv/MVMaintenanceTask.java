@@ -59,7 +59,11 @@ public class MVMaintenanceTask {
     public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, TNetworkAddress beRpcAddr,
                                           List<TExecPlanFragmentParams> fragmentInstances) {
         MVMaintenanceTask task = new MVMaintenanceTask();
+<<<<<<< HEAD
         task.dbName = GlobalStateMgr.getCurrentState().getDb(job.getView().getDbId()).getFullName();
+=======
+        task.dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(job.getView().getDbId()).getFullName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         task.job = job;
         task.beRpcAddr = beRpcAddr;
         task.taskId = taskId;

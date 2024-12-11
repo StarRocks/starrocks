@@ -47,7 +47,11 @@ import java.util.List;
  */
 public class ColocationGroupProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
+<<<<<<< HEAD
             .add("GroupId").add("GroupName").add("TableIds")
+=======
+            .add("GroupId").add("GroupName").add("TableIds").add("TableNames")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .add("BucketsNum").add("ReplicationNum").add("DistCols").add("IsStable").build();
 
     @Override
@@ -72,7 +76,11 @@ public class ColocationGroupProcDir implements ProcDirInterface {
         }
 
         GroupId groupId = new GroupId(dbId, grpId);
+<<<<<<< HEAD
         ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
+=======
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<Long>> beSeqs = index.getBackendsPerBucketSeq(groupId);
         return new ColocationGroupBackendSeqsProcNode(beSeqs);
     }
@@ -82,7 +90,11 @@ public class ColocationGroupProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
+<<<<<<< HEAD
         ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
+=======
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> infos = index.getInfos();
         result.setRows(infos);
         return result;

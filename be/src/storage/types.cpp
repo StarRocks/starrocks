@@ -37,7 +37,10 @@
 #include "gutil/strings/numbers.h"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/mem_pool.h"
 #include "runtime/time_types.h"
 #include "storage/collection.h"
@@ -50,6 +53,10 @@
 #include "storage/type_traits.h"
 #include "types/array_type_info.h"
 #include "types/date_value.hpp"
+<<<<<<< HEAD
+=======
+#include "types/large_int_value.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "types/map_type_info.h"
 #include "types/struct_type_info.h"
 #include "util/hash_util.hpp"
@@ -228,6 +235,12 @@ class ScalarTypeInfoResolver {
     DECLARE_SINGLETON(ScalarTypeInfoResolver);
 
 public:
+<<<<<<< HEAD
+=======
+    ScalarTypeInfoResolver(const ScalarTypeInfoResolver&) = delete;
+    const ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const TypeInfoPtr get_type_info(const LogicalType t) {
         if (this->_mapping.find(t) == this->_mapping.end()) {
             return std::make_shared<ScalarTypeInfo>(*this->_mapping[TYPE_NONE].get());
@@ -250,9 +263,12 @@ private:
 
     // item_type_info -> list_type_info
     std::unordered_map<LogicalType, std::unique_ptr<ScalarTypeInfo>, std::hash<size_t>> _mapping;
+<<<<<<< HEAD
 
     ScalarTypeInfoResolver(const ScalarTypeInfoResolver&) = delete;
     const ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 template <typename TypeInfoImpl>
@@ -359,7 +375,11 @@ struct ScalarTypeInfoImpl<TYPE_BOOLEAN> : public ScalarTypeInfoImplBase<TYPE_BOO
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const bool*>(src));
+<<<<<<< HEAD
         return std::string(buf);
+=======
+        return {buf};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     static void set_to_max(void* buf) { (*(bool*)buf) = true; }
@@ -380,7 +400,11 @@ struct ScalarTypeInfoImpl<TYPE_TINYINT> : public ScalarTypeInfoImplBase<TYPE_TIN
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const int8_t*>(src));
+<<<<<<< HEAD
         return std::string(buf);
+=======
+        return {buf};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
@@ -397,7 +421,11 @@ struct ScalarTypeInfoImpl<TYPE_SMALLINT> : public ScalarTypeInfoImplBase<TYPE_SM
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int16_t>(src));
+<<<<<<< HEAD
         return std::string(buf);
+=======
+        return {buf};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
@@ -413,7 +441,11 @@ struct ScalarTypeInfoImpl<TYPE_INT> : public ScalarTypeInfoImplBase<TYPE_INT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int32_t>(src));
+<<<<<<< HEAD
         return std::string(buf);
+=======
+        return {buf};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
@@ -429,7 +461,11 @@ struct ScalarTypeInfoImpl<TYPE_BIGINT> : public ScalarTypeInfoImplBase<TYPE_BIGI
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%" PRId64, unaligned_load<int64_t>(src));
+<<<<<<< HEAD
         return std::string(buf);
+=======
+        return {buf};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
@@ -515,7 +551,11 @@ struct ScalarTypeInfoImpl<TYPE_LARGEINT> : public ScalarTypeInfoImplBase<TYPE_LA
             }
         }
 
+<<<<<<< HEAD
         return std::string(buf);
+=======
+        return {buf};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // GCC7.3 will generate movaps instruction, which will lead to SEGV when buf is
@@ -561,7 +601,11 @@ struct ScalarTypeInfoImpl<TYPE_FLOAT> : public ScalarTypeInfoImplBase<TYPE_FLOAT
         char buf[1024] = {'\0'};
         int length = FloatToBuffer(unaligned_load<CppType>(src), MAX_FLOAT_STR_LENGTH, buf);
         DCHECK(length >= 0) << "gcvt float failed, float value=" << unaligned_load<CppType>(src);
+<<<<<<< HEAD
         return std::string(buf);
+=======
+        return {buf};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
@@ -586,7 +630,11 @@ struct ScalarTypeInfoImpl<TYPE_DOUBLE> : public ScalarTypeInfoImplBase<TYPE_DOUB
         char buf[1024] = {'\0'};
         int length = DoubleToBuffer(unaligned_load<CppType>(src), MAX_DOUBLE_STR_LENGTH, buf);
         DCHECK(length >= 0) << "gcvt float failed, float value=" << unaligned_load<CppType>(src);
+<<<<<<< HEAD
         return std::string(buf);
+=======
+        return {buf};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
@@ -833,7 +881,11 @@ struct ScalarTypeInfoImpl<TYPE_DATETIME_V1> : public ScalarTypeInfoImplBase<TYPE
 
         char buf[20] = {'\0'};
         strftime(buf, 20, "%Y-%m-%d %H:%M:%S", &time_tm);
+<<<<<<< HEAD
         return std::string(buf);
+=======
+        return {buf};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
@@ -897,9 +949,15 @@ template <>
 struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> {
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
+<<<<<<< HEAD
         if (value_len > OLAP_STRING_MAX_LENGTH) {
             return Status::InvalidArgument(fmt::format("String(length={}) is too long, the max length is: {}",
                                                        value_len, OLAP_STRING_MAX_LENGTH));
+=======
+        if (value_len > get_olap_string_max_length()) {
+            return Status::InvalidArgument(fmt::format("String(length={}) is too long, the max length is: {}",
+                                                       value_len, get_olap_string_max_length()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         auto slice = unaligned_load<Slice>(buf);
@@ -962,11 +1020,19 @@ struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
 
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
+<<<<<<< HEAD
         if (value_len > OLAP_STRING_MAX_LENGTH) {
             LOG(WARNING) << "String(length=" << value_len << ") is too long, the max length is "
                          << OLAP_STRING_MAX_LENGTH;
             return Status::InternalError(fmt::format("String(length={}) is too long, the max length is: {}", value_len,
                                                      OLAP_STRING_MAX_LENGTH));
+=======
+        if (value_len > get_olap_string_max_length()) {
+            LOG(WARNING) << "String(length=" << value_len << ") is too long, the max length is "
+                         << get_olap_string_max_length();
+            return Status::InternalError(fmt::format("String(length={}) is too long, the max length is: {}", value_len,
+                                                     get_olap_string_max_length()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         auto slice = unaligned_load<Slice>(buf);

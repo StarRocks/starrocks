@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # UPDATE
 
+<<<<<<< HEAD
 该语句用于更新一张主键模型表中的数据行。
+=======
+该语句用于更新一张主键表中的数据行。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 2.3 ～ 2.5 版本，StarRocks 提供 UPDATE 语句，并且仅支持单表 UPDATE 且不支持公用表表达式（CTE）。从 3.0 版本开始，StarRocks 丰富了 UPDATE 语法，支持使用多表关联和 CTE。如果需要将待更新的表与数据库中其他表关联，则可以在 FROM 子句或 CTE 中引用其他的表。从 3.1 版本开始，支持列模式的部分更新，适用于涉及少数列但是大量行的场景，加快更新速度。
 
@@ -72,6 +76,10 @@ UPDATE <table_name>
 * `auto`（默认值），表示由系统通过分析更新语句以及其涉及的列，自动判断执行部分更新时使用的模式。如果满足如下标准，则系统自动使用列模式：
   * 更新的列数占所有列数的百分比小于 30%，并且更新的列数少于 4 个。
   * 更新语句中没有使用 WHERE 条件。
+<<<<<<< HEAD
+=======
+  
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   反之，则系统不会使用列模式。
 * `column`，指定使用列模式执行部分更新，比较适用于涉及少数列并且大量行的部分列更新场景。
 

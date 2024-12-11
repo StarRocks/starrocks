@@ -34,12 +34,21 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.HiveTable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+=======
+import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.common.AnalysisException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 
@@ -90,18 +99,35 @@ public abstract class DataSink {
 
     public static boolean canTableSinkUsePipeline(Table table) {
         if (table instanceof OlapTable) {
+<<<<<<< HEAD
             return Config.enable_pipeline_load;
+=======
+            return true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else if (table instanceof MysqlTable) {
             return true;
         } else if (table instanceof IcebergTable) {
             return true;
+<<<<<<< HEAD
+=======
+        } else if (table instanceof HiveTable) {
+            return true;
+        } else if (table instanceof TableFunctionTable) {
+            return true;
+        } else if (table.isBlackHoleTable()) {
+            return true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         return false;
     }
 
     public boolean canUsePipeLine() {
+<<<<<<< HEAD
         return false;
+=======
+        return true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public boolean canUseRuntimeAdaptiveDop() {

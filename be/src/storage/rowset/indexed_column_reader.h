@@ -86,7 +86,11 @@ public:
     Status next_batch(size_t* n, Column* column);
 
 private:
+<<<<<<< HEAD
     IndexedColumnIterator(const IndexedColumnReader* reader, const IndexReadOptions& opts);
+=======
+    IndexedColumnIterator(const IndexedColumnReader* reader, IndexReadOptions opts);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Status _read_data_page(const PagePointer& pp);
 

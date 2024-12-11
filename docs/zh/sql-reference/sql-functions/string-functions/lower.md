@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # lower
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将参数中所有的字符串转换成小写。
 

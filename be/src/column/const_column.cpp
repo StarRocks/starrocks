@@ -27,6 +27,13 @@ ConstColumn::ConstColumn(ColumnPtr data) : ConstColumn(std::move(data), 0) {}
 
 ConstColumn::ConstColumn(ColumnPtr data, size_t size) : _data(std::move(data)), _size(size) {
     DCHECK(!_data->is_constant());
+<<<<<<< HEAD
+=======
+    if (_data->is_nullable() && size > 0 && !_data->is_null(0)) {
+        _data = down_cast<NullableColumn*>(_data.get())->data_column();
+    }
+    DCHECK(_data->is_nullable() ? _size == 0 || _data->is_null(0) : true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_data->size() > 1) {
         _data->resize(1);
     }
@@ -48,7 +55,11 @@ void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index,
     append(src, index, size);
 }
 
+<<<<<<< HEAD
 ColumnPtr ConstColumn::replicate(const std::vector<uint32_t>& offsets) {
+=======
+ColumnPtr ConstColumn::replicate(const Buffer<uint32_t>& offsets) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return ConstColumn::create(this->_data->clone_shared(), offsets.back());
 }
 
@@ -56,8 +67,13 @@ void ConstColumn::fill_default(const Filter& filter) {
     CHECK(false) << "ConstColumn does not support update";
 }
 
+<<<<<<< HEAD
 Status ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {
     return Status::NotSupported("ConstColumn does not support update");
+=======
+void ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    throw std::runtime_error("ConstColumn does not support update_rows");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void ConstColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {

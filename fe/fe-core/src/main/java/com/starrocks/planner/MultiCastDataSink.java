@@ -87,11 +87,14 @@ public class MultiCastDataSink extends DataSink {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return true;
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # find_in_set
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回 strlist 中第一次出现 str 的位置 (从 1 开始计数)。如果没有找到返回 0，任意参数为 NULL 就返回 NULL。
 

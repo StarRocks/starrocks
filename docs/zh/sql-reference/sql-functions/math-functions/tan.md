@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # tan
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算参数 `x` 的正切，`x` 为弧度值。
 

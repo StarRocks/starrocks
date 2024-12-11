@@ -46,7 +46,11 @@ namespace starrocks {
 class TypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
 
+<<<<<<< HEAD
 class BloomFilterOptions;
+=======
+struct BloomFilterOptions;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class WritableFile;
 
 class BloomFilterIndexWriter {

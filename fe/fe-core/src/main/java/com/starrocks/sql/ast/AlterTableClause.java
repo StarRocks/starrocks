@@ -20,6 +20,7 @@ import com.starrocks.sql.parser.NodePosition;
 
 // alter table clause
 public abstract class AlterTableClause extends AlterClause {
+<<<<<<< HEAD
 
     protected AlterTableClause(AlterOpType opType, NodePosition pos) {
         super(opType, pos);
@@ -31,4 +32,9 @@ public abstract class AlterTableClause extends AlterClause {
     public boolean isNeedTableStable() {
         return needTableStable;
     }
+=======
+    protected AlterTableClause(AlterOpType opType, NodePosition pos) {
+        super(opType, pos);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

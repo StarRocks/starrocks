@@ -91,4 +91,12 @@ public abstract class RangerAccessResourceBuilder implements ObjectTypeConverter
         rangerAccessResource.setValue(convertToRangerType(ObjectType.STORAGE_VOLUME), storageVolume);
         return this;
     }
+<<<<<<< HEAD
+=======
+
+    public RangerAccessResourceBuilder setPipe(String pipe) {
+        rangerAccessResource.setValue(convertToRangerType(ObjectType.PIPE), pipe);
+        return this;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

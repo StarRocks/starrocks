@@ -61,7 +61,11 @@ public class GlobalVarPersistInfo implements Writable {
     // the modified variable info will be saved as a json string
     private String persistJsonString;
 
+<<<<<<< HEAD
     private GlobalVarPersistInfo() {
+=======
+    public GlobalVarPersistInfo() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // for persist
     }
 
@@ -70,6 +74,13 @@ public class GlobalVarPersistInfo implements Writable {
         this.varNames = varNames;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPersistJsonString(String persistJsonString) {
+        this.persistJsonString = persistJsonString;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getPersistJsonString() {
         return persistJsonString;
     }

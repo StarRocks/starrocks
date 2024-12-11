@@ -344,7 +344,11 @@ TEST_F(EnvBrokerTest, test_write_file) {
     auto f = *_fs.new_writable_file(path);
     ASSERT_OK(f->append("first line\n"));
     ASSERT_OK(f->append("second line\n"));
+<<<<<<< HEAD
     f->close();
+=======
+    ASSERT_OK(f->close());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string content;
     ASSERT_OK(_fs_mem->read_file(path, &content));
     ASSERT_EQ("first line\nsecond line\n", content);

@@ -36,7 +36,11 @@ public class StorageVolumeAnalyzer {
         new StorageVolumeAnalyzer.StorageVolumeAnalyzerVisitor().visit(stmt, session);
     }
 
+<<<<<<< HEAD
     static class StorageVolumeAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class StorageVolumeAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

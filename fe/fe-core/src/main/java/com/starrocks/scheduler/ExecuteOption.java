@@ -18,18 +18,34 @@ package com.starrocks.scheduler;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.Map;
 
 public class ExecuteOption {
+<<<<<<< HEAD
     @SerializedName("priority")
     private int priority = Constants.TaskRunPriority.LOWEST.value();
     @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;
+=======
+
+    @SerializedName("priority")
+    private int priority = Constants.TaskRunPriority.LOWEST.value();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @SerializedName("taskRunProperties")
     private Map<String, String> taskRunProperties;
 
+<<<<<<< HEAD
+=======
+    @SerializedName("isMergeRedundant")
+    private final boolean isMergeRedundant;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // indicates whether the current execution is manual
     @SerializedName("isManual")
     private boolean isManual = false;
@@ -41,6 +57,7 @@ public class ExecuteOption {
     private boolean isReplay = false;
 
     public ExecuteOption(boolean isMergeRedundant) {
+<<<<<<< HEAD
         this.mergeRedundant = isMergeRedundant;
     }
 
@@ -48,6 +65,18 @@ public class ExecuteOption {
         this.priority = priority;
         this.mergeRedundant = mergeRedundant;
         this.taskRunProperties = taskRunProperties;
+=======
+        this.isMergeRedundant = isMergeRedundant;
+    }
+
+    public ExecuteOption(int priority, boolean isMergeRedundant, Map<String, String> taskRunProperties) {
+        this.priority = priority;
+        this.isMergeRedundant = isMergeRedundant;
+        // clone the taskRunProperties to avoid modifying the original map because `mergeProperties` may change it.
+        if (taskRunProperties != null) {
+            this.taskRunProperties = Maps.newHashMap(taskRunProperties);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static ExecuteOption makeMergeRedundantOption() {
@@ -66,9 +95,15 @@ public class ExecuteOption {
         // If old task run is a sync-mode task, skip to merge it to avoid sync-mode task
         // hanging after removing it.
         if (Config.enable_mv_refresh_sync_refresh_mergeable) {
+<<<<<<< HEAD
             return mergeRedundant;
         } else {
             return !isSync && mergeRedundant;
+=======
+            return isMergeRedundant;
+        } else {
+            return !isSync && isMergeRedundant;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -92,15 +127,58 @@ public class ExecuteOption {
         this.isSync = isSync;
     }
 
+<<<<<<< HEAD
     public void setReplay(boolean isReplay) {
         this.isReplay = isReplay;
+=======
+    public boolean isReplay() {
+        return isReplay;
+    }
+
+    public void setReplay(boolean replay) {
+        isReplay = replay;
+    }
+
+    private boolean containsKey(String key) {
+        return taskRunProperties.containsKey(key) && taskRunProperties.get(key) != null;
+    }
+
+    /**
+     * If the execute option contains the properties that need to be merged into the task run, eg: it's an internal partition
+     * refresh, needs to merge it into the newer task run.
+     * task in mv refresh
+     * @return
+     */
+    public boolean containsToMergeProperties() {
+        if (taskRunProperties == null) {
+            return false;
+        }
+        if (containsKey(TaskRun.PARTITION_START) || containsKey(TaskRun.PARTITION_END)
+                || containsKey(TaskRun.START_TASK_RUN_ID) || containsKey(TaskRun.PARTITION_VALUES)) {
+            return true;
+        }
+        return false;
+    }
+
+    public void mergeProperties(ExecuteOption option) {
+        if (option.taskRunProperties != null) {
+            if (taskRunProperties == null) {
+                taskRunProperties = Maps.newHashMap();
+            }
+            taskRunProperties.putAll(option.taskRunProperties);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         return String.format("ExecuteOption{priority=%s, mergeRedundant=%s, isManual=%s, " +
                         "isSync=%s, taskRunProperties={%s}}",
                 priority, mergeRedundant, isManual, isSync, taskRunProperties
         );
+=======
+        return GsonUtils.GSON.toJson(this);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

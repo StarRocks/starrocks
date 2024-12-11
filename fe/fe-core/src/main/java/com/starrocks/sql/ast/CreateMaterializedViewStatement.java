@@ -16,13 +16,22 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IndexDef;
+=======
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PartitionType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
@@ -49,6 +58,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private final List<IndexDef> indexDefs;
     private boolean ifNotExists;
     private String comment;
+<<<<<<< HEAD
     private RefreshSchemeDesc refreshSchemeDesc;
     private ExpressionPartitionDesc expressionPartitionDesc;
     private Map<String, String> properties;
@@ -59,6 +69,27 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     protected String inlineViewDef;
 
     private String simpleViewDef;
+=======
+    private RefreshSchemeClause refreshSchemeDesc;
+
+    // partition by clause which may be list or range partition expr.
+    private final List<Expr> partitionByExprs;
+    // partition type of the mv which is deduced by its referred base table.
+    private PartitionType partitionType;
+
+    private Map<String, String> properties;
+    private QueryStatement queryStatement;
+    private DistributionDesc distributionDesc;
+    private final int queryStartIndex;
+    private final List<String> sortKeys;
+    private KeysType keysType = KeysType.DUP_KEYS;
+    // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
+    protected String inlineViewDef;
+    // simple view definition of the mv which has been rewritten by AstToSQLBuilder#buildSimple
+    private String simpleViewDef;
+    // original view definition of the mv query without any rewrite which can be used in text based rewrite.
+    private String originalViewDefineSql;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private List<BaseTableInfo> baseTableInfos;
 
     // Maintenance information
@@ -68,9 +99,16 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // Sink table information
     private List<Column> mvColumnItems = Lists.newArrayList();
     private List<Index> mvIndexes = Lists.newArrayList();
+<<<<<<< HEAD
     private Column partitionColumn;
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
+=======
+    // MV's output columns that are referred by mv's partition expressions
+    private List<Column> partitionColumns;
+    // Ref base table partition expression referred by mv's partition by expressions
+    private List<Expr> partitionRefTableExprs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Materialized view's output columns may be different from defined query's output columns.
     // Record the indexes based on materialized view's column output.
@@ -79,16 +117,31 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     //  queryOutputIndexes  :  1, 0, 2
     // which means 0th of query output column is in 1th mv's output columns, and 1th -> 0th, 2th -> 2th.
     private List<Integer> queryOutputIndices = Lists.newArrayList();
+<<<<<<< HEAD
+=======
+    // Generated partition columns for mv's partition by expressions, partition expression index to generated column.
+    private Map<Integer, Column> generatedPartitionCols = Maps.newHashMap();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            List<IndexDef> indexDefs,
                                            String comment,
+<<<<<<< HEAD
                                            RefreshSchemeDesc refreshSchemeDesc,
                                            ExpressionPartitionDesc expressionPartitionDesc,
                                            DistributionDesc distributionDesc, List<String> sortKeys,
                                            Map<String, String> properties,
                                            QueryStatement queryStatement, NodePosition pos) {
+=======
+                                           RefreshSchemeClause refreshSchemeDesc,
+                                           List<Expr> partitionByExprs,
+                                           DistributionDesc distributionDesc, List<String> sortKeys,
+                                           Map<String, String> properties,
+                                           QueryStatement queryStatement,
+                                           int queryStartIndex,
+                                           NodePosition pos) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(pos);
         this.tableName = tableName;
         this.colWithComments = colWithComments;
@@ -96,10 +149,18 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
+<<<<<<< HEAD
         this.expressionPartitionDesc = expressionPartitionDesc;
         this.distributionDesc = distributionDesc;
         this.sortKeys = sortKeys;
         this.properties = properties;
+=======
+        this.partitionByExprs = partitionByExprs;
+        this.distributionDesc = distributionDesc;
+        this.sortKeys = sortKeys;
+        this.properties = properties;
+        this.queryStartIndex = queryStartIndex;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.queryStatement = queryStatement;
     }
 
@@ -135,6 +196,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.comment = comment;
     }
 
+<<<<<<< HEAD
     public RefreshSchemeDesc getRefreshSchemeDesc() {
         return refreshSchemeDesc;
     }
@@ -149,6 +211,33 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setPartitionExpDesc(ExpressionPartitionDesc expressionPartitionDesc) {
         this.expressionPartitionDesc = expressionPartitionDesc;
+=======
+    public RefreshSchemeClause getRefreshSchemeDesc() {
+        return refreshSchemeDesc;
+    }
+
+    public void setRefreshSchemeDesc(RefreshSchemeClause refreshSchemeDesc) {
+        this.refreshSchemeDesc = refreshSchemeDesc;
+    }
+
+    /**
+     * Get partition by expr of the mv
+     */
+    public List<Expr> getPartitionByExprs() {
+        return partitionByExprs;
+    }
+
+    /**
+     * Get partition type of the mv
+     * @return
+     */
+    public PartitionType getPartitionType() {
+        return partitionType;
+    }
+
+    public void setPartitionType(PartitionType partitionType) {
+        this.partitionType = partitionType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void setKeysType(KeysType keysType) {
@@ -195,6 +284,21 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.simpleViewDef = simpleViewDef;
     }
 
+<<<<<<< HEAD
+=======
+    public String getOriginalViewDefineSql() {
+        return originalViewDefineSql;
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        this.originalViewDefineSql = originalViewDefineSql;
+    }
+
+    public int getQueryStartIndex() {
+        return queryStartIndex;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public QueryStatement getQueryStatement() {
         return queryStatement;
     }
@@ -227,6 +331,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.baseTableInfos = baseTableInfos;
     }
 
+<<<<<<< HEAD
     public Column getPartitionColumn() {
         return partitionColumn;
     }
@@ -241,6 +346,22 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setPartitionRefTableExpr(Expr partitionRefTableExpr) {
         this.partitionRefTableExpr = partitionRefTableExpr;
+=======
+    public List<Column> getPartitionColumns() {
+        return partitionColumns;
+    }
+
+    public void setPartitionColumns(List<Column> partitionColumns) {
+        this.partitionColumns = partitionColumns;
+    }
+
+    public List<Expr> getPartitionRefTableExpr() {
+        return partitionRefTableExprs;
+    }
+
+    public void setPartitionRefTableExpr(List<Expr> partitionRefTableExprs) {
+        this.partitionRefTableExprs = partitionRefTableExprs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public ExecPlan getMaintenancePlan() {
@@ -264,6 +385,13 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.columnRefFactory = columnRefFactory;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<Integer, Column> getGeneratedPartitionCols() {
+        return generatedPartitionCols;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateMaterializedViewStatement(this, context);

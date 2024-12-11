@@ -63,7 +63,11 @@ static std::string k_default_storage_root_path = "";
 
 static void set_up(const std::string& sub_path) {
     config::mem_limit = "10g";
+<<<<<<< HEAD
     GlobalEnv::GetInstance()->init();
+=======
+    CHECK(GlobalEnv::GetInstance()->init().ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     k_default_storage_root_path = config::storage_root_path;
     config::storage_root_path = std::filesystem::current_path().string() + "/" + sub_path;
     fs::remove_all(config::storage_root_path);
@@ -357,7 +361,12 @@ TEST_F(TestDeleteConditionHandler, StoreCondSucceed) {
     conditions.push_back(condition);
 
     DeletePredicatePB del_pred;
+<<<<<<< HEAD
     success_res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred);
+=======
+    success_res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                                      &del_pred);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_EQ(true, success_res.ok());
 
     // Verify that the filter criteria stored in the header are correct
@@ -432,8 +441,13 @@ TEST_F(TestDeleteConditionHandler, StoreCondSucceed) {
 TEST_F(TestDeleteConditionHandler, StoreCondInvalidParameters) {
     std::vector<TCondition> conditions;
     DeletePredicatePB del_pred;
+<<<<<<< HEAD
     Status failed_res =
             _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred);
+=======
+    Status failed_res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(),
+                                                                            conditions, &del_pred);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_EQ(true, failed_res.is_invalid_argument());
 }
 
@@ -447,8 +461,13 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
     condition.condition_values.emplace_back("2");
     conditions.push_back(condition);
     DeletePredicatePB del_pred;
+<<<<<<< HEAD
     Status failed_res =
             _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred);
+=======
+    Status failed_res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(),
+                                                                            conditions, &del_pred);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(failed_res.is_invalid_argument());
 
     // 'v' is a value column
@@ -459,7 +478,12 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
     condition.condition_values.emplace_back("5");
     conditions.push_back(condition);
 
+<<<<<<< HEAD
     failed_res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred);
+=======
+    failed_res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                                     &del_pred);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(failed_res.is_invalid_argument());
 
     // value column in duplicate model can be deleted;
@@ -470,8 +494,13 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
     condition.condition_values.emplace_back("5");
     conditions.push_back(condition);
 
+<<<<<<< HEAD
     Status success_res =
             _delete_condition_handler.generate_delete_predicate(dup_tablet->tablet_schema(), conditions, &del_pred);
+=======
+    Status success_res = _delete_condition_handler.generate_delete_predicate(dup_tablet->unsafe_tablet_schema_ref(),
+                                                                             conditions, &del_pred);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_EQ(true, success_res.ok());
 }
 
@@ -543,7 +572,12 @@ TEST_F(TestDeleteConditionHandler2, ValidConditionValue) {
     conditions.push_back(condition);
 
     DeletePredicatePB del_pred;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.ok());
 
     // k5 type is int128
@@ -555,7 +589,12 @@ TEST_F(TestDeleteConditionHandler2, ValidConditionValue) {
     conditions.push_back(condition);
 
     DeletePredicatePB del_pred_2;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_2);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_2);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.ok());
 
     // k9 type is decimal, precision=6, frac=3
@@ -567,25 +606,45 @@ TEST_F(TestDeleteConditionHandler2, ValidConditionValue) {
     conditions.push_back(condition);
 
     DeletePredicatePB del_pred_3;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_3);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_3);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_EQ(true, res.ok());
 
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("2");
     DeletePredicatePB del_pred_4;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_4);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_4);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.ok());
 
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("-2");
     DeletePredicatePB del_pred_5;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_5);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_5);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.ok());
 
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("-2.3");
     DeletePredicatePB del_pred_6;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_6);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_6);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.ok());
 
     // k10,k11 type is date, datetime
@@ -603,7 +662,12 @@ TEST_F(TestDeleteConditionHandler2, ValidConditionValue) {
     conditions.push_back(condition);
 
     DeletePredicatePB del_pred_7;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_7);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_7);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.ok());
 
     // k12,k13 type is string(64), varchar(64)
@@ -621,7 +685,12 @@ TEST_F(TestDeleteConditionHandler2, ValidConditionValue) {
     conditions.push_back(condition);
 
     DeletePredicatePB del_pred_8;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_8);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_8);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.ok());
 }
 
@@ -638,14 +707,24 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     conditions.push_back(condition);
 
     DeletePredicatePB del_pred_1;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_1);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // test k1 min, k1 type is int8
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("-1000");
     DeletePredicatePB del_pred_2;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_2);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_2);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // k2(int16) max value
@@ -653,14 +732,24 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     conditions[0].column_name = "k2";
     conditions[0].condition_values.emplace_back("32768");
     DeletePredicatePB del_pred_3;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_3);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_3);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // k2(int16) min value
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("-32769");
     DeletePredicatePB del_pred_4;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_4);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_4);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // k3(int32) max
@@ -668,14 +757,24 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     conditions[0].column_name = "k3";
     conditions[0].condition_values.emplace_back("2147483648");
     DeletePredicatePB del_pred_5;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_5);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_5);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // k3(int32) min value
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("-2147483649");
     DeletePredicatePB del_pred_6;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_6);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_6);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // k4(int64) max
@@ -683,14 +782,24 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     conditions[0].column_name = "k4";
     conditions[0].condition_values.emplace_back("9223372036854775808");
     DeletePredicatePB del_pred_7;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_7);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_7);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // k4(int64) min
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("-9223372036854775809");
     DeletePredicatePB del_pred_8;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_8);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_8);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // k5(int128) max
@@ -698,14 +807,24 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     conditions[0].column_name = "k5";
     conditions[0].condition_values.emplace_back("170141183460469231731687303715884105728");
     DeletePredicatePB del_pred_9;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_9);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_9);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // k5(int128) min
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("-170141183460469231731687303715884105729");
     DeletePredicatePB del_pred_10;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_10);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_10);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // k9 integer overflow, type is decimal, precision=6, frac=3
@@ -713,21 +832,36 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     conditions[0].column_name = "k9";
     conditions[0].condition_values.emplace_back("12347876.5");
     DeletePredicatePB del_pred_11;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_11);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_11);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // k9 scale overflow, type is decimal, precision=6, frac=3
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("1.2345678");
     DeletePredicatePB del_pred_12;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_12);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_12);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // k9 has point
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("1.");
     DeletePredicatePB del_pred_13;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_13);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_13);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // invalid date
@@ -735,20 +869,35 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     conditions[0].column_name = "k10";
     conditions[0].condition_values.emplace_back("20130101");
     DeletePredicatePB del_pred_14;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_14);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_14);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     conditions[0].condition_values.clear();
 
     conditions[0].condition_values.emplace_back("2013-64-01");
     DeletePredicatePB del_pred_15;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_15);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_15);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("2013-01-40");
     DeletePredicatePB del_pred_16;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_16);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_16);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // invalid datetime
@@ -756,37 +905,67 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     conditions[0].column_name = "k11";
     conditions[0].condition_values.emplace_back("20130101 00:00:00");
     DeletePredicatePB del_pred_17;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_17);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_17);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("2013-64-01 00:00:00");
     DeletePredicatePB del_pred_18;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_18);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_18);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("2013-01-40 00:00:00");
     DeletePredicatePB del_pred_19;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_19);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_19);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("2013-01-01 24:00:00");
     DeletePredicatePB del_pred_20;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_20);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_20);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("2013-01-01 00:60:00");
     DeletePredicatePB del_pred_21;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_21);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_21);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     conditions[0].condition_values.clear();
     conditions[0].condition_values.emplace_back("2013-01-01 00:00:60");
     DeletePredicatePB del_pred_22;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_22);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_22);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     // too long varchar
@@ -797,7 +976,12 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
             "FhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYW"
             "FhYWFhYWFhYWFhYWFhYWFhYWFhYWE=;k13=YWFhYQ==");
     DeletePredicatePB del_pred_23;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_23);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_23);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 
     conditions[0].condition_values.clear();
@@ -807,7 +991,12 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
             "FhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYW"
             "FhYWFhYWFhYWFhYWFhYWFhYWFhYWE=;k13=YWFhYQ==");
     DeletePredicatePB del_pred_24;
+<<<<<<< HEAD
     res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred_24);
+=======
+    res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
+                                                              &del_pred_24);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(res.is_invalid_argument());
 }
 

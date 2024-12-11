@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.connector.hive;
 
@@ -24,10 +25,44 @@ import com.starrocks.connector.PartitionUtil;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+=======
+package com.starrocks.connector.hive;
+
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.ConnectorTableId;
+import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.starrocks.connector.PartitionUtil.executeInNewThread;
+<<<<<<< HEAD
 
 public class HiveMetastoreOperations {
     public static String BACKGROUND_THREAD_NAME_PREFIX = "background-get-partitions-statistics-";
@@ -37,16 +72,222 @@ public class HiveMetastoreOperations {
     public HiveMetastoreOperations(CachingHiveMetastore cachingHiveMetastore, boolean enableCatalogLevelCache) {
         this.metastore = cachingHiveMetastore;
         this.enableCatalogLevelCache = enableCatalogLevelCache;
+=======
+import static com.starrocks.connector.hive.HiveWriteUtils.checkLocationProperties;
+import static com.starrocks.connector.hive.HiveWriteUtils.createDirectory;
+import static com.starrocks.connector.hive.HiveWriteUtils.isDirectory;
+import static com.starrocks.connector.hive.HiveWriteUtils.isEmpty;
+import static com.starrocks.connector.hive.HiveWriteUtils.pathExists;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
+
+public class HiveMetastoreOperations {
+    private static final Logger LOG = LogManager.getLogger(HiveMetastoreOperations.class);
+    public static String BACKGROUND_THREAD_NAME_PREFIX = "background-get-partitions-statistics-";
+    public static final String LOCATION_PROPERTY = "location";
+    public static final String EXTERNAL_LOCATION_PROPERTY = "external_location";
+    public static final String FILE_FORMAT = "file_format";
+    private final CachingHiveMetastore metastore;
+    private final boolean enableCatalogLevelCache;
+    private final Configuration hadoopConf;
+    private final MetastoreType metastoreType;
+    private final String catalogName;
+
+    public HiveMetastoreOperations(CachingHiveMetastore cachingHiveMetastore,
+                                   boolean enableCatalogLevelCache,
+                                   Configuration hadoopConf,
+                                   MetastoreType metastoreType,
+                                   String catalogName) {
+        this.metastore = cachingHiveMetastore;
+        this.enableCatalogLevelCache = enableCatalogLevelCache;
+        this.hadoopConf = hadoopConf;
+        this.metastoreType = metastoreType;
+        this.catalogName = catalogName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public List<String> getAllDatabaseNames() {
         return metastore.getAllDatabaseNames();
     }
 
+<<<<<<< HEAD
+=======
+    public void createDb(String dbName, Map<String, String> properties) {
+        properties = properties == null ? new HashMap<>() : properties;
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
+                try {
+                    URI uri = new Path(value).toUri();
+                    FileSystem fileSystem = FileSystem.get(uri, hadoopConf);
+                    fileSystem.exists(new Path(value));
+                } catch (Exception e) {
+                    LOG.error("Invalid location URI: {}", value, e);
+                    throw new StarRocksConnectorException("Invalid location URI: %s. msg: %s", value, e.getMessage());
+                }
+            } else {
+                throw new IllegalArgumentException("Unrecognized property: " + key);
+            }
+        }
+
+        metastore.createDb(dbName, properties);
+    }
+
+    public void dropDb(String dbName, boolean force) throws MetaNotFoundException {
+        Database database;
+        try {
+            database = getDb(dbName);
+        } catch (Exception e) {
+            LOG.error("Failed to access database {}", dbName, e);
+            throw new MetaNotFoundException("Failed to access database " + dbName);
+        }
+
+        if (database == null) {
+            throw new MetaNotFoundException("Not found database " + dbName);
+        }
+
+        String dbLocation = database.getLocation();
+        if (Strings.isNullOrEmpty(dbLocation)) {
+            throw new MetaNotFoundException("Database location is empty");
+        }
+        boolean deleteData = false;
+        try {
+            deleteData = !FileSystem.get(URI.create(dbLocation), hadoopConf)
+                    .listLocatedStatus(new Path(dbLocation)).hasNext();
+        } catch (Exception e) {
+            LOG.error("Failed to check database directory", e);
+        }
+
+        metastore.dropDb(dbName, deleteData);
+    }
+
+    public Database getDb(String dbName) {
+        return metastore.getDb(dbName);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<String> getAllTableNames(String dbName) {
         return metastore.getAllTableNames(dbName);
     }
 
+<<<<<<< HEAD
+=======
+    public boolean createTable(CreateTableStmt stmt, List<Column> partitionColumns) throws DdlException {
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+        Map<String, String> properties = stmt.getProperties() != null ? stmt.getProperties() : new HashMap<>();
+        Path tablePath = null;
+        boolean tableLocationExists = false;
+        if (!stmt.isExternal()) {
+            checkLocationProperties(properties);
+            if (!Strings.isNullOrEmpty(properties.get(LOCATION_PROPERTY))) {
+                String tableLocationWithUserAssign = properties.get(LOCATION_PROPERTY);
+                tablePath = new Path(tableLocationWithUserAssign);
+                if (pathExists(tablePath, hadoopConf)) {
+                    tableLocationExists = true;
+                    if (!isEmpty(tablePath, hadoopConf)) {
+                        throw new StarRocksConnectorException("not support creating table under non-empty directory: %s",
+                                tableLocationWithUserAssign);
+                    }
+                }
+            } else {
+                tablePath = getDefaultLocation(dbName, tableName);
+            }
+        } else {
+            // checkExternalLocationProperties(properties);
+            if (properties.containsKey(EXTERNAL_LOCATION_PROPERTY)) {
+                tablePath = new Path(properties.get(EXTERNAL_LOCATION_PROPERTY));
+            } else if (properties.containsKey(LOCATION_PROPERTY)) {
+                tablePath = new Path(properties.get(LOCATION_PROPERTY));
+            }
+            tableLocationExists = true;
+        }
+
+        HiveStorageFormat.check(properties);
+
+        List<String> partitionColNames;
+        if (partitionColumns.isEmpty()) {
+            partitionColNames = stmt.getPartitionDesc() != null ?
+                    ((ListPartitionDesc) stmt.getPartitionDesc()).getPartitionColNames() : new ArrayList<>();
+        } else {
+            partitionColNames = partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
+        }
+
+        // default is managed table
+        HiveTable.HiveTableType tableType = HiveTable.HiveTableType.MANAGED_TABLE;
+        if (stmt.isExternal()) {
+            tableType = HiveTable.HiveTableType.EXTERNAL_TABLE;
+        }
+        HiveTable.Builder builder = HiveTable.builder()
+                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setTableName(tableName)
+                .setCatalogName(catalogName)
+                .setResourceName(toResourceName(catalogName, "hive"))
+                .setHiveDbName(dbName)
+                .setHiveTableName(tableName)
+                .setPartitionColumnNames(partitionColNames)
+                .setDataColumnNames(stmt.getColumns().stream()
+                        .map(Column::getName)
+                        .collect(Collectors.toList()).subList(0, stmt.getColumns().size() - partitionColNames.size()))
+                .setFullSchema(stmt.getColumns())
+                .setTableLocation(tablePath == null ? null : tablePath.toString())
+                .setProperties(stmt.getProperties())
+                .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, "parquet")))
+                .setCreateTime(System.currentTimeMillis())
+                .setHiveTableType(tableType);
+        Table table = builder.build();
+        try {
+            if (!tableLocationExists) {
+                createDirectory(tablePath, hadoopConf);
+            }
+            metastore.createTable(dbName, table);
+        } catch (Exception e) {
+            LOG.error("Failed to create table {}.{}", dbName, tableName);
+            boolean shouldDelete;
+            try {
+                if (tableExists(dbName, tableName)) {
+                    LOG.warn("Table {}.{} already exists. But some error occur such as accessing meta service timeout",
+                            dbName, table, e);
+                    return true;
+                }
+                FileSystem fileSystem = FileSystem.get(URI.create(tablePath.toString()), hadoopConf);
+                shouldDelete = !fileSystem.listLocatedStatus(tablePath).hasNext() && !tableLocationExists;
+                if (shouldDelete) {
+                    fileSystem.delete(tablePath);
+                }
+            } catch (Exception e1) {
+                LOG.error("Failed to delete table location {}", tablePath, e);
+            }
+            throw new DdlException(String.format("Failed to create table %s.%s. msg: %s", dbName, tableName, e.getMessage()));
+        }
+
+        return true;
+    }
+
+    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+        return createTable(stmt, ImmutableList.of());
+    }
+
+    public boolean createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        String existedDbName = stmt.getExistedDbName();
+        String existedTableName = stmt.getExistedTableName();
+        Table likeTable = getTable(existedDbName, existedTableName);
+        return createTable(stmt.getCreateTableStmt(), likeTable.getPartitionColumns());
+    }
+
+    public void dropTable(String dbName, String tableName) {
+        metastore.dropTable(dbName, tableName);
+    }
+
+    public Table getTable(String dbName, String tableName) {
+        return metastore.getTable(dbName, tableName);
+    }
+
+    public boolean tableExists(String dbName, String tableName) {
+        return metastore.tableExists(dbName, tableName);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<String> getPartitionKeys(String dbName, String tableName) {
         return metastore.getPartitionKeysByValue(dbName, tableName, HivePartitionValue.ALL_PARTITION_VALUES);
     }
@@ -55,6 +296,7 @@ public class HiveMetastoreOperations {
         return metastore.getPartitionKeysByValue(dbName, tableName, partitionValues);
     }
 
+<<<<<<< HEAD
     public Database getDb(String dbName) {
         return metastore.getDb(dbName);
     }
@@ -63,14 +305,35 @@ public class HiveMetastoreOperations {
         return metastore.getTable(dbName, tableName);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
         return metastore.getPartition(dbName, tableName, partitionValues);
     }
 
+<<<<<<< HEAD
     public Map<String, Partition> getPartitionByPartitionKeys(Table table, List<PartitionKey> partitionKeys) {
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
         List<String> partitionColumnNames = ((HiveMetaStoreTable) table).getPartitionColumnNames();
+=======
+    public void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions) {
+        metastore.addPartitions(dbName, tableName, partitions);
+    }
+
+    public void dropPartition(String dbName, String tableName, List<String> partitionValues, boolean deleteData) {
+        metastore.dropPartition(dbName, tableName, partitionValues, deleteData);
+    }
+
+    public boolean partitionExists(Table table, List<String> partitionValues) {
+        return metastore.partitionExists(table, partitionValues);
+    }
+
+    public Map<String, Partition> getPartitionByPartitionKeys(Table table, List<PartitionKey> partitionKeys) {
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
+        List<String> partitionColumnNames = (table).getPartitionColumnNames();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<String> partitionNames = partitionKeys.stream()
                 .map(partitionKey -> PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey))
                 .collect(Collectors.toList());
@@ -79,8 +342,13 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, Partition> getPartitionByNames(Table table, List<String> partitionNames) {
+<<<<<<< HEAD
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
+=======
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return metastore.getPartitionsByNames(dbName, tblName, partitionNames);
     }
 
@@ -89,9 +357,15 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
+<<<<<<< HEAD
         String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
+=======
+        String catalogName = (table).getCatalogName();
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<HivePartitionName> hivePartitionNames = partitionNames.stream()
                 .map(partitionName -> HivePartitionName.of(dbName, tblName, partitionName))
                 .peek(hivePartitionName -> checkState(hivePartitionName.getPartitionNames().isPresent(),
@@ -118,4 +392,50 @@ public class HiveMetastoreOperations {
     public void invalidateAll() {
         metastore.invalidateAll();
     }
+<<<<<<< HEAD
+=======
+
+    public void updateTableStatistics(String dbName, String tableName, Function<HivePartitionStats, HivePartitionStats> update) {
+        metastore.updateTableStatistics(dbName, tableName, update);
+    }
+
+    public void updatePartitionStatistics(String dbName, String tableName, String partitionName,
+                                          Function<HivePartitionStats, HivePartitionStats> update) {
+        metastore.updatePartitionStatistics(dbName, tableName, partitionName, update);
+    }
+
+    public Path getDefaultLocation(String dbName, String tableName) {
+        Database database = getDb(dbName);
+
+        if (database == null) {
+            throw new StarRocksConnectorException("Database '%s' not found", dbName);
+        }
+        if (Strings.isNullOrEmpty(database.getLocation())) {
+            throw new StarRocksConnectorException("Failed to find location in database '%s'. Please define the location" +
+                    " when you create table or recreate another database with location." +
+                    " You could execute the SQL command like 'CREATE TABLE <table_name> <columns> " +
+                    "PROPERTIES('location' = '<location>')", dbName);
+        }
+
+        String dbLocation = database.getLocation();
+        Path databasePath = new Path(dbLocation);
+
+        if (!pathExists(databasePath, hadoopConf)) {
+            throw new StarRocksConnectorException("Database '%s' location does not exist: %s", dbName, databasePath);
+        }
+
+        if (!isDirectory(databasePath, hadoopConf)) {
+            throw new StarRocksConnectorException("Database '%s' location is not a directory: %s",
+                    dbName, databasePath);
+        }
+
+        Path targetPath = new Path(databasePath, tableName);
+        if (pathExists(targetPath, hadoopConf)) {
+            throw new StarRocksConnectorException("Target directory for table '%s.%s' already exists: %s",
+                    dbName, tableName, targetPath);
+        }
+
+        return targetPath;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

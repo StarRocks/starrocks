@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # element_at
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the value for the specified key from a key-value pair of a map. If any input parameter is NULL or if the key does not exist in the map, the result is NULL.
 

@@ -77,7 +77,10 @@ public class DeleteStmt extends DmlStmt {
         this.usingRelations = usingRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
+<<<<<<< HEAD
         this.deleteConditions = Lists.newLinkedList();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public long getJobId() {

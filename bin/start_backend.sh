@@ -80,6 +80,11 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+<<<<<<< HEAD
+=======
+# JEMALLOC enable DEBUG 
+# export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 # Set JEMALLOC_CONF environment variable if not already set
 if [[ -z "$JEMALLOC_CONF" ]]; then
     if [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
@@ -107,7 +112,12 @@ if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
 fi
 
 if [ "$JAVA_HOME" = "" ]; then
+<<<<<<< HEAD
     export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jvm/$jvm_arch/server:$STARROCKS_HOME/lib/jvm/$jvm_arch:$LD_LIBRARY_PATH
+=======
+    echo "[WARNING] JAVA_HOME env not set. Functions or features that requires jni will not work at all."
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 else
     java_version=$(jdk_version)
     if [[ $java_version -gt 8 ]]; then
@@ -156,7 +166,10 @@ export CLASSPATH=${STARROCKS_HOME}/lib/jni-packages/starrocks-hadoop-ext.jar:$ST
 
 # ================= native section =====================
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+<<<<<<< HEAD
 export_cachelib_lib_path
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 
 # ====== handle meta_tool sub command before any modification change
@@ -174,10 +187,13 @@ if [ ! -d $UDF_RUNTIME_DIR ]; then
     mkdir -p ${UDF_RUNTIME_DIR}
 fi
 
+<<<<<<< HEAD
 if [ ! -z ${UDF_RUNTIME_DIR} ]; then
     rm -f ${UDF_RUNTIME_DIR}/*
 fi
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 if [ ${RUN_BE} -eq 1 ]; then
     pidfile=$PID_DIR/be.pid
 fi

@@ -66,10 +66,13 @@ public class CreateResourceStmt extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateResourceStatement(this, context);
     }
+<<<<<<< HEAD
 
     @Override
     public boolean needAuditEncryption() {
         return true;
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 

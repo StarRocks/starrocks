@@ -18,12 +18,22 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.connector.Connector;
+=======
+import com.starrocks.connector.CatalogConnector;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
@@ -50,11 +60,22 @@ public class IcebergTableSink extends DataSink {
     private final String fileFormat;
     private final String location;
     private final String compressionType;
+<<<<<<< HEAD
     private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
     private final CloudConfiguration cloudConfiguration;
 
     public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink) {
+=======
+    private final long targetMaxFileSize;
+    private final boolean isStaticPartitionSink;
+    private final String tableIdentifier;
+    private final CloudConfiguration cloudConfiguration;
+    private String targetBranch;
+
+    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink,
+                            SessionVariable sessionVariable, String targetBranch) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
         this.location = nativeTable.location();
@@ -63,6 +84,7 @@ public class IcebergTableSink extends DataSink {
         this.isStaticPartitionSink = isStaticPartitionSink;
         this.fileFormat = nativeTable.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .toLowerCase();
+<<<<<<< HEAD
         switch (fileFormat) {
             case "parquet":
                 compressionType = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION, PARQUET_COMPRESSION_DEFAULT)
@@ -77,6 +99,14 @@ public class IcebergTableSink extends DataSink {
         }
         String catalogName = icebergTable.getCatalogName();
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+=======
+        this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
+        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
+        this.targetBranch = targetBranch;
+
+        String catalogName = icebergTable.getCatalogName();
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalogName));
 
@@ -93,8 +123,13 @@ public class IcebergTableSink extends DataSink {
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));
     }
 
+<<<<<<< HEAD
     public static boolean isUnSupportedPartitionColumnType(Type type) {
         return type.isFloat() || type.isDecimalOfAnyVersion() || type.isDatetime();
+=======
+    public String getTargetBranch() {
+        return targetBranch;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -117,6 +152,10 @@ public class IcebergTableSink extends DataSink {
         tIcebergTableSink.setIs_static_partition_sink(isStaticPartitionSink);
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         tIcebergTableSink.setCompression_type(compression);
+<<<<<<< HEAD
+=======
+        tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
         tIcebergTableSink.setCloud_configuration(tCloudConfiguration);
@@ -136,11 +175,14 @@ public class IcebergTableSink extends DataSink {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return true;
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }

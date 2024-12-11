@@ -41,6 +41,10 @@
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
+<<<<<<< HEAD
+=======
+#include "storage/index/inverted/inverted_writer.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
@@ -56,6 +60,11 @@ class WritableFile;
 
 class Column;
 
+<<<<<<< HEAD
+=======
+static const size_t dictionary_min_rowcount = 256;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct ColumnWriterOptions {
     // input and output parameter:
     // - input: column_id/unique_id/type/length/encoding/compression/is_nullable members
@@ -69,6 +78,14 @@ struct ColumnWriterOptions {
     bool need_zone_map = false;
     bool need_bitmap_index = false;
     bool need_bloom_filter = false;
+<<<<<<< HEAD
+=======
+    bool need_vector_index = false;
+    bool need_inverted_index = false;
+    std::unordered_map<IndexType, std::string> standalone_index_file_paths;
+    std::unordered_map<IndexType, TabletIndex> tablet_index;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // for char/varchar will speculate encoding in append
     // for others will decide encoding in init method
     bool need_speculate_encoding = false;
@@ -76,6 +93,14 @@ struct ColumnWriterOptions {
     // when column data is encoding by dict
     // if global_dict is not nullptr, will checkout whether global_dict can cover all data
     GlobalDictMap* global_dict = nullptr;
+<<<<<<< HEAD
+=======
+
+    bool need_flat = false;
+    bool is_compaction = false;
+
+    std::string field_name;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class BitmapIndexWriter;
@@ -119,6 +144,13 @@ public:
 
     virtual Status write_bloom_filter_index() = 0;
 
+<<<<<<< HEAD
+=======
+    virtual Status write_inverted_index() { return Status::OK(); }
+
+    virtual Status write_vector_index(uint64_t* index_size) { return Status::OK(); }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     virtual ordinal_t get_next_rowid() const = 0;
 
     // only invalid in the case of global_dict is not nullptr
@@ -172,6 +204,11 @@ public:
     Status write_zone_map() override;
     Status write_bitmap_index() override;
     Status write_bloom_filter_index() override;
+<<<<<<< HEAD
+=======
+    Status write_inverted_index() override;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ordinal_t get_next_rowid() const override { return _next_rowid; }
 
     bool is_global_dict_valid() override { return _is_global_dict_valid; }
@@ -243,8 +280,16 @@ private:
     std::unique_ptr<ZoneMapIndexWriter> _zone_map_index_builder;
     std::unique_ptr<BitmapIndexWriter> _bitmap_index_builder;
     std::unique_ptr<BloomFilterIndexWriter> _bloom_filter_index_builder;
+<<<<<<< HEAD
     // _zone_map_index_builder != NULL || _bitmap_index_builder != NULL || _bloom_filter_index_builder != NULL
     bool _has_index_builder = false;
+=======
+    std::unique_ptr<InvertedWriter> _inverted_index_builder;
+
+    // _zone_map_index_builder != NULL || _bitmap_index_builder != NULL || _bloom_filter_index_builder != NULL
+    bool _has_index_builder = false;
+    bool _has_inverted_builder = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t _element_ordinal = 0;
     int64_t _previous_ordinal = 0;
 

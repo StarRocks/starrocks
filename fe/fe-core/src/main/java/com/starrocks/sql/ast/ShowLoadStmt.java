@@ -16,14 +16,20 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.analysis.Analyzer;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.proc.LoadProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.loadv2.JobState;
@@ -149,10 +155,13 @@ public class ShowLoadStmt extends ShowStmt {
     }
 
     @Override
+<<<<<<< HEAD
     public void analyze(Analyzer analyzer) throws UserException {
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowLoadStatement(this, context);
     }

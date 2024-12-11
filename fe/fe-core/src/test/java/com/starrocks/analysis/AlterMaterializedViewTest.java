@@ -20,7 +20,10 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.DdlException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVActiveChecker;
@@ -28,10 +31,16 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.groovy.util.Maps;
+=======
+import com.starrocks.sql.ast.RefreshSchemeClause;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -53,6 +62,10 @@ public class AlterMaterializedViewTest {
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         connectContext = AnalyzeTestUtil.getConnectContext();
+<<<<<<< HEAD
+=======
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
         currentState = GlobalStateMgr.getCurrentState();
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1\n" +
@@ -96,7 +109,12 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 refresh sync";
         AlterMaterializedViewStmt alterMvStmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+<<<<<<< HEAD
         Assert.assertEquals(alterMvStmt.getRefreshSchemeDesc().getType(), MaterializedView.RefreshType.SYNC);
+=======
+        RefreshSchemeClause refreshSchemeClause = (RefreshSchemeClause) alterMvStmt.getAlterTableClause();
+        Assert.assertEquals(refreshSchemeClause.getType(), MaterializedView.RefreshType.SYNC);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -136,7 +154,11 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"session.query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+<<<<<<< HEAD
             currentState.alterMaterializedView(stmt);
+=======
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         {
             String alterMvSql = "alter materialized view mv1 set (\"session.not_exists\" = \"10000\")";
@@ -144,16 +166,26 @@ public class AlterMaterializedViewTest {
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             Exception e = Assert.assertThrows(SemanticException.class,
                     () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+<<<<<<< HEAD
             Assert.assertEquals("Getting analyzing error. Detail message: Unknown system variable 'not_exists', " +
                             "the most similar variables are {'init_connect', 'tx_isolation', 'interpolate_passthrough'}.",
                     e.getMessage());
+=======
+            Assert.assertEquals("Getting analyzing error. Detail message: " +
+                    "Unknown system variable 'not_exists', the most similar variables are " +
+                    "{'init_connect', 'connector_max_split_size', 'tx_isolation'}.", e.getMessage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+<<<<<<< HEAD
             Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
+=======
+            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -163,7 +195,11 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 set (\"colocate_with\" = \"group1\")";
         AlterMaterializedViewStmt stmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+<<<<<<< HEAD
         Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
+=======
+        Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -172,14 +208,22 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"60\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+<<<<<<< HEAD
             currentState.alterMaterializedView(stmt);
+=======
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"abc\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+<<<<<<< HEAD
             Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
+=======
+            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -221,7 +265,10 @@ public class AlterMaterializedViewTest {
      */
     @Test
     public void testMVOnMVReload() throws Exception {
+<<<<<<< HEAD
         PlanTestBase.mockDml();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
@@ -237,8 +284,12 @@ public class AlterMaterializedViewTest {
 
         // drop base table would inactive all related MV
         starRocksAssert.dropTable("treload_1");
+<<<<<<< HEAD
         Assert.assertThrows(DdlException.class, () ->
                 starRocksAssert.refreshMV("refresh materialized view mvreload_3"));
+=======
+        starRocksAssert.refreshMV("refresh materialized view mvreload_3");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_1").isActive());
         Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_2").isActive());
         Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_3").isActive());
@@ -273,7 +324,10 @@ public class AlterMaterializedViewTest {
 
         // cleanup
         starRocksAssert.dropTable("treload_1");
+<<<<<<< HEAD
         starRocksAssert.getCtx().setThreadLocalInfoIfNotExists();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.dropMaterializedView("mvreload_1");
         starRocksAssert.dropMaterializedView("mvreload_2");
         starRocksAssert.dropMaterializedView("mvreload_3");
@@ -319,7 +373,11 @@ public class AlterMaterializedViewTest {
         MaterializedView mv = starRocksAssert.getMv("test", "mv_pb_view");
         Map<String, String> columnMap =
                 mv.getColumns().stream().collect(Collectors.toMap(Column::getName, Column::getComment));
+<<<<<<< HEAD
         Assert.assertEquals(Maps.of("order_id", "",
+=======
+        Assert.assertEquals(Map.of("order_id", "",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "order_amt", "",
                 "order_date", "",
                 "description", "",
@@ -332,7 +390,10 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testActiveChecker() throws Exception {
+<<<<<<< HEAD
         PlanTestBase.mockDml();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
@@ -385,7 +446,10 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testActiveGracePeriod() throws Exception {
+<<<<<<< HEAD
         PlanTestBase.mockDml();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
@@ -418,7 +482,11 @@ public class AlterMaterializedViewTest {
         }
 
         // foreground active
+<<<<<<< HEAD
         starRocksAssert.refreshMV("refresh materialized view " + mvName);
+=======
+        starRocksAssert.refreshMV("refresh materialized view " + mvName + " with sync mode");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(mv.isActive());
 
         // clear the grace period and active it again

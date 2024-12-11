@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_exists
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Checks whether a JSON object contains an element that can be located by the `json_path` expression. If the element exists, the JSON_EXISTS function returns `1`. Otherwise, the JSON_EXISTS function returns `0`.
 

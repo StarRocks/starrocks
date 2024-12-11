@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_acctbal,
@@ -42,6 +43,8 @@ order by
     n_name,
     s_name,
     p_partkey limit 100;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment statistics]
 PLAN FRAGMENT 0(F12)
 Output Exprs:15: s_acctbal | 11: s_name | 23: n_name | 1: p_partkey | 3: p_mfgr | 12: s_address | 14: s_phone | 16: s_comment
@@ -149,6 +152,10 @@ OutPut Exchange Id: 26
 |
 21:SORT
 |  order by: [1, INT, true] ASC
+<<<<<<< HEAD
+=======
+|  analytic partition by: [1: p_partkey, INT, true]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 |  offset: 0
 |  cardinality: 80000
 |  column statistics:
@@ -270,7 +277,11 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 17: ps_partkey IS NOT NULL, 18: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=24.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (17: ps_partkey)
@@ -297,10 +308,17 @@ OutPut Exchange Id: 14
 12:HdfsScanNode
 TABLE: part
 NON-PARTITION PREDICATES: 6: p_size = 12, 5: p_type LIKE '%COPPER'
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 53: p_size <= 12, 54: p_size >= 12
 partitions=1/1
 avgRowSize=62.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 6: p_size <= 12, 6: p_size >= 12
+partitions=1/1
+avgRowSize=62.0
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 100000
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
@@ -359,7 +377,11 @@ OutPut Exchange Id: 10
 TABLE: supplier
 partitions=1/1
 avgRowSize=197.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (13: s_nationkey)
@@ -410,7 +432,11 @@ TABLE: nation
 NON-PARTITION PREDICATES: 22: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (24: n_regionkey)
@@ -435,13 +461,24 @@ OutPut Exchange Id: 04
 2:HdfsScanNode
 TABLE: region
 NON-PARTITION PREDICATES: 27: r_name = 'AMERICA'
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 51: r_name <= 'AMERICA', 52: r_name >= 'AMERICA'
 partitions=1/1
 avgRowSize=10.8
 numNodes=0
+=======
+MIN/MAX PREDICATES: 27: r_name <= 'AMERICA', 27: r_name >= 'AMERICA'
+partitions=1/1
+avgRowSize=10.8
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 1
 column statistics:
 * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 * r_name-->[-Infinity, Infinity, 0.0, 6.8, 1.0] ESTIMATE
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -13,7 +13,11 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
@@ -25,7 +29,11 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class SetDefaultRoleExecutor {
+<<<<<<< HEAD
     public static void execute(SetDefaultRoleStmt stmt, ConnectContext context) throws UserException, PrivilegeException {
+=======
+    public static void execute(SetDefaultRoleStmt stmt, ConnectContext context) throws StarRocksException, PrivilegeException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         UserIdentity user = stmt.getUserIdentity();
         Set<Long> roleIdsForUser = manager.getRoleIdsByUser(user);

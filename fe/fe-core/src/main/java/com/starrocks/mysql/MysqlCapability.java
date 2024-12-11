@@ -127,6 +127,13 @@ public class MysqlCapability {
         return sb.toString();
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isDeprecateEof() {
+        return (flags & Flag.CLIENT_DEPRECATE_EOF.getFlagBit()) != 0;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isProtocol41() {
         return (flags & Flag.CLIENT_PROTOCOL_41.getFlagBit()) != 0;
     }

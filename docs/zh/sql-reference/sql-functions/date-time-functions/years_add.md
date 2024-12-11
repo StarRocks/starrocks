@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # years_add
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 向 `expr1` 添加指定的时间间隔，单位为年。
 

@@ -16,13 +16,27 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.authentication.UserProperty;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.SemanticException;
 import mockit.Expectations;
+=======
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -49,10 +63,13 @@ public class ExecuteAsStmtTest {
                 minTimes = 0;
                 result = auth;
 
+<<<<<<< HEAD
                 globalStateMgr.isUsingNewPrivilege();
                 minTimes = 0;
                 result = false;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 GlobalStateMgr.getCurrentState().getAuthorizationMgr().getDefaultRoleIdsByUser((UserIdentity) any);
                 minTimes = 0;
                 result = new HashSet<>();
@@ -66,6 +83,23 @@ public class ExecuteAsStmtTest {
                 result = globalStateMgr;
             }
         };
+<<<<<<< HEAD
+=======
+
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SqlParser getSqlParser() {
+                return sqlParser;
+            }
+
+            @Mock
+            public Analyzer getAnalyzer() {
+                return analyzer;
+            }
+        };
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -76,6 +110,20 @@ public class ExecuteAsStmtTest {
                 auth.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = true;
+<<<<<<< HEAD
+=======
+
+                auth.getUserProperty(anyString);
+                minTimes = 0;
+                result = new UserProperty();
+            }
+        };
+
+        new Expectations(ctx) {
+            {
+                ctx.updateByUserProperty((UserProperty) any);
+                minTimes = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 

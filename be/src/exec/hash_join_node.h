@@ -32,7 +32,10 @@ class ExprContext;
 class ColumnRef;
 class RuntimeFilterBuildDescriptor;
 
+<<<<<<< HEAD
 static constexpr size_t kHashJoinKeyColumnOffset = 1;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class HashJoinNode final : public ExecNode {
 public:
     HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -115,7 +118,12 @@ private:
     std::set<SlotId> _output_slots;
 
     bool _is_push_down = false;
+<<<<<<< HEAD
     bool _need_create_tuple_columns = true;
+=======
+    bool _enable_late_materialization = false;
+    bool _enable_partition_hash_join = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     JoinHashTable _ht;
 
@@ -124,8 +132,13 @@ private:
     ChunkPtr _probing_chunk = nullptr;
 
     Columns _key_columns;
+<<<<<<< HEAD
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
+=======
+    size_t _output_probe_column_count = 0;
+    size_t _output_build_column_count = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     size_t _probe_chunk_count = 0;
     size_t _output_chunk_count = 0;
 
@@ -144,9 +157,15 @@ private:
     RuntimeProfile::Counter* _merge_input_chunk_timer = nullptr;
     RuntimeProfile::Counter* _probe_timer = nullptr;
     RuntimeProfile::Counter* _search_ht_timer = nullptr;
+<<<<<<< HEAD
     RuntimeProfile::Counter* _output_build_column_timer = nullptr;
     RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* _output_tuple_column_timer = nullptr;
+=======
+    RuntimeProfile::Counter* _probe_counter = nullptr;
+    RuntimeProfile::Counter* _output_build_column_timer = nullptr;
+    RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RuntimeProfile::Counter* _build_rows_counter = nullptr;
     RuntimeProfile::Counter* _probe_rows_counter = nullptr;
     RuntimeProfile::Counter* _build_buckets_counter = nullptr;

@@ -128,7 +128,13 @@ protected:
             }
         }
 
+<<<<<<< HEAD
         DescriptorTbl::create(&_runtime_state, &_obj_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size);
+=======
+        ASSERT_TRUE(
+                DescriptorTbl::create(&_runtime_state, &_obj_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size)
+                        .ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         _runtime_state.set_desc_tbl(_desc_tbl);
 
@@ -196,7 +202,10 @@ protected:
         _tnode.repeat_node.output_tuple_id = 1;
 
         _tnode.row_tuples.push_back(1);
+<<<<<<< HEAD
         _tnode.nullable_tuples.push_back(false);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void TearDown() override {}

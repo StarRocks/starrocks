@@ -27,15 +27,30 @@ public class CreateCatalogStmt extends DdlStmt {
     private final Map<String, String> properties;
     private String catalogType;
 
+<<<<<<< HEAD
     public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties) {
         this(catalogName, comment, properties, NodePosition.ZERO);
     }
 
     public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties, NodePosition pos) {
+=======
+    private final boolean ifNotExists;
+
+    public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties, boolean ifNotExists) {
+        this(catalogName, comment, properties, ifNotExists, NodePosition.ZERO);
+    }
+
+    public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties,
+                             boolean ifNotExists, NodePosition pos) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(pos);
         this.catalogName = catalogName;
         this.comment = comment;
         this.properties = properties;
+<<<<<<< HEAD
+=======
+        this.ifNotExists = ifNotExists;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public String getCatalogName() {
@@ -58,6 +73,13 @@ public class CreateCatalogStmt extends DdlStmt {
         this.catalogType = catalogType;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isIfNotExists() {
+        return ifNotExists;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateCatalogStatement(this, context);
@@ -66,8 +88,16 @@ public class CreateCatalogStmt extends DdlStmt {
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
+<<<<<<< HEAD
         sb.append("CREATE EXTERNAL CATALOG '");
         sb.append(catalogName).append("' ");
+=======
+        sb.append("CREATE EXTERNAL CATALOG ");
+        if (ifNotExists) {
+            sb.append("IF NOT EXISTS ");
+        }
+        sb.append("'").append(catalogName).append("' ");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (comment != null) {
             sb.append("COMMENT \"").append(comment).append("\" ");
         }

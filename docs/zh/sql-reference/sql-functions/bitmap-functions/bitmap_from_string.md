@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_from_string
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将一个字符串转化为一个 bitmap，字符串由逗号分隔的一组 UInt64 数字组成。比如将 "0, 1, 2" 字符串转化为一个 bitmap，会对其中的第 0，1，2 位会进行设置，当输入字段不合法时返回 NULL。
 

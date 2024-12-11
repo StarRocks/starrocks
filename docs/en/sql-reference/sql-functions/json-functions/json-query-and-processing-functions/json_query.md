@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_query
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Queries the value of an element that can be located by the `json_path` expression in a JSON object and returns a JSON value.
 

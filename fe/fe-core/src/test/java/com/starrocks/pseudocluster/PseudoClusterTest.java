@@ -20,9 +20,23 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.RunMode;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
@@ -34,7 +48,17 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.sql.Connection;
+<<<<<<< HEAD
 import java.sql.Statement;
+=======
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class PseudoClusterTest {
     @BeforeClass
@@ -54,11 +78,18 @@ public class PseudoClusterTest {
         try {
             stmt.execute("create database test");
             stmt.execute("use test");
+<<<<<<< HEAD
             stmt.execute("create table test ( pk bigint NOT NULL, v0 string not null, v1 int not null ) " + 
                     "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
                     "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
             Assert.assertFalse(stmt.execute("insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3)"));
             System.out.printf("updated %d rows\n", stmt.getUpdateCount());
+=======
+            stmt.execute("create table test ( pk bigint NOT NULL, v0 string not null, v1 int not null ) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 3 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
+            Assert.assertFalse(stmt.execute("insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3)"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             stmt.execute("select * from test");
         } finally {
             stmt.close();
@@ -67,6 +98,144 @@ public class PseudoClusterTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCreateColumnWithRowTable() throws Exception {
+        Config.enable_experimental_rowstore = true;
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            stmt.execute("create database test_column_with_row");
+            stmt.execute("use test_column_with_row");
+            try {
+                stmt.execute("create table test1 ( pk bigint NOT NULL) " +
+                        "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
+                        "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +
+                        "\"storage_type\" = \"column_with_row\")");
+                Assert.fail("should throw exception");
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage().contains("column_with_row storage type must have some non-key columns"));
+            }
+            stmt.execute("create table test2 ( pk bigint NOT NULL, v1 array<int> NOT NULL, v2 bitmap NOT NULL) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +
+                    "\"storage_type\" = \"column_with_row\")");
+            stmt.execute("create table test3 ( pk bigint NOT NULL, v int NOT NULL) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +
+                    "\"storage_type\" = \"column_with_row\")");
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
+    public void testPreparedStatement() throws Exception {
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            stmt.execute("create database if not exists test_prepared_stmt");
+            stmt.execute("use test_prepared_stmt");
+            stmt.execute("create table if not exists test ( pk bigint NOT NULL, v1 int not null ) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
+            stmt.execute("prepare stmt1 from select * from test where pk = ?");
+            stmt.execute("prepare stmt3 from select 1");
+            stmt.execute("set @i = 1");
+            stmt.execute("execute stmt1 using @i");
+            stmt.execute("execute stmt1 using @i");
+            stmt.execute("execute stmt3");
+            stmt.execute("select * from test where pk = ?", 1);
+
+            {
+                SQLException e = Assert.assertThrows(SQLException.class,
+                        () -> stmt.execute("prepare stmt2 from insert overwrite test values (1,2)"));
+                Assert.assertEquals("(conn=1) Getting analyzing error. Detail message: This command is not " +
+                        "supported in the prepared statement protocol yet.", e.getMessage());
+                Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
+                Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
+            }
+            {
+                SQLException e = Assert.assertThrows(SQLException.class,
+                        () -> stmt.execute("prepare stmt2 from ALTER USER 'root'@'%' IDENTIFIED BY 'XXXXX' "));
+                Assert.assertEquals("(conn=1) Getting analyzing error. Detail message: This command is not " +
+                        "supported in the prepared statement protocol yet.", e.getMessage());
+                Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
+                Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
+            }
+
+            // client prepared stmt
+            PreparedStatement pstmt = connection.prepareStatement("select * from test where pk = ?");
+            pstmt.setInt(1, 1);
+            ResultSet rs = pstmt.executeQuery();
+            pstmt.close();
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
+    public void testPreparedStatementServer() throws Exception {
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            stmt.execute("create database if not exists test_prepared_stmt");
+            stmt.execute("use test_prepared_stmt");
+            stmt.execute("create table if not exists test ( pk bigint NOT NULL, v1 int not null ) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
+            stmt.execute("prepare stmt1 from select * from test where pk = ?");
+            stmt.execute("prepare stmt3 from select 1");
+            stmt.execute("set @i = 1");
+            stmt.execute("execute stmt1 using @i");
+            stmt.execute("execute stmt1 using @i");
+            stmt.execute("execute stmt3");
+            stmt.execute("select * from test where pk = ?", 1);
+            try {
+                stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
+                Assert.fail("expected exception was not occured.");
+            } catch (SQLException e) {
+                Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
+                Assert.assertTrue(e.toString(), e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
+            }
+
+            // client prepared stmt
+            PreparedStatement pstmt = connection.prepareStatement("select * from test where pk = ?");
+            pstmt.setInt(1, 1);
+            pstmt.executeQuery();
+            pstmt.close();
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
+    public void testPreparedStatementWitchServer() throws Exception {
+        PseudoCluster.getInstance().setServerPrepareStatement();
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            stmt.execute("create database if not exists test_prepared_stmt");
+            stmt.execute("use test_prepared_stmt");
+            stmt.execute("create table if not exists test ( pk bigint NOT NULL, v1 int not null ) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
+            // client prepared stmt
+            PreparedStatement pstmt = connection.prepareStatement("select * from test where pk = ?");
+            pstmt.setInt(1, 1);
+            pstmt.executeQuery();
+            pstmt.close();
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testCreateLakeTable() throws Exception {
         new MockUp<RunMode>() {
             @Mock
@@ -97,6 +266,7 @@ public class PseudoClusterTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
+<<<<<<< HEAD
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
                 return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
@@ -105,11 +275,36 @@ public class PseudoClusterTest {
             public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) {
                 return pathInfo;
             }
+=======
+            public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
+            }
+
+            @Mock
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
+            }
+
+            @Mock
+            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
+                return pathInfo;
+            }
+
+            @Mock
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+                // the worker id is a random number
+                return new ArrayList<>(Arrays.asList(10001L));
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         };
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
+<<<<<<< HEAD
             public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+=======
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException, DdlException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
 
@@ -119,6 +314,70 @@ public class PseudoClusterTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            void buildPartitions(Database db, OlapTable table, List<PhysicalPartition> partitions, long warehouseId)
+                    throws DdlException {
+                return;
+            }
+        };
+
+        /*
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
+
+        new MockUp<Cluster>() {
+            @Mock
+            public List<Long> getComputeNodeIds() {
+                return Lists.newArrayList(1L);
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+        };
+
+        new MockUp<ComputeNode>() {
+            @Mock
+            public boolean isAlive() {
+                return true;
+            }
+        };
+
+         */
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {

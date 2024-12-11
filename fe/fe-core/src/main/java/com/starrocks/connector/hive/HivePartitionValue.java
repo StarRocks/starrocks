@@ -16,6 +16,10 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.DatabaseTableName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 import java.util.Optional;
@@ -24,20 +28,36 @@ public class HivePartitionValue {
     // use empty list to represent all partition values when get partition names from partitionKeysCache
     public static final List<Optional<String>> ALL_PARTITION_VALUES = ImmutableList.of();
 
+<<<<<<< HEAD
     private final HiveTableName tableName;
 
     private final List<Optional<String>> partitionValues;
 
     public HivePartitionValue(HiveTableName tableName, List<Optional<String>> partitionValues) {
+=======
+    private final DatabaseTableName tableName;
+
+    private final List<Optional<String>> partitionValues;
+
+    public HivePartitionValue(DatabaseTableName tableName, List<Optional<String>> partitionValues) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.tableName = tableName;
         this.partitionValues = partitionValues;
     }
 
+<<<<<<< HEAD
     public static HivePartitionValue of(HiveTableName tableName, List<Optional<String>> partitionValues) {
         return new HivePartitionValue(tableName, partitionValues);
     }
 
     public HiveTableName getHiveTableName() {
+=======
+    public static HivePartitionValue of(DatabaseTableName tableName, List<Optional<String>> partitionValues) {
+        return new HivePartitionValue(tableName, partitionValues);
+    }
+
+    public DatabaseTableName getHiveTableName() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return tableName;
     }
 

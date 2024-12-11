@@ -70,15 +70,23 @@ public:
     }
 
     // like get_next(Chunk* chunk), but also returns each row's rssid + rowid (after encode)
+<<<<<<< HEAD
     [[nodiscard]] Status get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
+=======
+    Status get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Status st = do_get_next(chunk, rssid_rowids);
         DCHECK_CHUNK(chunk);
         return st;
     }
 
     // like get_next(Chunk* chunk), but also returns each row's rssid + rowid (after encode)
+<<<<<<< HEAD
     [[nodiscard]] Status get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
                                   std::vector<uint64_t>* rssid_rowids) {
+=======
+    Status get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks, std::vector<uint64_t>* rssid_rowids) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Status st = do_get_next(chunk, source_masks, rssid_rowids);
         DCHECK_CHUNK(chunk);
         return st;

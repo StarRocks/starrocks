@@ -27,6 +27,10 @@ import java.util.Map;
 import java.util.Set;
 
 public class BaseResponse {
+<<<<<<< HEAD
+=======
+    public static final String HEADER_QUERY_ID = "X-StarRocks-Query-Id";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private String contentType;
     protected StringBuilder content = new StringBuilder();
 

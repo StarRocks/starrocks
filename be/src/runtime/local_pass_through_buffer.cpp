@@ -17,6 +17,10 @@
 #include "column/chunk.h"
 #include "common/logging.h"
 #include "runtime/current_thread.h"
+<<<<<<< HEAD
+=======
+#include "runtime/exec_env.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -24,11 +28,19 @@ namespace starrocks {
 // channel per [sender_id]
 class PassThroughSenderChannel {
 public:
+<<<<<<< HEAD
     PassThroughSenderChannel() = default;
+=======
+    PassThroughSenderChannel(std::atomic_int64_t& total_bytes) : _total_bytes(total_bytes) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ~PassThroughSenderChannel() {
         if (_physical_bytes > 0) {
             CurrentThread::current().mem_consume(_physical_bytes);
+<<<<<<< HEAD
+=======
+            GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -39,19 +51,34 @@ public:
         int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
         DCHECK_GE(physical_bytes, 0);
         CurrentThread::current().mem_release(physical_bytes);
+<<<<<<< HEAD
+=======
+        GlobalEnv::GetInstance()->passthrough_mem_tracker()->consume(physical_bytes);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         std::unique_lock lock(_mutex);
         _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
         _bytes.push_back(chunk_size);
         _physical_bytes += physical_bytes;
+<<<<<<< HEAD
+=======
+        _total_bytes += physical_bytes;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
         std::unique_lock lock(_mutex);
         chunks->swap(_buffer);
         bytes->swap(_bytes);
+<<<<<<< HEAD
 
         // Consume physical bytes in current MemTracker, since later it would be released
         CurrentThread::current().mem_consume(_physical_bytes);
+=======
+        GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
+        // Consume physical bytes in current MemTracker, since later it would be released
+        CurrentThread::current().mem_consume(_physical_bytes);
+        _total_bytes -= _physical_bytes;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _physical_bytes = 0;
     }
 
@@ -60,6 +87,10 @@ private:
     ChunkUniquePtrVector _buffer;
     std::vector<size_t> _bytes;
     int64_t _physical_bytes = 0; // Physical consumed bytes for each chunk
+<<<<<<< HEAD
+=======
+    std::atomic_int64_t& _total_bytes;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 // channel per [fragment_instance_id, dest_node_id]
@@ -69,8 +100,13 @@ public:
         std::unique_lock lock(_mutex);
         auto it = _sender_id_to_channel.find(sender_id);
         if (it == _sender_id_to_channel.end()) {
+<<<<<<< HEAD
             auto* channel = new PassThroughSenderChannel();
             _sender_id_to_channel.emplace(std::make_pair(sender_id, channel));
+=======
+            auto* channel = new PassThroughSenderChannel(_total_bytes);
+            _sender_id_to_channel.emplace(sender_id, channel);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return channel;
         } else {
             return it->second;
@@ -83,9 +119,18 @@ public:
         _sender_id_to_channel.clear();
     }
 
+<<<<<<< HEAD
 private:
     std::mutex _mutex;
     std::unordered_map<int, PassThroughSenderChannel*> _sender_id_to_channel;
+=======
+    int64_t get_total_bytes() const { return _total_bytes; }
+
+private:
+    std::mutex _mutex;
+    std::unordered_map<int, PassThroughSenderChannel*> _sender_id_to_channel;
+    std::atomic_int64_t _total_bytes = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id)
@@ -107,7 +152,11 @@ PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key
     auto it = _key_to_channel.find(key);
     if (it == _key_to_channel.end()) {
         auto* channel = new PassThroughChannel();
+<<<<<<< HEAD
         _key_to_channel.emplace(std::make_pair(key, channel));
+=======
+        _key_to_channel.emplace(key, channel);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return channel;
     } else {
         return it->second;
@@ -127,6 +176,13 @@ void PassThroughContext::pull_chunks(int sender_id, ChunkUniquePtrVector* chunks
     sender_channel->pull_chunks(chunks, bytes);
 }
 
+<<<<<<< HEAD
+=======
+int64_t PassThroughContext::total_bytes() const {
+    return _channel->get_total_bytes();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& query_id) {
     VLOG_FILE << "PassThroughChunkBufferManager::open_fragment_instance, query_id = " << query_id;
     {
@@ -134,7 +190,11 @@ void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& quer
         auto it = _query_id_to_buffer.find(query_id);
         if (it == _query_id_to_buffer.end()) {
             auto* buffer = new PassThroughChunkBuffer(query_id);
+<<<<<<< HEAD
             _query_id_to_buffer.emplace(std::make_pair(query_id, buffer));
+=======
+            _query_id_to_buffer.emplace(query_id, buffer);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             it->second->ref();
         }

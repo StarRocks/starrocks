@@ -24,7 +24,10 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 using JoinRuntimeFilterPtr = std::shared_ptr<const JoinRuntimeFilter>;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class RfCacheValue;
 using RfCacheValueRawPtr = RfCacheValue*;
 using RfCacheValuePtr = std::shared_ptr<RfCacheValue>;

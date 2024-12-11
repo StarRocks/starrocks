@@ -15,7 +15,10 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
@@ -61,9 +64,15 @@ public class BasicStatsMetaTest extends PlanTestBase {
                     result = 100L;
                 }
             };
+<<<<<<< HEAD
             BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), Lists.newArrayList(),
                     StatsConstants.AnalyzeType.FULL,
                     LocalDateTime.of(2024, 07, 22, 12, 20), Maps.newHashMap(), 100);
+=======
+            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
+                    StatsConstants.AnalyzeType.FULL,
+                    LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 100);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.assertEquals(0.05, basicStatsMeta.getHealthy(), 0.01);
         }
 
@@ -79,9 +88,15 @@ public class BasicStatsMetaTest extends PlanTestBase {
                     result = 10000L;
                 }
             };
+<<<<<<< HEAD
             BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), Lists.newArrayList(),
                     StatsConstants.AnalyzeType.FULL,
                     LocalDateTime.of(2024, 07, 22, 12, 20), Maps.newHashMap(), 10000);
+=======
+            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
+                    StatsConstants.AnalyzeType.FULL,
+                    LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 10000);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             basicStatsMeta.increaseDeltaRows(5000L);
             basicStatsMeta.setUpdateRows(10000L);
             Assert.assertEquals(0.5, basicStatsMeta.getHealthy(), 0.01);
@@ -95,7 +110,12 @@ public class BasicStatsMetaTest extends PlanTestBase {
         {
             ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
             DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
+<<<<<<< HEAD
             String s = "{\"dbId\":10001,\"tableId\":10177,\"columns\":[],\"type\":\"FULL\",\"updateTime\":1721650800," +
+=======
+            String s = "{\"dbId\":" + db.getId() +
+                    ",\"tableId\":" + tbl.getId() + ",\"columns\":[],\"type\":\"FULL\",\"updateTime\":1721650800," +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "\"properties\":{},\"updateRows\":10000}";
             Text.writeString(dataOutputStream, s);
 
@@ -104,14 +124,24 @@ public class BasicStatsMetaTest extends PlanTestBase {
             DataInputStream dataInputStream = new DataInputStream(byteArrayInputStream);
             String deserializedString = Text.readString(dataInputStream);
             BasicStatsMeta deserializedMeta = GSON.fromJson(deserializedString, BasicStatsMeta.class);
+<<<<<<< HEAD
             Assert.assertEquals(10001, deserializedMeta.getDbId());
+=======
+            Assert.assertEquals(db.getId(), deserializedMeta.getDbId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         }
 
         {
+<<<<<<< HEAD
             BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), Lists.newArrayList(),
                     StatsConstants.AnalyzeType.FULL,
                     LocalDateTime.of(2024, 07, 22, 12, 20), Maps.newHashMap(), 10000);
+=======
+            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
+                    StatsConstants.AnalyzeType.FULL,
+                    LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 10000);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
             DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
             String s = GSON.toJson(basicStatsMeta);

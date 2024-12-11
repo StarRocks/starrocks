@@ -36,7 +36,11 @@ public class SafeModeCheckerTest {
 
     @Before
     public void setUp() {
+<<<<<<< HEAD
         globalStateMgr.getClusterInfo().addBackend(be);
+=======
+        globalStateMgr.getNodeMgr().getClusterInfo().addBackend(be);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ImmutableMap<String, DiskInfo> disksRef;
         DiskInfo diskInfo = new DiskInfo("");
         diskInfo.setTotalCapacityB(100);
@@ -50,7 +54,11 @@ public class SafeModeCheckerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo().getBackends();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
                 result = be;
             }
@@ -59,7 +67,11 @@ public class SafeModeCheckerTest {
 
     @After
     public void tearDown() throws DdlException {
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getClusterInfo().dropBackend(be);
+=======
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(be);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         GlobalStateMgr.getCurrentState().setSafeMode(false);
     }
 

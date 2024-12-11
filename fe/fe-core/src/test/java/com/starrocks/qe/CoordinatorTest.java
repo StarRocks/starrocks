@@ -12,34 +12,59 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+=======
+package com.starrocks.qe;
+
+import com.google.common.collect.ImmutableList;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.HashDistributionInfo;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.JoinNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.planner.OlapScanNode;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.stream.StreamAggNode;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TNetworkAddress;
+=======
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TBinlogOffset;
+import com.starrocks.thrift.TDescriptorTable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
@@ -55,23 +80,40 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+<<<<<<< HEAD
 import java.util.Comparator;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
+<<<<<<< HEAD
     Coordinator coordinator;
     CoordinatorPreprocessor coordinatorPreprocessor;
 
     @Before
     public void setUp() throws IOException {
+=======
+    DefaultCoordinator coordinator;
+    CoordinatorPreprocessor coordinatorPreprocessor;
+
+    @Before
+    public void setUp() {
+        super.setUp();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setExecutionId(new TUniqueId(0xdeadbeef, 0xdeadbeef));
         ConnectContext.threadLocalInfo.set(ctx);
 
+<<<<<<< HEAD
         coordinator = new Coordinator(ctx, Lists.newArrayList(), Lists.newArrayList(), new TDescriptorTable());
+=======
+        coordinator = new DefaultCoordinator.Factory().createQueryScheduler(ctx, Lists.newArrayList(), Lists.newArrayList(),
+                new TDescriptorTable());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         coordinatorPreprocessor = coordinator.getPrepareInfo();
     }
 
@@ -86,6 +128,7 @@ public class CoordinatorTest extends PlanTestBase {
 
     private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
         PlanFragment fragment = genFragment();
+<<<<<<< HEAD
         CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(fragment);
         CoordinatorPreprocessor.FInstanceExecParam instance0 =
                 new CoordinatorPreprocessor.FInstanceExecParam(null, null, 0, params);
@@ -99,13 +142,43 @@ public class CoordinatorTest extends PlanTestBase {
         params.instanceExecParams.add(instance0);
         params.instanceExecParams.add(instance1);
         params.instanceExecParams.add(instance2);
+=======
+        ExecutionFragment execFragment = new ExecutionFragment(null, fragment, 0);
+        FragmentInstance instance0 = new FragmentInstance(null, execFragment);
+        FragmentInstance instance1 = new FragmentInstance(null, execFragment);
+        FragmentInstance instance2 = new FragmentInstance(null, execFragment);
+        instance0.addBucketSeq(2);
+        instance0.addBucketSeq(0);
+        instance1.addBucketSeq(1);
+        instance1.addBucketSeq(4);
+        instance2.addBucketSeq(3);
+        instance2.addBucketSeq(5);
+
+        execFragment.addInstance(instance0);
+        execFragment.addInstance(instance1);
+        execFragment.addInstance(instance2);
+
+        OlapTable table = new OlapTable();
+        table.setDefaultDistributionInfo(new HashDistributionInfo(6, Collections.emptyList()));
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        OlapScanNode scanNode = new OlapScanNode(new PlanNodeId(0), desc, "test-scan-node");
+        scanNode.setSelectedPartitionIds(ImmutableList.of(0L, 1L));
+        execFragment.getOrCreateColocatedAssignment(scanNode);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         RuntimeFilterDescription rf = new RuntimeFilterDescription(ctx.sessionVariable);
         rf.setJoinMode(mode);
         fragment.getBuildRuntimeFilters().put(1, rf);
         Assert.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
+<<<<<<< HEAD
         coordinatorPreprocessor.computeBucketSeq2InstanceOrdinal(params, 6);
         params.setBucketSeqToInstanceForRuntimeFilters();
         Assert.assertEquals(rf.getBucketSeqToInstance(), Arrays.<Integer>asList(0, 1, 0, 2, 1, 2));
+=======
+        execFragment.setLayoutInfosForRuntimeFilters();
+        Assert.assertEquals(Arrays.asList(0, 1, 0, 2, 1, 2), rf.getBucketSeqToInstance());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -118,6 +191,7 @@ public class CoordinatorTest extends PlanTestBase {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
     }
 
+<<<<<<< HEAD
     private Map<Integer, List<TScanRangeParams>> createScanId2scanRanges(int scanId, int numScanRanges) {
         List<TScanRangeParams> scanRanges = Lists.newArrayList();
         for (int i = 0; i < numScanRanges; ++i) {
@@ -423,6 +497,8 @@ public class CoordinatorTest extends PlanTestBase {
 
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testBinlogScan() throws Exception {
         PlanFragmentId fragmentId = new PlanFragmentId(0);
@@ -431,7 +507,12 @@ public class CoordinatorTest extends PlanTestBase {
 
         OlapTable olapTable = getOlapTable("t0");
         List<Long> olapTableTabletIds =
+<<<<<<< HEAD
                 olapTable.getAllPartitions().stream().flatMap(x -> x.getBaseIndex().getTabletIdsInOrder().stream())
+=======
+                olapTable.getAllPartitions().stream().flatMap(x -> x.getDefaultPhysicalPartition().getBaseIndex()
+                                .getTabletIdsInOrder().stream())
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         .collect(Collectors.toList());
         Assert.assertFalse(olapTableTabletIds.isEmpty());
         tupleDesc.setTable(olapTable);
@@ -453,6 +534,7 @@ public class CoordinatorTest extends PlanTestBase {
         binlogScan.finalizeStats(null);
 
         List<ScanNode> scanNodes = Arrays.asList(binlogScan);
+<<<<<<< HEAD
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes);
         prepare.computeScanRangeAssignment();
 
@@ -463,6 +545,19 @@ public class CoordinatorTest extends PlanTestBase {
         TNetworkAddress expectedAddress = backend.getAddress();
         Assert.assertTrue(scanRangeMap.containsKey(expectedAddress));
         Map<Integer, List<TScanRangeParams>> rangesPerNode = scanRangeMap.get(expectedAddress);
+=======
+        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes,
+                StatisticUtils.buildConnectContext());
+        prepare.computeFragmentInstances();
+
+        FragmentScanRangeAssignment scanRangeMap =
+                prepare.getFragmentScanRangeAssignment(fragmentId);
+        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().get(0);
+        Assert.assertFalse(scanRangeMap.isEmpty());
+        Long expectedWorkerId = backend.getId();
+        Assert.assertTrue(scanRangeMap.containsKey(expectedWorkerId));
+        Map<Integer, List<TScanRangeParams>> rangesPerNode = scanRangeMap.get(expectedWorkerId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(rangesPerNode.containsKey(planNodeId.asInt()));
         List<TScanRangeParams> ranges = rangesPerNode.get(planNodeId.asInt());
         List<Long> tabletIds =
@@ -511,6 +606,7 @@ public class CoordinatorTest extends PlanTestBase {
         fragments.add(fragment);
 
         // Build topology
+<<<<<<< HEAD
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(fragments, scanNodes);
         prepare.prepareFragments();
         prepare.computeScanRangeAssignment();
@@ -519,13 +615,27 @@ public class CoordinatorTest extends PlanTestBase {
         // Assert
         Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentParams =
                 prepare.getFragmentExecParamsMap();
+=======
+        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(fragments, scanNodes,
+                StatisticUtils.buildConnectContext());
+        prepare.computeFragmentInstances();
+
+        // Assert
+        Map<PlanFragmentId, ExecutionFragment> fragmentParams = prepare.getExecutionDAG().getIdToFragment();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         fragmentParams.forEach((k, v) -> {
             System.err.println("Fragment " + k + " : " + v);
         });
         Assert.assertTrue(fragmentParams.containsKey(fragmentId));
+<<<<<<< HEAD
         CoordinatorPreprocessor.FragmentExecParams fragmentParam = fragmentParams.get(fragmentId);
         FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.scanRangeAssignment;
         List<CoordinatorPreprocessor.FInstanceExecParam> instances = fragmentParam.instanceExecParams;
+=======
+        ExecutionFragment fragmentParam = fragmentParams.get(fragmentId);
+        FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.getScanRangeAssignment();
+        List<FragmentInstance> instances = fragmentParam.getInstances();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertFalse(fragmentParams.isEmpty());
         Assert.assertEquals(1, scanRangeAssignment.size());
         Assert.assertEquals(1, instances.size());

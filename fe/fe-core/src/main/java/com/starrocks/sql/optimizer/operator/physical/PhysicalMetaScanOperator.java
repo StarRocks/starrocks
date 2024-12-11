@@ -20,21 +20,40 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 
+<<<<<<< HEAD
+=======
+import java.util.List;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Map;
 import java.util.Objects;
 
 public class PhysicalMetaScanOperator extends PhysicalScanOperator {
     private final Map<Integer, String> aggColumnIdToNames;
+<<<<<<< HEAD
+=======
+    private final List<String> selectPartitionNames;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public PhysicalMetaScanOperator(LogicalMetaScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_META_SCAN, scanOperator);
         this.aggColumnIdToNames = scanOperator.getAggColumnIdToNames();
+<<<<<<< HEAD
+=======
+        this.selectPartitionNames = scanOperator.getSelectPartitionNames();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public Map<Integer, String> getAggColumnIdToNames() {
         return aggColumnIdToNames;
     }
 
+<<<<<<< HEAD
+=======
+    public List<String> getSelectPartitionNames() {
+        return selectPartitionNames;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalMetaScan(this, context);
@@ -56,7 +75,12 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
         }
 
         PhysicalMetaScanOperator that = (PhysicalMetaScanOperator) o;
+<<<<<<< HEAD
         return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames);
+=======
+        return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames) &&
+                Objects.equals(selectPartitionNames, that.selectPartitionNames);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

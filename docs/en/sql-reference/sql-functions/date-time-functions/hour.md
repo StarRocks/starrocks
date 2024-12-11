@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hour
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the hour for a given date. The return value ranges from 0 to 23.
 

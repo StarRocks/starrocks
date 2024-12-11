@@ -27,6 +27,7 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeCompactionsScanner::_s_columns[] = {
+<<<<<<< HEAD
         {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"CANDIDATES_NUM", TYPE_BIGINT, sizeof(int64_t), false},
         {"BASE_COMPACTION_CONCURRENCY", TYPE_BIGINT, sizeof(int64_t), false},
@@ -35,6 +36,16 @@ SchemaScanner::ColumnDesc SchemaBeCompactionsScanner::_s_columns[] = {
         {"CANDIDATE_MAX_SCORE", TYPE_DOUBLE, sizeof(double), false},
         {"MANUAL_COMPACTION_CONCURRENCY", TYPE_BIGINT, sizeof(int64_t), false},
         {"MANUAL_COMPACTION_CANDIDATES_NUM", TYPE_BIGINT, sizeof(int64_t), false}};
+=======
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CANDIDATES_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"BASE_COMPACTION_CONCURRENCY", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CUMULATIVE_COMPACTION_CONCURRENCY", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LATEST_COMPACTION_SCORE", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"CANDIDATE_MAX_SCORE", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"MANUAL_COMPACTION_CONCURRENCY", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"MANUAL_COMPACTION_CANDIDATES_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false}};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 SchemaBeCompactionsScanner::SchemaBeCompactionsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -45,7 +56,11 @@ Status SchemaBeCompactionsScanner::start(RuntimeState* state) {
     auto o_id = get_backend_id();
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _infos.clear();
+<<<<<<< HEAD
     CompactionInfo info;
+=======
+    CompactionInformation info;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto compaction_manager = StorageEngine::instance()->compaction_manager();
     info.candidates_num = compaction_manager->candidates_size();
     info.base_compaction_concurrency = compaction_manager->base_compaction_concurrency();

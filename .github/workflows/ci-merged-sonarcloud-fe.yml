@@ -35,14 +35,22 @@ jobs:
           distribution: 'adopt'
 
       - name: Cache SonarCloud packages
+<<<<<<< HEAD
         uses: actions/cache@v3
+=======
+        uses: actions/cache@v4
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         with:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
       - name: Cache Maven packages
+<<<<<<< HEAD
         uses: actions/cache@v3
+=======
+        uses: actions/cache@v4
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         with:
           path: ~/.m2
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}

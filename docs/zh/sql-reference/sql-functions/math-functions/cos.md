@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # cos
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 求参数 `x` 的余弦值。
 

@@ -24,7 +24,11 @@ public class TaskSchedule {
 
     // Measured in milliseconds, between the start time and midnight, January 1, 1970 UTC.
     @SerializedName("startTime")
+<<<<<<< HEAD
     private long startTime;
+=======
+    private long startTime = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @SerializedName("period")
     private long period;
@@ -32,6 +36,12 @@ public class TaskSchedule {
     @SerializedName("timeUnit")
     private TimeUnit timeUnit;
 
+<<<<<<< HEAD
+=======
+    public TaskSchedule() {
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public TaskSchedule(long startTime, long period, TimeUnit timeUnit) {
         this.startTime = startTime;
         this.period = period;
@@ -63,7 +73,15 @@ public class TaskSchedule {
     }
 
     public String toString() {
+<<<<<<< HEAD
         return " (START " + Utils.getDatetimeFromLong(startTime)
                 + " EVERY(" + period + " " + timeUnit + "))";
+=======
+        if (startTime > 0) {
+            return " START(" + Utils.getDatetimeFromLong(startTime)
+                    + ") EVERY(" + period + " " + timeUnit + ")";
+        }
+        return "EVERY(" + period + " " + timeUnit + ")";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

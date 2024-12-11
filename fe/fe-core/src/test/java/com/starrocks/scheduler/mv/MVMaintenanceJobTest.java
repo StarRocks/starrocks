@@ -53,11 +53,19 @@ public class MVMaintenanceJobTest extends PlanTestBase {
         view.setMaintenancePlan(new ExecPlan());
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+<<<<<<< HEAD
         BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, 1L);
         baseTableInfos.add(baseTableInfo1);
         BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, 2L);
         baseTableInfos.add(baseTableInfo2);
         BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, 2L);
+=======
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, "db", "tbl1", 1L);
+        baseTableInfos.add(baseTableInfo1);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, "db", "tbl2", 2L);
+        baseTableInfos.add(baseTableInfo2);
+        BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, "db", "tbl3", 2L);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         baseTableInfos.add(baseTableInfo3);
 
         view.setBaseTableInfos(baseTableInfos);
@@ -126,7 +134,11 @@ public class MVMaintenanceJobTest extends PlanTestBase {
                 pair.first);
 
         String currentDb = connectContext.getDatabase();
+<<<<<<< HEAD
         long dbId = GlobalStateMgr.getCurrentState().getDb(currentDb).getId();
+=======
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb).getId();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         MaterializedView view = new MaterializedView();
         view.setDbId(dbId);
         view.setId(1024);
@@ -147,7 +159,11 @@ public class MVMaintenanceJobTest extends PlanTestBase {
         List<TExecPlanFragmentParams> instances = task.getFragmentInstances();
         assertEquals(4, instances.size());
 
+<<<<<<< HEAD
         TExecPlanFragmentParams firstInstance = instances.get(0);
+=======
+        TExecPlanFragmentParams firstInstance = instances.get(2);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         System.err.println(firstInstance);
         List<TPlanNode> planNodes = firstInstance.getFragment().getPlan().getNodes();
         assertEquals(5, planNodes.size());

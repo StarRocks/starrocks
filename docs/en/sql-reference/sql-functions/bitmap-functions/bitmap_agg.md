@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_agg
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Aggregates values (excluding NULLs) in a column into a bitmap (multiple rows into one row).
 

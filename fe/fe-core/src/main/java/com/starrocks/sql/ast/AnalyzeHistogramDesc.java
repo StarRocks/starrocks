@@ -35,4 +35,12 @@ public class AnalyzeHistogramDesc extends AnalyzeTypeDesc {
     public void setBuckets(long buckets) {
         this.buckets = buckets;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean isHistogram() {
+        return true;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

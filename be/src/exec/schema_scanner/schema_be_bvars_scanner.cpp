@@ -44,9 +44,15 @@ private:
 };
 
 SchemaScanner::ColumnDesc SchemaBeBvarsScanner::_s_columns[] = {
+<<<<<<< HEAD
         {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
+=======
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 SchemaBeBvarsScanner::SchemaBeBvarsScanner()

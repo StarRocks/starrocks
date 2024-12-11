@@ -56,10 +56,15 @@ const std::string SOURCE_SCROLL_SEARCH_FILTER_PATH =
 const std::string DOCVALUE_SCROLL_SEARCH_FILTER_PATH =
         "filter_path=_scroll_id,hits.total,hits.hits._score,hits.hits.fields";
 
+<<<<<<< HEAD
 const std::string REQUEST_SCROLL_PATH = "_scroll";
 const std::string REQUEST_PREFERENCE_PREFIX = "&preference=_shards:";
 const std::string REQUEST_SEARCH_SCROLL_PATH = "/_search/scroll";
 const std::string REQUEST_SEPARATOR = "/";
+=======
+const std::string REQUEST_PREFERENCE_PREFIX = "&preference=_shards:";
+const std::string REQUEST_SEARCH_SCROLL_PATH = "/_search/scroll";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ESScanReader::ESScanReader(const std::string& target, const std::map<std::string, std::string>& props,
                            bool doc_value_mode)
@@ -136,12 +141,21 @@ Status ESScanReader::open() {
     }
     // phase open, we cached the first response for `get_next` phase
     Status status = _network_client.execute_post_request(_query, &_cached_response);
+<<<<<<< HEAD
     VLOG(1) << "ES Query:" << _query;
     if (!status.ok() || _network_client.get_http_status() != 200) {
         std::string err_msg = fmt::format("Failed to connect to ES server, errmsg is: {}", status.get_error_msg());
         return Status::InternalError(err_msg);
     }
     VLOG(1) << "open _cached response: " << _cached_response;
+=======
+    VLOG(2) << "ES Query:" << _query;
+    if (!status.ok() || _network_client.get_http_status() != 200) {
+        std::string err_msg = fmt::format("Failed to connect to ES server, errmsg is: {}", status.message());
+        return Status::InternalError(err_msg);
+    }
+    VLOG(2) << "open _cached response: " << _cached_response;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -186,11 +200,19 @@ Status ESScanReader::get_next(bool* scan_eos, std::unique_ptr<T>& scroll_parser)
     }
 
     scroll_parser.reset(new T(_doc_value_mode));
+<<<<<<< HEAD
     VLOG(1) << "get_next request ES, returned response: " << response;
     Status status = scroll_parser->parse(response, _exactly_once);
     if (!status.ok()) {
         _eos = true;
         LOG(WARNING) << status.get_error_msg();
+=======
+    VLOG(2) << "get_next request ES, returned response: " << response;
+    Status status = scroll_parser->parse(response, _exactly_once);
+    if (!status.ok()) {
+        _eos = true;
+        LOG(WARNING) << status.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return status;
     }
 

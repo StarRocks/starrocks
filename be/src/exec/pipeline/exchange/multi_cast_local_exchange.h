@@ -12,10 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
+=======
+#pragma once
+
+#include <deque>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <utility>
 
 #include "column/chunk.h"
 #include "exec/pipeline/source_operator.h"
+<<<<<<< HEAD
+=======
+#include "exec/spill/dir_manager.h"
+#include "fs/fs.h"
+#include "util/runtime_profile.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::pipeline {
 
@@ -44,6 +56,7 @@ class MultiCastLocalExchangeSinkOperator;
 // ===== exchanger =====
 class MultiCastLocalExchanger {
 public:
+<<<<<<< HEAD
     MultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number);
     ~MultiCastLocalExchanger();
     bool can_pull_chunk(int32_t mcast_consumer_index) const;
@@ -58,6 +71,43 @@ public:
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
 
 private:
+=======
+    virtual ~MultiCastLocalExchanger() = default;
+    virtual Status init_metrics(RuntimeProfile* profile) = 0;
+
+    virtual bool can_pull_chunk(int32_t mcast_consumer_index) const = 0;
+    virtual bool can_push_chunk() const = 0;
+    virtual Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
+    virtual StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consuemr_index) = 0;
+    virtual void open_source_operator(int32_t mcast_consumer_index) = 0;
+    virtual void close_source_operator(int32_t mcast_consumer_index) = 0;
+    virtual void open_sink_operator() = 0;
+    virtual void close_sink_operator() = 0;
+
+    virtual bool releaseable() const { return false; }
+    virtual void enter_release_memory_mode() {}
+};
+
+class InMemoryMultiCastLocalExchanger final : public MultiCastLocalExchanger {
+public:
+    InMemoryMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number);
+    ~InMemoryMultiCastLocalExchanger() override;
+
+    Status init_metrics(RuntimeProfile* profile) override;
+    bool can_pull_chunk(int32_t mcast_consumer_index) const override;
+    bool can_push_chunk() const override;
+    Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consuemr_index) override;
+    void open_source_operator(int32_t mcast_consumer_index) override;
+    void close_source_operator(int32_t mcast_consumer_index) override;
+    void open_sink_operator() override;
+    void close_sink_operator() override;
+
+#ifndef BE_TEST
+private:
+#endif
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     struct Cell {
         ChunkPtr chunk = nullptr;
         Cell* next = nullptr;
@@ -82,11 +132,15 @@ private:
     Cell* _tail = nullptr;
     size_t _current_memory_usage = 0;
     size_t _current_row_size = 0;
+<<<<<<< HEAD
     std::unique_ptr<RuntimeProfile> _runtime_profile;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;
 };
 
+<<<<<<< HEAD
 // ===== source op =====
 class MultiCastLocalExchangeSourceOperator final : public SourceOperator {
 public:
@@ -182,6 +236,29 @@ public:
 
 private:
     std::shared_ptr<MultiCastLocalExchanger> _exchanger;
+=======
+class MemLimitedChunkQueue;
+
+class SpillableMultiCastLocalExchanger : public MultiCastLocalExchanger {
+public:
+    SpillableMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int32_t plan_node_id);
+    ~SpillableMultiCastLocalExchanger() override = default;
+
+    Status init_metrics(RuntimeProfile* profile) override;
+    bool can_pull_chunk(int32_t mcast_consumer_index) const override;
+    bool can_push_chunk() const override;
+    Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) override;
+    void open_source_operator(int32_t mcast_consumer_index) override;
+    void close_source_operator(int32_t mcast_consumer_index) override;
+    void open_sink_operator() override;
+    void close_sink_operator() override;
+    bool releaseable() const override { return true; }
+    void enter_release_memory_mode() override;
+
+private:
+    std::shared_ptr<MemLimitedChunkQueue> _queue;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks::pipeline

@@ -43,10 +43,18 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
+<<<<<<< HEAD
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.SortInfo;
+import com.starrocks.common.IdGenerator;
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.TopNType;
@@ -65,6 +73,10 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
@@ -88,6 +100,13 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     private boolean withRuntimeFilters = false;
 
+<<<<<<< HEAD
+=======
+    private List<Expr> preAggFnCalls;
+
+    private List<SlotId> preAggOutputColumnId;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setAnalyticPartitionExprs(List<Expr> exprs) {
         this.analyticPartitionExprs = exprs;
     }
@@ -108,6 +127,12 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         this.nullableTupleIds.addAll(input.getNullableTupleIds());
         this.children.add(input);
         this.offset = offset;
+<<<<<<< HEAD
+=======
+        if (info.getPreAggTupleDesc_() != null && !info.getPreAggTupleDesc_().getSlots().isEmpty()) {
+            this.tupleIds.addAll(Lists.newArrayList(info.getPreAggTupleDesc_().getId()));
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Preconditions.checkArgument(info.getOrderingExprs().size() == info.getIsAscOrder().size());
     }
 
@@ -135,6 +160,13 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         return info;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPreAggFnCalls(List<Expr> preAggFnCalls) {
+        this.preAggFnCalls = preAggFnCalls;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     protected void computeStats(Analyzer analyzer) {
     }
@@ -145,7 +177,12 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl) {
+=======
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl,
+                                    ExecGroupSets execGroupSets) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         // only support the runtime filter in TopN when limit > 0
         if (limit < 0 || !sessionVariable.getEnableTopNRuntimeFilter() ||
@@ -165,9 +202,15 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         rf.setSortInfo(getSortInfo());
         rf.setBuildExpr(orderBy);
         rf.setRuntimeFilterType(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER);
+<<<<<<< HEAD
 
         for (PlanNode child : children) {
             if (child.pushDownRuntimeFilters(descTbl, rf, orderBy, Lists.newArrayList())) {
+=======
+        RuntimeFilterPushDownContext rfPushDownCtx = new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+        for (PlanNode child : children) {
+            if (child.pushDownRuntimeFilters(rfPushDownCtx, orderBy, Lists.newArrayList())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 this.buildRuntimeFilters.add(rf);
             }
         }
@@ -179,6 +222,13 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         buildRuntimeFilters.clear();
     }
 
+<<<<<<< HEAD
+=======
+    public void setPreAggOutputColumnId(List<SlotId> preAggOutputColumnId) {
+        this.preAggOutputColumnId = preAggOutputColumnId;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     protected String debugString() {
         List<String> strings = Lists.newArrayList();
@@ -197,7 +247,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                 Expr.treesToThrift(info.getOrderingExprs()),
                 info.getIsAscOrder(),
                 info.getNullsFirst());
+<<<<<<< HEAD
         Preconditions.checkState(tupleIds.size() == 1, "Incorrect size for tupleIds in SortNode");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         sortInfo.setSort_tuple_slot_exprs(Expr.treesToThrift(resolvedTupleExprs));
 
         msg.sort_node = new TSortNode(sortInfo, useTopN);
@@ -237,11 +290,29 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         if (sqlSortKeysBuilder.length() > 0) {
             msg.sort_node.setSql_sort_keys(sqlSortKeysBuilder.toString());
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!buildRuntimeFilters.isEmpty()) {
             List<TRuntimeFilterDescription> tRuntimeFilterDescriptions =
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters);
             msg.sort_node.setBuild_runtime_filters(tRuntimeFilterDescriptions);
         }
+<<<<<<< HEAD
+=======
+
+        if (preAggFnCalls != null && !preAggFnCalls.isEmpty()) {
+            msg.sort_node.setPre_agg_exprs(Expr.treesToThrift(preAggFnCalls));
+            msg.sort_node.setPre_agg_insert_local_shuffle(
+                    ConnectContext.get().getSessionVariable().isInsertLocalShuffleForWindowPreAgg());
+        }
+        if (preAggOutputColumnId != null && !preAggOutputColumnId.isEmpty()) {
+            List<Integer> outputColumnsId = preAggOutputColumnId.stream().map(slotId -> slotId.asInt()).collect(
+                    Collectors.toList());
+            msg.sort_node.setPre_agg_output_slot_id(outputColumnsId);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -287,6 +358,45 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
             output.append(isAsc.next() ? "ASC" : "DESC");
         }
         output.append("\n");
+<<<<<<< HEAD
+=======
+
+        if (preAggFnCalls != null && !preAggFnCalls.isEmpty()) {
+            output.append(detailPrefix).append("pre agg functions: ");
+            List<String> strings = Lists.newArrayList();
+
+            for (Expr fnCall : preAggFnCalls) {
+                strings.add("[");
+                if (detailLevel.equals(TExplainLevel.NORMAL)) {
+                    strings.add(fnCall.toSql());
+                } else {
+                    strings.add(fnCall.explain());
+                }
+                strings.add("]");
+            }
+            output.append(Joiner.on(", ").join(strings));
+            output.append("\n");
+        }
+
+        if (!analyticPartitionExprs.isEmpty()) {
+            output.append(detailPrefix).append("analytic partition by: ");
+            start = true;
+            for (Expr expr : analyticPartitionExprs) {
+                if (start) {
+                    start = false;
+                } else {
+                    output.append(", ");
+                }
+                if (detailLevel.equals(TExplainLevel.NORMAL)) {
+                    output.append(expr.toSql());
+                } else {
+                    output.append(expr.explain());
+                }
+            }
+            output.append("\n");
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (!buildRuntimeFilters.isEmpty()) {
                 output.append(detailPrefix).append("build runtime filters:\n");
@@ -299,12 +409,16 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         return output.toString();
     }
 
+<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return children.get(0).getNumInstances();
     }
 
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // Compute the memory layout for the generated tuple.
         computeStats(analyzer);
         // createDefaultSmap(analyzer);
@@ -349,11 +463,14 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean canUseRuntimeAdaptiveDop() {
         return !withRuntimeFilters && getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # timestamp
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将时间表达式 `expr` 转换为 DATETIME 值。
 

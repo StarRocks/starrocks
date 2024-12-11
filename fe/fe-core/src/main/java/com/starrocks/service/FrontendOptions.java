@@ -37,11 +37,19 @@ package com.starrocks.service;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.Storage;
 import org.apache.commons.net.util.SubnetUtils;
+=======
+import com.google.common.net.InetAddresses;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.NetUtils;
+import com.starrocks.persist.Storage;
+import inet.ipaddr.IPAddressString;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,13 +58,21 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.Inet4Address;
+<<<<<<< HEAD
+=======
+import java.net.Inet6Address;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Properties;
 
 public class FrontendOptions {
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public enum HostType {
         FQDN,
         IP,
@@ -78,7 +94,11 @@ public class FrontendOptions {
     public static void init(String[] args) throws UnknownHostException {
         localAddr = null;
         if (!"0.0.0.0".equals(Config.frontend_address)) {
+<<<<<<< HEAD
             if (!InetAddressValidator.getInstance().isValidInet4Address(Config.frontend_address)) {
+=======
+            if (!InetAddressValidator.getInstance().isValid(Config.frontend_address)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 throw new UnknownHostException("invalid frontend_address: " + Config.frontend_address);
             }
             localAddr = InetAddress.getByName(Config.frontend_address);
@@ -150,6 +170,7 @@ public class FrontendOptions {
     }
 
     @VisibleForTesting
+<<<<<<< HEAD
     static void initAddrUseFqdn(List<InetAddress> hosts) {
         useFqdn = true;
 
@@ -211,12 +232,97 @@ public class FrontendOptions {
         }
         LOG.info("Use FQDN init local addr, FQDN: {}, IP: {}", 
                 localAddr.getCanonicalHostName(), localAddr.getHostAddress());
+=======
+    static void initAddrUseFqdn(List<InetAddress> addrs) {
+        useFqdn = true;
+        analyzePriorityCidrs();
+        String fqdn = null;
+
+        if (PRIORITY_CIDRS.isEmpty()) {
+            // Get FQDN from local host by default.
+            try {
+                InetAddress localHost = InetAddress.getLocalHost();
+                fqdn = localHost.getCanonicalHostName();
+                String ip = localHost.getHostAddress();
+                LOG.info("Get FQDN from local host by default, FQDN: {}, ip: {}, v6: {}", fqdn, ip,
+                        localHost instanceof Inet6Address);
+            } catch (UnknownHostException e) {
+                LOG.error("failed to get FQDN from local host, will exit", e);
+                System.exit(-1);
+            }
+            if (fqdn == null) {
+                LOG.error("priority_networks is not set and we cannot get FQDN from local host");
+                System.exit(-1);
+            }
+            // Try to resolve addr from FQDN
+            InetAddress uncheckedInetAddress = null;
+            try {
+                uncheckedInetAddress = InetAddress.getByName(fqdn);
+            } catch (UnknownHostException e) {
+                LOG.error("failed to parse FQDN: {}, message: {}", fqdn, e.getMessage(), e);
+                System.exit(-1);
+            }
+            if (null == uncheckedInetAddress) {
+                LOG.error("failed to parse FQDN: {}", fqdn);
+                System.exit(-1);
+            }
+            // Check whether the InetAddress obtained via FQDN is bound to some network interface
+            boolean hasInetAddr = false;
+            for (InetAddress addr : addrs) {
+                LOG.info("Try to match addr in fqdn mode, ip: {}, FQDN: {}",
+                        addr.getHostAddress(), addr.getCanonicalHostName());
+                if (addr.getCanonicalHostName()
+                        .equals(uncheckedInetAddress.getCanonicalHostName())) {
+                    hasInetAddr = true;
+                    break;
+                }
+            }
+            if (hasInetAddr) {
+                localAddr = uncheckedInetAddress;
+                LOG.info("Using FQDN from local host by default, FQDN: {}, ip: {}, v6: {}",
+                        localAddr.getCanonicalHostName(),
+                        localAddr.getHostAddress(),
+                        localAddr instanceof Inet6Address);
+            } else {
+                LOG.error("Cannot find a network interface matching FQDN: {}", fqdn);
+                System.exit(-1);
+            }
+        } else {
+            LOG.info("using priority_networks in fqdn mode to decide whether ipv6 or ipv4 is preferred");
+            for (InetAddress addr : addrs) {
+                String hostAddr = addr.getHostAddress();
+                String canonicalHostName = addr.getCanonicalHostName();
+                LOG.info("Try to match addr in fqdn mode, ip: {}, FQDN: {}", hostAddr, canonicalHostName);
+                if (isInPriorNetwork(hostAddr)) {
+                    localAddr = addr;
+                    fqdn = canonicalHostName;
+                    LOG.info("Using FQDN from matched addr, FQDN: {}, ip: {}, v6: {}",
+                            fqdn, hostAddr, addr instanceof Inet6Address);
+                    break;
+                }
+                LOG.info("skip addr {} not belonged to priority networks in FQDN mode", addr);
+            }
+            if (fqdn == null) {
+                LOG.error("priority_networks has been set and we cannot find matched addr, will exit");
+                System.exit(-1);
+            }
+        }
+
+        // double-check the reverse resolve
+        String canonicalHostName = localAddr.getCanonicalHostName();
+        if (!canonicalHostName.equals(fqdn)) {
+            LOG.error("The FQDN of the parsed address [{}] is not the same as " + 
+                    "the FQDN obtained from the host [{}]", canonicalHostName, fqdn);
+            System.exit(-1);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @VisibleForTesting
     static void initAddrUseIp(List<InetAddress> hosts) {
         useFqdn = false;
         analyzePriorityCidrs();
+<<<<<<< HEAD
         // if not set frontend_address, get a non-loopback ip
 
         InetAddress loopBack = null;
@@ -242,6 +348,54 @@ public class FrontendOptions {
         if (!PRIORITY_CIDRS.isEmpty() && !hasMatchedIp) {
             LOG.warn("ip address range configured for priority_networks does not include the current IP address");
         }
+=======
+
+        InetAddress loopBack = null;
+        boolean hasMatchedIp = false;
+
+        // If `priority_networks` is configured, find a possible ip matching the configuration first.
+        // Otherwise, find other usable ip as if `priority_networks` is not configured.
+        if (!PRIORITY_CIDRS.isEmpty()) {
+            for (InetAddress addr : hosts) {
+                LOG.info("check ip address: {}", addr);
+                // Whether to use IPv4 or IPv6, it's configured by CIDR format.
+                // If both IPv4 and IPv6 are configured, the config order decides priority.
+                if (isInPriorNetwork(addr.getHostAddress())) {
+                    localAddr = addr;
+                    hasMatchedIp = true;
+                    break;
+                }
+                LOG.info("skip ip not belonged to priority networks: {}", addr);
+            }
+            // If all ips not match the priority_networks then print the warning log
+            if (!hasMatchedIp) {
+                LOG.warn("ip address range configured for priority_networks does not include the current IP address, " +
+                        "will try other usable ip");
+            }
+        }
+
+        if (localAddr == null) {
+            for (InetAddress addr : hosts) {
+                LOG.info("check ip address: {}", addr);
+                if (addr.isLoopbackAddress()) {
+                    loopBack = addr;
+                } else {
+                    if (Config.net_use_ipv6_when_priority_networks_empty) {
+                        if (addr instanceof Inet6Address) {
+                            localAddr = addr;
+                        }
+                    } else if (addr instanceof Inet4Address) {
+                        localAddr = addr;
+                    }
+                    if (localAddr != null) {
+                        // Use the first one found.
+                        break;
+                    }
+                }
+            }
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // nothing found, use loopback addr
         if (localAddr == null) {
             localAddr = loopBack;
@@ -260,10 +414,13 @@ public class FrontendOptions {
         }
     }
 
+<<<<<<< HEAD
     public static InetAddress getLocalHost() {
         return localAddr;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static boolean isUseFqdn() {
         return useFqdn;
     }
@@ -272,13 +429,18 @@ public class FrontendOptions {
         if (useFqdn) {
             return localAddr.getCanonicalHostName();
         }
+<<<<<<< HEAD
         return localAddr.getHostAddress();
+=======
+        return InetAddresses.toAddrString(localAddr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static String getHostname() {
         return localAddr.getHostName();
     }
 
+<<<<<<< HEAD
     public static String getHostnameByIp(String ip) {
         String hostName = FeConstants.NULL_STRING;
         try {
@@ -294,6 +456,12 @@ public class FrontendOptions {
     private static void analyzePriorityCidrs() {
         String priorCidrs = Config.priority_networks;
         if (Strings.isNullOrEmpty(priorCidrs)) {
+=======
+    private static void analyzePriorityCidrs() {
+        String priorCidrs = Config.priority_networks;
+        if (Strings.isNullOrEmpty(priorCidrs)) {
+            PRIORITY_CIDRS.clear();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return;
         }
         LOG.info("configured prior_cidrs value: {}", priorCidrs);
@@ -308,6 +476,7 @@ public class FrontendOptions {
         ip = ip.trim();
         for (String cidr : PRIORITY_CIDRS) {
             cidr = cidr.trim();
+<<<<<<< HEAD
             if (!cidr.contains("/")) {
                 // it is not valid CIDR, compare ip directly.
                 if (cidr.equals(ip)) {
@@ -320,9 +489,22 @@ public class FrontendOptions {
                 if (subnetInfo.isInRange(ip)) {
                     return true;
                 }
+=======
+            IPAddressString network = new IPAddressString(cidr);
+            IPAddressString address = new IPAddressString(ip);
+            if (network.contains(address)) {
+                return true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         return false;
     }
+<<<<<<< HEAD
+=======
+
+    public static boolean isBindIPV6() {
+        return localAddr instanceof Inet6Address;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 

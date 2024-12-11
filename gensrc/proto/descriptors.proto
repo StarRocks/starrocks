@@ -38,6 +38,10 @@ package starrocks;
 option java_package = "com.starrocks.proto";
 
 import "types.proto";
+<<<<<<< HEAD
+=======
+import "tablet_schema.proto";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 message PSlotDescriptor {
     required int32 id = 1;
@@ -62,10 +66,26 @@ message PTupleDescriptor {
     optional int32 num_null_slots = 5;
 };
 
+<<<<<<< HEAD
+=======
+message POlapTableColumnParam {
+    repeated ColumnPB columns_desc = 1;
+    repeated int32 sort_key_uid = 2;
+    required int32 short_key_column_count = 3;
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 message POlapTableIndexSchema {
     required int64 id = 1;
     repeated string columns = 2;
     required int32 schema_hash = 3;
+<<<<<<< HEAD
+=======
+    optional POlapTableColumnParam column_param = 4;
+    optional int64 schema_id = 5;
+    map<string, string> column_to_expr_value = 6;
+    optional bool is_shadow = 7;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 message POlapTableSchemaParam {

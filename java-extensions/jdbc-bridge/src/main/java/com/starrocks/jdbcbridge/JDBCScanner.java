@@ -23,12 +23,17 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URL;
 import java.net.URLClassLoader;
+<<<<<<< HEAD
+=======
+import java.sql.Blob;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Time;
 import java.sql.Timestamp;
+<<<<<<< HEAD
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -38,6 +43,19 @@ import java.util.Locale;
 import java.util.Set;
 
 
+=======
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class JDBCScanner {
     private String driverLocation;
     private HikariDataSource dataSource;
@@ -51,7 +69,10 @@ public class JDBCScanner {
     private int resultNumRows = 0;
     ClassLoader classLoader;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public JDBCScanner(String driverLocation, JDBCScanContext scanContext) {
         this.driverLocation = driverLocation;
         this.scanContext = scanContext;
@@ -61,9 +82,13 @@ public class JDBCScanner {
         String cacheKey = computeCacheKey(scanContext.getUser(), scanContext.getPassword(), scanContext.getJdbcURL());
         URL driverURL = new File(driverLocation).toURI().toURL();
         DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(cacheKey, () -> {
+<<<<<<< HEAD
             ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {
                     driverURL,
             });
+=======
+            ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {driverURL});
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Thread.currentThread().setContextClassLoader(classLoader);
             HikariConfig config = new HikariConfig();
             config.setDriverClassName(scanContext.getDriverClassName());
@@ -85,7 +110,12 @@ public class JDBCScanner {
 
         connection = dataSource.getConnection();
         connection.setAutoCommit(false);
+<<<<<<< HEAD
         statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+=======
+        statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY,
+                ResultSet.CONCUR_READ_ONLY);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("mysql")) {
             statement.setFetchSize(Integer.MIN_VALUE);
         } else {
@@ -97,10 +127,25 @@ public class JDBCScanner {
         resultColumnClassNames = new ArrayList<>(resultSetMetaData.getColumnCount());
         resultChunk = new ArrayList<>(resultSetMetaData.getColumnCount());
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
+<<<<<<< HEAD
             resultColumnClassNames.add(resultSetMetaData.getColumnClassName(i));
             Class<?> clazz = classLoader.loadClass(resultSetMetaData.getColumnClassName(i));
             if (isGeneralJDBCClassType(clazz)) {
                 resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
+=======
+            String className = resultSetMetaData.getColumnClassName(i);
+            resultColumnClassNames.add(className);
+            if (className.equals("byte[]") || className.equals("[B")) {
+                resultChunk.add((Object[]) Array.newInstance(byte[].class, scanContext.getStatementFetchSize()));
+                continue;
+            }
+            Class<?> clazz = classLoader.loadClass(className);
+            if (isGeneralJDBCClassType(clazz)) {
+                resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
+            } else if (null != mapEngineSpecificClassType(clazz)) {
+                Class targetClass = mapEngineSpecificClassType(clazz);
+                resultChunk.add((Object[]) Array.newInstance(targetClass, scanContext.getStatementFetchSize()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 resultChunk.add((Object[]) Array.newInstance(String.class, scanContext.getStatementFetchSize()));
             }
@@ -111,6 +156,7 @@ public class JDBCScanner {
         return username + "/" + password + "/" + jdbcUrl;
     }
 
+<<<<<<< HEAD
     private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET =  new HashSet<>(Arrays.asList(
             Boolean.class,
             Short.class,
@@ -126,11 +172,33 @@ public class JDBCScanner {
             Time.class,
             String.class
     ));
+=======
+    private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET = new HashSet<>(
+            Arrays.asList(Boolean.class, Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class,
+                    BigInteger.class, BigDecimal.class, java.sql.Date.class, Timestamp.class, LocalDate.class,
+                    LocalDateTime.class, Time.class, String.class));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private boolean isGeneralJDBCClassType(Class<?> clazz) {
         return GENERAL_JDBC_CLASS_SET.contains(clazz);
     }
 
+<<<<<<< HEAD
+=======
+    private static final Map<String, Class> ENGINE_SPECIFIC_CLASS_MAPPING = new HashMap<String, Class>() {{
+            put("com.clickhouse.data.value.UnsignedByte", Short.class);
+            put("com.clickhouse.data.value.UnsignedShort", Integer.class);
+            put("com.clickhouse.data.value.UnsignedInteger", Long.class);
+            put("com.clickhouse.data.value.UnsignedLong", BigInteger.class);
+            put("oracle.jdbc.OracleBlob", Blob.class);
+        }};
+
+    private Class mapEngineSpecificClassType(Class<?> clazz) {
+        String className = clazz.getName();
+        return ENGINE_SPECIFIC_CLASS_MAPPING.get(className);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // used for cpp interface
     public List<String> getResultColumnClassNames() {
         return resultColumnClassNames;
@@ -166,12 +234,28 @@ public class JDBCScanner {
                     dataColumn[resultNumRows] = ((Number) resultObject).floatValue();
                 } else if (dataColumn instanceof Double[]) {
                     dataColumn[resultNumRows] = ((Number) resultObject).doubleValue();
+<<<<<<< HEAD
+=======
+                } else if (resultObject instanceof byte[]) {
+                    dataColumn[resultNumRows] = resultObject;
+                } else if (resultObject instanceof Blob) {
+                    dataColumn[resultNumRows] = resultObject;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 } else if (dataColumn instanceof String[] && resultObject instanceof String) {
                     // if both sides are String, assign value directly to avoid additional calls to getString
                     dataColumn[resultNumRows] = resultObject;
                 } else if (!(dataColumn instanceof String[])) {
+<<<<<<< HEAD
                     // for other general class type, assign value directly
                     dataColumn[resultNumRows] = resultObject;
+=======
+                    if (dataColumn instanceof BigInteger[] && resultObject instanceof Number) {
+                        dataColumn[resultNumRows] = new BigInteger(resultObject.toString());
+                    } else {
+                        // for other general class type, assign value directly
+                        dataColumn[resultNumRows] = resultObject;
+                    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 } else {
                     // for non-general class type, use string representation
                     dataColumn[resultNumRows] = resultSet.getString(i + 1);
@@ -186,7 +270,10 @@ public class JDBCScanner {
         return resultNumRows;
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void close() throws Exception {
         if (resultSet != null) {
             resultSet.close();

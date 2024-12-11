@@ -21,11 +21,20 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 SchemaScanner::ColumnDesc SysFeMemoryUsage::_s_columns[] = {{"module_name", TYPE_VARCHAR, sizeof(StringValue), true},
                                                             {"class_name", TYPE_VARCHAR, sizeof(StringValue), true},
                                                             {"current_consumption", TYPE_BIGINT, sizeof(long), true},
                                                             {"peak_consumption", TYPE_BIGINT, sizeof(long), true},
                                                             {"counter_info", TYPE_VARCHAR, sizeof(StringValue), true}};
+=======
+SchemaScanner::ColumnDesc SysFeMemoryUsage::_s_columns[] = {
+        {"module_name", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"class_name", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"current_consumption", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"peak_consumption", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"counter_info", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 SysFeMemoryUsage::SysFeMemoryUsage()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -37,12 +46,21 @@ Status SysFeMemoryUsage::start(RuntimeState* state) {
     RETURN_IF(!_param->ip || !_param->port, Status::InternalError("IP or port not exists"));
 
     RETURN_IF_ERROR(SchemaScanner::start(state));
+<<<<<<< HEAD
+=======
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     TAuthInfo auth = build_auth_info();
     TFeMemoryReq request;
     request.__set_auth_info(auth);
 
+<<<<<<< HEAD
     return (SchemaHelper::list_fe_memory_usage(*(_param->ip), _param->port, request, &_result));
+=======
+    return SchemaHelper::list_fe_memory_usage(_ss_state, request, &_result);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status SysFeMemoryUsage::_fill_chunk(ChunkPtr* chunk) {

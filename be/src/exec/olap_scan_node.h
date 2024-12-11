@@ -87,6 +87,12 @@ public:
     int estimated_max_concurrent_chunks() const;
 
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
+<<<<<<< HEAD
+=======
+    static StatusOr<std::vector<RowsetSharedPtr>> capture_tablet_rowsets(const TabletSharedPtr& tablet,
+                                                                         const TInternalScanRange* scan_range);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static int compute_priority(int32_t num_submitted_tasks);
 
     int io_tasks_per_scan_operator() const override {
@@ -96,6 +102,10 @@ public:
         return starrocks::ScanNode::io_tasks_per_scan_operator();
     }
 
+<<<<<<< HEAD
+=======
+    bool output_chunk_by_bucket() const override { return _output_chunk_by_bucket; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool is_asc_hint() const override { return _output_asc_hint; }
     std::optional<bool> partition_order_hint() const override { return _partition_order_hint; }
 
@@ -146,7 +156,11 @@ private:
     void _update_status(const Status& status);
     Status _get_status();
 
+<<<<<<< HEAD
     void _fill_chunk_pool(int count, bool force_column_pool);
+=======
+    void _fill_chunk_pool(int count);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool _submit_scanner(TabletScanner* scanner, bool blockable);
     void _close_pending_scanners();
 
@@ -168,8 +182,12 @@ private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     TupleDescriptor* _tuple_desc = nullptr;
+<<<<<<< HEAD
     OlapScanConjunctsManager _conjuncts_manager;
     DictOptimizeParser _dict_optimize_parser;
+=======
+    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const Schema* _chunk_schema = nullptr;
 
     int32_t _num_scanners = 0;
@@ -202,6 +220,10 @@ private:
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     bool _sorted_by_keys_per_tablet = false;
+<<<<<<< HEAD
+=======
+    bool _output_chunk_by_bucket = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool _output_asc_hint = true;
     std::optional<bool> _partition_order_hint;
 
@@ -242,10 +264,23 @@ private:
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
+    RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_search_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _process_vector_distance_and_id_timer = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

@@ -33,16 +33,44 @@ namespace starrocks {
 class SegmentReplicateTask final : public Runnable {
 public:
     SegmentReplicateTask(ReplicateToken* replicate_token, std::unique_ptr<SegmentPB> segment, bool eos)
+<<<<<<< HEAD
             : _replicate_token(replicate_token), _segment(std::move(segment)), _eos(eos) {}
 
     ~SegmentReplicateTask() override = default;
 
     void run() override { _replicate_token->_sync_segment(std::move(_segment), _eos); }
+=======
+            : _replicate_token(replicate_token),
+              _segment(std::move(segment)),
+              _eos(eos),
+              _create_time_ns(MonotonicNanos()) {}
+
+    ~SegmentReplicateTask() override = default;
+
+    void run() override {
+        auto& stat = _replicate_token->_stat;
+        stat.num_pending_tasks.fetch_add(-1, std::memory_order_relaxed);
+        stat.pending_time_ns.fetch_add(MonotonicNanos() - _create_time_ns, std::memory_order_relaxed);
+        stat.num_running_tasks.fetch_add(1, std::memory_order_relaxed);
+        int64_t duration_ns = 0;
+        {
+            SCOPED_RAW_TIMER(&duration_ns);
+            _replicate_token->_sync_segment(std::move(_segment), _eos);
+        }
+        stat.num_running_tasks.fetch_add(-1, std::memory_order_relaxed);
+        stat.num_finished_tasks.fetch_add(1, std::memory_order_relaxed);
+        stat.execute_time_ns.fetch_add(duration_ns, std::memory_order_relaxed);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     ReplicateToken* _replicate_token;
     std::unique_ptr<SegmentPB> _segment;
     bool _eos;
+<<<<<<< HEAD
+=======
+    int64_t _create_time_ns;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 ReplicateChannel::ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id)
@@ -93,7 +121,11 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
                                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     RETURN_IF_ERROR(_st);
 
+<<<<<<< HEAD
     VLOG(1) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
+=======
+    VLOG(2) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             << " eos " << eos << " to [" << _host << ":" << _port;
 
     // 1. init sync channel
@@ -111,7 +143,11 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
         RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
     }
 
+<<<<<<< HEAD
     VLOG(1) << "Asynced tablet " << _opt->tablet_id << " segment id "
+=======
+    VLOG(2) << "Asynced tablet " << _opt->tablet_id << " segment id "
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             << (segment == nullptr ? -1 : segment->segment_id()) << " eos " << eos << " to [" << _host << ":" << _port
             << "] res " << _closure->result.DebugString();
 
@@ -125,6 +161,14 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     request.set_eos(eos);
     request.set_txn_id(_opt->txn_id);
     request.set_index_id(_opt->index_id);
+<<<<<<< HEAD
+=======
+    request.set_sink_id(_opt->sink_id);
+
+    VLOG(2) << "Send segment to " << debug_string()
+            << " segment_id=" << (segment == nullptr ? -1 : segment->segment_id()) << " eos=" << eos
+            << " txn_id=" << _opt->txn_id << " index_id=" << _opt->index_id << " sink_id=" << _opt->sink_id;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     _closure->ref();
     _closure->reset();
@@ -210,7 +254,15 @@ Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
         return Status::InternalError(fmt::format("{} segment=null eos=false", debug_string()));
     }
     auto task = std::make_shared<SegmentReplicateTask>(this, std::move(segment), eos);
+<<<<<<< HEAD
     return _replicate_token->submit(std::move(task));
+=======
+    Status st = _replicate_token->submit(std::move(task));
+    if (st.ok()) {
+        _stat.num_pending_tasks.fetch_add(1, std::memory_order_relaxed);
+    }
+    return st;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void ReplicateToken::cancel(const Status& st) {
@@ -290,6 +342,46 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
                 return set_status(st);
             }
         }
+<<<<<<< HEAD
+=======
+        if (!segment->seg_indexes().empty()) {
+            auto mutable_indexes = segment->mutable_seg_indexes();
+            size_t total_index_data_size = 0;
+            for (int i = 0; i < mutable_indexes->size(); i++) {
+                auto& index = mutable_indexes->at(i);
+                if (index.index_type() == VECTOR) {
+                    auto index_path = mutable_indexes->at(i).index_path();
+                    auto res = _fs->new_random_access_file(index_path);
+
+                    if (!res.ok()) {
+                        LOG(WARNING) << "Failed to open index file " << index_path << " by " << debug_string()
+                                     << " err " << res.status();
+                        return set_status(res.status());
+                    }
+
+                    auto file_size_res = _fs->get_file_size(index_path);
+                    if (!file_size_res.ok()) {
+                        LOG(WARNING) << "Failed to get index file size " << index_path << " err " << res.status();
+                        return set_status(res.status());
+                    }
+                    auto file_size = file_size_res.value();
+                    mutable_indexes->at(i).set_index_file_size(file_size);
+                    total_index_data_size += file_size;
+
+                    auto rfile = std::move(res.value());
+                    auto buf = new uint8[file_size];
+                    data.append_user_data(buf, file_size, [](void* buf) { delete[](uint8*) buf; });
+                    auto st = rfile->read_fully(buf, file_size);
+                    if (!st.ok()) {
+                        LOG(WARNING) << "Failed to read index file " << segment->DebugString() << " by "
+                                     << debug_string() << " err " << st;
+                        return set_status(st);
+                    }
+                }
+                segment->set_seg_index_data_size(total_index_data_size);
+            }
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // 2. send segment to secondary replica

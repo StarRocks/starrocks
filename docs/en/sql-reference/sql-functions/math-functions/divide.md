@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # divide
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Return the quotient of x divide y. If y is 0, return null.
 

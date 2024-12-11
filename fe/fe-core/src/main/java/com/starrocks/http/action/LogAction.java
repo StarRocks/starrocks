@@ -30,6 +30,10 @@ import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
+=======
+import org.owasp.encoder.Encode;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -55,9 +59,15 @@ public class LogAction extends WebBaseAction {
     public void executeGet(BaseRequest request, BaseResponse response) {
         getPageHeader(request, response.getContent());
 
+<<<<<<< HEAD
         // get parameters
         addVerboseName = request.getSingleParameter("add_verbose");
         delVerboseName = request.getSingleParameter("del_verbose");
+=======
+        // HTML encode the add_verbose and del_verbose to prevent XSS
+        addVerboseName = Encode.forHtml(request.getSingleParameter("add_verbose"));
+        delVerboseName = Encode.forHtml(request.getSingleParameter("del_verbose"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG.info("add verbose name: {}, del verbose name: {}", addVerboseName, delVerboseName);
 
         appendLogConf(response.getContent());
@@ -96,7 +106,11 @@ public class LogAction extends WebBaseAction {
             appendUpdateVerboseButton(buffer, "add_verbose");
             appendUpdateVerboseButton(buffer, "del_verbose");
         } catch (IOException e) {
+<<<<<<< HEAD
             LOG.error(e);
+=======
+            LOG.error(e.getMessage(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -141,9 +155,16 @@ public class LogAction extends WebBaseAction {
             raf.seek(startPos);
             buffer.append("<p>Showing last " + webContentLength + " bytes of log</p>");
             buffer.append("<pre>");
+<<<<<<< HEAD
             String fileBuffer = null;
             while ((fileBuffer = raf.readLine()) != null) {
                 buffer.append(fileBuffer).append("\n");
+=======
+            String fileBuffer;
+            while ((fileBuffer = raf.readLine()) != null) {
+                // HTML encode to prevent XSS
+                buffer.append(Encode.forHtml(fileBuffer)).append("\n");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             buffer.append("</pre>");
         } catch (FileNotFoundException e) {

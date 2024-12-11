@@ -32,6 +32,11 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
@@ -66,6 +71,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import static com.starrocks.sql.common.TimeUnitUtils.TIME_MAP;
 
@@ -78,7 +87,11 @@ public class ColumnFilterConverter {
     private static final ColumnFilterVisitor COLUMN_FILTER_VISITOR = new ColumnFilterVisitor();
 
     // replaces a field in an expression with a constant
+<<<<<<< HEAD
     private static class ExprRewriter extends AstVisitor<Boolean, Void> {
+=======
+    private static class ExprRewriter implements AstVisitor<Boolean, Void> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         private final ColumnRefOperator columnRef;
         private final ConstantOperator constant;
@@ -102,16 +115,38 @@ public class ColumnFilterConverter {
 
         @Override
         public Boolean visitFunctionCall(FunctionCallExpr node, Void context) {
+<<<<<<< HEAD
             if (FunctionSet.SUBSTRING.equalsIgnoreCase(node.getFnName().getFunction()) ||
                     FunctionSet.SUBSTR.equalsIgnoreCase(node.getFnName().getFunction())) {
                 Expr firstExpr = node.getChild(0);
                 if (firstExpr instanceof SlotRef) {
                     SlotRef slotRef = (SlotRef) node.getChild(0);
+=======
+            String functionName = node.getFnName().getFunction();
+            if (FunctionSet.SUBSTRING.equalsIgnoreCase(functionName) ||
+                    FunctionSet.SUBSTR.equalsIgnoreCase(functionName)) {
+                Expr firstExpr = node.getChild(0);
+                if (firstExpr instanceof SlotRef) {
+                    SlotRef slotRef = (SlotRef) firstExpr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (columnRef.getName().equals(slotRef.getColumnName())) {
                         node.setChild(0, new StringLiteral(constant.getVarchar()));
                         return true;
                     }
                 }
+<<<<<<< HEAD
+=======
+            } else if (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(functionName) ||
+                    FunctionSet.FROM_UNIXTIME_MS.equalsIgnoreCase(functionName)) {
+                Expr firstExpr = node.getChild(0);
+                if (firstExpr instanceof SlotRef) {
+                    SlotRef slotRef = (SlotRef) firstExpr;
+                    if (columnRef.getName().equals(slotRef.getColumnName())) {
+                        node.setChild(0, new IntLiteral(constant.getBigint()));
+                        return true;
+                    }
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             return false;
         }
@@ -172,7 +207,13 @@ public class ColumnFilterConverter {
 
         if (table != null && table.isExprPartitionTable()) {
             OlapTable olapTable = (OlapTable) table;
+<<<<<<< HEAD
             predicate = convertPredicate(predicate, (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo());
+=======
+            predicate = convertPredicate(predicate,
+                    (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo(),
+                    table.getIdToColumn());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         if (!checkColumnRefCanPartition(predicate.getChild(0), table)) {
@@ -189,12 +230,22 @@ public class ColumnFilterConverter {
     // Replace the predicate of the query with the predicate of the partition expression and evaluate.
     // If the condition is not met, there will be no change to the predicate.
     public static ScalarOperator convertPredicate(ScalarOperator predicate,
+<<<<<<< HEAD
                                                   ExpressionRangePartitionInfoV2 exprRangePartitionInfo) {
         // Currently only one partition column is supported
         if (exprRangePartitionInfo.getPartitionExprs().size() != 1) {
             return predicate;
         }
         Expr firstPartitionExpr = exprRangePartitionInfo.getPartitionExprs().get(0);
+=======
+                                                  ExpressionRangePartitionInfoV2 exprRangePartitionInfo,
+                                                  Map<ColumnId, Column> idToColumn) {
+        // Currently only one partition column is supported
+        if (exprRangePartitionInfo.getPartitionExprsSize() != 1) {
+            return predicate;
+        }
+        Expr firstPartitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Expr predicateExpr = firstPartitionExpr.clone();
 
         // only support binary predicate
@@ -219,11 +270,20 @@ public class ColumnFilterConverter {
             }
             predicate = predicate.clone();
             ConstantOperator result = (ConstantOperator) evaluation;
+<<<<<<< HEAD
             try {
                 result = result.castTo(predicateExpr.getType());
             } catch (Exception e) {
                 return predicate;
             }
+=======
+            Optional<ConstantOperator> castResult = result.castTo(predicateExpr.getType());
+
+            if (!castResult.isPresent()) {
+                return predicate;
+            }
+            result = castResult.get();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             predicate.setChild(1, result);
         }
         return predicate;
@@ -255,7 +315,11 @@ public class ColumnFilterConverter {
                 return false;
             }
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+<<<<<<< HEAD
             return checkPartitionExprsContainsOperator(expressionRangePartitionInfo.getPartitionExprs(),
+=======
+            return checkPartitionExprsContainsOperator(expressionRangePartitionInfo.getPartitionExprs(table.getIdToColumn()),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     (CallOperator) right);
         }
 

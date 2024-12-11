@@ -29,19 +29,33 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "testutil/assert.h"
+<<<<<<< HEAD
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
 #include "util/defer_op.h"
+=======
+#include "testutil/sync_point.h"
+#include "util/brpc_stub_cache.h"
+#include "util/cpu_info.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 class mg_connection;
 
 namespace starrocks {
 
+<<<<<<< HEAD
 extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, const std::string&);
 
 namespace {
 static std::string k_response_str;
 static void inject_send_reply(HttpRequest* request, HttpStatus status, const std::string& content) {
+=======
+extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, std::string_view);
+
+namespace {
+static std::string k_response_str;
+static void inject_send_reply(HttpRequest* request, HttpStatus status, std::string_view content) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     k_response_str = content;
 }
 } // namespace
@@ -50,7 +64,10 @@ extern TLoadTxnBeginResult k_stream_load_begin_result;
 extern TLoadTxnCommitResult k_stream_load_commit_result;
 extern TLoadTxnRollbackResult k_stream_load_rollback_result;
 extern TStreamLoadPutResult k_stream_load_put_result;
+<<<<<<< HEAD
 extern Status k_stream_load_plan_status;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 class TransactionStreamLoadActionTest : public testing::Test {
 public:
@@ -63,7 +80,10 @@ public:
         k_stream_load_commit_result = TLoadTxnCommitResult();
         k_stream_load_rollback_result = TLoadTxnRollbackResult();
         k_stream_load_put_result = TStreamLoadPutResult();
+<<<<<<< HEAD
         k_stream_load_plan_status = Status::OK();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
@@ -591,6 +611,12 @@ TEST_F(TransactionStreamLoadActionTest, txn_plan_fail) {
     }
 
     {
+<<<<<<< HEAD
+=======
+        SyncPoint::GetInstance()->EnableProcessing();
+        SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::execute_plan_fragment:1",
+                                              [](void* arg) { *(Status*)arg = Status::InternalError("TestFail"); });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TransactionStreamLoadAction action(&_env);
 
         HttpRequest request(_evhttp_req);
@@ -603,13 +629,22 @@ TEST_F(TransactionStreamLoadActionTest, txn_plan_fail) {
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_LABEL_KEY, "123");
+<<<<<<< HEAD
         k_stream_load_plan_status = Status::InternalError("TestFail");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         action.on_header(&request);
         action.handle(&request);
 
         rapidjson::Document doc;
         doc.Parse(k_response_str.c_str());
         ASSERT_STREQ("OK", doc["Status"].GetString());
+<<<<<<< HEAD
+=======
+
+        SyncPoint::GetInstance()->ClearCallBack("StreamLoadExecutor::execute_plan_fragment:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -761,6 +796,103 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
     }
 }
 
+<<<<<<< HEAD
+=======
+#define SET_MEMORY_LIMIT_EXCEEDED(stmt)                                                            \
+    do {                                                                                           \
+        DeferOp defer([]() {                                                                       \
+            SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");          \
+            SyncPoint::GetInstance()->DisableProcessing();                                         \
+        });                                                                                        \
+        SyncPoint::GetInstance()->EnableProcessing();                                              \
+        SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker", [](void* arg) { \
+            *((Status*)arg) = Status::MemoryLimitExceeded("TestFail");                             \
+        });                                                                                        \
+        { stmt; }                                                                                  \
+    } while (0)
+
+TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
+    TransactionStreamLoadAction action(&_env);
+    auto ctx = new StreamLoadContext(&_env);
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "huge_malloc";
+    ctx->ref();
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    auto evb = evbuffer_new();
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+        evbuffer_free(evb);
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    std::string content = "abc";
+
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    ev_req.input_buffer = evb;
+    request._ev_req = &ev_req;
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+    request._headers.emplace(HTTP_DB_KEY, ctx->db);
+    request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+    request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+    ASSERT_EQ(0, action.on_header(&request));
+
+    evbuffer_add(evb, content.data(), content.size());
+    SET_MEMORY_LIMIT_EXCEEDED({
+        ctx->status = Status::OK();
+        action.on_chunk_data(&request);
+        ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+    });
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+
+    evbuffer_add(evb, content.data(), content.size());
+    SET_MEMORY_LIMIT_EXCEEDED({
+        ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+        ctx->status = Status::OK();
+        action.on_chunk_data(&request);
+        ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+        ctx->buffer = nullptr;
+    });
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ctx->buffer = nullptr;
+
+    evbuffer_add(evb, content.data(), content.size());
+    auto old_format = ctx->format;
+    SET_MEMORY_LIMIT_EXCEEDED({
+        ctx->format = TFileFormatType::FORMAT_JSON;
+        ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+        ctx->status = Status::OK();
+        action.on_chunk_data(&request);
+        ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+        ctx->buffer = nullptr;
+    });
+    ctx->format = TFileFormatType::FORMAT_JSON;
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ctx->buffer = nullptr;
+    ctx->format = old_format;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 TEST_F(TransactionStreamLoadActionTest, free_handler_ctx) {
     TransactionStreamLoadAction action(&_env);
     auto ctx = new StreamLoadContext(&_env);

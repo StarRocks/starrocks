@@ -32,7 +32,11 @@ FdCache::~FdCache() {
 }
 
 FdCache::Handle* FdCache::insert(std::string_view path, int fd) {
+<<<<<<< HEAD
     void* value = reinterpret_cast<void*>(static_cast<uintptr_t>(fd));
+=======
+    void* value = reinterpret_cast<void*>(static_cast<uintptr_t>(fd)); // NOLINT
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Cache::Handle* h = _cache->insert(CacheKey(path.data(), path.size()), value, 1, fd_deleter);
     return reinterpret_cast<FdCache::Handle*>(h);
 }

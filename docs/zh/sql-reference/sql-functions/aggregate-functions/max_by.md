@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # max_by
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回与 `y` 的最大值相关联的 `x` 值。比如 `SELECT max_by(subject, exam_result) FROM exam;` 表示返回 `exam` 表中考试得分最高的科目。该函数从 2.5 版本开始支持。
 

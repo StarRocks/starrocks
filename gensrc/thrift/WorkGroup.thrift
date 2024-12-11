@@ -39,6 +39,11 @@ struct TWorkGroup {
   13: optional i64 big_query_cpu_second_limit
   14: optional double spill_mem_limit_threshold
 
+<<<<<<< HEAD
+=======
+  15: optional i32 exclusive_cpu_cores
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   100: optional i32 max_cpu_cores
 }
 

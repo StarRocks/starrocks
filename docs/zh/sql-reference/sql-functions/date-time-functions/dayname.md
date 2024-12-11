@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dayname
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回指定日期对应的星期名称。
 

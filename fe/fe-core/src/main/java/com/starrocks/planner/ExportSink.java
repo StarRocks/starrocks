@@ -131,8 +131,11 @@ public class ExportSink extends DataSink {
         return DataPartition.RANDOM;
     }
 
+<<<<<<< HEAD
     @Override
     public boolean canUsePipeLine() {
         return true;
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

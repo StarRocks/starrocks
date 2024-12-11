@@ -58,7 +58,11 @@ class WritableFile;
 // reader can prune an entire segment without reading pages.
 class ZoneMapIndexWriter {
 public:
+<<<<<<< HEAD
     static std::unique_ptr<ZoneMapIndexWriter> create(TypeInfo* type_info, int length);
+=======
+    static std::unique_ptr<ZoneMapIndexWriter> create(TypeInfo* type_info);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     virtual ~ZoneMapIndexWriter() = default;
 

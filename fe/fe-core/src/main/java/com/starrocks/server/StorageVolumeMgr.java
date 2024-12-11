@@ -15,6 +15,10 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
@@ -23,8 +27,14 @@ import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.persist.DropStorageVolumeLog;
+import com.starrocks.persist.ImageWriter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -41,7 +51,10 @@ import com.starrocks.storagevolume.StorageVolume;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+<<<<<<< HEAD
 import java.io.DataOutputStream;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.URI;
@@ -115,7 +128,11 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                                       Optional<Boolean> enabled, String comment)
             throws DdlException, AlreadyExistsException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+<<<<<<< HEAD
             validateParams(params);
+=======
+            validateParams(svType, params);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             validateLocations(svType, locations);
             if (exists(name)) {
                 throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
@@ -159,11 +176,27 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
             throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+<<<<<<< HEAD
             validateParams(params);
             StorageVolume sv = getStorageVolumeByName(name);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
             StorageVolume copied = new StorageVolume(sv);
 
+=======
+            StorageVolume sv = getStorageVolumeByName(name);
+            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
+            StorageVolume copied = new StorageVolume(sv);
+            validateParams(copied.getType(), params);
+
+            List<String> immutableProperties =
+                    Lists.newArrayList(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
+                            CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
+            for (String param : immutableProperties) {
+                if (params.containsKey(param)) {
+                    throw new DdlException(String.format("Storage volume property '%s' is immutable!", param));
+                }
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (enabled.isPresent()) {
                 boolean enabledValue = enabled.get();
                 if (!enabledValue) {
@@ -282,12 +315,52 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public void replayDropStorageVolume(DropStorageVolumeLog log) {
     }
 
+<<<<<<< HEAD
     protected void validateParams(Map<String, String> params) throws DdlException {
+=======
+    protected void validateParams(String svType, Map<String, String> params) throws DdlException {
+        if (svType.equalsIgnoreCase(HDFS)) {
+            return;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (String key : params.keySet()) {
             if (!PARAM_NAMES.contains(key)) {
                 throw new DdlException("Invalid properties " + key);
             }
         }
+<<<<<<< HEAD
+=======
+
+        // storage volume type specific checks
+        if (!svType.equalsIgnoreCase(S3)) {
+            // The following two properties can be only set when storage volume type is 'S3'
+            List<String> s3Params = Lists.newArrayList(
+                    CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
+                    CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
+            for (String param : s3Params) {
+                if (params.containsKey(param)) {
+                    throw new DdlException(
+                            String.format("Invalid property '%s' for storage volume type '%s'", param, svType));
+                }
+            }
+        }
+        if (params.containsKey(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX)) {
+            try {
+                int value = Integer.parseInt(params.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+                if (value < 0) {
+                    throw new DdlException(String.format(
+                            "Invalid property value '%s' for property '%s', expecting a positive integer string.",
+                            params.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX),
+                            CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+                }
+            } catch (NumberFormatException e) {
+                throw new DdlException(String.format(
+                        "Invalid property value '%s' for property '%s', expecting a valid integer string.",
+                        params.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX),
+                        CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+            }
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void validateLocations(String svType, List<String> locations) throws DdlException {
@@ -317,8 +390,13 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
     }
 
+<<<<<<< HEAD
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.STORAGE_VOLUME_MGR, 1);
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.STORAGE_VOLUME_MGR, 1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         writer.writeJson(this);
         writer.close();
     }
@@ -352,11 +430,14 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
     }
 
+<<<<<<< HEAD
     public long saveStorageVolumes(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
         return checksum;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void load(DataInput in) throws IOException {
         String json = Text.readString(in);
         StorageVolumeMgr data = GsonUtils.GSON.fromJson(json, StorageVolumeMgr.class);

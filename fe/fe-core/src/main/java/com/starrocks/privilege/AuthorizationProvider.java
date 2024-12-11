@@ -35,6 +35,13 @@ public interface AuthorizationProvider {
 
     boolean isAvailablePrivType(ObjectType objectType, PrivilegeType privilegeType);
 
+<<<<<<< HEAD
+=======
+    PrivilegeType getPrivilegeType(String privTypeString);
+
+    ObjectType getObjectType(String objectTypeUnResolved);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * generate PEntryObject by tokenlist
      */
@@ -88,10 +95,13 @@ public interface AuthorizationProvider {
             List<PrivilegeType> wants,
             List<PEntryObject> objects,
             PrivilegeCollectionV2 currentPrivilegeCollection);
+<<<<<<< HEAD
 
     /**
      * Used for metadata upgrade
      */
     void upgradePrivilegeCollection(
             PrivilegeCollectionV2 info, short pluginId, short metaVersion) throws PrivilegeException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

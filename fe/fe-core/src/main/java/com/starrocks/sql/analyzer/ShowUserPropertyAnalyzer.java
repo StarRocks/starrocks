@@ -23,7 +23,11 @@ public class ShowUserPropertyAnalyzer {
     public static void analyze(ShowUserPropertyStmt statment, ConnectContext context) {
         String user = statment.getUser();
         if (Strings.isNullOrEmpty(user)) {
+<<<<<<< HEAD
             statment.setUser(context.getQualifiedUser());
+=======
+            statment.setUser(context.getCurrentUserIdentity().getUser());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             statment.setUser(user);
         }

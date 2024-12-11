@@ -18,7 +18,10 @@
 
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
+<<<<<<< HEAD
 #include "storage/column_or_predicate.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -1641,6 +1644,80 @@ TEST(ColumnPredicateTest, test_in) {
 }
 
 // NOLINTNEXTLINE
+<<<<<<< HEAD
+=======
+TEST(ColumnPredicateTest, test_dict_in) {
+    {
+        std::unique_ptr<ColumnPredicate> p(
+                new_dictionary_code_in_predicate(get_type_info(TYPE_INT), 0, {3, 4, 6, 8, 10}, 200));
+        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        c->append_datum(Datum(1));
+        c->append_datum(Datum(2));
+        c->append_datum(Datum(3));
+        (void)c->append_nulls(1);
+        c->append_datum(Datum(4));
+        c->append_datum(Datum(5));
+        c->append_datum(Datum(3));
+        c->append_datum(Datum(4));
+
+        ASSERT_EQ(PredicateType::kInList, p->type());
+        ASSERT_FALSE(p->can_vectorized());
+
+        // ---------------------------------------------
+        // evaluate()
+        // ---------------------------------------------
+        std::vector<uint8_t> buff(8);
+        p->evaluate(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("0,0,1,0,1,0,1,1", to_string(buff));
+
+        buff.assign(8, 0);
+        p->evaluate(c.get(), buff.data(), 1, 3);
+        ASSERT_EQ("0,0,1,0,0,0,0,0", to_string(buff));
+
+        // ---------------------------------------------
+        // evaluate_and()
+        // ---------------------------------------------
+        buff.assign(8, 1);
+        p->evaluate_and(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("0,0,1,0,1,0,1,1", to_string(buff));
+
+        p->evaluate_and(c.get(), buff.data(), 1, 3);
+        ASSERT_EQ("0,0,1,0,1,0,1,1", to_string(buff));
+
+        buff.assign(8, 0);
+        p->evaluate_and(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("0,0,0,0,0,0,0,0", to_string(buff));
+
+        buff[3] = 1;
+        p->evaluate_and(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("0,0,0,0,0,0,0,0", to_string(buff));
+
+        buff[2] = 1;
+        p->evaluate_and(c.get(), buff.data(), 2, 4);
+        ASSERT_EQ("0,0,1,0,0,0,0,0", to_string(buff));
+
+        // ---------------------------------------------
+        // evaluate_or()
+        // ---------------------------------------------
+        buff.assign(8, 0);
+        p->evaluate_or(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("0,0,1,0,1,0,1,1", to_string(buff));
+
+        p->evaluate_or(c.get(), buff.data(), 2, 4);
+        ASSERT_EQ("0,0,1,0,1,0,1,1", to_string(buff));
+
+        buff.assign(8, 1);
+        p->evaluate_or(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("1,1,1,1,1,1,1,1", to_string(buff));
+
+        buff[0] = 0;
+        p->evaluate_or(c.get(), buff.data(), 2, 4);
+        ASSERT_EQ("0,1,1,1,1,1,1,1", to_string(buff));
+    }
+}
+
+// NOLINTNEXTLINE
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 TEST(ColumnPredicateTest, test_no_in) {
     {
         std::unique_ptr<ColumnPredicate> p(new_column_not_in_predicate(get_type_info(TYPE_INT), 0, {"3", "4"}));
@@ -1886,6 +1963,7 @@ TEST(ColumnPredicateTest, test_not_null) {
     }
 }
 
+<<<<<<< HEAD
 // NOLINTNEXTLINE
 TEST(ColumnPredicateTest, test_or) {
     {
@@ -1955,6 +2033,8 @@ TEST(ColumnPredicateTest, test_or) {
     }
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #define ZMF(min, max) zone_map_filter(ZoneMapDetail(min, max))
 
 // NOLINTNEXTLINE

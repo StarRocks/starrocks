@@ -19,9 +19,12 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
@@ -31,7 +34,11 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowDbStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.ShowTableStmt;
+=======
+import com.starrocks.sql.ast.UserIdentity;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.Assert;
@@ -53,6 +60,7 @@ public class ShowDbStmtTest {
         Database db = new Database();
         new Expectations(db) {
             {
+<<<<<<< HEAD
                 db.readLock();
                 minTimes = 0;
 
@@ -83,6 +91,10 @@ public class ShowDbStmtTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), anyString);
+                minTimes = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 
@@ -98,6 +110,10 @@ public class ShowDbStmtTest {
 
         ctx.setConnectScheduler(scheduler);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
+<<<<<<< HEAD
+=======
+        ctx.setCurrentUserIdentity(new UserIdentity("testUser", "%"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ctx.setQualifiedUser("testCluster:testUser");
 
         new Expectations(ctx) {
@@ -124,8 +140,12 @@ public class ShowDbStmtTest {
         Assert.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
 
         stmt = new ShowDbStmt(null, null, null);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ShowResultSetMetaData metaData = resultSet.getMetaData();
         Assert.assertEquals(metaData.getColumn(0).getName(), "Database");
 

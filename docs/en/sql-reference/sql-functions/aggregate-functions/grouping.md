@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # grouping
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Indicates whether a column is an aggregate column. If it is an aggregate column, 0 is returned. Otherwise, 1 is returned.
 

@@ -22,6 +22,11 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +64,17 @@ public class LogicalFilterOperator extends LogicalOperator {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        DomainProperty childDomainProperty = inputs.get(0).getDomainProperty();
+        DomainPropertyDeriver deriver = new DomainPropertyDeriver();
+        DomainProperty filterDomainProperty = deriver.derive(predicate);
+        return childDomainProperty.filterDomainProperty(filterDomainProperty);
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalFilter(this, context);
     }

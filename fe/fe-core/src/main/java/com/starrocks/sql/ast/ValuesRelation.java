@@ -15,6 +15,10 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Type;
@@ -27,6 +31,13 @@ import java.util.List;
 public class ValuesRelation extends QueryRelation {
     private final List<List<Expr>> rows;
 
+<<<<<<< HEAD
+=======
+    // for list files
+    // rows may be empty, and can not get output column type from rows.
+    private final List<Type> outputColumnTypes;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /*
         isNullValues means a statement without from or from dual, add a single row of null values here,
         so that the semantics are the same, and the processing of subsequent query logic can be simplified,
@@ -57,6 +68,17 @@ public class ValuesRelation extends QueryRelation {
         super(pos);
         this.rows = new ArrayList<>(rows);
         this.explicitColumnNames = explicitColumnNames;
+<<<<<<< HEAD
+=======
+        this.outputColumnTypes = Lists.newArrayList();
+    }
+
+    public ValuesRelation(List<List<Expr>> rows, List<String> explicitColumnNames, List<Type> outputColumnTypes) {
+        super(NodePosition.ZERO);
+        this.rows = new ArrayList<>(rows);
+        this.explicitColumnNames = explicitColumnNames;
+        this.outputColumnTypes = outputColumnTypes;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void addRow(ArrayList<Expr> row) {
@@ -76,6 +98,13 @@ public class ValuesRelation extends QueryRelation {
         return rows.get(0);
     }
 
+<<<<<<< HEAD
+=======
+    public List<Type> getOutputColumnTypes() {
+        return outputColumnTypes;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setNullValues(boolean nullValues) {
         isNullValues = nullValues;
     }

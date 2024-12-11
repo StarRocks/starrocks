@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # isnull
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 判断输入值是否为 `NULL`。如果是 `NULL`，返回 1。如果不是 `NULL`，返回 0。
 

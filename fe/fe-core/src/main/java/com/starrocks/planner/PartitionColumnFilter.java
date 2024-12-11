@@ -162,7 +162,11 @@ public class PartitionColumnFilter {
                 upperKey = PartitionKey.createPartitionKey(
                         Lists.newArrayList(new PartitionValue(upperBound.getStringValue())), columns);
             } catch (AnalysisException e) {
+<<<<<<< HEAD
                 LOG.warn(e.getMessage());
+=======
+                LOG.warn(e.getMessage(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return null;
             }
             return Range.range(lowerKey, lowerType, upperKey, upperType);
@@ -186,6 +190,13 @@ public class PartitionColumnFilter {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isPoint() {
+        return lowerBoundInclusive && upperBoundInclusive && lowerBound != null && lowerBound.equals(upperBound);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public String toString() {
         String str = "";

@@ -44,6 +44,18 @@ std::ostream& operator<<(std::ostream& os, const UniqueId& uid) {
     return os;
 }
 
+<<<<<<< HEAD
+=======
+std::string print_id(const UniqueId& id) {
+    boost::uuids::uuid uuid{};
+    int64_t hi = gbswap_64(id.hi);
+    int64_t lo = gbswap_64(id.lo);
+    memcpy(uuid.data + 0, &hi, 8);
+    memcpy(uuid.data + 8, &lo, 8);
+    return boost::uuids::to_string(uuid);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 std::string print_id(const TUniqueId& id) {
     boost::uuids::uuid uuid{};
     int64_t hi = gbswap_64(id.hi);
@@ -84,4 +96,29 @@ TUniqueId generate_uuid() {
     return uid;
 }
 
+<<<<<<< HEAD
+=======
+bool parse_id(const std::string& s, TUniqueId* id) {
+    DCHECK(id != nullptr);
+
+    const char* hi_part = s.c_str();
+    char* colon = const_cast<char*>(strchr(hi_part, '-'));
+
+    if (colon == nullptr) {
+        return false;
+    }
+
+    const char* lo_part = colon + 1;
+    *colon = '\0';
+
+    char* error_hi = nullptr;
+    char* error_lo = nullptr;
+    id->hi = strtoul(hi_part, &error_hi, 16);
+    id->lo = strtoul(lo_part, &error_lo, 16);
+
+    bool valid = *error_hi == '\0' && *error_lo == '\0';
+    *colon = ':';
+    return valid;
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

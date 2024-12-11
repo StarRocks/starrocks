@@ -48,6 +48,10 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
+=======
+import com.starrocks.privilege.AccessDeniedException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.LeaderOpExecutor;
 import com.starrocks.qe.OriginStatement;
@@ -75,7 +79,11 @@ public class ShowProcAction extends RestBaseAction {
     }
 
     @Override
+<<<<<<< HEAD
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+=======
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // check authority
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
         checkUserOwnsAdminRole(currentUser);
@@ -129,7 +137,11 @@ public class ShowProcAction extends RestBaseAction {
                     procNode = instance.open(path);
                 }
             } catch (AnalysisException e) {
+<<<<<<< HEAD
                 LOG.warn(e.getMessage());
+=======
+                LOG.warn(e.getMessage(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 response.getContent().append("[]");
             }
 
@@ -143,7 +155,11 @@ public class ShowProcAction extends RestBaseAction {
                     response.setContentType("application/json");
                     response.getContent().append(formatResultToJson(columnNames, rows));
                 } catch (AnalysisException e) {
+<<<<<<< HEAD
                     LOG.warn(e.getMessage());
+=======
+                    LOG.warn(e.getMessage(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     response.getContent().append("[]");
                 }
             }

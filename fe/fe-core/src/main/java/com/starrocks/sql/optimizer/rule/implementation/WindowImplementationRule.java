@@ -43,6 +43,10 @@ public class WindowImplementationRule extends ImplementationRule {
                 logical.getEnforceSortColumns(),
                 logical.isUseHashBasedPartition(),
                 logical.isSkewed(),
+<<<<<<< HEAD
+=======
+                logical.isInputIsBinary(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 logical.getLimit(),
                 logical.getPredicate(),
                 logical.getProjection());

@@ -82,6 +82,10 @@ Status LakeSnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnecti
         LOG(INFO) << "finished to split files. valid file num: " << files->size();
 
     } catch (apache::thrift::TException& e) {
+<<<<<<< HEAD
+=======
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::stringstream ss;
         ss << "failed to list files in remote path: " << remote_path << ", msg: " << e.what();
         LOG(WARNING) << ss.str();
@@ -116,6 +120,10 @@ Status LakeSnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, 
             return Status::InternalError(ss.str());
         }
     } catch (apache::thrift::TException& e) {
+<<<<<<< HEAD
+=======
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::stringstream ss;
         ss << "Fail to rename file: " << orig_name << " to: " << new_name << " msg:" << e.what();
         LOG(WARNING) << ss.str();
@@ -127,7 +135,11 @@ Status LakeSnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, 
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status LakeSnapshotLoader::_check_snapshot_paths(const ::starrocks::lake::UploadSnapshotsRequest* request) {
+=======
+Status LakeSnapshotLoader::_check_snapshot_paths(const ::starrocks::UploadSnapshotsRequest* request) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (auto& [tablet_id, snapshot] : request->snapshots()) {
         auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
         if (!tablet.ok()) {
@@ -145,7 +157,11 @@ Status LakeSnapshotLoader::_check_snapshot_paths(const ::starrocks::lake::Upload
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status LakeSnapshotLoader::upload(const ::starrocks::lake::UploadSnapshotsRequest* request) {
+=======
+Status LakeSnapshotLoader::upload(const ::starrocks::UploadSnapshotsRequest* request) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string ip = request->broker().substr(0, request->broker().find(':'));
     int port = std::stoi(request->broker().substr(request->broker().find(':') + 1).c_str());
     TNetworkAddress address = make_network_address(ip, port);
@@ -161,7 +177,11 @@ Status LakeSnapshotLoader::upload(const ::starrocks::lake::UploadSnapshotsReques
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "
+<<<<<<< HEAD
            << "broker addr: " << request->broker() << ". msg: " << status.get_error_msg();
+=======
+           << "broker addr: " << request->broker() << ". msg: " << status.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
@@ -242,7 +262,11 @@ Status LakeSnapshotLoader::upload(const ::starrocks::lake::UploadSnapshotsReques
     return status;
 }
 
+<<<<<<< HEAD
 Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequest* request) {
+=======
+Status LakeSnapshotLoader::restore(const ::starrocks::RestoreSnapshotsRequest* request) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string ip = request->broker().substr(0, request->broker().find(':'));
     int port = std::stoi(request->broker().substr(request->broker().find(':') + 1).c_str());
     TNetworkAddress address = make_network_address(ip, port);
@@ -257,7 +281,11 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "
+<<<<<<< HEAD
            << "broker addr: " << request->broker() << ". msg: " << status.get_error_msg();
+=======
+           << "broker addr: " << request->broker() << ". msg: " << status.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
@@ -265,10 +293,14 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
     // 2. For each tablet, remove the metadata first and then upload snapshot.
     // we only support overwriting now.
     for (auto& restore_info : request->restore_infos()) {
+<<<<<<< HEAD
         // 2.1 Remove the tablet metadata
         RETURN_IF_ERROR(_env->lake_tablet_manager()->delete_tablet(restore_info.tablet_id()));
 
         // 2.2. Get remote files
+=======
+        // 2.1. Get remote files
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::map<std::string, FileStat> remote_files;
         RETURN_IF_ERROR(
                 _get_existing_files_from_remote(*client, restore_info.snapshot_path(), broker_prop, &remote_files));
@@ -279,7 +311,11 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
             return Status::InternalError(ss.str());
         }
 
+<<<<<<< HEAD
         // 2.3. Upload the tablet metadata. Metadata need to be uploaded first,
+=======
+        // 2.2. Upload the tablet metadata. Metadata need to be uploaded first,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // otherwise the segment files may be deleted by gc.
         for (auto& iter : remote_files) {
             if (!starrocks::lake::is_tablet_metadata(iter.first)) {
@@ -297,7 +333,11 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
             }
             raw::stl_string_resize_uninitialized(&read_buf, size);
             RETURN_IF_ERROR(rf->read_at_fully(0, read_buf.data(), size));
+<<<<<<< HEAD
             std::shared_ptr<starrocks::lake::TabletMetadata> meta = std::make_shared<starrocks::lake::TabletMetadata>();
+=======
+            std::shared_ptr<starrocks::TabletMetadata> meta = std::make_shared<starrocks::TabletMetadata>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             bool parsed = meta->ParseFromArray(read_buf.data(), static_cast<int>(size));
             if (!parsed) {
                 return Status::Corruption(fmt::format("failed to parse tablet meta {}", full_remote_file));
@@ -306,7 +346,11 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
             RETURN_IF_ERROR(_env->lake_tablet_manager()->put_tablet_metadata(meta));
         }
 
+<<<<<<< HEAD
         // 2.4. upload the segment files.
+=======
+        // 2.3. upload the segment files.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (auto& iter : remote_files) {
             if (starrocks::lake::is_tablet_metadata(iter.first)) {
                 continue;

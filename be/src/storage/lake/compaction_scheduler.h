@@ -20,8 +20,13 @@
 #include <memory>
 
 #include "common/status.h"
+<<<<<<< HEAD
 #include "gutil/macros.h"
 #include "storage/lake/compaction_task.h"
+=======
+#include "compaction_task_context.h"
+#include "gutil/macros.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/blocking_queue.hpp"
 #include "util/stack_trace_mutex.h"
 
@@ -31,15 +36,25 @@ class Closure;
 } // namespace google::protobuf
 
 namespace starrocks {
+<<<<<<< HEAD
+=======
+class CompactRequest;
+class CompactResponse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class ThreadPool;
 } // namespace starrocks
 
 namespace starrocks::lake {
 
+<<<<<<< HEAD
 class CompactRequest;
 class CompactResponse;
 class CompactionScheduler;
 struct CompactionTaskContext;
+=======
+class CompactionScheduler;
+class CompactionTask;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class TabletManager;
 
 // For every `CompactRequest` a new `CompactionTaskCallback` instance will be created.
@@ -49,8 +64,13 @@ class TabletManager;
 // `CompactResponse` will be sent to the FE.
 class CompactionTaskCallback {
 public:
+<<<<<<< HEAD
     explicit CompactionTaskCallback(CompactionScheduler* scheduler, const lake::CompactRequest* request,
                                     lake::CompactResponse* response, ::google::protobuf::Closure* done);
+=======
+    explicit CompactionTaskCallback(CompactionScheduler* scheduler, const CompactRequest* request,
+                                    CompactResponse* response, ::google::protobuf::Closure* done);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ~CompactionTaskCallback();
 
@@ -58,6 +78,7 @@ public:
 
     void finish_task(std::unique_ptr<CompactionTaskContext>&& context);
 
+<<<<<<< HEAD
     bool has_error() const {
         std::lock_guard l(_mtx);
         return !_status.ok();
@@ -67,21 +88,43 @@ public:
         std::lock_guard l(_mtx);
         return _status;
     }
+=======
+    // used to check if compaction should be aborted early
+    Status has_error() const;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     void update_status(const Status& st) {
         std::lock_guard l(_mtx);
         _status.update(st);
     }
 
+<<<<<<< HEAD
     bool timeout_exceeded() const { return butil::gettimeofday_ms() >= _timeout_deadline_ms; }
 
     int64_t timeout_ms() const;
 
+=======
+    int64_t timeout_ms() const;
+
+    bool allow_partial_success() const;
+
+    void set_last_check_time(int64_t now) {
+        std::lock_guard l(_mtx);
+        _last_check_time = now;
+    }
+
+    int64_t last_check_time() const {
+        std::lock_guard l(_mtx);
+        return _last_check_time;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
 
     CompactionScheduler* _scheduler;
     mutable StackTraceMutex<bthread::Mutex> _mtx;
+<<<<<<< HEAD
     const lake::CompactRequest* _request;
     lake::CompactResponse* _response;
     ::google::protobuf::Closure* _done;
@@ -114,6 +157,19 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     std::shared_ptr<CompactionTaskCallback> callback;
 };
 
+=======
+    const CompactRequest* _request;
+    CompactResponse* _response;
+    ::google::protobuf::Closure* _done;
+    Status _status;
+    int64_t _timeout_deadline_ms;
+    // compaction's last check time in second, initialized when first put into task queue,
+    // used to help check whether it's valid periodically, task's in queue time is considered
+    int64_t _last_check_time;
+    std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct CompactionTaskInfo {
     int64_t txn_id;
     int64_t tablet_id;
@@ -124,6 +180,10 @@ struct CompactionTaskInfo {
     int runs;     // How many times the compaction task has been executed
     int progress; // 0-100
     bool skipped;
+<<<<<<< HEAD
+=======
+    std::string profile; // detailed execution info, such as io stats
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class CompactionScheduler {
@@ -239,6 +299,11 @@ public:
     // update at runtime
     void update_compact_threads(int32_t new_val);
 
+<<<<<<< HEAD
+=======
+    void stop();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     friend class CompactionTaskCallback;
 
@@ -351,6 +416,10 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(int64_t txn_id,
                                                                std::unique_ptr<CompactionTaskContext>& context) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
+<<<<<<< HEAD
+=======
+    context->enqueue_time_sec = ::time(nullptr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _internal_task_queues[idx]->put(std::move(context));
 }
 
@@ -358,7 +427,13 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
         int64_t txn_id, std::vector<std::unique_ptr<CompactionTaskContext>>& contexts) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
+<<<<<<< HEAD
     for (auto& context : contexts) {
+=======
+    int64_t now = ::time(nullptr);
+    for (auto& context : contexts) {
+        context->enqueue_time_sec = now;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _internal_task_queues[idx]->put(std::move(context));
     }
 }
@@ -402,4 +477,9 @@ inline void CompactionScheduler::WrapTaskQueues::steal_task(int start_index,
     DCHECK(*context == nullptr);
 }
 
+<<<<<<< HEAD
+=======
+Status compaction_should_cancel(CompactionTaskContext* context);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::lake

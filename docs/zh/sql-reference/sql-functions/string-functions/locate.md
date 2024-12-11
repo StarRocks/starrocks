@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # locate
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回 `substr` 在 `str` 中出现的位置（从 1 开始计数，按「字符」计算）。如果指定了第 3 个参数 `pos`，则从 `pos` 下标开始的字符串处开始查找 `substr` 第一次出现的位置，如果没有找到则返回 0。
 

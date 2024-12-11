@@ -21,7 +21,11 @@ using namespace starrocks;
 
 namespace starrocks::pipeline {
 Status AssertNumRowsOperator::prepare(RuntimeState* state) {
+<<<<<<< HEAD
     Operator::prepare(state);
+=======
+    RETURN_IF_ERROR(Operator::prepare(state));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // AssertNumRows should return exactly one row, report error if more than one row, return null if empty input
     ChunkPtr chunk = std::make_shared<Chunk>();

@@ -36,6 +36,10 @@ package com.starrocks.consistency;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.CatalogRecycleBin;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -44,26 +48,57 @@ import com.starrocks.catalog.MetaObject;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.consistency.CheckConsistencyJob.JobState;
+import com.starrocks.persist.ConsistencyCheckInfo;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.task.CheckConsistencyTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+<<<<<<< HEAD
 import java.util.Calendar;
 import java.util.Comparator;
 import java.util.Date;
+=======
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -137,14 +172,187 @@ public class ConsistencyChecker extends FrontendDaemon {
         return true;
     }
 
+<<<<<<< HEAD
     private void checkTabletMetaConsistency() {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency(creatingTableCounters);
+=======
+    /**
+     * Check the consistency between {@link com.starrocks.catalog.TabletInvertedIndex} and
+     * {@link com.starrocks.server.LocalMetastore}.
+     * <p>
+     * If we find an invalid tablet, i.e. it's neither in current catalog nor in recycle bin,
+     * we will remove it from {@link com.starrocks.catalog.TabletInvertedIndex} directly.
+     * And this process will also output a report in `fe.log`, including valid number of
+     * tablet and number of tablet in recycle bin for each backend.
+     */
+    private void checkTabletMetaConsistency(Map<Long, Integer> creatingTableIds) {
+        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        TabletInvertedIndex tabletInvertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
+        Set<Long> invalidTablets = new HashSet<>();
+        // backend id -> <num of currently existed tablet, num of tablet in recycle bin>
+        Map<Long, Pair<Long, Long>> backendTabletNumReport = new HashMap<>();
+        List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
+
+        long startTime = System.currentTimeMillis();
+        long scannedTabletCount = 0;
+        long numIgnoredTabletCausedByAbnormalState = 0;
+        List<Long> ignoreTablets = new ArrayList<>();
+
+        for (Long backendId : backendIds) {
+            LOG.info("TabletMetaChecker: start to check tablet meta consistency for backend {}", backendId);
+            List<Long> tabletIds = tabletInvertedIndex.getTabletIdsByBackendId(backendId);
+            backendTabletNumReport.put(backendId, new Pair<>(0L, 0L));
+
+            for (Long tabletId : tabletIds) {
+                scannedTabletCount++;
+                boolean isInRecycleBin = false;
+
+                TabletMeta tabletMeta = tabletInvertedIndex.getTabletMeta(tabletId);
+                if (tabletMeta == null) {
+                    deleteTabletByConsistencyChecker(null, tabletId, backendId, "tablet meta is null", invalidTablets);
+                    continue;
+                }
+
+                // validate database
+                long dbId = tabletMeta.getDbId();
+                Database db = localMetastore.getDb(dbId);
+                if (db == null) {
+                    db = recycleBin.getDatabase(dbId);
+                    if (db != null) {
+                        isInRecycleBin = true;
+                    } else {
+                        deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
+                                "database " + dbId + " doesn't exist", invalidTablets);
+                        continue;
+                    }
+                }
+
+                Locker locker = new Locker();
+                try {
+                    locker.lockDatabase(db.getId(), LockType.READ);
+
+                    // validate table
+                    long tableId = tabletMeta.getTableId();
+                    if (creatingTableIds.containsKey(tableId)) {
+                        continue;
+                    }
+                    com.starrocks.catalog.Table table = db.getTable(tableId);
+                    if (table == null) {
+                        table = recycleBin.getTable(dbId, tableId);
+                        if (table != null) {
+                            isInRecycleBin = true;
+                        } else {
+                            deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
+                                    "table " + dbId + "." + tableId + " doesn't exist", invalidTablets);
+                            continue;
+                        }
+                    }
+
+                    // To avoid delete tablet using by restore job, rollup job, schema change job etc.
+                    if (table instanceof OlapTable &&
+                            ((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
+                        if (ignoreTablets.size() < 20) {
+                            ignoreTablets.add(tabletId);
+                        }
+                        numIgnoredTabletCausedByAbnormalState++;
+                        continue;
+                    }
+
+                    // validate partition
+                    long partitionId = tabletMeta.getPhysicalPartitionId();
+                    PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+                    if (physicalPartition == null) {
+                        physicalPartition = recycleBin.getPhysicalPartition(partitionId);
+                        if (physicalPartition != null) {
+                            isInRecycleBin = true;
+                        } else {
+                            deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
+                                    "partition " + dbId + "." + tableId + "." + partitionId + " doesn't exist",
+                                    invalidTablets);
+                            continue;
+                        }
+                    }
+
+                    // validate index
+                    long indexId = tabletMeta.getIndexId();
+                    MaterializedIndex index = physicalPartition.getIndex(indexId);
+                    if (index == null) {
+                        deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
+                                "materialized index " + dbId + "." + tableId + "." +
+                                        partitionId + "." + indexId + " doesn't exist",
+                                invalidTablets);
+                        continue;
+                    }
+
+                    if (!table.isCloudNativeTableOrMaterializedView()) {
+                        // validate tablet
+                        Tablet tablet = index.getTablet(tabletId);
+                        if (tablet == null) {
+                            deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
+                                    "tablet " + dbId + "." + tableId + "." +
+                                            partitionId + "." + indexId + "." + tabletId + " doesn't exist",
+                                    invalidTablets);
+                            continue;
+                        }
+                    }
+
+                    if (isInRecycleBin) {
+                        backendTabletNumReport.get(backendId).second++;
+                    } else {
+                        backendTabletNumReport.get(backendId).first++;
+                    }
+
+                    tabletMeta.resetToBeCleanedTime();
+                } finally {
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+                }
+            } // end for tabletIds
+        } // end for backendIds
+
+        // logging report
+        LOG.info("TabletMetaChecker has cleaned {} invalid tablet(s), scanned {} tablet(s) on {} backend(s) in {}ms," +
+                        " total tablets in recycle bin: {}, total ignored tablets: {}, up to 20 of ignored tablets: {}, " +
+                        "backend tablet count info(format: backend_id=curr_tablet_count:recycle_tablet_count): {}",
+                invalidTablets.size(), scannedTabletCount, backendIds.size(),
+                System.currentTimeMillis() - startTime,
+                backendTabletNumReport.values().stream().mapToLong(p -> p.second).sum(),
+                numIgnoredTabletCausedByAbnormalState, ignoreTablets,
+                backendTabletNumReport);
+    }
+
+    private void deleteTabletByConsistencyChecker(TabletMeta tabletMeta, long tabletId, long backendId,
+                                                  String reason, Set<Long> invalidTablets) {
+        if (tabletMeta != null) {
+            Long toBeCleanedTime = tabletMeta.getToBeCleanedTime();
+            if (toBeCleanedTime == null) {
+                // init `toBeCleanedTime` and delay the actual deletion to next round of check
+                tabletMeta.setToBeCleanedTime(System.currentTimeMillis() +
+                        Config.consistency_tablet_meta_check_interval_ms / 2);
+                return;
+            } else if (System.currentTimeMillis() < toBeCleanedTime) {
+                return;
+            }
+        }
+
+        LOG.info("TabletMetaChecker: delete tablet {} on backend {} from inverted index by" +
+                        " consistency checker, because: {}",
+                tabletId, backendId, reason);
+        TabletInvertedIndex tabletInvertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        tabletInvertedIndex.deleteTablet(tabletId);
+        invalidTablets.add(tabletId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     protected void runAfterCatalogReady() {
         if (System.currentTimeMillis() - lastTabletMetaCheckTime > Config.consistency_tablet_meta_check_interval_ms) {
+<<<<<<< HEAD
             checkTabletMetaConsistency();
+=======
+            checkTabletMetaConsistency(creatingTableCounters);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             lastTabletMetaCheckTime = System.currentTimeMillis();
         }
 
@@ -269,7 +477,11 @@ public class ConsistencyChecker extends FrontendDaemon {
         List<Long> chosenTablets = Lists.newArrayList();
 
         // sort dbs
+<<<<<<< HEAD
         List<Long> dbIds = globalStateMgr.getDbIds();
+=======
+        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIds();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (dbIds.isEmpty()) {
             return chosenTablets;
         }
@@ -279,7 +491,11 @@ public class ConsistencyChecker extends FrontendDaemon {
                 // skip 'information_schema' database
                 continue;
             }
+<<<<<<< HEAD
             Database db = globalStateMgr.getDb(dbId);
+=======
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 continue;
             }
@@ -291,11 +507,20 @@ public class ConsistencyChecker extends FrontendDaemon {
         try {
             while ((chosenOne = dbQueue.poll()) != null) {
                 Database db = (Database) chosenOne;
+<<<<<<< HEAD
                 db.readLock();
                 long startTime = System.currentTimeMillis();
                 try {
                     // sort tables
                     List<Table> tables = db.getTables();
+=======
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+                long startTime = System.currentTimeMillis();
+                try {
+                    // sort tables
+                    List<Table> tables = globalStateMgr.getLocalMetastore().getTables(db.getId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     Queue<MetaObject> tableQueue = new PriorityQueue<>(Math.max(tables.size(), 1), COMPARATOR);
                     for (Table table : tables) {
                         // Only check the OLAP table who is in NORMAL state.
@@ -313,15 +538,24 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                         // sort partitions
                         Queue<MetaObject> partitionQueue =
+<<<<<<< HEAD
                                 new PriorityQueue<>(Math.max(table.getAllPartitions().size(), 1), COMPARATOR);
                         for (Partition partition : table.getPartitions()) {
                             // check partition's replication num. if 1 replication. skip
                             if (table.getPartitionInfo().getReplicationNum(partition.getId()) == (short) 1) {
                                 LOG.debug("partition[{}]'s replication num is 1. ignore", partition.getId());
+=======
+                                    new PriorityQueue<>(Math.max(table.getAllPhysicalPartitions().size(), 1), COMPARATOR);
+                        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+                            // check partition's replication num. if 1 replication. skip
+                            if (table.getPartitionInfo().getReplicationNum(physicalPartition.getParentId()) == (short) 1) {
+                                LOG.debug("partition[{}]'s replication num is 1. ignore", physicalPartition.getParentId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                 continue;
                             }
 
                             // check if this partition has no data
+<<<<<<< HEAD
                             if (partition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
                                 LOG.debug("partition[{}]'s version is {}. ignore", partition.getId(),
                                         Partition.PARTITION_INIT_VERSION);
@@ -336,6 +570,22 @@ public class ConsistencyChecker extends FrontendDaemon {
                             // sort materializedIndices
                             List<MaterializedIndex> visibleIndexes =
                                     partition.getMaterializedIndices(IndexExtState.VISIBLE);
+=======
+                            if (physicalPartition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
+                                LOG.debug("partition[{}]'s version is {}. ignore", physicalPartition.getId(),
+                                            Partition.PARTITION_INIT_VERSION);
+                                continue;
+                            }
+                            partitionQueue.add(physicalPartition);
+                        }
+
+                        while ((chosenOne = partitionQueue.poll()) != null) {
+                            PhysicalPartition physicalPartition = (PhysicalPartition) chosenOne;
+
+                            // sort materializedIndices
+                            List<MaterializedIndex> visibleIndexes =
+                                        physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             Queue<MetaObject> indexQueue =
                                     new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
                             indexQueue.addAll(visibleIndexes);
@@ -357,6 +607,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                                     }
 
                                     // check if version has already been checked
+<<<<<<< HEAD
                                     if (partition.getVisibleVersion() == tablet.getCheckedVersion()) {
                                         if (tablet.isConsistent()) {
                                             LOG.debug("tablet[{}]'s version[{}-{}] has been checked. ignore",
@@ -365,6 +616,17 @@ public class ConsistencyChecker extends FrontendDaemon {
                                     } else {
                                         LOG.info("chose tablet[{}-{}-{}-{}-{}] to check consistency", db.getId(),
                                                 table.getId(), partition.getId(), index.getId(), chosenTabletId);
+=======
+                                    if (physicalPartition.getVisibleVersion() == tablet.getCheckedVersion()) {
+                                        if (tablet.isConsistent()) {
+                                            LOG.debug("tablet[{}]'s version[{}-{}] has been checked. ignore",
+                                                        chosenTabletId, tablet.getCheckedVersion(),
+                                                        physicalPartition.getVisibleVersion());
+                                        }
+                                    } else {
+                                        LOG.info("chose tablet[{}-{}-{}-{}-{}] to check consistency", db.getId(),
+                                                    table.getId(), physicalPartition.getId(), index.getId(), chosenTabletId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                                         chosenTablets.add(chosenTabletId);
                                     }
@@ -380,8 +642,13 @@ public class ConsistencyChecker extends FrontendDaemon {
                     // Since only at most `MAX_JOB_NUM` tablet are chosen, we don't need to release the db read lock
                     // from time to time, just log the time cost here.
                     LOG.info("choose tablets from db[{}-{}](with read lock held) took {}ms",
+<<<<<<< HEAD
                             db.getFullName(), db.getId(), System.currentTimeMillis() - startTime);
                     db.readUnlock();
+=======
+                                db.getFullName(), db.getId(), System.currentTimeMillis() - startTime);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             } // end while dbQueue
         } finally {
@@ -405,11 +672,16 @@ public class ConsistencyChecker extends FrontendDaemon {
     }
 
     public void replayFinishConsistencyCheck(ConsistencyCheckInfo info, GlobalStateMgr globalStateMgr) {
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(info.getDbId());
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(info.getDbId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             LOG.warn("replay finish consistency check failed, db is null, info: {}", info);
             return;
         }
+<<<<<<< HEAD
         db.writeLock();
         try {
             OlapTable table = (OlapTable) db.getTable(info.getTableId());
@@ -423,6 +695,23 @@ public class ConsistencyChecker extends FrontendDaemon {
                 return;
             }
             MaterializedIndex index = partition.getIndex(info.getIndexId());
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getId(), info.getTableId());
+        if (table == null) {
+            LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
+            return;
+        }
+
+        try (AutoCloseableLock ignore
+                    = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(info.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                LOG.warn("replay finish consistency check failed, partition is null, info: {}", info);
+                return;
+            }
+            MaterializedIndex index = physicalPartition.getIndex(info.getIndexId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (index == null) {
                 LOG.warn("replay finish consistency check failed, index is null, info: {}", info);
                 return;
@@ -436,14 +725,23 @@ public class ConsistencyChecker extends FrontendDaemon {
             long lastCheckTime = info.getLastCheckTime();
             db.setLastCheckTime(lastCheckTime);
             table.setLastCheckTime(lastCheckTime);
+<<<<<<< HEAD
             partition.setLastCheckTime(lastCheckTime);
+=======
+            if (physicalPartition instanceof MetaObject) {
+                ((MetaObject) physicalPartition).setLastCheckTime(lastCheckTime);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             index.setLastCheckTime(lastCheckTime);
             tablet.setLastCheckTime(lastCheckTime);
             tablet.setCheckedVersion(info.getCheckedVersion());
 
             tablet.setIsConsistent(info.isConsistent());
+<<<<<<< HEAD
         } finally {
             db.writeUnlock();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 

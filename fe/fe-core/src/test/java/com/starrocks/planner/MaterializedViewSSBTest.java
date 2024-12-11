@@ -22,9 +22,15 @@ import org.junit.Test;
 
 public class MaterializedViewSSBTest extends MaterializedViewTestBase {
     @BeforeClass
+<<<<<<< HEAD
     public static void setUp() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         MaterializedViewTestBase.setUp();
+=======
+    public static void beforeClass() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        MaterializedViewTestBase.beforeClass();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 

@@ -16,12 +16,23 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.StringLiteral;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Column;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
+=======
+import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
+import com.starrocks.connector.DatabaseTableName;
+import com.starrocks.connector.MetastoreType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
@@ -32,6 +43,10 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
+<<<<<<< HEAD
+=======
+import java.util.HashMap;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -50,7 +65,11 @@ public class CachingHiveMetastoreTest {
     @Before
     public void setUp() throws Exception {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
+<<<<<<< HEAD
         metastore = new HiveMetastore(client, "hive_catalog");
+=======
+        metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         executor = Executors.newFixedThreadPool(5);
     }
 
@@ -98,8 +117,13 @@ public class CachingHiveMetastoreTest {
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         com.starrocks.catalog.Table table = cachingHiveMetastore.getTable("db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
+<<<<<<< HEAD
         Assert.assertEquals("db1", hiveTable.getDbName());
         Assert.assertEquals("tbl1", hiveTable.getTableName());
+=======
+        Assert.assertEquals("db1", hiveTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", hiveTable.getCatalogTableName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
@@ -121,6 +145,17 @@ public class CachingHiveMetastoreTest {
         });
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testTableExists() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        Assert.assertTrue(cachingHiveMetastore.tableExists("db1", "tbl1"));
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testRefreshTable() {
         new Expectations(metastore) {
             {
@@ -153,14 +188,22 @@ public class CachingHiveMetastoreTest {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         Assert.assertFalse(cachingHiveMetastore.tableNameLockMap.containsKey(
+<<<<<<< HEAD
                 HiveTableName.of("db1", "tbl1")));
+=======
+                DatabaseTableName.of("db1", "tbl1")));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             cachingHiveMetastore.refreshTable("db1", "tbl1", true);
         } catch (Exception e) {
             Assert.fail();
         }
         Assert.assertTrue(cachingHiveMetastore.tableNameLockMap.containsKey(
+<<<<<<< HEAD
                 HiveTableName.of("db1", "tbl1")));
+=======
+                DatabaseTableName.of("db1", "tbl1")));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         try {
             cachingHiveMetastore.refreshTable("db1", "tbl1", true);
@@ -176,7 +219,11 @@ public class CachingHiveMetastoreTest {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         Assert.assertFalse(cachingHiveMetastore.tableNameLockMap.containsKey(
+<<<<<<< HEAD
                 HiveTableName.of("db1", "tbl1")));
+=======
+                DatabaseTableName.of("db1", "tbl1")));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             // mock query table tbl1
             List<String> partitionNames = cachingHiveMetastore.getPartitionKeysByValue("db1", "tbl1",
@@ -188,7 +235,11 @@ public class CachingHiveMetastoreTest {
         } catch (Exception e) {
             Assert.fail();
         }
+<<<<<<< HEAD
         Assert.assertTrue(cachingHiveMetastore.isTablePresent(HiveTableName.of("db1", "tbl1")));
+=======
+        Assert.assertTrue(cachingHiveMetastore.isTablePresent(DatabaseTableName.of("db1", "tbl1")));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         try {
             cachingHiveMetastore.refreshTableBackground("db1", "tbl1", true);
@@ -196,7 +247,11 @@ public class CachingHiveMetastoreTest {
             Assert.fail();
         }
         // not skip refresh table, table cache still exist
+<<<<<<< HEAD
         Assert.assertTrue(cachingHiveMetastore.isTablePresent(HiveTableName.of("db1", "tbl1")));
+=======
+        Assert.assertTrue(cachingHiveMetastore.isTablePresent(DatabaseTableName.of("db1", "tbl1")));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // sleep 1s, background refresh table will be skipped
         Thread.sleep(1000);
         long oldValue = Config.background_refresh_metadata_time_secs_since_last_access_secs;
@@ -211,7 +266,11 @@ public class CachingHiveMetastoreTest {
             Config.background_refresh_metadata_time_secs_since_last_access_secs = oldValue;
         }
         // table cache will be removed because of skip refresh table
+<<<<<<< HEAD
         Assert.assertFalse(cachingHiveMetastore.isTablePresent(HiveTableName.of("db1", "tbl1")));
+=======
+        Assert.assertFalse(cachingHiveMetastore.isTablePresent(DatabaseTableName.of("db1", "tbl1")));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -219,14 +278,22 @@ public class CachingHiveMetastoreTest {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         Assert.assertFalse(cachingHiveMetastore.tableNameLockMap.containsKey(
+<<<<<<< HEAD
                 HiveTableName.of("db1", "tbl1")));
+=======
+                DatabaseTableName.of("db1", "tbl1")));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             cachingHiveMetastore.refreshView("db1", "hive_view");
         } catch (Exception e) {
             Assert.fail();
         }
         Assert.assertTrue(cachingHiveMetastore.tableNameLockMap.containsKey(
+<<<<<<< HEAD
                 HiveTableName.of("db1", "hive_view")));
+=======
+                DatabaseTableName.of("db1", "hive_view")));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         new Expectations(metastore) {
             {
@@ -260,7 +327,11 @@ public class CachingHiveMetastoreTest {
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         Partition partition = cachingHiveMetastore.getPartition(
                 "db1", "tbl1", Lists.newArrayList("par1"));
+<<<<<<< HEAD
         Assert.assertEquals(ORC, partition.getInputFormat());
+=======
+        Assert.assertEquals(ORC, partition.getFileFormat());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals("100", partition.getParameters().get(TOTAL_SIZE));
 
         partition = metastore.getPartition("db1", "tbl1", Lists.newArrayList());
@@ -276,12 +347,20 @@ public class CachingHiveMetastoreTest {
                 cachingHiveMetastore.getPartitionsByNames("db1", "table1", partitionNames);
 
         Partition partition1 = partitions.get("part1=1/part2=2");
+<<<<<<< HEAD
         Assert.assertEquals(ORC, partition1.getInputFormat());
+=======
+        Assert.assertEquals(ORC, partition1.getFileFormat());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals("100", partition1.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=1/part2=2", partition1.getFullPath());
 
         Partition partition2 = partitions.get("part1=3/part2=4");
+<<<<<<< HEAD
         Assert.assertEquals(ORC, partition2.getInputFormat());
+=======
+        Assert.assertEquals(ORC, partition2.getFileFormat());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals("100", partition2.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=3/part2=4", partition2.getFullPath());
     }
@@ -340,4 +419,117 @@ public class CachingHiveMetastoreTest {
         List<String> value = PartitionUtil.fromPartitionKey(hivePartitionKey);
         Assert.assertEquals(HiveMetaClient.PARTITION_NULL_VALUE, value.get(0));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testPartitionExist() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        Assert.assertTrue(cachingHiveMetastore.partitionExists(metastore.getTable("db", "table"), Lists.newArrayList()));
+    }
+
+    @Test
+    public void testDropPartition() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        cachingHiveMetastore.dropPartition("db", "table", Lists.newArrayList("1"), false);
+    }
+
+    @Test
+    public void testUpdateTableStats() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        HivePartitionStats partitionStats = HivePartitionStats.empty();
+        cachingHiveMetastore.updateTableStatistics("db", "table", ignore -> partitionStats);
+    }
+
+    @Test
+    public void testUpdatePartitionStats() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        HivePartitionStats partitionStats = HivePartitionStats.empty();
+        cachingHiveMetastore.updatePartitionStatistics("db", "table", "p1=1", ignore -> partitionStats);
+    }
+
+    @Test
+    public void testRefreshTableByEvent() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+
+        HiveCommonStats stats = new HiveCommonStats(10, 100);
+
+        // unpartition
+        {
+            HiveTable table = (HiveTable) cachingHiveMetastore.getTable("db1", "tbl1");
+            Partition partition = cachingHiveMetastore.getPartition(
+                    "db1", "tbl1", Lists.newArrayList("par1"));
+            cachingHiveMetastore.refreshTableByEvent(table, stats, partition);
+        }
+
+        // partition
+        {
+            HiveTable table = (HiveTable) cachingHiveMetastore.getTable("db1", "unpartitioned_table");
+            Partition partition = cachingHiveMetastore.getPartition(
+                    "db1", "unpartitioned_table", Lists.newArrayList("col1"));
+            cachingHiveMetastore.refreshTableByEvent(table, stats, partition);
+        }
+    }
+
+    @Test
+    public void testRefreshPartitionByEvent() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+
+        HiveCommonStats stats = new HiveCommonStats(10, 100);
+        HivePartitionName hivePartitionName = HivePartitionName.of("db1", "unpartitioned_table", "col1=1");
+        Partition partition = cachingHiveMetastore.getPartition(
+                "db1", "unpartitioned_table", Lists.newArrayList("col1"));
+        cachingHiveMetastore.refreshPartitionByEvent(hivePartitionName, stats, partition);
+    }
+
+    @Test
+    public void testRefreshPartition() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, true);
+
+        List<HivePartitionName> partitionNames = Lists.newArrayList(
+                HivePartitionName.of("db1", "table1", "col1=1"),
+                HivePartitionName.of("db1", "table1", "col1=2"));
+        cachingHiveMetastore.refreshPartition(partitionNames);
+    }
+
+    @Test
+    public void testAddPartitionFailed() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        HivePartition hivePartition = HivePartition.builder()
+                // Unsupported type
+                .setColumns(Lists.newArrayList(new Column("c1", Type.BITMAP)))
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .setDatabaseName("db")
+                .setTableName("table")
+                .setLocation("location")
+                .setValues(Lists.newArrayList("p1=1"))
+                .setParameters(new HashMap<>()).build();
+
+        HivePartitionStats hivePartitionStats = HivePartitionStats.empty();
+        HivePartitionWithStats hivePartitionWithStats = new HivePartitionWithStats("p1=1", hivePartition, hivePartitionStats);
+        Assert.assertThrows(StarRocksConnectorException.class, () -> {
+            cachingHiveMetastore.addPartitions("db", "table", Lists.newArrayList(hivePartitionWithStats));
+        });
+    }
+
+    @Test
+    public void testGetCachedName() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor(
+                "hive_catalog", cachingHiveMetastore, null, null, false, false);
+        Assert.assertTrue(processor.getCachedTableNames().isEmpty());
+
+        processor = new HiveCacheUpdateProcessor("hive_catalog", metastore, null, null, false, false);
+        Assert.assertTrue(processor.getCachedTableNames().isEmpty());
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

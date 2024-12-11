@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # negative
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 对参数 `x` 取其负数作为结果输出。
 

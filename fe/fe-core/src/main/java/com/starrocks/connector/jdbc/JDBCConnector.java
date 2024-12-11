@@ -59,7 +59,11 @@ public class JDBCConnector implements Connector {
     private void validate(String propertyKey) {
         String value = properties.get(propertyKey);
         if (value == null) {
+<<<<<<< HEAD
             throw new IllegalArgumentException("Missing " + propertyKey + " in properties");
+=======
+            throw new StarRocksConnectorException("Missing " + propertyKey + " in properties");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -87,7 +91,11 @@ public class JDBCConnector implements Connector {
             String checkSum = Hex.encodeHexString(digest.digest());
             properties.put(JDBCResource.CHECK_SUM, checkSum);
         } catch (Exception e) {
+<<<<<<< HEAD
             throw new IllegalArgumentException("Cannot get driver from url: " + properties.get(JDBCResource.DRIVER_URL));
+=======
+            throw new StarRocksConnectorException("Cannot get driver from url: " + properties.get(JDBCResource.DRIVER_URL));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 

@@ -55,13 +55,26 @@ using Permutation = std::vector<PermutationItem>;
 using PermutationView = array_view<PermutationItem>;
 using SmallPermutation = std::vector<SmallPermuteItem>;
 
+<<<<<<< HEAD
 template <class T, class Container>
 static inline InlinePermutation<T> create_inline_permutation(const SmallPermutation& other,
                                                              const Container& container) {
+=======
+template <class T, bool CheckBound = false>
+static inline InlinePermutation<T> create_inline_permutation(const SmallPermutation& other, const auto& container) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     InlinePermutation<T> inlined(other.size());
     for (int i = 0; i < other.size(); i++) {
         int index = other[i].index_in_chunk;
         inlined[i].index_in_chunk = index;
+<<<<<<< HEAD
+=======
+        if constexpr (CheckBound) {
+            if (index >= container.size()) {
+                continue;
+            }
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         inlined[i].inline_value = container[index];
     }
     return inlined;
@@ -137,6 +150,10 @@ private:
 };
 
 // Compare result of column, value must be -1,0,1
+<<<<<<< HEAD
 using CompareVector = std::vector<int8_t>;
+=======
+using CompareVector = Buffer<int8_t>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 } // namespace starrocks

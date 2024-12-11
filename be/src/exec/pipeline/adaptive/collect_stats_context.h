@@ -78,6 +78,11 @@ public:
 
     const int64_t max_output_amplification_factor() const { return _max_output_amplification_factor; }
 
+<<<<<<< HEAD
+=======
+    EventPtr blocking_event() const { return _blocking_event; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     using BufferChunkQueue = std::queue<ChunkPtr>;
 
@@ -109,6 +114,11 @@ private:
     std::vector<uint8_t> _is_finished_per_driver_seq;
 
     RuntimeState* const _runtime_state;
+<<<<<<< HEAD
+=======
+
+    EventPtr _blocking_event;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class CollectStatsState {

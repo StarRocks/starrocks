@@ -40,15 +40,26 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
+<<<<<<< HEAD
 import com.starrocks.catalog.AuthorizationInfo;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.LogBuilder;
+import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
 import com.starrocks.load.FailMsg;
@@ -65,9 +76,12 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -98,7 +112,12 @@ public abstract class BulkLoadJob extends LoadJob {
     protected Map<String, String> sessionVariables = Maps.newHashMap();
 
     protected static final String PRIORITY_SESSION_VARIABLE_KEY = "priority.session.variable.key";
+<<<<<<< HEAD
     public static final String LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY = "log.rejected.record.num.session.variable.key";
+=======
+    public static final String LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY =
+            "log.rejected.record.num.session.variable.key";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final String CURRENT_USER_IDENT_KEY = "current.user.ident.key";
     public static final String CURRENT_QUALIFIED_USER_KEY = "current.qualified.user.key";
 
@@ -107,15 +126,26 @@ public abstract class BulkLoadJob extends LoadJob {
         super();
     }
 
+<<<<<<< HEAD
     public BulkLoadJob(long dbId, String label, OriginStatement originStmt) throws MetaNotFoundException {
         super(dbId, label);
         this.originStmt = originStmt;
         this.authorizationInfo = gatherAuthInfo();
+=======
+    public BulkLoadJob(long dbId, String label, OriginStatement originStmt) {
+        super(dbId, label);
+        this.originStmt = originStmt;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         if (ConnectContext.get() != null) {
             SessionVariable var = ConnectContext.get().getSessionVariable();
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
+<<<<<<< HEAD
             sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, var.getloadTransmissionCompressionType());
+=======
+            sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE,
+                    var.getloadTransmissionCompressionType());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             sessionVariables.put(CURRENT_QUALIFIED_USER_KEY, ConnectContext.get().getQualifiedUser());
             sessionVariables.put(CURRENT_USER_IDENT_KEY, ConnectContext.get().getCurrentUserIdentity().toString());
         } else {
@@ -126,7 +156,11 @@ public abstract class BulkLoadJob extends LoadJob {
     public static BulkLoadJob fromLoadStmt(LoadStmt stmt, ConnectContext context) throws DdlException {
         // get db id
         String dbName = stmt.getLabel().getDbName();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
@@ -169,7 +203,12 @@ public abstract class BulkLoadJob extends LoadJob {
 
     private void checkAndSetDataSourceInfo(Database db, List<DataDescription> dataDescriptions) throws DdlException {
         // check data source info
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             for (DataDescription dataDescription : dataDescriptions) {
                 BrokerFileGroup fileGroup = new BrokerFileGroup(dataDescription);
@@ -177,6 +216,7 @@ public abstract class BulkLoadJob extends LoadJob {
                 fileGroupAggInfo.addFileGroup(fileGroup);
             }
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
         }
     }
@@ -193,6 +233,16 @@ public abstract class BulkLoadJob extends LoadJob {
     public Set<String> getTableNamesForShow() {
         Set<String> result = Sets.newHashSet();
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+    }
+
+    @Override
+    public Set<String> getTableNamesForShow() {
+        Set<String> result = Sets.newHashSet();
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (database == null) {
             for (long tableId : fileGroupAggInfo.getAllTableIds()) {
                 result.add(String.valueOf(tableId));
@@ -200,7 +250,11 @@ public abstract class BulkLoadJob extends LoadJob {
             return result;
         }
         for (long tableId : fileGroupAggInfo.getAllTableIds()) {
+<<<<<<< HEAD
             Table table = database.getTable(tableId);
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (table == null) {
                 result.add(String.valueOf(tableId));
             } else {
@@ -213,7 +267,11 @@ public abstract class BulkLoadJob extends LoadJob {
     @Override
     public Set<String> getTableNames(boolean noThrow) throws MetaNotFoundException {
         Set<String> result = Sets.newHashSet();
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (database == null) {
             if (noThrow) {
                 return result;
@@ -224,7 +282,11 @@ public abstract class BulkLoadJob extends LoadJob {
         // The database will not be locked in here.
         // The getTable is a thread-safe method called without read lock of database
         for (long tableId : fileGroupAggInfo.getAllTableIds()) {
+<<<<<<< HEAD
             Table table = database.getTable(tableId);
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (table == null) {
                 if (!noThrow) {
                     throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
@@ -260,7 +322,11 @@ public abstract class BulkLoadJob extends LoadJob {
                 return;
             }
 
+<<<<<<< HEAD
             if (!failMsg.getMsg().contains("timeout")) {
+=======
+            if (!failMsg.getMsg().contains("timeout") || failMsg.getCancelType() == FailMsg.CancelType.USER_CANCEL) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 unprotectedExecuteCancel(failMsg, true);
                 logFinalOperation();
             } else {
@@ -278,7 +344,11 @@ public abstract class BulkLoadJob extends LoadJob {
                         id, taskId, transactionId, failMsg.getMsg());
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
                         dbId, transactionId, failMsg.getMsg());
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 LOG.warn("Loading task failed to abort transaction, job_id: {}, task_id: {}, txn_id: {}, " +
                         "task fail message: {}, abort exception:", id, taskId, transactionId, failMsg.getMsg(), e);
             }
@@ -302,7 +372,11 @@ public abstract class BulkLoadJob extends LoadJob {
             for (DataDescription dataDescription : stmt.getDataDescriptions()) {
                 dataDescription.analyzeWithoutCheckPriv();
             }
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 throw new DdlException("Database[" + dbId + "] does not exist");
             }
@@ -327,6 +401,7 @@ public abstract class BulkLoadJob extends LoadJob {
         }
         unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment(), true);
     }
+<<<<<<< HEAD
 
     @Override
     public void write(DataOutput out) throws IOException {
@@ -363,4 +438,6 @@ public abstract class BulkLoadJob extends LoadJob {
             logRejectedRecordNum = Long.parseLong(sessionVariables.get(LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY));
         }
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

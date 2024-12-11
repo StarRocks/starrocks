@@ -43,6 +43,11 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "runtime/global_dict/types.h"
+<<<<<<< HEAD
+=======
+#include "storage/row_store_encoder_factory.h"
+#include "storage/tablet_schema.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -54,10 +59,23 @@ class MemTracker;
 class WritableFile;
 class Chunk;
 class ColumnWriter;
+<<<<<<< HEAD
+=======
+class Schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 extern const char* const k_segment_magic;
 extern const uint32_t k_segment_magic_length;
 
+<<<<<<< HEAD
+=======
+class SegmentFileMark {
+public:
+    std::string rowset_path_prefix;
+    std::string rowset_id;
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct SegmentWriterOptions {
 #ifdef BE_TEST
     uint32_t num_rows_per_block = 100;
@@ -66,6 +84,12 @@ struct SegmentWriterOptions {
 #endif
     GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
+<<<<<<< HEAD
+=======
+    SegmentFileMark segment_file_mark;
+    std::string encryption_meta;
+    bool is_compaction = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.
@@ -93,7 +117,11 @@ struct SegmentWriterOptions {
 //
 class SegmentWriter {
 public:
+<<<<<<< HEAD
     SegmentWriter(std::unique_ptr<WritableFile> block, uint32_t segment_id, const TabletSchema* tablet_schema,
+=======
+    SegmentWriter(std::unique_ptr<WritableFile> block, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                   SegmentWriterOptions opts);
     ~SegmentWriter();
 
@@ -133,14 +161,26 @@ public:
 
     uint64_t current_filesz() const;
 
+<<<<<<< HEAD
+=======
+    const std::string& encryption_meta() const { return _opts.encryption_meta; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     Status _write_short_key_index();
     Status _write_footer();
     Status _write_raw_data(const std::vector<Slice>& slices);
     void _init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column);
+<<<<<<< HEAD
 
     uint32_t _segment_id;
     const TabletSchema* _tablet_schema;
+=======
+    void _verify_footer();
+
+    uint32_t _segment_id;
+    TabletSchemaCSPtr _tablet_schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     SegmentWriterOptions _opts;
 
     std::unique_ptr<WritableFile> _wfile;
@@ -151,6 +191,10 @@ private:
     std::vector<uint32_t> _column_indexes;
     bool _has_key = true;
     std::vector<uint32_t> _sort_column_indexes;
+<<<<<<< HEAD
+=======
+    std::unique_ptr<Schema> _schema_without_full_row_column;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // num rows written when appending [partial] columns
     uint32_t _num_rows_written = 0;

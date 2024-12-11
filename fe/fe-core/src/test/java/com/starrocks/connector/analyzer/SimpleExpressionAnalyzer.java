@@ -369,7 +369,11 @@ public class SimpleExpressionAnalyzer {
             predicateBaseAndCheck(node);
 
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
+<<<<<<< HEAD
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+=======
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             for (Type type : list) {
                 if (!Type.canCastTo(type, compatibleType)) {
@@ -387,7 +391,11 @@ public class SimpleExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
+<<<<<<< HEAD
             Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
+=======
+            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp().isRange(), type1, type2);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // check child type can be cast
             final String ERROR_MSG = "Column type %s does not support binary predicate operation.";
             if (!Type.canCastTo(type1, compatibleType)) {
@@ -557,7 +565,11 @@ public class SimpleExpressionAnalyzer {
 
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
+<<<<<<< HEAD
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+=======
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             for (Type type : list) {
                 // TODO(mofei) support it
@@ -660,9 +672,12 @@ public class SimpleExpressionAnalyzer {
             if (node.getChildren().size() < 1) {
                 throw new SemanticException("GROUPING functions required at least one parameters");
             }
+<<<<<<< HEAD
             if (node.getChildren().stream().anyMatch(e -> !(e instanceof SlotRef))) {
                 throw new SemanticException("grouping functions only support column.");
             }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             Type[] childTypes = new Type[1];
             childTypes[0] = Type.BIGINT;

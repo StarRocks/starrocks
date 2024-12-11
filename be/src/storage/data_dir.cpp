@@ -43,7 +43,10 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
 #include "gutil/strings/util.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
 #include "storage/olap_define.h"
@@ -307,7 +310,15 @@ Status DataDir::load() {
             return s;
         }
         for (auto tablet_id : tablet_ids) {
+<<<<<<< HEAD
             _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
+=======
+            Status s = _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
+            if (!s.ok()) {
+                LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.message();
+                return s;
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
         tablet_ids.clear();
@@ -326,7 +337,11 @@ Status DataDir::load() {
     if (!load_tablet_status.ok()) {
         LOG(FATAL) << "there is failure when scan rockdb tablet metas, quit process"
                    << ". loaded tablet: " << tablet_ids.size() << " error tablet: " << failed_tablet_ids.size()
+<<<<<<< HEAD
                    << ", path: " << _path << " error: " << load_tablet_status.get_error_msg()
+=======
+                   << ", path: " << _path << " error: " << load_tablet_status.message()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                    << " duration: " << (MonotonicMillis() - load_tablet_start) << "ms";
     } else {
         LOG(INFO) << "load tablet from meta finished"
@@ -334,6 +349,30 @@ Status DataDir::load() {
                   << ", path: " << _path << " duration: " << (MonotonicMillis() - load_tablet_start) << "ms";
     }
 
+<<<<<<< HEAD
+=======
+    for (int64_t tablet_id : tablet_ids) {
+        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id);
+        /*
+         * check path here, in migration case, it is possible that
+         * there are two different tablets with the same tablet id
+         * in two different paths. And one of them is shutdown.
+         * For the path with shutdown tablet, should skip the
+         * tablet meta save here. (tablet get from manager is not the shutdown one)
+        */
+        if (tablet && tablet->data_dir()->path_hash() == this->path_hash() &&
+            tablet->set_tablet_schema_into_rowset_meta()) {
+            TabletMetaPB tablet_meta_pb;
+            tablet->tablet_meta()->to_meta_pb(&tablet_meta_pb);
+            Status s = TabletMetaManager::save(this, tablet_meta_pb);
+            if (!s.ok()) {
+                LOG(ERROR) << "data dir " << _path << " save tablet meta failed: " << s.message();
+                return s;
+            }
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // load rowset meta from meta env and create rowset
     // COMMITTED: add to txn manager
     // VISIBLE: add to tablet
@@ -362,8 +401,13 @@ Status DataDir::load() {
             return true;
         }
         RowsetSharedPtr rowset;
+<<<<<<< HEAD
         Status create_status = RowsetFactory::create_rowset(&tablet->tablet_schema(), tablet->schema_hash_path(),
                                                             rowset_meta, &rowset);
+=======
+        Status create_status =
+                RowsetFactory::create_rowset(tablet->tablet_schema(), tablet->schema_hash_path(), rowset_meta, &rowset);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!create_status.ok()) {
             LOG(WARNING) << "Fail to create rowset from rowsetmeta,"
                          << " rowset=" << rowset_meta->rowset_id() << " state=" << rowset_meta->rowset_state();
@@ -372,6 +416,14 @@ Status DataDir::load() {
         }
         if (rowset_meta->rowset_state() == RowsetStatePB::COMMITTED &&
             rowset_meta->tablet_uid() == tablet->tablet_uid()) {
+<<<<<<< HEAD
+=======
+            if (!rowset_meta->tablet_schema()) {
+                auto tablet_schema_ptr = tablet->tablet_schema();
+                rowset_meta->set_tablet_schema(tablet_schema_ptr);
+                rowset_meta->set_skip_tablet_schema(true);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Status commit_txn_status = _txn_manager->commit_txn(
                     _kv_store, rowset_meta->partition_id(), rowset_meta->txn_id(), rowset_meta->tablet_id(),
                     rowset_meta->tablet_schema_hash(), rowset_meta->tablet_uid(), rowset_meta->load_id(), rowset, true);
@@ -383,9 +435,20 @@ Status DataDir::load() {
                 LOG(INFO) << "Added committed rowset=" << rowset_meta->rowset_id()
                           << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
             }
+<<<<<<< HEAD
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
             Status publish_status = tablet->load_rowset(rowset);
+=======
+
+        } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
+                   rowset_meta->tablet_uid() == tablet->tablet_uid()) {
+            Status publish_status = tablet->load_rowset(rowset);
+            if (!rowset_meta->tablet_schema()) {
+                rowset_meta->set_tablet_schema(tablet->tablet_schema());
+                rowset_meta->set_skip_tablet_schema(true);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!publish_status.ok() && !publish_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add visible rowset=" << rowset->rowset_id()
                              << " to tablet=" << rowset_meta->tablet_id() << " txn id=" << rowset_meta->txn_id()
@@ -406,7 +469,11 @@ Status DataDir::load() {
 
     if (!load_rowset_status.ok()) {
         LOG(WARNING) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count
+<<<<<<< HEAD
                      << "/" << total_rowset_count << " error: " << load_rowset_status.get_error_msg()
+=======
+                     << "/" << total_rowset_count << " error: " << load_rowset_status.message()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                      << " duration: " << (MonotonicMillis() - load_rowset_start) << "ms";
     } else {
         LOG(INFO) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count
@@ -631,7 +698,11 @@ void DataDir::perform_tmp_path_scan() {
         for (const auto& entry : std::filesystem::directory_iterator(tmp_path)) {
             if (entry.is_regular_file()) {
                 const auto& filename = entry.path().string();
+<<<<<<< HEAD
                 if (HasSuffixString(filename, ".crm")) {
+=======
+                if (filename.ends_with(".crm")) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     _all_check_crm_files.insert(filename);
                 }
             }

@@ -47,6 +47,13 @@ public class CreateViewStmt extends DdlStmt {
         this.queryStatement = queryStmt;
     }
 
+<<<<<<< HEAD
+=======
+    public String getCatalog() {
+        return tableName.getCatalog();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getDbName() {
         return tableName.getDb();
     }

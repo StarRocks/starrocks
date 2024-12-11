@@ -15,7 +15,11 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+<<<<<<< HEAD
 import autovalue.shaded.com.google.common.common.base.Preconditions;
+=======
+import com.google.common.base.Preconditions;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
@@ -35,7 +39,10 @@ import java.util.stream.Collectors;
 
 public class MvNormalizePredicateRule extends NormalizePredicateRule {
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Comparator to normalize predicates, only use scalar operators' string to compare.
     private static final Comparator<ScalarOperator> SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID =
             (o1, o2) -> {
@@ -59,11 +66,15 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                         String s2 = o2.toString().toLowerCase();
                         String n1 = s1.replaceAll("\\d+: ", "");
                         String n2 = s2.replaceAll("\\d+: ", "");
+<<<<<<< HEAD
                         int ret = Integer.compare(n1.length(), n2.length());
                         if (ret != 0) {
                             return ret;
                         }
                         ret = n1.compareTo(n2);
+=======
+                        int ret = n1.compareTo(n2);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         return (ret == 0) ? s1.compareTo(s2) : ret;
                     }
                 }

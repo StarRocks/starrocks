@@ -45,6 +45,13 @@ SELECT 语句用于从单个或多个表，视图，物化视图中读取数据�
       - [逻辑操作符](#逻辑操作符)
       - [正则表达式操作符](#正则表达式操作符)
     - [别名 (alias)](#别名-alias)
+<<<<<<< HEAD
+=======
+    - [PIVOT](#pivot)
+      - [语法](#语法-1)
+      - [参数](#参数)
+      - [示例](#示例-1)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 SELECT 可以作为独立的语句也可以作为其他语句的子句，其查询结果可以作为另一个语句的输入值。
 
@@ -1076,3 +1083,62 @@ select sum(tiny_column) as total_count from big_table;
 
 select one.tiny_column, two.int_column from small_table one, big_table two where one.tiny_column = two.tiny_column;
 ```
+<<<<<<< HEAD
+=======
+
+### PIVOT
+
+该函数从 3.3 版本开始支持。
+
+PIVOT操作符是SQL中的一个高级特性，它允许你将表中的行转换为列，通常用于数据透视表的创建。这在处理数据库报表或分析时非常有用，特别是当你需要对数据进行汇总或分类展示时。
+
+实际上，PIVOT 是一种语法糖，它可以简化像 sum(case when ... then ... end) 这样的查询语句的编写。
+
+#### 语法
+  
+```sql
+pivot:
+SELECT ...
+FROM ...
+PIVOT (
+  aggregate_function(<expr>) [[AS] alias] [, aggregate_function(<expr>) [[AS] alias] ...]
+  FOR <pivot_column>
+  IN (<pivot_value>)
+)
+
+pivot_column:
+<column_name> 
+| (<column_name> [, <column_name> ...])
+
+pivot_value:
+<literal> [, <literal> ...]
+| (<literal>, <literal> ...) [, (<literal>, <literal> ...)]
+```
+
+#### 参数
+在PIVOT操作中，你需要指定以下几个关键部分：
+- aggregate_function()：聚合函数，如SUM、AVG、COUNT等，用于对数据进行汇总。
+- alias：为聚合结果指定的别名，使得结果更易于理解。
+- FOR pivot_column：指定要进行行转列操作的列名。
+- IN (pivot_value)：指定pivot_column列中要转换为列的具体值。
+
+#### 示例
+
+```sql
+create table t1 (c0 int, c1 int, c2 int, c3 int);
+SELECT * FROM t1 PIVOT (SUM(c1) AS sum_c1, AVG(c2) AS avg_c2 FOR c3 IN (1, 2, 3, 4, 5));
+-- 结果等同于以下查询：
+SELECT SUM(CASE WHEN c3 = 1 THEN c1 ELSE NULL END) AS sum_c1_1,
+       AVG(CASE WHEN c3 = 1 THEN c2 ELSE NULL END) AS avg_c2_1,
+       SUM(CASE WHEN c3 = 2 THEN c1 ELSE NULL END) AS sum_c1_2,
+       AVG(CASE WHEN c3 = 2 THEN c2 ELSE NULL END) AS avg_c2_2,
+       SUM(CASE WHEN c3 = 3 THEN c1 ELSE NULL END) AS sum_c1_3,
+       AVG(CASE WHEN c3 = 3 THEN c2 ELSE NULL END) AS avg_c2_3,
+       SUM(CASE WHEN c3 = 4 THEN c1 ELSE NULL END) AS sum_c1_4,
+       AVG(CASE WHEN c3 = 4 THEN c2 ELSE NULL END) AS avg_c2_4,
+       SUM(CASE WHEN c3 = 5 THEN c1 ELSE NULL END) AS sum_c1_5,
+       AVG(CASE WHEN c3 = 5 THEN c2 ELSE NULL END) AS avg_c2_5
+FROM t1
+GROUP BY c0;
+```
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

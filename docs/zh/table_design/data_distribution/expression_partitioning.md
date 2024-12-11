@@ -40,7 +40,11 @@ expression ::=
 ### 使用说明
 
 - 在导入的过程中 StarRocks 根据导入数据已经自动创建了一些分区，但是由于某些原因导入作业最终失败，则在当前版本中，已经自动创建的分区并不会由于导入失败而自动删除。
+<<<<<<< HEAD
 - StarRocks 自动创建分区数量上限默认为 4096，由 FE 配置参数 `max_automatic_partition_number` 决定。该参数可以防止您由于误操作而创建大量分区。
+=======
+- StarRocks 单次导入自动创建分区数量上限默认为 4096，由 FE 配置参数 `auto_partition_max_creation_number_per_load` 决定。该参数可以防止您由于误操作而创建大量分区。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - 分区命名规则与动态分区的命名规则一致。
 
 ### 示例
@@ -140,7 +144,11 @@ partition_columns ::=
 ### 使用说明
 
 - 在导入的过程中 StarRocks 根据导入数据已经自动创建了一些分区，但是由于某些原因导入作业最终失败，则在当前版本中，已经自动创建的分区并不会由于导入失败而自动删除。
+<<<<<<< HEAD
 - StarRocks 自动创建分区数量上限默认为 4096，由 FE 配置参数 `max_automatic_partition_number` 决定。该参数可以防止您由于误操作而创建大量分区。
+=======
+- StarRocks 单次导入自动创建分区数量上限默认为 4096，由 FE 配置参数 `auto_partition_max_creation_number_per_load` 决定。该参数可以防止您由于误操作而创建大量分区。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - 分区命名规则：如果存在多个分区列，则不同分区列的值以下划线（_）连接。例如：存在有两个分区列 `dt` 和 `city`，均为字符串类型，导入一条数据 `2022-04-01`, `beijing`，则自动创建的分区名称为 `p20220401_beijing`。
 
 ### 示例
@@ -235,9 +243,17 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ## 使用限制
 
+<<<<<<< HEAD
 - 自 v3.1.0 起，StarRocks [存算分离模式](../../deployment/deploy_shared_data.md)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks [存算分离模式](../../deployment/deploy_shared_data.md)支持[列表达式分区](#列表达式分区自-v31)。
 - 使用 CTAS 建表时暂时不支持表达式分区。
 - 暂时不支持使用 Spark Load 导入数据至表达式分区的表。
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 删除列表达式分区时，分区直接被删除并且不能被恢复。
 - 列表达式分区暂时不支持[备份与恢复](../../administration/management/Backup_and_restore.md)。
+=======
+- 自 v3.1.0 起，StarRocks [存算分离模式](../../deployment/shared_data/shared_data.mdx)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks 存算分离模式支持[列表达式分区](#列表达式分区自-v31)。
+- 使用 CTAS 建表时暂时不支持表达式分区。
+- 暂时不支持使用 Spark Load 导入数据至表达式分区的表。
+- 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 删除列表达式分区时，分区直接被删除并且不能被恢复。
+- 表达式分区表暂时不支持[备份与恢复](../../administration/management/Backup_and_restore.md)。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - 如果使用表达式分区，则仅支持回滚到 2.5.4 及以后的版本。

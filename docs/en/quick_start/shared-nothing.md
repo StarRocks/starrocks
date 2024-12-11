@@ -114,6 +114,10 @@ mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 ---
 
 ## Load two datasets
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 There are many ways to load data into StarRocks. For this tutorial the simplest way is to use curl and StarRocks Stream Load.
 
 :::tip

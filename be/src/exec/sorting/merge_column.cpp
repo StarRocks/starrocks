@@ -131,8 +131,12 @@ public:
         auto equal_right = [&](size_t lhs_index, size_t rhs_index) {
             return _right_col->compare_at(lhs_index, rhs_index, *_right_col, _null_first) == 0;
         };
+<<<<<<< HEAD
         do_merge(cmp, equal_left, equal_right);
         return Status::OK();
+=======
+        return do_merge(cmp, equal_left, equal_right);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     template <class Container, class ValueType>

@@ -366,7 +366,11 @@ TEST(StructColumnTest, test_update_rows) {
     copy->append_datum(struct2);
     copy->append_datum(DatumStruct{uint64_t(4), Slice("world")});
     std::vector<uint32_t> replace_indexes = {0, 2};
+<<<<<<< HEAD
     ASSERT_TRUE(column->update_rows(*copy.get(), replace_indexes.data()).ok());
+=======
+    column->update_rows(*copy.get(), replace_indexes.data());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ASSERT_EQ(3, column->size());
     ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(0));

@@ -14,12 +14,27 @@
 
 package com.starrocks.common.util;
 
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 
+=======
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSerializer;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.analyzer.SemanticException;
+
+import java.time.DayOfWeek;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+<<<<<<< HEAD
+=======
+import java.time.OffsetDateTime;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -28,6 +43,10 @@ import java.time.format.ResolverStyle;
 import java.time.format.SignStyle;
 import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
+<<<<<<< HEAD
+=======
+import java.time.temporal.WeekFields;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class DateUtils {
     // These are marked as deprecated because they don't support year 0000 parsing
@@ -54,11 +73,28 @@ public class DateUtils {
     public static final DateTimeFormatter DATEKEY_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d");
     public static final DateTimeFormatter DATE_TIME_FORMATTER_UNIX = unixDatetimeFormatter("%Y-%m-%d %H:%i:%s");
     public static final DateTimeFormatter DATE_TIME_MS_FORMATTER_UNIX = unixDatetimeFormatter("%Y-%m-%d %H:%i:%s.%f");
+<<<<<<< HEAD
+=======
+    public static final DateTimeFormatter SECOND_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H%i%s");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final DateTimeFormatter MINUTE_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H%i");
     public static final DateTimeFormatter HOUR_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H");
     public static final DateTimeFormatter YEAR_FORMATTER_UNIX = unixDatetimeFormatter("%Y");
     public static final DateTimeFormatter MONTH_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m");
 
+<<<<<<< HEAD
+=======
+    private static final JsonSerializer<LocalDateTime> LOCAL_DATETIME_PRINTER =
+            (dateTime, type, cx) -> new JsonPrimitive(dateTime.format(DATE_TIME_FORMATTER_UNIX));
+
+    public static final Gson GSON_PRINTER = new GsonBuilder()
+            .addSerializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
+            .addDeserializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
+            .enableComplexMapKeySerialization()
+            .disableHtmlEscaping()
+            .registerTypeAdapter(LocalDateTime.class, LOCAL_DATETIME_PRINTER)
+            .create();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /*
      * Dates containing two-digit year values are ambiguous because the century is unknown.
      * MySQL interprets two-digit year values using these rules:
@@ -91,11 +127,37 @@ public class DateUtils {
         DATETIME_FORMATTERS[1][1][1][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s.%f", false);
     }
 
+<<<<<<< HEAD
+=======
+    public static String formatDateTimeUnix(LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return dateTime.format(DATE_TIME_FORMATTER_UNIX);
+    }
+
+    public static LocalDateTime fromEpochMillis(long epochMilli, ZoneId zoneId) {
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMilli), zoneId);
+    }
+
+    public static LocalDateTime parseUnixDateTime(String str) {
+        return LocalDateTime.parse(str, DATE_TIME_FORMATTER_UNIX);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static LocalDateTime parseStrictDateTime(String str) {
         if (str == null || str.length() < 5) {
             throw new IllegalArgumentException("Invalid datetime string: " + str);
         }
+<<<<<<< HEAD
         if (str.contains(":")) {
+=======
+        if (str.endsWith("Z") || str.endsWith("]")) {
+            return parseIsoZonedDateTimeString(str);
+        } else if (str.contains("+")) {
+            return parseOffsetDateTimeString(str);
+        } else if (str.contains(":")) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // datetime
             int isTwoDigit = str.split("-")[0].length() == 2 ? 1 : 0;
             int withSec = str.split(":").length > 2 ? 1 : 0;
@@ -120,7 +182,23 @@ public class DateUtils {
         }
     }
 
+<<<<<<< HEAD
     public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
+=======
+    private static LocalDateTime parseIsoZonedDateTimeString(String datetime) {
+        ZonedDateTime zonedDateTime = ZonedDateTime.parse(datetime, DateTimeFormatter.ISO_ZONED_DATE_TIME);
+        ZonedDateTime localDateTimeWithZone = zonedDateTime.withZoneSameInstant(ZoneId.systemDefault());
+        return localDateTimeWithZone.toLocalDateTime();
+    }
+
+    private static LocalDateTime parseOffsetDateTimeString(String datetime) {
+        OffsetDateTime offsetDateTime = OffsetDateTime.parse(datetime, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        ZonedDateTime localDateTimeWithZone = offsetDateTime.atZoneSameInstant(ZoneId.systemDefault());
+        return localDateTimeWithZone.toLocalDateTime();
+    }
+
+    public static DateTimeFormatter probeFormat(String dateTimeStr) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (dateTimeStr.length() == 8) {
             return DATEKEY_FORMATTER;
         } else if (dateTimeStr.length() == 10) {
@@ -130,11 +208,35 @@ public class DateUtils {
         } else if (dateTimeStr.length() == 26) {
             return DATE_TIME_MS_FORMATTER_UNIX;
         } else {
+<<<<<<< HEAD
             throw new AnalysisException("can not probe datetime format:" + dateTimeStr);
         }
     }
 
     public static String formatTimeStampInSeconds(long timestampInSeconds, ZoneId timeZoneId) {
+=======
+            throw new SemanticException("can not probe datetime format:" + dateTimeStr);
+        }
+    }
+
+    public static String convertDateFormaterToDateKeyFormater(String datetime) {
+        LocalDate date = LocalDate.parse(datetime, DATE_FORMATTER);
+        String convertedDate = date.format(DATEKEY_FORMATTER_UNIX);
+        return convertedDate;
+    }
+
+    public static String convertDateTimeFormaterToSecondFormater(String datetime) {
+        LocalDateTime date = LocalDateTime.parse(datetime, DATE_TIME_FORMATTER);
+        String convertedDatetime = date.format(SECOND_FORMATTER_UNIX);
+        return convertedDatetime;
+    }
+
+    public static String formatTimestampInSeconds(long timestampInSeconds) {
+        return formatTimestampInSeconds(timestampInSeconds, TimeUtils.getSystemTimeZone().toZoneId());
+    }
+
+    public static String formatTimestampInSeconds(long timestampInSeconds, ZoneId timeZoneId) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return formatTimeStampInMill(timestampInSeconds * 1000, timeZoneId);
     }
 
@@ -156,7 +258,11 @@ public class DateUtils {
         }
     }
 
+<<<<<<< HEAD
     public static LocalDateTime parseDatTimeString(String datetime) throws AnalysisException {
+=======
+    public static LocalDateTime parseDatTimeString(String datetime) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         DateTimeFormatter dateTimeFormatter = probeFormat(datetime);
         return parseStringWithDefaultHSM(datetime, dateTimeFormatter);
     }
@@ -229,7 +335,12 @@ public class DateUtils {
                                 .appendValue(ChronoField.SECOND_OF_MINUTE, 2);
                         break;
                     case 'v': // %v Week (01..53), where Monday is the first day of the week; used with %x
+<<<<<<< HEAD
                         builder.appendValue(ChronoField.ALIGNED_WEEK_OF_YEAR, 2);
+=======
+                        final WeekFields weekFields = WeekFields.of(DayOfWeek.MONDAY, 4);
+                        builder.appendValue(weekFields.weekOfWeekBasedYear(), 2);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         break;
                     case 'Y': // %Y Year, numeric, four digits
                         builder.appendValue(ChronoField.YEAR, 4);

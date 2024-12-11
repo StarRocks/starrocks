@@ -74,8 +74,13 @@ mv1	CREATE MATERIALIZED VIEW `mv1` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
+<<<<<<< HEAD
 "replicated_storage" = "true",
 "replication_num" = "1",
+=======
+"replication_num" = "1",
+"replicated_storage" = "true",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "storage_medium" = "HDD"
 )
 AS SELECT `t0`.`k1`, `t1`.`v1`
@@ -93,8 +98,13 @@ mv2	CREATE MATERIALIZED VIEW `mv2` (`k1`, `count(v1)`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
+<<<<<<< HEAD
 "replicated_storage" = "true",
 "replication_num" = "1",
+=======
+"replication_num" = "1",
+"replicated_storage" = "true",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "storage_medium" = "HDD"
 )
 AS SELECT `t_random`.`k1`, count(`t_random`.`v1`) AS `count(v1)`
@@ -114,8 +124,13 @@ mv3	CREATE MATERIALIZED VIEW `mv3` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
+<<<<<<< HEAD
 "replicated_storage" = "true",
 "replication_num" = "1",
+=======
+"replication_num" = "1",
+"replicated_storage" = "true",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "storage_medium" = "HDD"
 )
 AS SELECT `t0`.`k1`, `t1`.`v1`
@@ -134,8 +149,13 @@ mv4	CREATE MATERIALIZED VIEW `mv4` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
+<<<<<<< HEAD
 "replicated_storage" = "true",
 "replication_num" = "1",
+=======
+"replication_num" = "1",
+"replicated_storage" = "true",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "storage_medium" = "HDD"
 )
 AS SELECT `t0`.`k1`, `t1`.`v1`
@@ -154,8 +174,13 @@ mv_part1	CREATE MATERIALIZED VIEW `mv_part1` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
+<<<<<<< HEAD
 "replicated_storage" = "true",
 "replication_num" = "1",
+=======
+"replication_num" = "1",
+"replicated_storage" = "true",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "storage_medium" = "HDD"
 )
 AS SELECT `t1`.`k1`, `t2`.`v1`
@@ -181,8 +206,13 @@ PARTITION BY (`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 2 
 REFRESH ASYNC
 PROPERTIES (
+<<<<<<< HEAD
 "replicated_storage" = "true",
 "replication_num" = "1",
+=======
+"replication_num" = "1",
+"replicated_storage" = "true",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "storage_medium" = "HDD"
 )
 AS SELECT `t1`.`k1`, `t1`.`v1`, `t1`.`v2`
@@ -209,8 +239,13 @@ PARTITION BY (`k1`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
+<<<<<<< HEAD
 "replicated_storage" = "true",
 "replication_num" = "1",
+=======
+"replication_num" = "1",
+"replicated_storage" = "true",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "storage_medium" = "HDD"
 )
 AS SELECT `t1`.`k1`, `t1`.`v1`, `t1`.`v2`

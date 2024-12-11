@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     sum(l_extendedprice* (1 - l_discount)) as revenue
@@ -34,6 +35,8 @@ where
             and l_shipmode in ('AIR', 'AIR REG')
             and l_shipinstruct = 'DELIVER IN PERSON'
     ) ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 AGGREGATE ([GLOBAL] aggregate [{27: sum=sum(27: sum)}] group by [[]] having [null]
     EXCHANGE GATHER

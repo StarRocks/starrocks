@@ -34,7 +34,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PhysicalDecodeOperator extends PhysicalOperator {
+<<<<<<< HEAD
     private final ImmutableMap<ColumnRefOperator, ColumnRefOperator> dictToStrings;
+=======
+    private final Map<ColumnRefOperator, ColumnRefOperator> dictToStrings;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final Map<ColumnRefOperator, ScalarOperator> stringFunctions;
 
     public PhysicalDecodeOperator(ImmutableMap<ColumnRefOperator, ColumnRefOperator> dictToStrings,
@@ -108,12 +112,25 @@ public class PhysicalDecodeOperator extends PhysicalOperator {
 
     }
 
+<<<<<<< HEAD
     public ImmutableMap<Integer, Integer> getDictToStrings() {
         Map<Integer, Integer> res = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : dictToStrings.entrySet()) {
             res.put(entry.getKey().getId(), entry.getValue().getId());
         }
         return ImmutableMap.copyOf(res);
+=======
+    public ImmutableMap<Integer, Integer> getDictIdToStringsId() {
+        ImmutableMap.Builder<Integer, Integer> builder = ImmutableMap.builder();
+        for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : dictToStrings.entrySet()) {
+            builder.put(entry.getKey().getId(), entry.getValue().getId());
+        }
+        return builder.build();
+    }
+
+    public Map<ColumnRefOperator, ColumnRefOperator> getDictToStrings() {
+        return dictToStrings;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getStringFunctions() {

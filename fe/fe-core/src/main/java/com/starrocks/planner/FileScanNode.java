@@ -43,8 +43,11 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+<<<<<<< HEAD
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.sql.ast.ImportColumnDesc;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
@@ -61,15 +64,27 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.CsvFormat;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.loadv2.LoadJob;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -89,7 +104,10 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+<<<<<<< HEAD
 import com.starrocks.warehouse.Warehouse;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -102,7 +120,10 @@ import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+<<<<<<< HEAD
 import java.util.stream.Stream;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 
@@ -149,7 +170,12 @@ public class FileScanNode extends LoadScanNode {
     private List<List<TBrokerFileStatus>> fileStatusesList;
     // file num
     private int filesAdded;
+<<<<<<< HEAD
     
+=======
+    private long totalBytes = 0;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private List<ComputeNode> nodes;
     private int nextBe = 0;
 
@@ -161,7 +187,15 @@ public class FileScanNode extends LoadScanNode {
     // 3. use vectorized engine
     private boolean useVectorizedLoad;
 
+<<<<<<< HEAD
     private boolean nullExprInAutoIncrement;
+=======
+    private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+    private boolean flexibleColumnMapping = false;
+
+    private boolean nullExprInAutoIncrement;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static class ParamCreateContext {
         public BrokerFileGroup fileGroup;
         public TBrokerScanRangeParams params;
@@ -174,17 +208,29 @@ public class FileScanNode extends LoadScanNode {
     private List<ParamCreateContext> paramCreateContexts;
 
     public FileScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
+<<<<<<< HEAD
                         List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
+=======
+                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, long warehouseId) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(id, desc, planNodeName);
         this.fileStatusesList = fileStatusesList;
         this.filesAdded = filesAdded;
         this.parallelInstanceNum = 1;
         this.useVectorizedLoad = false;
         this.nullExprInAutoIncrement = true;
+<<<<<<< HEAD
     }
 
     @Override
     public void init(Analyzer analyzer) throws UserException {
+=======
+        this.warehouseId = warehouseId;
+    }
+
+    @Override
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super.init(analyzer);
 
         this.analyzer = analyzer;
@@ -195,6 +241,7 @@ public class FileScanNode extends LoadScanNode {
                 try {
                     fileGroups = Lists.newArrayList(new BrokerFileGroup(brokerTable));
                 } catch (AnalysisException e) {
+<<<<<<< HEAD
                     throw new UserException(e.getMessage());
                 }
                 brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
@@ -206,6 +253,11 @@ public class FileScanNode extends LoadScanNode {
                     throw new UserException(e.getMessage());
                 }
                 brokerDesc = new BrokerDesc(funcTable.getProperties());
+=======
+                    throw new StarRocksException(e.getMessage());
+                }
+                brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             targetTable = tbl;
         }
@@ -222,7 +274,11 @@ public class FileScanNode extends LoadScanNode {
             // csv/json/parquet load is controlled by Config::enable_vectorized_file_load
             // if Config::enable_vectorized_file_load is set true,
             // vectorized load will been enabled
+<<<<<<< HEAD
             TFileFormatType format = formatType(context.fileGroup.getFileFormat(), "");
+=======
+            TFileFormatType format = Load.getFormatType(context.fileGroup.getFileFormat(), "");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             initParams(context);
             paramCreateContexts.add(context);
         }
@@ -257,17 +313,35 @@ public class FileScanNode extends LoadScanNode {
         this.parallelInstanceNum = parallelInstanceNum;
     }
 
+<<<<<<< HEAD
+=======
+    public void setFlexibleColumnMapping(boolean enable) {
+        this.flexibleColumnMapping = enable;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
         this.useVectorizedLoad = useVectorizedLoad;
     }
 
+<<<<<<< HEAD
+=======
+    public void setJSONOptions(LoadJob.JSONOptions options) {
+        this.jsonOptions = options;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean nullExprInAutoIncrement() {
         return nullExprInAutoIncrement;
     }
 
     // Called from init, construct source tuple information
     private void initParams(ParamCreateContext context)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
         params.setHdfs_read_buffer_size_kb(Config.hdfs_read_buffer_size_kb);
         context.params = params;
@@ -279,20 +353,36 @@ public class FileScanNode extends LoadScanNode {
                 throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
             }
             THdfsProperties hdfsProperties = new THdfsProperties();
+<<<<<<< HEAD
             HdfsUtil.getTProperties(filePaths.get(0), brokerDesc, hdfsProperties); 
+=======
+            HdfsUtil.getTProperties(filePaths.get(0), brokerDesc, hdfsProperties);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             params.setHdfs_properties(hdfsProperties);
         }
         byte[] column_separator = fileGroup.getColumnSeparator().getBytes(StandardCharsets.UTF_8);
         byte[] row_delimiter = fileGroup.getRowDelimiter().getBytes(StandardCharsets.UTF_8);
         if (column_separator.length != 1) {
+<<<<<<< HEAD
             if (column_separator.length > 50) {
                 throw new UserException("the column separator is limited to a maximum of 50 bytes");
+=======
+            if (column_separator.length > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH) {
+                ErrorReport.reportUserException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH, "column separator",
+                        1, CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             params.setMulti_column_separator(fileGroup.getColumnSeparator());
         }
         if (row_delimiter.length != 1) {
+<<<<<<< HEAD
             if (row_delimiter.length > 50) {
                 throw new UserException("the row delimiter is limited to a maximum of 50 bytes");
+=======
+            if (row_delimiter.length > CsvFormat.MAX_ROW_DELIMITER_LENGTH){
+                ErrorReport.reportUserException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH, "row delimiter",
+                        1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             params.setMulti_row_delimiter(fileGroup.getRowDelimiter());
         }
@@ -306,6 +396,11 @@ public class FileScanNode extends LoadScanNode {
         params.setTrim_space(fileGroup.isTrimspace());
         params.setEnclose(fileGroup.getEnclose());
         params.setEscape(fileGroup.getEscape());
+<<<<<<< HEAD
+=======
+        params.setJson_file_size_limit(Config.json_file_size_limit);
+        params.setFlexible_column_mapping(flexibleColumnMapping);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }
@@ -318,9 +413,15 @@ public class FileScanNode extends LoadScanNode {
      * exprMap: the expr from column mapping in load stmt.
      *
      * @param context
+<<<<<<< HEAD
      * @throws UserException
      */
     private void initColumns(ParamCreateContext context) throws UserException {
+=======
+     * @throws StarRocksException
+     */
+    private void initColumns(ParamCreateContext context) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         context.tupleDescriptor = analyzer.getDescTbl().createTupleDescriptor();
         // columns in column list is case insensitive
         context.slotDescByName = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
@@ -341,7 +442,11 @@ public class FileScanNode extends LoadScanNode {
                 useVectorizedLoad, columnsFromPath);
     }
 
+<<<<<<< HEAD
     private void finalizeParams(ParamCreateContext context) throws UserException, AnalysisException {
+=======
+    private void finalizeParams(ParamCreateContext context) throws StarRocksException, AnalysisException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Map<String, SlotDescriptor> slotDescByName = context.slotDescByName;
         Map<String, Expr> exprMap = context.exprMap;
         Map<Integer, Integer> destSidToSrcSidWithoutTrans = Maps.newHashMap();
@@ -371,7 +476,11 @@ public class FileScanNode extends LoadScanNode {
                         if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
                             expr = column.getDefaultExpr().obtainExpr();
                         } else {
+<<<<<<< HEAD
                             throw new UserException("Column(" + column + ") has unsupported default value:"
+=======
+                            throw new StarRocksException("Column(" + column + ") has unsupported default value:"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     + column.getDefaultExpr().getExpr());
                         }
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
@@ -381,7 +490,11 @@ public class FileScanNode extends LoadScanNode {
                                 nullExprInAutoIncrement = false;
                             }
                         } else {
+<<<<<<< HEAD
                             throw new UserException("Unknown slot ref("
+=======
+                            throw new StarRocksException("Unknown slot ref("
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     + destSlotDesc.getColumn().getName() + ") in source file");
                         }
                     }
@@ -418,12 +531,20 @@ public class FileScanNode extends LoadScanNode {
         context.params.setSrc_tuple_id(context.tupleDescriptor.getId().asInt());
         context.params.setDest_tuple_id(desc.getId().asInt());
         context.params.setStrict_mode(strictMode);
+<<<<<<< HEAD
+=======
+        context.params.setJson_file_size_limit(Config.json_file_size_limit);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // Need re compute memory layout after set some slot descriptor to nullable
         context.tupleDescriptor.computeMemLayout();
     }
 
     private TScanRangeLocations newLocations(TBrokerScanRangeParams params, String brokerName, boolean hasBroker)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ComputeNode selectedBackend = nodes.get(nextBe++);
         nextBe = nextBe % nodes.size();
 
@@ -433,11 +554,15 @@ public class FileScanNode extends LoadScanNode {
 
         if (hasBroker) {
             FsBroker broker = null;
+<<<<<<< HEAD
             try {
                 broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
             } catch (AnalysisException e) {
                 throw new UserException(e.getMessage());
             }
+=======
+            broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             brokerScanRange.addToBroker_addresses(new TNetworkAddress(broker.ip, broker.port));
         } else {
             brokerScanRange.addToBroker_addresses(new TNetworkAddress("", 0));
@@ -463,7 +588,11 @@ public class FileScanNode extends LoadScanNode {
         return locations.scan_range.broker_scan_range;
     }
 
+<<<<<<< HEAD
     private void getFileStatusAndCalcInstance() throws UserException {
+=======
+    private void getFileStatusAndCalcInstance() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (fileStatusesList == null || filesAdded == -1) {
             // FIXME(cmy): fileStatusesList and filesAdded can be set out of db lock when doing pull load,
             // but for now it is very difficult to set them out of db lock when doing broker query.
@@ -504,7 +633,10 @@ public class FileScanNode extends LoadScanNode {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_FILES_FOUND, String.join(", ", filePaths));
         }
 
+<<<<<<< HEAD
         long totalBytes = 0;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (List<TBrokerFileStatus> fileStatuses : fileStatusesList) {
             Collections.sort(fileStatuses, T_BROKER_FILE_STATUS_COMPARATOR);
             for (TBrokerFileStatus fileStatus : fileStatuses) {
@@ -515,13 +647,18 @@ public class FileScanNode extends LoadScanNode {
         // numInstances:
         // min(totalBytes / min_bytes_per_broker_scanner,
         //     backends_size * parallelInstanceNum)
+<<<<<<< HEAD
         numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
+=======
+        int numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         numInstances = Math.min(nodes.size() * parallelInstanceNum, numInstances);
         numInstances = Math.max(1, numInstances);
 
         bytesPerInstance = (totalBytes + numInstances - 1) / (numInstances != 0 ? numInstances : 1);
     }
 
+<<<<<<< HEAD
     private void assignBackends() throws UserException {
         nodes = Lists.newArrayList();
 
@@ -530,12 +667,26 @@ public class FileScanNode extends LoadScanNode {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             for (long cnId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(cnId);
+=======
+    private void assignBackends() throws StarRocksException {
+        nodes = Lists.newArrayList();
+
+        // TODO: need to refactor after be split into cn + dn
+        if (RunMode.isSharedDataMode()) {
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            for (long cnId : computeNodeIds) {
+                ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (cn != null && cn.isAvailable()) {
                     nodes.add(cn);
                 }
             }
         } else {
+<<<<<<< HEAD
             for (ComputeNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+=======
+            for (ComputeNode be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (be.isAvailable()) {
                     nodes.add(be);
                 }
@@ -543,11 +694,16 @@ public class FileScanNode extends LoadScanNode {
         }
 
         if (nodes.isEmpty()) {
+<<<<<<< HEAD
             throw new UserException("No available backends");
+=======
+            throw new StarRocksException("No available backends");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         Collections.shuffle(nodes, random);
     }
 
+<<<<<<< HEAD
     private TFileFormatType formatType(String fileFormat, String path) {
         if (fileFormat != null) {
             if (fileFormat.toLowerCase().equals("parquet")) {
@@ -577,11 +733,17 @@ public class FileScanNode extends LoadScanNode {
         }
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // If fileFormat is not null, we use fileFormat instead of check file's suffix
     private void processFileGroup(
             ParamCreateContext context,
             List<TBrokerFileStatus> fileStatuses)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (fileStatuses == null || fileStatuses.isEmpty()) {
             return;
         }
@@ -594,7 +756,11 @@ public class FileScanNode extends LoadScanNode {
         long curFileOffset = 0;
         for (int i = 0; i < fileStatuses.size(); ) {
             TBrokerFileStatus fileStatus = fileStatuses.get(i);
+<<<<<<< HEAD
             TFileFormatType formatType = formatType(context.fileGroup.getFileFormat(), fileStatus.path);
+=======
+            TFileFormatType formatType = Load.getFormatType(context.fileGroup.getFileFormat(), fileStatus.path);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             List<String> columnsFromPath = HdfsUtil.parseColumnsFromPath(fileStatus.path,
                     context.fileGroup.getColumnsFromPath());
             int numberOfColumnsFromFile = context.slotDescByName.size() - columnsFromPath.size();
@@ -617,6 +783,14 @@ public class FileScanNode extends LoadScanNode {
             TBrokerRangeDesc rangeDesc =
                     createBrokerRangeDesc(curFileOffset, fileStatus, formatType, rangeBytes, columnsFromPath,
                             numberOfColumnsFromFile);
+<<<<<<< HEAD
+=======
+
+            rangeDesc.setStrip_outer_array(jsonOptions.stripOuterArray);
+            rangeDesc.setJsonpaths(jsonOptions.jsonPaths);
+            rangeDesc.setJson_root(jsonOptions.jsonRoot);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             brokerScanRange(smallestLocations.first).addToRanges(rangeDesc);
             smallestLocations.second += rangeBytes;
             locationsHeap.add(smallestLocations);
@@ -650,7 +824,11 @@ public class FileScanNode extends LoadScanNode {
     }
 
     private void createScanRangeLocations(ParamCreateContext context, List<TBrokerFileStatus> fileStatuses)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Preconditions.checkState(locationsHeap.isEmpty(), "Locations heap is not empty");
 
         long totalBytes = 0;
@@ -667,7 +845,11 @@ public class FileScanNode extends LoadScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         locationsList = Lists.newArrayList();
         locationsHeap = new PriorityQueue<>(SCAN_RANGE_LOCATIONS_COMPARATOR);
 
@@ -680,14 +862,21 @@ public class FileScanNode extends LoadScanNode {
             try {
                 finalizeParams(context);
             } catch (AnalysisException e) {
+<<<<<<< HEAD
                 throw new UserException(e.getMessage());
+=======
+                throw new StarRocksException(e.getMessage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             processFileGroup(context, fileStatuses);
         }
 
+<<<<<<< HEAD
         // update numInstances
         numInstances = locationsList.size();
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (LOG.isDebugEnabled()) {
             for (TScanRangeLocations locations : locationsList) {
                 LOG.debug("Scan range is {}", locations);
@@ -704,7 +893,11 @@ public class FileScanNode extends LoadScanNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.FILE_SCAN_NODE;
         TFileScanNode fileScanNode = new TFileScanNode(desc.getId().asInt());
+<<<<<<< HEAD
         fileScanNode.setEnable_pipeline_load(Config.enable_pipeline_load);
+=======
+        fileScanNode.setEnable_pipeline_load(true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         msg.setFile_scan_node(fileScanNode);
     }
 
@@ -719,7 +912,11 @@ public class FileScanNode extends LoadScanNode {
     public void updateScanRangeLocations() {
         try {
             assignBackends();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG.warn("assign backends failed.", e);
             // Just return, retry by LoadTask
             return;
@@ -741,7 +938,11 @@ public class FileScanNode extends LoadScanNode {
             try {
                 // Get new alive be and broker here, and params is not used, so set null
                 newLocations = newLocations(null, brokerDesc.getName(), brokerDesc.hasBroker());
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 LOG.warn("new locations failed.", e);
                 // Just return, retry by LoadTask
                 return;
@@ -759,10 +960,13 @@ public class FileScanNode extends LoadScanNode {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return numInstances;
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
@@ -781,8 +985,21 @@ public class FileScanNode extends LoadScanNode {
 
     @Override
     public boolean canUsePipeLine() {
+<<<<<<< HEAD
         return Config.enable_pipeline_load;
     }
 
+=======
+        return true;
+    }
+
+    public long getFileTotalSize() {
+        return totalBytes;
+    }
+
+    public int getFileNum() {
+        return filesAdded;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 }

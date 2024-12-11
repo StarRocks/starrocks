@@ -32,10 +32,23 @@ public:
         this->data(state).clear();
     }
 
+<<<<<<< HEAD
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         const auto* column = down_cast<const HyperLogLogColumn*>(columns[0]);
         this->data(state).merge(*(column->get_object(row_num)));
+=======
+    ALWAYS_INLINE void update_state(FunctionContext* ctx, AggDataPtr state, HyperLogLog& hll) const {
+        int64_t prev_memory = this->data(state).mem_usage();
+        this->data(state).merge(hll);
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
+    }
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        const auto* column = down_cast<const HyperLogLogColumn*>(columns[0]);
+        update_state(ctx, state, *(column->get_object(row_num)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -43,7 +56,11 @@ public:
                                               int64_t frame_end) const override {
         const auto* column = down_cast<const HyperLogLogColumn*>(columns[0]);
         for (size_t i = frame_start; i < frame_end; ++i) {
+<<<<<<< HEAD
             this->data(state).merge(*(column->get_object(i)));
+=======
+            update_state(ctx, state, *(column->get_object(i)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -51,7 +68,11 @@ public:
         DCHECK(column->is_object());
 
         const auto* hll_column = down_cast<const HyperLogLogColumn*>(column);
+<<<<<<< HEAD
         this->data(state).merge(*(hll_column->get_object(row_num)));
+=======
+        update_state(ctx, state, *(hll_column->get_object(row_num)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,

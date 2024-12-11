@@ -62,12 +62,23 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.starrocks.alter.AlterJobV2;
+<<<<<<< HEAD
 import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.authentication.LDAPSecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
+=======
+import com.starrocks.alter.LakeRollupJob;
+import com.starrocks.alter.LakeTableAlterMetaJob;
+import com.starrocks.alter.LakeTableAsyncFastSchemaChangeJob;
+import com.starrocks.alter.LakeTableSchemaChangeJob;
+import com.starrocks.alter.OnlineOptimizeJobV2;
+import com.starrocks.alter.OptimizeJobV2;
+import com.starrocks.alter.RollupJobV2;
+import com.starrocks.alter.SchemaChangeJobV2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
@@ -76,7 +87,11 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
+<<<<<<< HEAD
 import com.starrocks.catalog.CatalogRecycleBin;
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -105,6 +120,13 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.PseudoType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.RecycleListPartitionInfo;
+import com.starrocks.catalog.RecyclePartitionInfoV2;
+import com.starrocks.catalog.RecycleRangePartitionInfo;
+import com.starrocks.catalog.RecycleUnPartitionInfo;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
@@ -114,12 +136,26 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+<<<<<<< HEAD
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
+=======
+import com.starrocks.encryption.EncryptionKeyPBAdapter;
+import com.starrocks.lake.LakeMaterializedView;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.RecycleLakeListPartitionInfo;
+import com.starrocks.lake.RecycleLakeRangePartitionInfo;
+import com.starrocks.lake.RecycleLakeUnPartitionInfo;
+import com.starrocks.lake.backup.LakeBackupJob;
+import com.starrocks.lake.backup.LakeRestoreJob;
+import com.starrocks.lake.backup.LakeTableSnapshotInfo;
+import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.load.loadv2.BrokerLoadJob;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
@@ -147,7 +183,11 @@ import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.MaterializedViewPEntryObject;
 import com.starrocks.privilege.PEntryObject;
+<<<<<<< HEAD
 import com.starrocks.privilege.PipePFCEntryObject;
+=======
+import com.starrocks.privilege.PipePEntryObject;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.privilege.PolicyFCEntryObject;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
@@ -155,7 +195,12 @@ import com.starrocks.privilege.StorageVolumePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
+<<<<<<< HEAD
 import com.starrocks.privilege.WarehouseFCPEntryObject;
+=======
+import com.starrocks.privilege.WarehousePEntryObject;
+import com.starrocks.proto.EncryptionKeyPB;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
@@ -164,13 +209,26 @@ import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
+<<<<<<< HEAD
+=======
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.ExternalAnalyzeJob;
+import com.starrocks.statistic.ExternalAnalyzeStatus;
+import com.starrocks.statistic.NativeAnalyzeJob;
+import com.starrocks.statistic.NativeAnalyzeStatus;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TxnCommitAttachment;
+<<<<<<< HEAD
 import com.starrocks.warehouse.LocalWarehouse;
+=======
+import com.starrocks.warehouse.DefaultWarehouse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.warehouse.Warehouse;
 
 import java.io.IOException;
@@ -243,8 +301,17 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(AlterJobV2.class, "clazz")
                     .registerSubtype(RollupJobV2.class, "RollupJobV2")
                     .registerSubtype(SchemaChangeJobV2.class, "SchemaChangeJobV2")
+<<<<<<< HEAD
                     .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                     .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob");
+=======
+                    .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2")
+                    .registerSubtype(OnlineOptimizeJobV2.class, "OnlineOptimizeJobV2")
+                    .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
+                    .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
+                    .registerSubtype(LakeRollupJob.class, "LakeRollupJob")
+                    .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // runtime adapter for class "LoadJobStateUpdateInfo"
     private static final RuntimeTypeAdapterFactory<LoadJobStateUpdateInfo>
@@ -272,10 +339,22 @@ public class GsonUtils {
             .registerSubtype(RangePartitionPersistInfo.class, "RangePartitionPersistInfo")
             .registerSubtype(SinglePartitionPersistInfo.class, "SinglePartitionPersistInfo");
 
+<<<<<<< HEAD
     private static final RuntimeTypeAdapterFactory<CatalogRecycleBin.RecyclePartitionInfoV2>
             RECYCLE_PARTITION_INFO_V_2_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(CatalogRecycleBin.RecyclePartitionInfoV2.class, "clazz")
             .registerSubtype(CatalogRecycleBin.RecycleRangePartitionInfo.class, "RecycleRangePartitionInfo");
+=======
+    private static final RuntimeTypeAdapterFactory<RecyclePartitionInfoV2>
+            RECYCLE_PARTITION_INFO_V_2_ADAPTER_FACTORY
+            = RuntimeTypeAdapterFactory.of(RecyclePartitionInfoV2.class, "clazz")
+            .registerSubtype(RecycleRangePartitionInfo.class, "RecycleRangePartitionInfo")
+            .registerSubtype(RecycleLakeRangePartitionInfo.class, "RecycleLakeRangePartitionInfo")
+            .registerSubtype(RecycleListPartitionInfo.class, "RecycleListPartitionInfo")
+            .registerSubtype(RecycleLakeListPartitionInfo.class, "RecycleLakeListPartitionInfo")
+            .registerSubtype(RecycleUnPartitionInfo.class, "RecycleUnPartitionInfo")
+            .registerSubtype(RecycleLakeUnPartitionInfo.class, "RecycleLakeUnPartitionInfo");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
@@ -311,6 +390,7 @@ public class GsonUtils {
                     .registerSubtype(CatalogPEntryObject.class, "CatalogPEntryObject")
                     .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject")
                     .registerSubtype(StorageVolumePEntryObject.class, "StorageVolumePEntryObject")
+<<<<<<< HEAD
                     .registerSubtype(WarehouseFCPEntryObject.class, "WarehousePEntryObject")
                     .registerSubtype(PolicyFCEntryObject.class, "PolicyPEntryObject")
                     .registerSubtype(PipePFCEntryObject.class, "PipePEntryObject");
@@ -322,6 +402,15 @@ public class GsonUtils {
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")
             .registerSubtype(LocalWarehouse.class, "LocalWarehouse");
+=======
+                    .registerSubtype(WarehousePEntryObject.class, "WarehousePEntryObject")
+                    .registerSubtype(PipePEntryObject.class, "PipePEntryObject")
+                    .registerSubtype(PolicyFCEntryObject.class, "PolicyPEntryObject");
+
+    private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
+            .of(Warehouse.class, "clazz")
+            .registerSubtype(DefaultWarehouse.class, "DefaultWarehouse");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static final RuntimeTypeAdapterFactory<LoadJob> LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(LoadJob.class, "clazz")
@@ -337,7 +426,12 @@ public class GsonUtils {
                     .registerSubtype(MiniLoadTxnCommitAttachment.class, "MiniLoadTxnCommitAttachment")
                     .registerSubtype(RLTaskTxnCommitAttachment.class, "RLTaskTxnCommitAttachment")
                     .registerSubtype(StreamLoadTxnCommitAttachment.class, "StreamLoadTxnCommitAttachment")
+<<<<<<< HEAD
                     .registerSubtype(ReplicationTxnCommitAttachment.class, "ReplicationTxnCommitAttachment");
+=======
+                    .registerSubtype(ReplicationTxnCommitAttachment.class, "ReplicationTxnCommitAttachment")
+                    .registerSubtype(CompactionTxnCommitAttachment.class, "CompactionTxnCommitAttachment");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static final RuntimeTypeAdapterFactory<RoutineLoadProgress> ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(RoutineLoadProgress.class, "clazz")
@@ -367,6 +461,19 @@ public class GsonUtils {
                     .registerSubtype(SharedNothingStorageVolumeMgr.class, "SharedNothingStorageVolumeMgr")
                     .registerSubtype(SharedDataStorageVolumeMgr.class, "SharedDataStorageVolumeMgr");
 
+<<<<<<< HEAD
+=======
+    public static final RuntimeTypeAdapterFactory<AnalyzeStatus> ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(AnalyzeStatus.class, "clazz")
+                    .registerSubtype(NativeAnalyzeStatus.class, "NativeAnalyzeStatus", true)
+                    .registerSubtype(ExternalAnalyzeStatus.class, "ExternalAnalyzeStatus");
+
+    public static final RuntimeTypeAdapterFactory<AnalyzeJob> ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(AnalyzeJob.class, "clazz")
+                    .registerSubtype(NativeAnalyzeJob.class, "NativeAnalyzeJob", true)
+                    .registerSubtype(ExternalAnalyzeJob.class, "ExternalAnalyzeJob");
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -398,6 +505,10 @@ public class GsonUtils {
             .enableComplexMapKeySerialization()
             .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
             .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
+<<<<<<< HEAD
+=======
+            .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
             // For call constructor with selectedFields
             .registerTypeAdapter(MapType.class, new MapType.MapTypeDeserializer())
@@ -415,7 +526,10 @@ public class GsonUtils {
             .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
+<<<<<<< HEAD
             .registerTypeAdapterFactory(SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY)
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY)
@@ -424,10 +538,19 @@ public class GsonUtils {
             .registerTypeAdapterFactory(ABSTRACT_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY)
+<<<<<<< HEAD
+=======
+            .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_DESERIALIZER)
+<<<<<<< HEAD
+=======
+            .registerTypeAdapter(EncryptionKeyPB.class, new EncryptionKeyPBAdapter())
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_DESERIALIZER)
             .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER);
@@ -632,6 +755,23 @@ public class GsonUtils {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static class ColumnIdAdapter implements JsonSerializer<ColumnId>,
+            JsonDeserializer<ColumnId> {
+        @Override
+        public ColumnId deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+                throws JsonParseException {
+            return ColumnId.create(json.getAsJsonPrimitive().getAsString());
+        }
+
+        @Override
+        public JsonElement serialize(ColumnId src, Type typeOfSrc, JsonSerializationContext context) {
+            return new JsonPrimitive(src.getId());
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static class ProcessHookTypeAdapterFactory implements TypeAdapterFactory {
 
         public ProcessHookTypeAdapterFactory() {
@@ -678,6 +818,7 @@ public class GsonUtils {
             }
         }
     }
+<<<<<<< HEAD
 
     /*
     * For historical reasons, there was a period of time when the code serialized Expr directly in GsonUtils,
@@ -712,4 +853,6 @@ public class GsonUtils {
         @SerializedName("expr")
         public String expressionSql;
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

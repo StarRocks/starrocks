@@ -718,13 +718,36 @@ public:
 
 class ZstdBlockCompression final : public BlockCompressionCodec {
 public:
+<<<<<<< HEAD
     ZstdBlockCompression() : BlockCompressionCodec(CompressionTypePB::ZSTD) {}
+=======
+    ZstdBlockCompression() : BlockCompressionCodec(CompressionTypePB::ZSTD), _level(-1) {}
+    ZstdBlockCompression(int level) : BlockCompressionCodec(CompressionTypePB::ZSTD), _level(level) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     static const ZstdBlockCompression* instance() {
         static ZstdBlockCompression s_instance;
         return &s_instance;
     }
 
+<<<<<<< HEAD
+=======
+    static const ZstdBlockCompression* instance(int level) {
+        if (level < 1 || level > 22) {
+            return nullptr;
+        }
+
+        static ZstdBlockCompression s_instances[22] = {
+                ZstdBlockCompression(1),  ZstdBlockCompression(2),  ZstdBlockCompression(3),  ZstdBlockCompression(4),
+                ZstdBlockCompression(5),  ZstdBlockCompression(6),  ZstdBlockCompression(7),  ZstdBlockCompression(8),
+                ZstdBlockCompression(9),  ZstdBlockCompression(10), ZstdBlockCompression(11), ZstdBlockCompression(12),
+                ZstdBlockCompression(13), ZstdBlockCompression(14), ZstdBlockCompression(15), ZstdBlockCompression(16),
+                ZstdBlockCompression(17), ZstdBlockCompression(18), ZstdBlockCompression(19), ZstdBlockCompression(20),
+                ZstdBlockCompression(21), ZstdBlockCompression(22)};
+        return &s_instances[level - 1];
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ~ZstdBlockCompression() override = default;
 
     Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
@@ -753,6 +776,26 @@ private:
         }
         compression::ZSTDCompressionContext* context = ref.value().get();
         ZSTD_CCtx* ctx = context->ctx;
+<<<<<<< HEAD
+=======
+        size_t ret;
+
+        // Every zstd compression context get from pool will be inited by default
+        // with level = ZSTD_CLEVEL_DEFAULT(3). And the context will be return to the
+        // pool by reseting back to level = ZSTD_CLEVEL_DEFAULT(3).
+        // What we should do here is simply set the level as we wanted.
+        if (_level != -1) {
+            if (_level < 1 || _level > 22) {
+                return Status::InternalError(strings::Substitute("ZSTD with invalid compression level: $0", _level));
+            }
+            ret = ZSTD_CCtx_setParameter(ctx, ZSTD_c_compressionLevel, _level);
+            if (ZSTD_isError(ret)) {
+                context->compression_fail = true;
+                return Status::InternalError(
+                        strings::Substitute("ZSTD set level failed: $0", ZSTD_getErrorString(ZSTD_getErrorCode(ret))));
+            }
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         [[maybe_unused]] faststring* compression_buffer = nullptr;
         [[maybe_unused]] size_t max_len = 0;
@@ -783,7 +826,10 @@ private:
         out_buf.size = output->size;
         out_buf.pos = 0;
 
+<<<<<<< HEAD
         size_t ret;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (auto& input : inputs) {
             ZSTD_inBuffer in_buf;
             in_buf.src = input.data;
@@ -846,6 +892,10 @@ private:
         }
         compression::ZSTDDecompressContext* context = ref.value().get();
         ZSTD_DCtx* ctx = context->ctx;
+<<<<<<< HEAD
+=======
+        // Decompression context does not depend on level parameter
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         if (output->data == nullptr) {
             // We may pass a NULL 0-byte output buffer but some zstd versions
@@ -865,6 +915,11 @@ private:
         output->size = ret;
         return Status::OK();
     }
+<<<<<<< HEAD
+=======
+
+    int _level;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class GzipBlockCompression : public ZlibBlockCompression {
@@ -973,6 +1028,45 @@ private:
     const static int MEM_LEVEL = 8;
 };
 
+<<<<<<< HEAD
+=======
+#ifdef __x86_64__
+class GzipBlockCompressionV2 final : public GzipBlockCompression {
+public:
+    GzipBlockCompressionV2() : GzipBlockCompression() {}
+
+    static const GzipBlockCompressionV2* instance() {
+        static GzipBlockCompressionV2 s_instance;
+        return &s_instance;
+    }
+
+    ~GzipBlockCompressionV2() override = default;
+
+    Status decompress(const Slice& input, Slice* output) const override {
+        if (input.empty()) {
+            output->size = 0;
+            return Status::OK();
+        }
+
+        thread_local std::unique_ptr<libdeflate_decompressor, void (*)(libdeflate_decompressor*)> decompressor{
+                libdeflate_alloc_decompressor(), libdeflate_free_decompressor};
+        if (!decompressor) {
+            return Status::InternalError("libdeflate_alloc_decompressor failed");
+        }
+
+        std::size_t out_len;
+        auto result = libdeflate_gzip_decompress(decompressor.get(), input.data, input.size, output->data, output->size,
+                                                 &out_len);
+        if (result != LIBDEFLATE_SUCCESS) {
+            return Status::InvalidArgument("libdeflate_gzip_decompress failed");
+        }
+
+        return Status::OK();
+    }
+};
+#endif
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class LzoBlockCompression : public BlockCompressionCodec {
 public:
     LzoBlockCompression() : BlockCompressionCodec(CompressionTypePB::LZO) {}
@@ -1039,6 +1133,7 @@ public:
     size_t max_compressed_len(size_t len) const override { return size_t(-1); }
 };
 
+<<<<<<< HEAD
 #ifdef __x86_64__
 class GzipBlockCompressionV2 final : public GzipBlockCompression {
 public:
@@ -1070,6 +1165,9 @@ public:
 #endif
 
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec) {
+=======
+Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec, int compression_level) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     switch (type) {
     case CompressionTypePB::NO_COMPRESSION:
         *codec = nullptr;
@@ -1087,7 +1185,15 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         *codec = ZlibBlockCompression::instance();
         break;
     case CompressionTypePB::ZSTD:
+<<<<<<< HEAD
         *codec = ZstdBlockCompression::instance();
+=======
+        if (compression_level != -1) {
+            *codec = ZstdBlockCompression::instance(compression_level);
+        } else {
+            *codec = ZstdBlockCompression::instance();
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         break;
     case CompressionTypePB::GZIP:
 #ifdef __x86_64__

@@ -20,8 +20,12 @@
 #include "common/statusor.h"
 #include "exec/spill/spiller.h"
 
+<<<<<<< HEAD
 namespace starrocks {
 namespace spill {
+=======
+namespace starrocks::spill {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 std::shared_ptr<Spiller> SpillerFactory::create(const SpilledOptions& options) {
     std::lock_guard guard(_mutex);
     auto spiller = std::make_shared<Spiller>(options, shared_from_this());
@@ -32,5 +36,9 @@ std::shared_ptr<Spiller> SpillerFactory::create(const SpilledOptions& options) {
 SpillerFactoryPtr make_spilled_factory() {
     return std::make_shared<SpillerFactory>();
 }
+<<<<<<< HEAD
 } // namespace spill
 } // namespace starrocks
+=======
+} // namespace starrocks::spill
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

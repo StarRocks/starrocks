@@ -12,11 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.lake.compaction;
 
 import java.util.Collections;
 import java.util.List;
+=======
+package com.starrocks.lake.compaction;
+
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import javax.validation.constraints.NotNull;
 
 public class RandomSorter implements Sorter {
@@ -24,8 +33,17 @@ public class RandomSorter implements Sorter {
     }
 
     @NotNull
+<<<<<<< HEAD
     public List<PartitionStatistics> sort(@NotNull List<PartitionStatistics> partitionStatistics) {
         Collections.shuffle(partitionStatistics);
         return partitionStatistics;
+=======
+    public List<PartitionStatisticsSnapshot> sort(@NotNull List<PartitionStatisticsSnapshot> partitionStatistics) {
+        Collections.shuffle(partitionStatistics);
+        return partitionStatistics.stream()
+                .sorted(Comparator.comparingInt((PartitionStatisticsSnapshot stats) -> stats.getPriority().getValue())
+                        .reversed())
+                .collect(Collectors.toList());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_empty
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Constructs a PERCENTILE value, which is used to fill in null values for data loading using [Stream Load](../../../loading/StreamLoad.md) or [INSERT INTO](../../../loading/InsertInto.md).
 

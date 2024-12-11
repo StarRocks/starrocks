@@ -34,6 +34,10 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <algorithm>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -182,6 +186,16 @@ public:
         return ((size >= x.size) && memequal(data + (size - x.size), x.size, x.data, x.size));
     }
 
+<<<<<<< HEAD
+=======
+    Slice tolower(std::string& buf) {
+        // copy this slice into buf
+        buf.assign(get_data(), get_size());
+        std::transform(buf.begin(), buf.end(), buf.begin(), [](unsigned char c) { return std::tolower(c); });
+        return Slice(buf.data(), buf.size());
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /// @brief Comparator struct, useful for ordered collections (like STL maps).
     struct Comparator {
         /// Compare two slices using Slice::compare()

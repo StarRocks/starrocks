@@ -19,7 +19,11 @@ package com.starrocks.task;
 
 import com.starrocks.thrift.TClearTransactionTaskRequest;
 import com.starrocks.thrift.TTaskType;
+<<<<<<< HEAD
 import com.starrocks.thrift.TTxnType;
+=======
+import com.starrocks.transaction.TransactionType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 
@@ -27,9 +31,15 @@ public class ClearTransactionTask extends AgentTask {
 
     private long transactionId;
     private List<Long> partitionIds;
+<<<<<<< HEAD
     private TTxnType txnType;
 
     public ClearTransactionTask(long backendId, long transactionId, List<Long> partitionIds, TTxnType txnType) {
+=======
+    private TransactionType txnType;
+
+    public ClearTransactionTask(long backendId, long transactionId, List<Long> partitionIds, TransactionType txnType) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(null, backendId, TTaskType.CLEAR_TRANSACTION_TASK, -1L, -1L, -1L, -1L, -1L, transactionId);
         this.transactionId = transactionId;
         this.partitionIds = partitionIds;
@@ -40,7 +50,11 @@ public class ClearTransactionTask extends AgentTask {
     public TClearTransactionTaskRequest toThrift() {
         TClearTransactionTaskRequest clearTransactionTaskRequest = new TClearTransactionTaskRequest(
                 transactionId, partitionIds);
+<<<<<<< HEAD
         clearTransactionTaskRequest.setTxn_type(txnType);
+=======
+        clearTransactionTaskRequest.setTxn_type(txnType.toThrift());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return clearTransactionTaskRequest;
     }
 }

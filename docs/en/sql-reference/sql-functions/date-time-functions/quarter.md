@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # quarter
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the quarter part of a date, in the range of 1 to 4.
 

@@ -290,7 +290,11 @@ class BitmapUnionAggregator extends SparkRDDAggregator<BitmapValue> {
             ((BitmapValue) value).serialize(outputStream);
             return bos.toByteArray();
         } catch (IOException ioException) {
+<<<<<<< HEAD
             LOG.warn(ioException);
+=======
+            LOG.warn(ioException.getMessage(), ioException);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throw new RuntimeException(ioException);
         }
     }
@@ -334,7 +338,11 @@ class HllUnionAggregator extends SparkRDDAggregator<Hll> {
             ((Hll) value).serialize(outputStream);
             return bos.toByteArray();
         } catch (IOException ioException) {
+<<<<<<< HEAD
             LOG.warn(ioException);
+=======
+            LOG.warn(ioException.getMessage(), ioException);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throw new RuntimeException(ioException);
         }
     }
@@ -606,4 +614,8 @@ class BucketPartitioner extends Partitioner {
         List<Object> rddKey = (List<Object>) key;
         return bucketKeyMap.get(String.valueOf(rddKey.get(0)));
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

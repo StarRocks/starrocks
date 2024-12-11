@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # md5sum_numeric
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算多个输入参数的 MD5 128-bit 校验和 (checksum), 返回 MD5 值的十进制表示。
 

@@ -36,16 +36,25 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.QueryStatisticsFormatter;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.QeProcessorImpl;
+=======
+import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryStatisticsInfo;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.QueryStatisticsItem;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.util.Comparator;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -57,6 +66,10 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(CurrentQueryStatisticsProcDir.class);
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("StartTime")
+<<<<<<< HEAD
+=======
+            .add("feIp")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .add("QueryId")
             .add("ConnectionId")
             .add("Database")
@@ -67,6 +80,12 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             .add("DiskSpillSize")
             .add("CPUTime")
             .add("ExecTime")
+<<<<<<< HEAD
+=======
+            .add("Warehouse")
+            .add("CustomQueryId")
+            .add("ResourceGroup")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .build();
 
     @Override
@@ -90,6 +109,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
     @Override
     public ProcResult fetchResult() throws AnalysisException {
         final BaseProcResult result = new BaseProcResult();
+<<<<<<< HEAD
         final Map<String, QueryStatisticsItem> statistic =
                 QeProcessorImpl.INSTANCE.getQueryStatistics();
         result.setNames(TITLE_NAMES.asList());
@@ -121,6 +141,14 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             values.add(QueryStatisticsFormatter.getSecondsFromMilli(item.getQueryExecTime()));
             sortedRowData.add(values);
         }
+=======
+        result.setNames(TITLE_NAMES.asList());
+        List<QueryStatisticsInfo> queryInfos = QueryStatisticsInfo.makeListFromMetricsAndMgrs();
+        List<List<String>> sortedRowData = queryInfos
+                .stream()
+                .map(QueryStatisticsInfo::formatToList)
+                .collect(Collectors.toList());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         result.setRows(sortedRowData);
         return result;

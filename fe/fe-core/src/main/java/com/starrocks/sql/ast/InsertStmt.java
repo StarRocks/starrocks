@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
@@ -28,6 +29,23 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+=======
+import com.starrocks.catalog.BlackHoleTable;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.google.common.base.Preconditions.checkState;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 /**
  * Insert into is performed to load data from the result of query stmt.
@@ -47,6 +65,10 @@ import java.util.Map;
  */
 public class InsertStmt extends DmlStmt {
     public static final String STREAMING = "STREAMING";
+<<<<<<< HEAD
+=======
+    public static final String PROPERTY_MATCH_COLUMN_BY = "match_column_by";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private final TableName tblName;
     private PartitionNames targetPartitionNames;
@@ -54,8 +76,15 @@ public class InsertStmt extends DmlStmt {
     // if targetPartitionNames is not set, add all formal partitions' id of the table into it
     private List<Long> targetPartitionIds = Lists.newArrayList();
     private List<String> targetColumnNames;
+<<<<<<< HEAD
     private QueryStatement queryStatement;
     private String label = null;
+=======
+    private boolean usePartialUpdate = false;
+    private QueryStatement queryStatement;
+    private String label = null;
+    private String targetBranch = null;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // set after parse all columns and expr in query statement
     // this result expr in the order of target table's columns
@@ -65,7 +94,10 @@ public class InsertStmt extends DmlStmt {
 
     private Table targetTable;
 
+<<<<<<< HEAD
     private List<Column> targetColumns = Lists.newArrayList();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private boolean isOverwrite;
     private long overwriteJobId = -1;
 
@@ -82,6 +114,7 @@ public class InsertStmt extends DmlStmt {
      */
     private boolean forCTAS = false;
 
+<<<<<<< HEAD
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
         this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
@@ -89,6 +122,24 @@ public class InsertStmt extends DmlStmt {
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite, NodePosition pos) {
+=======
+    // tableFunctionAsTargetTable is true if insert statement is parsed from INSERT INTO FILES(..)
+    private final boolean tableFunctionAsTargetTable;
+    private final boolean blackHoleTableAsTargetTable;
+    private final Map<String, String> tableFunctionProperties;
+
+    private boolean isVersionOverwrite = false;
+
+    // column match by position or name
+    private ColumnMatchPolicy columnMatchPolicy = ColumnMatchPolicy.POSITION;
+
+    // create partition if not exists
+    private boolean isDynamicOverwrite = false;
+
+    public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
+                      QueryStatement queryStatement, boolean isOverwrite, Map<String, String> insertProperties,
+                      NodePosition pos) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(pos);
         this.tblName = tblName;
         this.targetPartitionNames = targetPartitionNames;
@@ -96,6 +147,13 @@ public class InsertStmt extends DmlStmt {
         this.queryStatement = queryStatement;
         this.targetColumnNames = cols;
         this.isOverwrite = isOverwrite;
+<<<<<<< HEAD
+=======
+        this.properties.putAll(insertProperties);
+        this.tableFunctionAsTargetTable = false;
+        this.tableFunctionProperties = null;
+        this.blackHoleTableAsTargetTable = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // Ctor for CreateTableAsSelectStmt
@@ -107,6 +165,36 @@ public class InsertStmt extends DmlStmt {
         this.targetColumnNames = null;
         this.queryStatement = queryStatement;
         this.forCTAS = true;
+<<<<<<< HEAD
+=======
+        this.tableFunctionAsTargetTable = false;
+        this.tableFunctionProperties = null;
+        this.blackHoleTableAsTargetTable = false;
+    }
+
+    // Ctor for INSERT INTO FILES(...)
+    public InsertStmt(Map<String, String> tableFunctionProperties, QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
+        this.tblName = new TableName("table_function_catalog", "table_function_db", "table_function_table");
+        this.targetColumnNames = null;
+        this.targetPartitionNames = null;
+        this.queryStatement = queryStatement;
+        this.tableFunctionAsTargetTable = true;
+        this.tableFunctionProperties = tableFunctionProperties;
+        this.blackHoleTableAsTargetTable = false;
+    }
+
+    // Ctor for INSERT INTO blackhole() SELECT ...
+    public InsertStmt(QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
+        this.tblName = new TableName("black_hole_catalog", "black_hole_db", "black_hole_table");
+        this.targetColumnNames = null;
+        this.targetPartitionNames = null;
+        this.queryStatement = queryStatement;
+        this.tableFunctionAsTargetTable = false;
+        this.tableFunctionProperties = null;
+        this.blackHoleTableAsTargetTable = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public Table getTargetTable() {
@@ -133,6 +221,25 @@ public class InsertStmt extends DmlStmt {
         return overwriteJobId > 0;
     }
 
+<<<<<<< HEAD
+=======
+    public void setIsVersionOverwrite(boolean isVersionOverwrite) {
+        this.isVersionOverwrite = isVersionOverwrite;
+    }
+
+    public boolean isVersionOverwrite() {
+        return isVersionOverwrite;
+    }
+
+    public void setIsDynamicOverwrite(boolean isDynamicOverwrite) {
+        this.isDynamicOverwrite = isDynamicOverwrite;
+    }
+
+    public boolean isDynamicOverwrite() {
+        return isDynamicOverwrite;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public QueryStatement getQueryStatement() {
         return queryStatement;
     }
@@ -155,6 +262,13 @@ public class InsertStmt extends DmlStmt {
         return label;
     }
 
+<<<<<<< HEAD
+=======
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isSystem() {
         return isSystem;
     }
@@ -184,6 +298,17 @@ public class InsertStmt extends DmlStmt {
         return targetColumnNames;
     }
 
+<<<<<<< HEAD
+=======
+    public void setUsePartialUpdate() {
+        this.usePartialUpdate = true;
+    }
+
+    public boolean usePartialUpdate() {
+        return this.usePartialUpdate;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setTargetPartitionNames(PartitionNames targetPartitionNames) {
         this.targetPartitionNames = targetPartitionNames;
     }
@@ -192,16 +317,33 @@ public class InsertStmt extends DmlStmt {
         this.targetPartitionIds = targetPartitionIds;
     }
 
+<<<<<<< HEAD
+=======
+    public String getTargetBranch() {
+        return targetBranch;
+    }
+
+    public void setTargetBranch(String targetBranch) {
+        this.targetBranch = targetBranch;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<Long> getTargetPartitionIds() {
         return targetPartitionIds;
     }
 
+<<<<<<< HEAD
     public void setTargetColumns(List<Column> targetColumns) {
         this.targetColumns = targetColumns;
     }
 
     public boolean isSpecifyKeyPartition() {
         return targetTable != null && targetTable instanceof IcebergTable && isStaticKeyPartitionInsert();
+=======
+    public boolean isSpecifyKeyPartition() {
+        return targetTable != null && (targetTable.isHiveTable() || targetTable.isIcebergTable()) &&
+                isStaticKeyPartitionInsert();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public boolean isStaticKeyPartitionInsert() {
@@ -232,4 +374,72 @@ public class InsertStmt extends DmlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitInsertStatement(this, context);
     }
+<<<<<<< HEAD
+=======
+
+    public boolean useTableFunctionAsTargetTable() {
+        return tableFunctionAsTargetTable;
+    }
+
+    public boolean useBlackHoleTableAsTargetTable() {
+        return blackHoleTableAsTargetTable;
+    }
+
+    public Map<String, String> getTableFunctionProperties() {
+        return tableFunctionProperties;
+    }
+
+    private List<Column> collectSelectedFieldsFromQueryStatement() {
+        QueryRelation query = getQueryStatement().getQueryRelation();
+        return query.getRelationFields().getAllFields().stream()
+                .filter(Field::isVisible)
+                .map(field -> new Column(field.getName(), field.getType(), field.isNullable()))
+                .collect(Collectors.toList());
+    }
+
+    public Table makeBlackHoleTable() {
+        List<Column> columns = collectSelectedFieldsFromQueryStatement();
+        // rename each column's name, assign unique name
+        for (int i = 0; i < columns.size(); i++) {
+            columns.get(i).setName(columns.get(i).getName() + "_blackhole_" + i);
+        }
+        return new BlackHoleTable(columns);
+    }
+
+    public Table makeTableFunctionTable(SessionVariable sessionVariable) {
+        checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
+        List<Column> columns = collectSelectedFieldsFromQueryStatement();
+        return new TableFunctionTable(columns, getTableFunctionProperties(), sessionVariable);
+    }
+
+    public enum ColumnMatchPolicy {
+        POSITION,
+        NAME;
+
+        public static ColumnMatchPolicy fromString(String value) {
+            for (ColumnMatchPolicy policy : values()) {
+                if (policy.name().equalsIgnoreCase(value)) {
+                    return policy;
+                }
+            }
+            return null;
+        }
+
+        public static List<String> getCandidates() {
+            return Arrays.stream(values()).map(p -> p.name().toLowerCase()).collect(Collectors.toList());
+        }
+    }
+
+    public boolean isColumnMatchByPosition() {
+        return columnMatchPolicy == ColumnMatchPolicy.POSITION;
+    }
+
+    public boolean isColumnMatchByName() {
+        return columnMatchPolicy == ColumnMatchPolicy.NAME;
+    }
+
+    public void setColumnMatchPolicy(ColumnMatchPolicy columnMatchPolicy) {
+        this.columnMatchPolicy = columnMatchPolicy;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

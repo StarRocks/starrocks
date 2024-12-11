@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # utc_timestamp
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回当前 UTC 日期时间。
 

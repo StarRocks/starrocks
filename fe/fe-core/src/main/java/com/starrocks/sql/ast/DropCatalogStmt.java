@@ -21,6 +21,7 @@ import com.starrocks.sql.parser.NodePosition;
 public class DropCatalogStmt extends DdlStmt {
 
     private final String name;
+<<<<<<< HEAD
 
     public DropCatalogStmt(String name) {
         this(name, NodePosition.ZERO);
@@ -29,12 +30,36 @@ public class DropCatalogStmt extends DdlStmt {
     public DropCatalogStmt(String name, NodePosition pos) {
         super(pos);
         this.name = name;
+=======
+    private final boolean ifExists;
+
+
+    public DropCatalogStmt(String name) {
+        this(name, false, NodePosition.ZERO);
+    }
+
+    public DropCatalogStmt(String name, boolean ifExists) {
+        this(name, ifExists, NodePosition.ZERO);
+    }
+
+    public DropCatalogStmt(String name, boolean ifExists, NodePosition pos) {
+        super(pos);
+        this.name = name;
+        this.ifExists = ifExists;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public String getName() {
         return name;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isIfExists() {
+        return ifExists;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropCatalogStatement(this, context);
@@ -44,6 +69,12 @@ public class DropCatalogStmt extends DdlStmt {
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("DROP CATALOG ");
+<<<<<<< HEAD
+=======
+        if (ifExists) {
+            sb.append("IF EXISTS ");
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         sb.append("\'" + name + "\'");
         return sb.toString();
     }

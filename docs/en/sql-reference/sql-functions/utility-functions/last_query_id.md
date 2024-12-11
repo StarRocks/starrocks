@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # last_query_id
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Obtains the ID of the most recently executed query in the current session.
 

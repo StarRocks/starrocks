@@ -57,6 +57,7 @@ protected:
     Status _lazy_init(RuntimeState* runtime_state, const MetaScannerParams& params);
     Status _real_init();
 
+<<<<<<< HEAD
     Status _get_tablet(const TInternalScanRange* scan_range) override;
     Status _init_meta_reader_params() override;
 
@@ -67,6 +68,11 @@ protected:
     LakeMetaReaderParams _reader_params;
     std::shared_ptr<LakeMetaReader> _reader;
     int64_t _tablet_id;
+=======
+    LakeMetaScanNode* _parent;
+    int64_t _tablet_id;
+    std::unique_ptr<LakeMetaReader> _reader;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

@@ -24,6 +24,10 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+<<<<<<< HEAD
+=======
+@Deprecated
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class LinkDbInfo implements Writable {
     private String cluster;
     private String name;
@@ -34,12 +38,15 @@ public class LinkDbInfo implements Writable {
         this.name = "";
     }
 
+<<<<<<< HEAD
     public LinkDbInfo(String name, long id) {
         this.name = name;
         this.id = id;
         this.cluster = "";
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getName() {
         return name;
     }

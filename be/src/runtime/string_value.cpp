@@ -39,11 +39,19 @@
 namespace starrocks {
 
 std::string StringValue::debug_string() const {
+<<<<<<< HEAD
     return std::string(ptr, len);
 }
 
 std::string StringValue::to_string() const {
     return std::string(ptr, len);
+=======
+    return {ptr, len};
+}
+
+std::string StringValue::to_string() const {
+    return {ptr, len};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 std::ostream& operator<<(std::ostream& os, const StringValue& string_value) {

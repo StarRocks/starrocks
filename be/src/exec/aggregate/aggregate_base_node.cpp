@@ -14,7 +14,10 @@
 
 #include "exec/aggregate/aggregate_base_node.h"
 
+<<<<<<< HEAD
 #include "exprs/anyval_util.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -30,7 +33,11 @@ AggregateBaseNode::~AggregateBaseNode() {
 
 Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+<<<<<<< HEAD
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs, state));
+=======
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs, state, true));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (auto& expr : _group_by_expr_ctxs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_groupby()) {
@@ -68,6 +75,27 @@ void AggregateBaseNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
+<<<<<<< HEAD
+=======
+void AggregateBaseNode::push_down_tuple_slot_mappings(RuntimeState* state,
+                                                      const std::vector<TupleSlotMapping>& parent_mappings) {
+    _tuple_slot_mappings = parent_mappings;
+
+    DCHECK(_tuple_ids.size() == 1);
+    for (auto& expr_ctx : _group_by_expr_ctxs) {
+        if (expr_ctx->root()->is_slotref()) {
+            auto ref = dynamic_cast<ColumnRef*>(expr_ctx->root());
+            DCHECK(ref != nullptr);
+            _tuple_slot_mappings.emplace_back(ref->tuple_id(), ref->slot_id(), _tuple_ids[0], ref->slot_id());
+        }
+    }
+
+    for (auto& child : _children) {
+        child->push_down_tuple_slot_mappings(state, _tuple_slot_mappings);
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
     // accept runtime filters from parent if possible.
     _runtime_filter_collector.push_down(state, id(), collector, _tuple_ids, _local_rf_waiting_set);

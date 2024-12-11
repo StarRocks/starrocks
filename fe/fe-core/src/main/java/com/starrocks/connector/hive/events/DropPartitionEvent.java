@@ -17,7 +17,11 @@ package com.starrocks.connector.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+=======
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.hive.HivePartitionName;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -42,7 +46,11 @@ public class DropPartitionEvent extends MetastoreTableEvent {
     private final Map<String, String> droppedPartition;
 
     private DropPartitionEvent(NotificationEvent event,
+<<<<<<< HEAD
                                CacheUpdateProcessor cacheProcessor,
+=======
+                               HiveCacheUpdateProcessor cacheProcessor,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                Map<String, String> droppedPartition,
                                String catalogName) {
         super(event, cacheProcessor, catalogName);
@@ -67,7 +75,11 @@ public class DropPartitionEvent extends MetastoreTableEvent {
     }
 
     protected static List<MetastoreEvent> getEvents(NotificationEvent event,
+<<<<<<< HEAD
                                                     CacheUpdateProcessor cacheProcessor,
+=======
+                                                    HiveCacheUpdateProcessor cacheProcessor,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                                     String catalogName) {
         DropPartitionMessage dropPartitionMessage =
                 MetastoreEventsProcessor.getMessageDeserializer()

@@ -87,7 +87,11 @@ public:
         const auto* bitmap_column = down_cast<const BitmapColumn*>(columns[0]);
 
         // based on NullableAggregateFunctionVariadic.
+<<<<<<< HEAD
         const InputColumnType* key_column = down_cast<const InputColumnType*>(columns[1]);
+=======
+        const auto* key_column = down_cast<const InputColumnType*>(columns[1]);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         auto bimtap_value = bitmap_column->get_pool()[row_num];
         auto key_value = key_column->get_data()[row_num];
@@ -139,7 +143,11 @@ public:
         }
 
         const auto* bitmap_column = down_cast<const BitmapColumn*>(src[0].get());
+<<<<<<< HEAD
         const InputColumnType* key_column = down_cast<const InputColumnType*>(src[1].get());
+=======
+        const auto* key_column = down_cast<const InputColumnType*>(src[1].get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // compute bytes for serialization for this chunk.
         int new_size = 0;

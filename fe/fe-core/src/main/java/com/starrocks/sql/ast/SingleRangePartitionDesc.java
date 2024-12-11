@@ -42,10 +42,13 @@ public class SingleRangePartitionDesc extends SinglePartitionDesc {
     }
 
     public void analyze(int partColNum, Map<String, String> tableProperties) throws AnalysisException {
+<<<<<<< HEAD
         if (isAnalyzed) {
             return;
         }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FeNameFormat.checkPartitionName(getPartitionName());
         partitionKeyDesc.analyze(partColNum);
 
@@ -54,7 +57,10 @@ public class SingleRangePartitionDesc extends SinglePartitionDesc {
         } else {
             analyzeProperties(tableProperties, null);
         }
+<<<<<<< HEAD
         isAnalyzed = true;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

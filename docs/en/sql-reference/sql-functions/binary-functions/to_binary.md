@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_binary
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a VARCHAR string to a binary value based on the specified binary format (`binary_type`) of the input string. The following binary formats are supported: `hex`, `encode64`, and `utf8`. If no `binary_type` is specified, `hex` is the default.
 

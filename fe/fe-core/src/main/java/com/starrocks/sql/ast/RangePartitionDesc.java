@@ -28,6 +28,10 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -42,6 +46,11 @@ public class RangePartitionDesc extends PartitionDesc {
     private final List<MultiRangePartitionDesc> multiRangePartitionDescs;
     // for automatic partition table is ture. otherwise is false
     protected boolean isAutoPartitionTable = false;
+<<<<<<< HEAD
+=======
+    // For automatically created partitioned tables, the partition column type and expression type may be inconsistent.
+    protected Type partitionType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs) {
         this(partitionColNames, partitionDescs, NodePosition.ZERO);
@@ -128,7 +137,15 @@ public class RangePartitionDesc extends PartitionDesc {
                 }
                 PartitionConvertContext context = new PartitionConvertContext();
                 context.setAutoPartitionTable(isAutoPartitionTable);
+<<<<<<< HEAD
                 context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+=======
+                if (partitionType != null) {
+                    context.setFirstPartitionColumnType(partitionType);
+                } else {
+                    context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 context.setProperties(otherProperties);
 
                 this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.convertToSingle(context));
@@ -193,7 +210,11 @@ public class RangePartitionDesc extends PartitionDesc {
         RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(partitionColumns);
         for (SingleRangePartitionDesc desc : singleRangePartitionDescs) {
             long partitionId = partitionNameToId.get(desc.getPartitionName());
+<<<<<<< HEAD
             rangePartitionInfo.handleNewSinglePartitionDesc(desc, partitionId, isTemp);
+=======
+            rangePartitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), desc, partitionId, isTemp);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return rangePartitionInfo;
     }

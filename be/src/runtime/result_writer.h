@@ -34,6 +34,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <stdexcept>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -59,6 +64,7 @@ public:
 
     // convert one chunk to mysql result and
     // append this chunk to the result sink
+<<<<<<< HEAD
     virtual Status append_chunk(Chunk* chunk) = 0;
 
     // decompose append_chunk into two functions: process_chunk and try_add_batch,
@@ -72,12 +78,33 @@ public:
     virtual StatusOr<bool> try_add_batch(TFetchDataResultPtrs& results) {
         return Status::NotSupported("Not Implemented");
     }
+=======
+    // used in non-pipeline engine
+    virtual Status append_chunk(Chunk* chunk) = 0;
+
+    // used in pipeline-engine no io block
+    virtual Status add_to_write_buffer(Chunk* chunk) { return Status::NotSupported("Not Implemented"); }
+    virtual bool is_full() const { throw std::runtime_error("not implements is full in ResultWriter"); }
+    virtual void cancel() { throw std::runtime_error("not implements is full in ResultWriter"); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     virtual Status close() = 0;
 
     int64_t get_written_rows() const { return _written_rows; }
 
 protected:
+<<<<<<< HEAD
+=======
+    // used in pipeline engine,
+    // the former transform input chunk into multiple TFetchDataResult, the latter add TFetchDataResult
+    // to queue whose consumers are rpc threads that invoke fetch_data rpc.
+    // TODO: Avoid serialization overhead.
+    virtual StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) {
+        return Status::NotSupported("Not Implemented");
+    }
+
+protected:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t _written_rows = 0; // number of rows written
 };
 

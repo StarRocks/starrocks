@@ -16,7 +16,10 @@ insert into t1 select 1, bitmap_empty();
 -- !result
 select bitmap_to_array(c2) from t1;
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 truncate table t1;
 -- result:

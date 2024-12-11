@@ -22,6 +22,7 @@
 #include <chrono>
 #include <thread>
 
+<<<<<<< HEAD
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "gutil/stl_util.h"
@@ -32,14 +33,44 @@
 #include "storage/lake/tablet_manager.h"
 #include "testutil/sync_point.h"
 #include "util/threadpool.h"
+=======
+#include "agent/master_info.h"
+#include "common/status.h"
+#include "fs/fs.h"
+#include "fs/key_cache.h"
+#include "gen_cpp/FrontendService.h"
+#include "gen_cpp/FrontendService_types.h"
+#include "gutil/stl_util.h"
+#include "runtime/client_cache.h"
+#include "runtime/exec_env.h"
+#include "service/service_be/lake_service.h"
+#include "storage/lake/compaction_task.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/memtable_flush_executor.h"
+#include "storage/storage_engine.h"
+#include "testutil/sync_point.h"
+#include "util/threadpool.h"
+#include "util/thrift_rpc_helper.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::lake {
 
 CompactionTaskCallback::~CompactionTaskCallback() = default;
 
+<<<<<<< HEAD
 CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, const lake::CompactRequest* request,
                                                lake::CompactResponse* response, ::google::protobuf::Closure* done)
         : _scheduler(scheduler), _mtx(), _request(request), _response(response), _done(done) {
+=======
+CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, const CompactRequest* request,
+                                               CompactResponse* response, ::google::protobuf::Closure* done)
+        : _scheduler(scheduler),
+          _mtx(),
+          _request(request),
+          _response(response),
+          _done(done),
+          _last_check_time(INT64_MAX) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     CHECK(_request != nullptr);
     CHECK(_response != nullptr);
     _timeout_deadline_ms = butil::gettimeofday_ms() + timeout_ms();
@@ -50,15 +81,65 @@ int64_t CompactionTaskCallback::timeout_ms() const {
     return _request->has_timeout_ms() ? _request->timeout_ms() : kDefaultTimeoutMs;
 }
 
+<<<<<<< HEAD
+=======
+bool CompactionTaskCallback::allow_partial_success() const {
+    if (_request->has_allow_partial_success() && _request->allow_partial_success()) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+Status CompactionTaskCallback::has_error() const {
+    std::lock_guard l(_mtx);
+    if (_status.ok()) {
+        if (butil::gettimeofday_ms() >= _timeout_deadline_ms) {
+            return Status::Aborted(fmt::format("timeout exceeded after {}ms", timeout_ms()));
+        } else {
+            return Status::OK();
+        }
+    }
+    if (allow_partial_success()) {
+        if (_status.is_aborted()) {
+            // manual cancel
+            // FE validation failed
+            // background worker shutdown
+            return _status;
+        } else {
+            return Status::OK();
+        }
+    } else {
+        return _status;
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
     std::unique_lock l(_mtx);
 
     if (!context->status.ok()) {
+<<<<<<< HEAD
         // Add failed tablet for upgrade compatibility: older version FE relies on the failed tablet to determine
         // whether the job is successful.
         _response->add_failed_tablets(context->tablet_id);
     }
 
+=======
+        _response->add_failed_tablets(context->tablet_id);
+    }
+
+    // process compact stat
+    auto compact_stat = _response->add_compact_stats();
+    compact_stat->set_tablet_id(context->tablet_id);
+    compact_stat->set_read_time_remote(context->stats->io_ns_remote);
+    compact_stat->set_read_bytes_remote(context->stats->io_bytes_read_remote);
+    compact_stat->set_read_time_local(context->stats->io_ns_local_disk);
+    compact_stat->set_read_bytes_local(context->stats->io_bytes_read_local_disk);
+    compact_stat->set_in_queue_time_sec(context->stats->in_queue_time_sec);
+    compact_stat->set_sub_task_count(_request->tablet_ids_size());
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DCHECK(_request != nullptr);
     _status.update(context->status);
 
@@ -106,26 +187,63 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
 }
 
 CompactionScheduler::~CompactionScheduler() {
+<<<<<<< HEAD
     _stopped.store(true, std::memory_order_relaxed);
     _threads->shutdown();
+=======
+    stop();
+}
+
+void CompactionScheduler::stop() {
+    bool expected = false;
+    if (_stopped.compare_exchange_strong(expected, true)) {
+        _threads->shutdown();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void CompactionScheduler::compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
                                   CompactResponse* response, ::google::protobuf::Closure* done) {
+<<<<<<< HEAD
+=======
+    // when FE request a compaction, CN may not have any key cached yet, so pass an encryption_meta to refresh cache
+    if (!request->encryption_meta().empty()) {
+        Status st = KeyCache::instance().refresh_keys(request->encryption_meta());
+        if (!st.ok()) {
+            LOG(WARNING) << fmt::format("refresh keys using encryption_meta in PTabletWriterOpenRequest failed {}",
+                                        st.detailed_message());
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // By default, all the tablet compaction tasks with the same txn id will be executed in the same
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
     // tasks from busy threads to execute.
     auto cb = std::make_shared<CompactionTaskCallback>(this, request, response, done);
+<<<<<<< HEAD
     std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(), cb);
+=======
+    bool is_checker = true; // make the first tablet as checker
+    std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
+    for (auto tablet_id : request->tablet_ids()) {
+        auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
+                                                               request->force_base_compaction(), is_checker, cb);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         {
             std::lock_guard l(_contexts_lock);
             _contexts.Append(context.get());
         }
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
+<<<<<<< HEAD
     }
+=======
+        is_checker = false;
+    }
+    // initialize last check time, compact request is received right after FE sends it, so consider it valid now
+    cb->set_last_check_time(time(nullptr));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _task_queues.put_by_txn_id(request->txn_id(), contexts_vec);
     // DO NOT touch `contexts_vec` from here!
     TEST_SYNC_POINT("CompactionScheduler::compact:return");
@@ -147,6 +265,12 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
         // Load "finish_time" with memory_order_acquire and check its value before reading the "status" to avoid
         // the race condition between this thread and the `CompactionScheduler::thread_task` threads.
         info.finish_time = context->finish_time.load(std::memory_order_acquire);
+<<<<<<< HEAD
+=======
+        if (info.runs > 0) {
+            info.profile = context->stats->to_json_stats();
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (info.finish_time > 0) {
             info.status = context->status;
         }
@@ -227,12 +351,66 @@ void CompactionScheduler::thread_task(int id) {
     }
 }
 
+<<<<<<< HEAD
+=======
+Status compaction_should_cancel(CompactionTaskContext* context) {
+    RETURN_IF_ERROR(context->callback->has_error());
+
+    int64_t check_interval_seconds = 60LL * config::lake_compaction_check_valid_interval_minutes;
+    if (!context->is_checker || check_interval_seconds <= 0) {
+        return Status::OK();
+    }
+
+    int64_t now = time(nullptr);
+    int64_t last_check_time = context->callback->last_check_time();
+    if (now > last_check_time && (now - last_check_time) >= check_interval_seconds) {
+        // ask FE whether this compaction transaction is still valid
+#ifndef BE_TEST
+        TNetworkAddress master_addr = get_master_address();
+        if (master_addr.hostname.size() > 0 && master_addr.port > 0) {
+            TReportLakeCompactionRequest request;
+            request.__set_txn_id(context->txn_id);
+            TReportLakeCompactionResponse result;
+            auto status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                    master_addr.hostname, master_addr.port,
+                    [&request, &result](FrontendServiceConnection& client) {
+                        client->reportLakeCompaction(result, request);
+                    },
+                    3000 /* timeout 3 seconds */);
+            if (status.ok()) {
+                if (!result.valid) {
+                    // notify all tablets in this compaction request
+                    LOG(WARNING) << "validate compaction transaction " << context->txn_id << " for tablet "
+                                 << context->tablet_id << ", abort invalid compaction";
+                    Status rs = Status::Aborted("compaction validation failed");
+                    context->callback->update_status(rs);
+                    return rs; // should cancel compaction
+                } else {
+                    // everything is fine
+                }
+            } else {
+                LOG(WARNING) << "fail to validate compaction transaction " << context->txn_id << " for tablet "
+                             << context->tablet_id << ", error: " << status;
+            }
+        } else {
+            LOG(WARNING) << "fail to validate compaction transaction " << context->txn_id << " for tablet "
+                         << context->tablet_id << ", error: leader FE address not found";
+        }
+#endif
+        // update check time, if check rpc failed, wait next round
+        context->callback->set_last_check_time(now);
+    }
+    return Status::OK();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext> context) {
     const auto start_time = ::time(nullptr);
     const auto tablet_id = context->tablet_id;
     const auto txn_id = context->txn_id;
     const auto version = context->version;
 
+<<<<<<< HEAD
     if (context->start_time.load(std::memory_order_relaxed) == 0) {
         context->start_time.store(start_time, std::memory_order_relaxed);
     }
@@ -244,6 +422,27 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
         auto should_cancel = [&]() { return context->callback->has_error() || context->callback->timeout_exceeded(); };
         TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
         status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
+=======
+    int64_t in_queue_time_sec = start_time > context->enqueue_time_sec ? (start_time - context->enqueue_time_sec) : 0;
+    context->stats->in_queue_time_sec += in_queue_time_sec;
+    context->start_time.store(start_time, std::memory_order_relaxed);
+    context->runs.fetch_add(1, std::memory_order_relaxed);
+
+    auto status = Status::OK();
+    auto task_or = _tablet_mgr->compact(context.get());
+    if (task_or.ok()) {
+        auto should_cancel = [&]() { return compaction_should_cancel(context.get()); };
+        TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
+        ThreadPool* flush_pool = nullptr;
+        if (config::lake_enable_compaction_async_write) {
+            // CAUTION: we reuse delta writer's memory table flush pool here
+            flush_pool = StorageEngine::instance()->lake_memtable_flush_executor()->get_thread_pool();
+            if (UNLIKELY(flush_pool == nullptr)) {
+                return Status::InternalError("Get memory table flush pool failed");
+            }
+        }
+        status.update(task_or.value()->execute(std::move(should_cancel), flush_pool));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     } else {
         status.update(task_or.status());
     }
@@ -251,18 +450,30 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
     auto cost = finish_time - start_time;
 
+<<<<<<< HEAD
     // Task failure due to memory limitations allows for retries. more threads allow for more retries.
     if (status.is_mem_limit_exceeded() &&
+=======
+    // Task failure due to memory limitations allows for retries, more threads allow for more retries.
+    // If allow partial success, do not retry, task result should be reported to FE as soon as possible.
+    if (!context->callback->allow_partial_success() && status.is_mem_limit_exceeded() &&
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         context->runs.load(std::memory_order_relaxed) < _task_queues.task_queue_size() + 1) {
         LOG(WARNING) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
                      << " txn_id=" << txn_id << " cost=" << cost << "s";
         context->progress.update(0);
+<<<<<<< HEAD
         // re-schedule the compaction task
+=======
+        // reset start time and re-schedule the compaction task
+        context->start_time.store(0, std::memory_order_relaxed);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _task_queues.put_by_txn_id(context->txn_id, context);
     } else {
         VLOG_IF(3, status.ok()) << "Compacted tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id
                                 << " cost=" << cost << "s";
 
+<<<<<<< HEAD
         if (status.is_cancelled()) {
             if (context->callback->has_error()) {
                 auto cause = context->callback->error();
@@ -272,6 +483,8 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
                 status = Status::Cancelled(fmt::format("Cancelled due to timeout exceeded: {}ms", timeout));
             }
         }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG_IF(ERROR, !status.ok()) << "Fail to compact tablet " << tablet_id << ". version=" << version
                                     << " txn_id=" << txn_id << " cost=" << cost << "s : " << status;
 

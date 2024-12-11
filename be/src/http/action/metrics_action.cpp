@@ -336,7 +336,11 @@ void MetricsAction::handle(HttpRequest* req) {
         PrometheusMetricsVisitor visitor;
         _metrics->collect(&visitor);
         if (config::dump_metrics_with_bvar) {
+<<<<<<< HEAD
             bvar::Variable::dump_exposed(&visitor, nullptr);
+=======
+            bvar::Variable::dump_exposed(&visitor, &_options);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 #ifdef USE_STAROS
 #ifdef BE_TEST

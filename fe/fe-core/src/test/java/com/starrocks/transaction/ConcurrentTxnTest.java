@@ -41,7 +41,11 @@ public class ConcurrentTxnTest {
 
     int runTime = 2;
     int numDB = 2;
+<<<<<<< HEAD
     int numTable = 100;
+=======
+    int numTable = 20;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int numThread = 2;
     // 0 means random num of tablets
     int numTabletPerTable = 0;

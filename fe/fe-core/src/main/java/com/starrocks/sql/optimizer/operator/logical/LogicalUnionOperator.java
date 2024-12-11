@@ -26,10 +26,26 @@ import java.util.List;
 public class LogicalUnionOperator extends LogicalSetOperator {
     private boolean isUnionAll;
 
+<<<<<<< HEAD
     public LogicalUnionOperator(List<ColumnRefOperator> result, List<List<ColumnRefOperator>> childOutputColumns,
                                 boolean isUnionAll) {
         super(OperatorType.LOGICAL_UNION, result, childOutputColumns, Operator.DEFAULT_LIMIT, null);
         this.isUnionAll = isUnionAll;
+=======
+    // record if this union is derived from IcebergEqualityDeleteRewriteRule
+    private boolean fromIcebergEqualityDeleteRewrite;
+
+    public LogicalUnionOperator(List<ColumnRefOperator> result, List<List<ColumnRefOperator>> childOutputColumns,
+                                boolean isUnionAll) {
+        this(result, childOutputColumns, isUnionAll, false);
+    }
+
+    public LogicalUnionOperator(List<ColumnRefOperator> result, List<List<ColumnRefOperator>> childOutputColumns,
+                                boolean isUnionAll, boolean fromIcebergEqualityDeleteRewrite) {
+        super(OperatorType.LOGICAL_UNION, result, childOutputColumns, Operator.DEFAULT_LIMIT, null);
+        this.isUnionAll = isUnionAll;
+        this.fromIcebergEqualityDeleteRewrite = fromIcebergEqualityDeleteRewrite;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private LogicalUnionOperator() {
@@ -40,6 +56,13 @@ public class LogicalUnionOperator extends LogicalSetOperator {
         return isUnionAll;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isFromIcebergEqualityDeleteRewrite() {
+        return fromIcebergEqualityDeleteRewrite;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public int hashCode() {
         return super.hashCode();
@@ -83,6 +106,10 @@ public class LogicalUnionOperator extends LogicalSetOperator {
         public Builder withOperator(LogicalUnionOperator unionOperator) {
             super.withOperator(unionOperator);
             builder.isUnionAll = unionOperator.isUnionAll;
+<<<<<<< HEAD
+=======
+            builder.fromIcebergEqualityDeleteRewrite = unionOperator.fromIcebergEqualityDeleteRewrite;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return this;
         }
 
@@ -90,5 +117,13 @@ public class LogicalUnionOperator extends LogicalSetOperator {
             builder.isUnionAll = isUnionAll;
             return this;
         }
+<<<<<<< HEAD
+=======
+
+        public Builder isFromIcebergEqualityDeleteRewrite(boolean isFromIcebergEqualityDeleteRewrite) {
+            builder.fromIcebergEqualityDeleteRewrite = isFromIcebergEqualityDeleteRewrite;
+            return this;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

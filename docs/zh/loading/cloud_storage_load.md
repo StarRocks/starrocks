@@ -16,7 +16,11 @@ Broker Load 能够保证单次导入事务的原子性，即单次导入的多�
 >
 > Broker Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
+<<<<<<< HEAD
 从 3.1 版本起，StarRocks 新增支持使用 INSERT 语句和 `FILES` 关键字直接从 AWS S3 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [INSERT > 通过 FILES 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
+=======
+从 3.1 版本起，StarRocks 新增支持使用 INSERT 语句和 `FILES` 关键字直接从 AWS S3 导入特定格式的数据文件，避免了需事先创建外部表的麻烦。参见 [INSERT > 通过 FILES 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 本文主要介绍如何使用 [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 从云存储系统导入数据。
 
@@ -30,6 +34,11 @@ Broker Load 支持如下数据文件格式：
 
 - ORC
 
+<<<<<<< HEAD
+=======
+- JSON（自 3.2.3 版本起支持）
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 > **说明**
 >
 > 对于 CSV 格式的数据，需要注意以下两点：
@@ -69,7 +78,11 @@ Broker Load 支持如下数据文件格式：
 
 2. 将 `file1.csv` 和 `file2.csv` 上传到云存储空间的指定路径下。这里假设分别上传到 AWS S3 存储空间 `bucket_s3` 里的 `input` 文件夹下、 Google GCS 存储空间 `bucket_gcs` 里的 `input` 文件夹下、阿里云 OSS 存储空间 `bucket_oss` 里的 `input` 文件夹下、腾讯云 COS 存储空间 `bucket_cos` 里的 `input` 文件夹下、华为云 OBS 存储空间 `bucket_obs` 里的 `input` 文件夹下、其他兼容 S3 协议的对象存储（如 MinIO）空间 `bucket_minio` 里的 `input` 文件夹下、以及 Azure Storage 的指定路径下。
 
+<<<<<<< HEAD
 3. 登录 StarRocks 数据库（假设为 `test_db`），创建两张主键模型表，`table1` 和 `table2`。两张表都包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户姓名和用户得分，主键为 `id` 列，如下所示：
+=======
+3. 登录 StarRocks 数据库（假设为 `test_db`），创建两张主键表，`table1` 和 `table2`。两张表都包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户姓名和用户得分，主键为 `id` 列，如下所示：
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
    ```SQL
    CREATE TABLE `table1`
@@ -908,7 +921,11 @@ PROPERTIES
 2. 查询 `table2` 的数据，如下所示：
 
    ```SQL
+<<<<<<< HEAD
    SELECT * FROM table1;
+=======
+   SELECT * FROM table2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
    +------+-------+-------+
    | id   | name  | score |
    +------+-------+-------+
@@ -1073,7 +1090,11 @@ PROPERTIES
 2. 查询 `table2` 的数据，如下所示：
 
    ```SQL
+<<<<<<< HEAD
    SELECT * FROM table1;
+=======
+   SELECT * FROM table2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
    +------+-------+-------+
    | id   | name  | score |
    +------+-------+-------+
@@ -1244,7 +1265,11 @@ PROPERTIES
 2. 查询 `table2` 的数据，如下所示：
 
    ```SQL
+<<<<<<< HEAD
    SELECT * FROM table1;
+=======
+   SELECT * FROM table2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
    +------+-------+-------+
    | id   | name  | score |
    +------+-------+-------+
@@ -1358,18 +1383,31 @@ WHERE database_name = 'test_db' and label = 'label_brokerload_unqualifiedtest_82
 REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/test_db/label_brokerload_unqualifiedtest_0728/6/404a20b1e4db4d27_8aa9af1e8d6d8bdc
 ```
 
+<<<<<<< HEAD
 有关返回字段的说明，参见 [Information Schema > loads](../sql-reference/information_schema.md#loads)。
+=======
+有关返回字段的说明，参见 [`information_schema.loads`](../sql-reference/information_schema/loads.md)。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## 取消导入作业
 
 当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../sql-reference/sql-statements/loading_unloading/CANCEL_LOAD.md) 语句来取消该导入作业。
 
+<<<<<<< HEAD
 例如，可以通过以下语句，撤销 `db1` 数据库中标签为 `label1` 的导入作业：
 
 ```SQL
 CANCEL LOAD
 FROM db1
 WHERE LABEL = "label";
+=======
+例如，可以通过以下语句，撤销 `test_db` 数据库中标签为 `label1` 的导入作业：
+
+```SQL
+CANCEL LOAD
+FROM test_db
+WHERE LABEL = "label1";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ```
 
 ## 作业拆分与并行执行

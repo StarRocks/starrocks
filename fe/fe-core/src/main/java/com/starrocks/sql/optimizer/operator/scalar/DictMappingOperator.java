@@ -24,9 +24,18 @@ import java.util.List;
 import java.util.Objects;
 
 public class DictMappingOperator extends ScalarOperator {
+<<<<<<< HEAD
 
     private ColumnRefOperator dictColumn;
     private ScalarOperator originScalaOperator;
+=======
+    // use dict id
+    private ColumnRefOperator dictColumn;
+    // dict expression
+    private ScalarOperator originScalaOperator;
+    // input string expression
+    private ScalarOperator stringProvideOperator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public DictMappingOperator(ColumnRefOperator dictColumn, ScalarOperator originScalaOperator, Type retType) {
         super(OperatorType.DICT_MAPPING, retType);
@@ -34,6 +43,17 @@ public class DictMappingOperator extends ScalarOperator {
         this.originScalaOperator = originScalaOperator;
     }
 
+<<<<<<< HEAD
+=======
+    public DictMappingOperator(Type type, ColumnRefOperator dictColumn, ScalarOperator originScalaOperator,
+                               ScalarOperator stringScalarOperator) {
+        super(OperatorType.DICT_MAPPING, type);
+        this.dictColumn = dictColumn;
+        this.originScalaOperator = originScalaOperator;
+        this.stringProvideOperator = stringScalarOperator;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ColumnRefOperator getDictColumn() {
         return dictColumn;
     }
@@ -42,6 +62,13 @@ public class DictMappingOperator extends ScalarOperator {
         return originScalaOperator;
     }
 
+<<<<<<< HEAD
+=======
+    public ScalarOperator getStringProvideOperator() {
+        return stringProvideOperator;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public boolean isNullable() {
         return originScalaOperator.isNullable();
@@ -63,7 +90,12 @@ public class DictMappingOperator extends ScalarOperator {
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         return "DictMapping(" + dictColumn + "{" + originScalaOperator + "}" + ")";
+=======
+        String stringOperator = stringProvideOperator == null ? "" : ", " + stringProvideOperator;
+        return "DictMapping(" + dictColumn + ", " + originScalaOperator + stringOperator + ")";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -72,6 +104,7 @@ public class DictMappingOperator extends ScalarOperator {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean equals(Object other) {
         if (other == null) {
             return false;
@@ -85,6 +118,20 @@ public class DictMappingOperator extends ScalarOperator {
                     mapping.dictColumn.equals(dictColumn);
         }
         return false;
+=======
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        DictMappingOperator that = (DictMappingOperator) o;
+        return Objects.equals(dictColumn, that.dictColumn) &&
+                Objects.equals(originScalaOperator, that.originScalaOperator) &&
+                Objects.equals(stringProvideOperator, that.stringProvideOperator);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -98,10 +145,29 @@ public class DictMappingOperator extends ScalarOperator {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public void getColumnRefs(List<ColumnRefOperator> columns) {
+        dictColumn.getColumnRefs(columns);
+        if (stringProvideOperator != null) {
+            stringProvideOperator.getColumnRefs(columns);
+        } else {
+            originScalaOperator.getColumnRefs(columns);
+        }
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ScalarOperator clone() {
         DictMappingOperator clone = (DictMappingOperator) super.clone();
         clone.dictColumn = (ColumnRefOperator) this.dictColumn.clone();
         clone.originScalaOperator = this.originScalaOperator.clone();
+<<<<<<< HEAD
+=======
+        if (this.stringProvideOperator != null) {
+            clone.stringProvideOperator = this.stringProvideOperator.clone();
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return clone;
     }
 }

@@ -45,11 +45,20 @@ public:
     bool zone_map_filter(const ZoneMapDetail& detail) const { return true; }
 
     static constexpr PredicateType type() { return PredicateType::kMap; }
+<<<<<<< HEAD
     static constexpr bool support_bloom_filter() { return false; }
 
     static constexpr bool can_vectorized() { return true; }
 
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const {
+=======
+    static constexpr bool support_original_bloom_filter() { return false; }
+
+    static constexpr bool can_vectorized() { return true; }
+
+    static constexpr bool support_bitmap_filter() { return false; }
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::Cancelled("not implemented");
     }
 
@@ -93,4 +102,8 @@ ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info,
 
     return nullptr;
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

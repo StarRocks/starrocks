@@ -25,19 +25,37 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.FunctionSet;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
+=======
+import com.starrocks.persist.ColumnIdExpr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
+import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
+import com.starrocks.sql.analyzer.PartitionFunctionChecker;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class ExpressionPartitionDesc extends PartitionDesc {
 
@@ -47,6 +65,12 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     // range partition desc == null means this must be materialized view
     private RangePartitionDesc rangePartitionDesc = null;
 
+<<<<<<< HEAD
+=======
+    private static final List<String> AUTO_PARTITION_SUPPORT_FUNCTIONS =
+            Lists.newArrayList(FunctionSet.TIME_SLICE, FunctionSet.DATE_TRUNC);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ExpressionPartitionDesc(RangePartitionDesc rangePartitionDesc, Expr expr) {
         super(expr.getPos());
         this.rangePartitionDesc = rangePartitionDesc;
@@ -92,11 +116,23 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         boolean hasExprAnalyze = false;
         SlotRef slotRef;
         if (rangePartitionDesc != null) {
+<<<<<<< HEAD
             rangePartitionDesc.analyze(columnDefs, otherProperties);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // for automatic partition table
             if (rangePartitionDesc.isAutoPartitionTable) {
                 rangePartitionDesc.setAutoPartitionTable(true);
                 slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
+<<<<<<< HEAD
+=======
+                if (expr instanceof FunctionCallExpr) {
+                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                    if (!AUTO_PARTITION_SUPPORT_FUNCTIONS.contains(functionCallExpr.getFnName().getFunction())) {
+                        throw new SemanticException("Only support date_trunc and time_slice as partition expression");
+                    }
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 // for partition by range expr table
                 // The type of the partition field may be different from the type after the expression
@@ -105,10 +141,33 @@ public class ExpressionPartitionDesc extends PartitionDesc {
                     partitionType = ((CastExpr) expr).getTargetTypeDef().getType();
                 } else if (expr instanceof FunctionCallExpr) {
                     slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
+<<<<<<< HEAD
+=======
+
+                    Optional<ColumnDef> columnDef = columnDefs.stream()
+                            .filter(c -> c.getName().equals(slotRef.getColumnName())).findFirst();
+                    Preconditions.checkState(columnDef.isPresent());
+                    slotRef.setType(columnDef.get().getType());
+
+                    String functionName = ((FunctionCallExpr) expr).getFnName().getFunction().toLowerCase();
+                    if (functionName.equals(FunctionSet.STR2DATE)) {
+                        partitionType = Type.DATE;
+                        if (!PartitionFunctionChecker.checkStr2date(expr)) {
+                            throw new SemanticException("partition function check fail, only supports the result " +
+                                    "of the function str2date(VARCHAR str, VARCHAR format) as a strict DATE type");
+                        }
+                    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 } else {
                     throw new AnalysisException("Unsupported expr:" + expr.toSql());
                 }
             }
+<<<<<<< HEAD
+=======
+            rangePartitionDesc.partitionType = partitionType;
+            PartitionDescAnalyzer.analyze(rangePartitionDesc);
+            rangePartitionDesc.analyze(columnDefs, otherProperties);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             // for materialized view
             slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
@@ -118,6 +177,10 @@ public class ExpressionPartitionDesc extends PartitionDesc {
             if (columnDef.getName().equalsIgnoreCase(slotRef.getColumnName())) {
                 slotRef.setType(columnDef.getType());
                 PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+<<<<<<< HEAD
+=======
+                partitionType = expr.getType();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 hasExprAnalyze = true;
             }
         }
@@ -131,7 +194,12 @@ public class ExpressionPartitionDesc extends PartitionDesc {
             throws DdlException {
         // for materialized view express partition.
         if (rangePartitionDesc == null) {
+<<<<<<< HEAD
             return new ExpressionRangePartitionInfo(Collections.singletonList(expr), schema, PartitionType.RANGE);
+=======
+            return new ExpressionRangePartitionInfo(Collections.singletonList(ColumnIdExpr.create(schema, expr)),
+                    schema, PartitionType.RANGE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         List<Column> partitionColumns = Lists.newArrayList();
         // check and get partition column
@@ -147,7 +215,11 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         }
         for (Column column : partitionColumns) {
             try {
+<<<<<<< HEAD
                 RangePartitionInfo.checkRangeColumnType(column);
+=======
+                RangePartitionInfo.checkExpressionRangeColumnType(column, expr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
@@ -157,19 +229,34 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         RangePartitionInfo partitionInfo;
         if (rangePartitionDesc.isAutoPartitionTable) {
             // for automatic partition table
+<<<<<<< HEAD
             partitionInfo = new ExpressionRangePartitionInfo(Collections.singletonList(expr), partitionColumns,
+=======
+            partitionInfo = new ExpressionRangePartitionInfo(
+                    Collections.singletonList(ColumnIdExpr.create(schema, expr)),
+                    partitionColumns,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     PartitionType.EXPR_RANGE);
         } else {
             // for partition by range expr
             ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 =
+<<<<<<< HEAD
                     new ExpressionRangePartitionInfoV2(Collections.singletonList(expr), partitionColumns);
+=======
+                    new ExpressionRangePartitionInfoV2(Collections.singletonList(ColumnIdExpr.create(schema, expr)),
+                            partitionColumns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             expressionRangePartitionInfoV2.setSourcePartitionTypes(Collections.singletonList(sourcePartitionColumn.getType()));
             partitionInfo = expressionRangePartitionInfoV2;
         }
 
         for (SingleRangePartitionDesc desc : getRangePartitionDesc().getSingleRangePartitionDescs()) {
             long partitionId = partitionNameToId.get(desc.getPartitionName());
+<<<<<<< HEAD
             partitionInfo.handleNewSinglePartitionDesc(desc, partitionId, isTemp);
+=======
+            partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), desc, partitionId, isTemp);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         return partitionInfo;

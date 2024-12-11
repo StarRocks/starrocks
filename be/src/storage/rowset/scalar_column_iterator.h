@@ -59,6 +59,7 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override;
 
+<<<<<<< HEAD
     Status next_batch(const SparseRange& range, Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
@@ -68,6 +69,24 @@ public:
 
     Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                           SparseRange* range) override;
+=======
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+
+    ordinal_t get_current_ordinal() const override { return _current_ordinal; }
+
+    ordinal_t num_rows() const override { return _reader->num_rows(); }
+
+    bool has_zone_map() const override { return _reader->has_zone_map(); }
+
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
+                                      const ColumnPredicate* del_predicate, SparseRange<>* range,
+                                      CompoundNodeType pred_relationn) override;
+
+    bool has_original_bloom_filter_index() const override;
+    bool has_ngram_bloom_filter_index() const override;
+    Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          SparseRange<>* range) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     bool all_page_dict_encoded() const override { return _all_dict_encoded; }
 
@@ -77,7 +96,11 @@ public:
 
     Status next_dict_codes(size_t* n, Column* dst) override;
 
+<<<<<<< HEAD
     Status next_dict_codes(const SparseRange& range, Column* dst) override;
+=======
+    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
 
@@ -87,16 +110,30 @@ public:
 
     ParsedPage* get_current_page() { return _page.get(); }
 
+<<<<<<< HEAD
+=======
+    ColumnReader* get_column_reader() override { return _reader; }
+
+    Status null_count(size_t* count) override;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool is_nullable();
 
     int64_t element_ordinal() const override { return _element_ordinal; }
 
     // only work when all_page_dict_encoded was true.
     // used to acquire load local dict
+<<<<<<< HEAD
     int dict_size();
 
 private:
     static void _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
+=======
+    int dict_size() override;
+
+private:
+    static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status _load_next_page(bool* eos);
     Status _read_data_page(const OrdinalPageIndexIterator& iter);
 
@@ -107,7 +144,11 @@ private:
     Status _do_next_dict_codes(size_t* n, Column* dst);
 
     template <LogicalType Type>
+<<<<<<< HEAD
     Status _do_next_batch_dict_codes(const SparseRange& range, Column* dst);
+=======
+    Status _do_next_batch_dict_codes(const SparseRange<>& range, Column* dst);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     template <LogicalType Type>
     Status _do_decode_dict_codes(const int32_t* codes, size_t size, Column* words);
@@ -121,12 +162,19 @@ private:
     template <typename ParseFunc>
     Status _fetch_by_rowid(const rowid_t* rowids, size_t size, Column* values, ParseFunc&& page_parse);
 
+<<<<<<< HEAD
+=======
+    template <LogicalType Type>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status _load_dict_page();
 
     bool _contains_deleted_row(uint32_t page_index) const;
 
+<<<<<<< HEAD
     bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ColumnReader* _reader;
 
     // 1. The _page represents current page.
@@ -149,11 +197,19 @@ private:
     ordinal_t _current_ordinal = 0;
 
     // page indexes those are DEL_PARTIAL_SATISFIED
+<<<<<<< HEAD
     std::unordered_set<uint32_t> _delete_partial_satisfied_pages;
 
     int (ScalarColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
     Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, Column* dst) = nullptr;
     Status (ScalarColumnIterator::*_next_batch_dict_codes_func)(const SparseRange& range, Column* dst) = nullptr;
+=======
+    std::optional<std::unordered_set<uint32_t>> _delete_partial_satisfied_pages;
+
+    int (ScalarColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
+    Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, Column* dst) = nullptr;
+    Status (ScalarColumnIterator::*_next_batch_dict_codes_func)(const SparseRange<>& range, Column* dst) = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status (ScalarColumnIterator::*_decode_dict_codes_func)(const int32_t* codes, size_t size, Column* words) = nullptr;
     Status (ScalarColumnIterator::*_init_dict_decoder_func)() = nullptr;
 

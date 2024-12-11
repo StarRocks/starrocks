@@ -26,8 +26,15 @@ import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.common.DmlException;
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.common.DmlException;
+import com.starrocks.statistic.StatisticsMetaManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -60,11 +67,22 @@ public class InsertOverwriteJobRunnerTest {
         Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
+<<<<<<< HEAD
         Config.enable_experimental_mv = true;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
 
+<<<<<<< HEAD
+=======
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.withDatabase("insert_overwrite_test").useDatabase("insert_overwrite_test")
                 .withTable(
                         "CREATE TABLE insert_overwrite_test.t1(k1 int, k2 int, k3 int)" +
@@ -85,18 +103,31 @@ public class InsertOverwriteJobRunnerTest {
 
     @Test
     public void testReplayInsertOverwrite() {
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb("insert_overwrite_test");
         Table table = database.getTable("t1");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
                 Lists.newArrayList(olapTable.getPartition("t1").getId()));
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assert.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
         runner.cancel();
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
 
         InsertOverwriteJob insertOverwriteJob2 = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
+<<<<<<< HEAD
                 Lists.newArrayList(olapTable.getPartition("t1").getId()));
+=======
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(100L,
                 InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
                 Lists.newArrayList(2000L), null, Lists.newArrayList(2001L));
@@ -125,11 +156,20 @@ public class InsertOverwriteJobRunnerTest {
         String sql = "insert overwrite t1 select * from t2";
         InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb("insert_overwrite_test");
         Table table = database.getTable("t1");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, insertStmt, database.getId(), olapTable.getId());
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assert.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, insertStmt, database.getId(), olapTable.getId(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
         Assert.assertFalse(runner.isFinished());
     }
@@ -148,7 +188,11 @@ public class InsertOverwriteJobRunnerTest {
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
+<<<<<<< HEAD
                 Lists.newArrayList(olapTable.getPartition("t1").getId()));
+=======
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
 
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);

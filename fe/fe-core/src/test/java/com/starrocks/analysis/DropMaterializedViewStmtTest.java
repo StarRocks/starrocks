@@ -43,8 +43,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageType;
@@ -59,8 +62,11 @@ import java.util.List;
 public class DropMaterializedViewStmtTest {
 
     Analyzer analyzer;
+<<<<<<< HEAD
     @Mocked
     Auth auth;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private GlobalStateMgr globalStateMgr;
     @Mocked
     private ConnectContext connectContext;
@@ -68,7 +74,10 @@ public class DropMaterializedViewStmtTest {
     @Before
     public void setUp() {
         analyzer = AccessTestUtil.fetchAdminAnalyzer();
+<<<<<<< HEAD
         MockedAuth.mockedAuth(auth);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         analyzer = new Analyzer(globalStateMgr, connectContext);
         Database db = new Database(50000L, "test");
@@ -85,7 +94,11 @@ public class DropMaterializedViewStmtTest {
                 baseSchema, KeysType.AGG_KEYS, singlePartitionInfo, null);
         table.setBaseIndexId(100);
         db.registerTableUnlocked(table);
+<<<<<<< HEAD
         table.addPartition(new Partition(100, "p",
+=======
+        table.addPartition(new Partition(100, 101, "p",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 new MaterializedIndex(200, MaterializedIndex.IndexState.NORMAL), null));
         table.setIndexMeta(200, "mvname", baseSchema, 0, 0, (short) 0,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
@@ -97,11 +110,14 @@ public class DropMaterializedViewStmtTest {
             }
 
             @Mock
+<<<<<<< HEAD
             Auth getAuth() {
                 return auth;
             }
 
             @Mock
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Database getDb(long dbId) {
                 return db;
             }

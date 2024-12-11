@@ -15,11 +15,19 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.TabletScheduler;
@@ -44,8 +52,17 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
+<<<<<<< HEAD
             long partitionId = partitionCommitInfo.getPartitionId();
             Partition partition = table.getPartition(partitionId);
+=======
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            if (partition == null) {
+                LOG.warn("partition {} is dropped, ignore", partitionId);
+                continue;
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             List<MaterializedIndex> allIndices =
                     partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
             for (MaterializedIndex index : allIndices) {
@@ -60,10 +77,31 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             }
             // The version of a replication transaction may not continuously
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+<<<<<<< HEAD
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
             } else {
                 partition.setNextVersion(partition.getNextVersion() + 1);
             }
+=======
+                long versionDiff = partitionCommitInfo.getVersion() - partition.getNextVersion();
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                partition.setNextDataVersion(partition.getNextDataVersion() + versionDiff + 1);
+            } else if (txnState.isVersionOverwrite()) {
+                // overwrite empty partition, it's next version will less than overwrite version
+                // otherwise, it's next version will not change
+                if (partitionCommitInfo.getVersion() + 1 > partition.getNextVersion()) {
+                    partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                    partition.setNextDataVersion(partition.getNextVersion());
+                }
+            } else if (partitionCommitInfo.isDoubleWrite()) {
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                partition.setNextDataVersion(partition.getNextVersion());
+            } else {
+                partition.setNextVersion(partition.getNextVersion() + 1);
+                partition.setNextDataVersion(partition.getNextDataVersion() + 1);
+            }
+            LOG.debug("partition[{}] next version[{}]", partitionId, partition.getNextVersion());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -71,19 +109,32 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         long tableId = table.getId();
+<<<<<<< HEAD
         OlapTable table = (OlapTable) db.getTable(tableId);
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (table == null) {
             LOG.warn("table {} is dropped, ignore", tableId);
             return;
         }
+<<<<<<< HEAD
         List<String> validDictCacheColumns = Lists.newArrayList();
+=======
+        List<ColumnId> validDictCacheColumns = Lists.newArrayList();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
         long maxPartitionVersionTime = -1;
 
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
+<<<<<<< HEAD
             long partitionId = partitionCommitInfo.getPartitionId();
             Partition partition = table.getPartition(partitionId);
+=======
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (partition == null) {
                 LOG.warn("partition {} is dropped, ignore", partitionId);
                 continue;
@@ -92,6 +143,10 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             long version = partitionCommitInfo.getVersion();
             List<MaterializedIndex> allIndices =
                     partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+<<<<<<< HEAD
+=======
+            List<String> skipUpdateReplicas = Lists.newArrayList();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (MaterializedIndex index : allIndices) {
                 for (Tablet tablet : index.getTablets()) {
                     boolean hasFailedVersion = false;
@@ -120,7 +175,12 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                             // not update their last failed version.
                             // if B is published successfully in next turn, then B is normal and C will be set
                             // abnormal so that quorum is maintained and loading will go on.
+<<<<<<< HEAD
                             LOG.warn("skip update replica[{}.{}] to visible version", tablet.getId(), replica.getBackendId());
+=======
+                            String combinedId = String.format("%d_%d", tablet.getId(), replica.getBackendId());
+                            skipUpdateReplicas.add(combinedId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             newVersion = replica.getVersion();
                             if (version > lastFailedVersion) {
                                 lastFailedVersion = version;
@@ -146,16 +206,47 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         }
                         replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
                     } // end for replicas
+<<<<<<< HEAD
+=======
+                    if (!skipUpdateReplicas.isEmpty()) {
+                        LOG.warn("skip update replicas to visible version(tabletId_BackendId): {}", skipUpdateReplicas);
+                    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                     if (hasFailedVersion && replicationNum == 1) {
                         TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tablet.getId(), replicas);
                     }
                 } // end for tablets
             } // end for indices
+<<<<<<< HEAD
             long versionTime = partitionCommitInfo.getVersionTime();
             partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+=======
+
+            long versionTime = partitionCommitInfo.getVersionTime();
+            if (txnState.isVersionOverwrite()) {
+                if (partition.getVisibleVersion() < version) {
+                    partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+                    partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                    if (partitionCommitInfo.getVersionEpoch() > 0) {
+                        partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                    }
+                    partition.setVersionTxnType(txnState.getTransactionType());
+                }
+            } else {
+                partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+                partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                if (partitionCommitInfo.getVersionEpoch() > 0) {
+                    partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                }
+                partition.setVersionTxnType(txnState.getTransactionType());
+            }
+
+            if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
+                for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     IDictManager.getInstance().removeGlobalDict(tableId, column);
                 }
             }
@@ -170,7 +261,11 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
+<<<<<<< HEAD
                 String columnName = validDictCacheColumns.get(i);
+=======
+                ColumnId columnName = validDictCacheColumns.get(i);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
                         .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);

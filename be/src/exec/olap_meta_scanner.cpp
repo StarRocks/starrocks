@@ -16,6 +16,10 @@
 
 #include "exec/olap_meta_scan_node.h"
 #include "storage/storage_engine.h"
+<<<<<<< HEAD
+=======
+#include "storage/tablet.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/tablet_manager.h"
 
 namespace starrocks {
@@ -37,11 +41,24 @@ Status OlapMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParam
 }
 
 Status OlapMetaScanner::_init_meta_reader_params() {
+<<<<<<< HEAD
+=======
+    _reader_params.tablet_id = _tablet->tablet_id();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _reader_params.tablet = _tablet;
     _reader_params.version = Version(0, _version);
     _reader_params.runtime_state = _runtime_state;
     _reader_params.chunk_size = _runtime_state->chunk_size();
     _reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
+<<<<<<< HEAD
+=======
+    if (_parent->_meta_scan_node.__isset.columns && !_parent->_meta_scan_node.columns.empty() &&
+        _parent->_meta_scan_node.columns[0].col_unique_id > 0) {
+        _reader_params.tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), _parent->_meta_scan_node.columns);
+    } else {
+        _reader_params.tablet_schema = _tablet->tablet_schema();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _reader_params.desc_tbl = &_parent->_desc_tbl;
 
     return Status::OK();

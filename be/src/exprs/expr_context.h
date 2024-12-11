@@ -54,6 +54,11 @@ class MemTracker;
 class RuntimeState;
 class ObjectPool;
 class TColumnValue;
+<<<<<<< HEAD
+=======
+class BloomFilter;
+struct NgramBloomFilterReaderOptions;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 /// An ExprContext contains the state for the execution of a tree of Exprs, in particular
 /// the FunctionContexts necessary for the expr tree. This allows for multi-threaded
@@ -114,9 +119,20 @@ public:
 
     StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
     StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
+<<<<<<< HEAD
 
     bool error_if_overflow() const;
 
+=======
+    bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options);
+    bool support_ngram_bloom_filter();
+    bool is_index_only_filter() const;
+
+    bool error_if_overflow() const;
+
+    Status rewrite_jit_expr(ObjectPool* pool);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void set_build_from_only_in_filter(bool build_from_only_in_filter) {
         _build_from_only_in_filter = build_from_only_in_filter;
     }
@@ -135,10 +151,15 @@ private:
     /// Pool backing fn_contexts_. Counts against the runtime state's UDF mem tracker.
     std::unique_ptr<MemPool> _pool;
 
+<<<<<<< HEAD
+=======
+    RuntimeState* _runtime_state = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /// The expr tree this context is for.
     Expr* _root;
 
     /// True if this context came from a Clone() call. Used to manage FunctionStateScope.
+<<<<<<< HEAD
     bool _is_clone;
 
     /// Variables keeping track of current state.
@@ -148,6 +169,18 @@ private:
     bool _build_from_only_in_filter{false};
     // In operator, the ExprContext::close method will be called concurrently
     std::atomic<bool> _closed;
+=======
+    bool _is_clone{false};
+    /// Variables keeping track of current state.
+    bool _prepared{false};
+    bool _opened{false};
+    // Indicates that this expr is built from only in runtime in filter
+    // For hash join, it will build both IN filter and bloom filter. This variable is false.
+    // For cross join, it will only build Runtime IN filter, and this value is false.
+    bool _build_from_only_in_filter{false};
+    // In operator, the ExprContext::close method will be called concurrently
+    std::atomic<bool> _closed{false};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 #define RETURN_IF_HAS_ERROR(expr_ctxs)             \

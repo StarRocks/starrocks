@@ -20,6 +20,10 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.PropertyAnalyzer;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.ast.UserIdentity;
@@ -51,6 +55,12 @@ public class Task implements Writable {
     @SerializedName("createTime")
     private long createTime;
 
+<<<<<<< HEAD
+=======
+    @SerializedName("catalogName")
+    private String catalogName;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName("dbName")
     private String dbName;
 
@@ -136,6 +146,17 @@ public class Task implements Writable {
         this.createTime = createTime;
     }
 
+<<<<<<< HEAD
+=======
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getDbName() {
         return ClusterNamespace.getNameFromFullName(dbName);
     }
@@ -157,6 +178,13 @@ public class Task implements Writable {
         return properties;
     }
 
+<<<<<<< HEAD
+=======
+    public String getPropertiesString() {
+        return PropertyAnalyzer.stringifyProperties(properties);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
     }

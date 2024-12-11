@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_keys
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the top-level keys from a JSON object as a JSON array, or, if a `path` is specified, the top-level keys from the path.
 
@@ -24,7 +28,11 @@ json_keys(json_doc[, path])
 
 Returns a JSON array.
 
+<<<<<<< HEAD
 An empty array is returned if the JSON object is empty.
+=======
+An empty array is returned if the JSON object is empty. 
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 `NULL` is returned if the JSON document is not a JSON object or the path does not identify a value in the document.
 

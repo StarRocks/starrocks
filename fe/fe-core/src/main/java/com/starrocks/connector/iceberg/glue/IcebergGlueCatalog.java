@@ -20,11 +20,18 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+<<<<<<< HEAD
 import com.starrocks.connector.iceberg.IcebergAwsClientFactory;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -48,10 +55,17 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+<<<<<<< HEAD
 
 public class IcebergGlueCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergGlueCatalog.class);
     public static final String LOCATION_PROPERTY = "location";
+=======
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
+
+public class IcebergGlueCatalog implements IcebergCatalog {
+    private static final Logger LOG = LogManager.getLogger(IcebergGlueCatalog.class);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private final Configuration conf;
     private final GlueCatalog delegate;
@@ -78,6 +92,14 @@ public class IcebergGlueCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.tableExists(TableIdentifier.of(dbName, tableName));
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<String> listAllDatabases() {
         return delegate.listNamespaces().stream()
                 .map(ns -> ns.level(0))
@@ -85,7 +107,11 @@ public class IcebergGlueCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
     public void createDb(String dbName, Map<String, String> properties) {
+=======
+    public void createDB(String dbName, Map<String, String> properties) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         properties = properties == null ? new HashMap<>() : properties;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -108,7 +134,11 @@ public class IcebergGlueCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
     public void dropDb(String dbName) throws MetaNotFoundException {
+=======
+    public void dropDB(String dbName) throws MetaNotFoundException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Database database;
         try {
             database = getDB(dbName);
@@ -149,6 +179,19 @@ public class IcebergGlueCatalog implements IcebergCatalog {
             PartitionSpec partitionSpec,
             String location,
             Map<String, String> properties) {
+<<<<<<< HEAD
+=======
+        if (Strings.isNullOrEmpty(location)) {
+            String dbLocation = getDB(dbName).getLocation();
+            if (Strings.isNullOrEmpty(dbLocation)) {
+                throw new StarRocksConnectorException("Failed to find location in database '%s'. Please define the location" +
+                        " when you create table or recreate another database with location." +
+                        " You could execute the SQL command like 'CREATE TABLE <table_name> <columns> " +
+                        "PROPERTIES('location' = '<location>')", dbName);
+            }
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Table nativeTable = delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
                 .withLocation(location)
                 .withPartitionSpec(partitionSpec)
@@ -164,6 +207,14 @@ public class IcebergGlueCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+        delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void deleteUncommittedDataFiles(List<String> fileLocations) {
         if (fileLocations.isEmpty()) {
             return;

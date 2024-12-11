@@ -38,6 +38,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.NetUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.HeartbeatResponse;
@@ -46,6 +50,11 @@ import com.starrocks.system.HeartbeatResponse.HbStatus;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
+=======
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class FsBroker implements Writable, Comparable<FsBroker> {
     @SerializedName(value = "ip")
@@ -131,7 +140,11 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
         if (port != that.port) {
             return false;
         }
+<<<<<<< HEAD
         return ip.equals(that.ip);
+=======
+        return NetUtils.isSameIP(ip, that.ip);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     }
 
@@ -144,7 +157,19 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
 
     @Override
     public int compareTo(FsBroker o) {
+<<<<<<< HEAD
         int ret = ip.compareTo(o.ip);
+=======
+        int ret;
+        try {
+            InetAddress thisAddress = InetAddress.getByName(ip);
+            InetAddress otherAddress = InetAddress.getByName(ip);
+            
+            ret = thisAddress.getHostAddress().compareTo(otherAddress.getHostAddress());
+        } catch (UnknownHostException e) {
+            ret = ip.compareTo(o.ip);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (ret != 0) {
             return ret;
         }
@@ -159,7 +184,11 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         return ip + ":" + port;
+=======
+        return NetUtils.getHostPortInAccessibleFormat(ip, port);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static FsBroker readIn(DataInput in) throws IOException {

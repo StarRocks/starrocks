@@ -134,6 +134,10 @@ private:
     uint64_t _threads_started_metric{0};
     uint64_t _threads_running_metric{0};
 
+<<<<<<< HEAD
+=======
+public:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ThreadMgr(const ThreadMgr&) = delete;
     const ThreadMgr& operator=(const ThreadMgr&) = delete;
 };
@@ -196,6 +200,10 @@ void ThreadMgr::get_thread_infos(std::vector<BeThreadInfo>& infos) {
             info.tid = thread.second.thread_id();
             info.idle = thread.second.thread()->idle();
             info.finished_tasks = thread.second.thread()->finished_tasks();
+<<<<<<< HEAD
+=======
+            info.num_bound_cpu_cores = thread.second.thread()->num_bound_cpu_cores();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 }
@@ -213,7 +221,11 @@ Thread::~Thread() {
 }
 
 void Thread::join() {
+<<<<<<< HEAD
     ThreadJoiner(this).join();
+=======
+    (void)ThreadJoiner(this).join();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 int64_t Thread::tid() const {

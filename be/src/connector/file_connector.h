@@ -16,6 +16,10 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+<<<<<<< HEAD
+=======
+#include "connector_chunk_sink.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/file_scanner.h"
 
 namespace starrocks::connector {
@@ -27,6 +31,11 @@ public:
     DataSourceProviderPtr create_data_source_provider(starrocks::ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
+<<<<<<< HEAD
+=======
+    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ConnectorType connector_type() const override { return ConnectorType::FILE; }
 };
 

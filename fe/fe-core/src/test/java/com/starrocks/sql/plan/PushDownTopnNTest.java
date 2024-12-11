@@ -23,7 +23,11 @@ public class PushDownTopnNTest extends PlanTestBase {
     public void before() {
         connectContext.getSessionVariable().setCboPushDownTopNLimit(1000);
     }
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testPushDownTopBelowUnionAll1() throws Exception {
         String sql = "select * from (" +
@@ -32,14 +36,21 @@ public class PushDownTopnNTest extends PlanTestBase {
                 "select v4 as a, v5 as b, v6 as c from t1) AS t \n" +
                 "ORDER BY t.b desc limit 20";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         System.out.println(plan);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertContains(plan, "6:TOP-N\n" +
                 "  |  order by: <slot 5> 5: v5 DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 20\n" +
                 "  |  \n" +
                 "  5:OlapScanNode\n" +
+<<<<<<< HEAD
                 "     TABLE: t1");
+=======
+                "     TABLE: t");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertContains(plan, "2:TOP-N\n" +
                 "  |  order by: <slot 2> 2: v2 DESC\n" +
                 "  |  offset: 0\n" +
@@ -57,7 +68,10 @@ public class PushDownTopnNTest extends PlanTestBase {
                 "select v4 as a, v5 as b, v6 as c from t1) AS t \n" +
                 "ORDER BY t.b desc limit 20";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         System.out.println(plan);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // t0 should be added `topn` for limit 1 is less than limit 20
         assertContains(plan, "STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
@@ -104,7 +118,10 @@ public class PushDownTopnNTest extends PlanTestBase {
                 "select v4, v5 , v6  from t1) AS t \n" +
                 "ORDER BY t.b desc limit 20";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         System.out.println(plan);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertContains(plan, "6:TOP-N\n" +
                 "  |  order by: <slot 5> 5: v5 DESC\n" +
                 "  |  offset: 0\n" +
@@ -130,7 +147,10 @@ public class PushDownTopnNTest extends PlanTestBase {
                 "select v4, v5 , v6  from t1) AS t \n" +
                 "ORDER BY t.b desc limit " + (context.getSessionVariable().getCboPushDownTopNLimit() + 1);
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         System.out.println(plan);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertContains(plan, "STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
                 "    RANDOM\n" +
@@ -154,7 +174,10 @@ public class PushDownTopnNTest extends PlanTestBase {
                 "select v4, v5 , v6  from t1) AS t \n" +
                 "ORDER BY t.b desc limit " + (context.getSessionVariable().getCboPushDownTopNLimit() + 1);
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         System.out.println(plan);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertContains(plan, "STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
                 "    RANDOM\n" +

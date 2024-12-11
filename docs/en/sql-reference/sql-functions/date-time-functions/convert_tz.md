@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # convert_tz
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a DATE or DATETIME value from one time zone to another.
 

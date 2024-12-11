@@ -117,7 +117,10 @@ private:
         // Use explicit producer token to avoid the overhead of too many sub-queues
         static thread_local ::moodycamel::ProducerToken producer_token(_ctx_resources);
         DCHECK(ptr);
+<<<<<<< HEAD
         _resetter(ptr.get());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Status status = _resetter(ptr.get());
         // if reset fail, then delete this context
         if (!status.ok()) {

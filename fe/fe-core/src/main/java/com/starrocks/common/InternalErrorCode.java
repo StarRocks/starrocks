@@ -29,6 +29,11 @@ public enum InternalErrorCode {
     TABLE_ERR(6),
     META_NOT_FOUND_ERR(7),
     REPLICA_ENOUGH_ERR(8),
+<<<<<<< HEAD
+=======
+    // query cancelled due to backend not alive: FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
+    CANCEL_NODE_NOT_ALIVE_ERR(9),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // for load job error
     MANUAL_PAUSE_ERR(100),

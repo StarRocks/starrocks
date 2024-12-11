@@ -34,7 +34,11 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.DataDescription;
@@ -54,7 +58,11 @@ public class LoadStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException {
+=======
+    public void testNormal() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LoadStmt stmt = (LoadStmt) analyzeSuccess(
                 "LOAD LABEL test.testLabel " +
                         "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`)");

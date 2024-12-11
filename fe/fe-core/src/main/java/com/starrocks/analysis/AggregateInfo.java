@@ -38,14 +38,20 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.List;
 
 public final class AggregateInfo extends AggregateInfoBase {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(AggregateInfo.class);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public enum AggPhase {
         FIRST,

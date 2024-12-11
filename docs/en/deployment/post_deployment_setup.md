@@ -85,9 +85,17 @@ If you have created new users in your cluster, you need to enlarge their maximum
 
 ```SQL
 -- Replace <username> with the username you want to enlarge the maximum connection number for.
+<<<<<<< HEAD
 SET PROPERTY FOR '<username>' 'max_user_connections' = '1000';
+=======
+ALTER USER '<username>' SET PROPERTIES ("max_user_connections" = "1000");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ```
 
 ## What to do next
 
+<<<<<<< HEAD
 After deploying and setting up your StarRocks cluster, you can then proceed to design tables that best work for your scenarios. See [Understand StarRocks table design](../table_design/StarRocks_table_design.md) for detailed instructions on designing a table.
+=======
+After deploying and setting up your StarRocks cluster, you can then proceed to design tables that best work for your scenarios. See [Understand StarRocks table design](../table_design/table_design.md) for detailed instructions on designing a table.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

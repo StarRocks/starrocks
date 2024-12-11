@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_orderkey,
@@ -21,6 +22,8 @@ group by
 order by
     revenue desc,
     o_orderdate limit 10;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment statistics]
 PLAN FRAGMENT 0(F07)
 Output Exprs:18: l_orderkey | 35: sum | 13: o_orderdate | 16: o_shippriority
@@ -141,10 +144,17 @@ OutPut Exchange Id: 09
 3:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 13: o_orderdate < '1995-03-11'
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 37: o_orderdate < '1995-03-11'
 partitions=1/1
 avgRowSize=24.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 13: o_orderdate < '1995-03-11'
+partitions=1/1
+avgRowSize=24.0
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 72661123
 probe runtime filters:
 - filter_id = 0, probe_expr = (10: o_custkey)
@@ -170,10 +180,17 @@ OutPut Exchange Id: 06
 4:HdfsScanNode
 TABLE: customer
 NON-PARTITION PREDICATES: 7: c_mktsegment = 'HOUSEHOLD'
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 38: c_mktsegment <= 'HOUSEHOLD', 39: c_mktsegment >= 'HOUSEHOLD'
 partitions=1/1
 avgRowSize=18.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 7: c_mktsegment <= 'HOUSEHOLD', 7: c_mktsegment >= 'HOUSEHOLD'
+partitions=1/1
+avgRowSize=18.0
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 3000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 3000000.0] ESTIMATE
@@ -199,10 +216,17 @@ OutPut Exchange Id: 02
 0:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 28: l_shipdate > '1995-03-11'
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 36: l_shipdate > '1995-03-11'
 partitions=1/1
 avgRowSize=28.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 28: l_shipdate > '1995-03-11'
+partitions=1/1
+avgRowSize=28.0
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 323426370
 probe runtime filters:
 - filter_id = 1, probe_expr = (18: l_orderkey)

@@ -29,9 +29,15 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.system.BackendCoreStat;
+=======
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.system.BackendResourceStat;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -57,7 +63,11 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         try {
             dumpJson.addProperty("session_variables", dumpInfo.getSessionVariable().getJsonString());
         } catch (IOException e) {
+<<<<<<< HEAD
             LOG.warn("serialize session variables failed. " + e);
+=======
+            LOG.warn("serialize session variables failed. ", e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // BE number
@@ -67,9 +77,15 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         // backend core stat
         JsonObject backendCoreStat = new JsonObject();
         backendCoreStat.addProperty("numOfHardwareCoresPerBe",
+<<<<<<< HEAD
                 GsonUtils.GSON.toJson(BackendCoreStat.getNumOfHardwareCoresPerBe()));
         backendCoreStat.addProperty("cachedAvgNumOfHardwareCores",
                 BackendCoreStat.getCachedAvgNumOfHardwareCores());
+=======
+                GsonUtils.GSON.toJson(BackendResourceStat.getInstance().getNumHardwareCoresPerBe()));
+        backendCoreStat.addProperty("cachedAvgNumOfHardwareCores",
+                BackendResourceStat.getInstance().getCachedAvgNumHardwareCores());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         dumpJson.add("be_core_stat", backendCoreStat);
         // exception
         JsonArray exceptions = new JsonArray();
@@ -113,7 +129,11 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Pair<String, com.starrocks.catalog.Table> entry : tableMetaPairs) {
             String tableName = entry.first + "." + entry.second.getName();
             List<String> createTableStmt = Lists.newArrayList();
+<<<<<<< HEAD
             GlobalStateMgr.getDdlStmt(entry.second, createTableStmt, null, null, false, true /* hide password */);
+=======
+            AstToStringBuilder.getDdlStmt(entry.second, createTableStmt, null, null, false, true /* hide password */);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             tableMetaData.addProperty(tableName, createTableStmt.get(0));
         }
         dumpJson.add("table_meta", tableMetaData);
@@ -289,8 +309,13 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         if (CollectionUtils.isNotEmpty(hiveMeta.getDataColumnNames())) {
             hiveTableDumpInfo.setDataColumnNames(
                     hiveMeta.getDataColumnNames().stream()
+<<<<<<< HEAD
                     .map(e -> DesensitizedSQLBuilder.desensitizeColName(e, dict))
                     .collect(Collectors.toList())
+=======
+                            .map(e -> DesensitizedSQLBuilder.desensitizeColName(e, dict))
+                            .collect(Collectors.toList())
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             );
         }
 

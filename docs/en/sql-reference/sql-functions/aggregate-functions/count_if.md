@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # count_if
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the number of records that meet the specified condition or `0` if no records satisfy the condition.
 

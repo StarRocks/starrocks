@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # CAST
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将 `input` 转换成指定数据类型的值，如 `cast (input as BIGINT)` 将当前 `input` 转换为 BIGINT 类型的值。
 

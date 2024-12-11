@@ -53,8 +53,12 @@ public class FileTableScanNodeTest {
                     }
                 }
                 blockDescList.add(new Block());
+<<<<<<< HEAD
                 RemoteFileDesc fileDesc =
                         new RemoteFileDesc("aa", "snappy", 0, 0, ImmutableList.copyOf(blockDescList), null);
+=======
+                RemoteFileDesc fileDesc = new RemoteFileDesc("aa", "snappy", 0, 0, ImmutableList.copyOf(blockDescList));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 fileDescList.add(fileDesc);
                 return fileDescList;
             }

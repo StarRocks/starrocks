@@ -39,6 +39,10 @@ add_library(Webserver STATIC
   action/reload_tablet_action.cpp
   action/restore_tablet_action.cpp
   action/pprof_actions.cpp
+<<<<<<< HEAD
+=======
+  action/memory_metrics_action.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   action/metrics_action.cpp
   action/stream_load.cpp
   action/transaction_stream_load.cpp
@@ -48,6 +52,10 @@ add_library(Webserver STATIC
   action/update_config_action.cpp
   action/runtime_filter_cache_action.cpp
   action/query_cache_action.cpp
+<<<<<<< HEAD
+=======
+  action/datacache_action.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   action/pipeline_blocking_drivers_action.cpp
   action/lake/dump_tablet_metadata_action.cpp
   action/stop_be_action.cpp)

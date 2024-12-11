@@ -12,13 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.KeysDesc;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
@@ -48,14 +54,29 @@ public class CreateTableStmt extends DdlStmt {
     private List<AlterClause> rollupAlterClauseList;
 
     // set in analyze
+<<<<<<< HEAD
     private List<Column> columns = Lists.newArrayList();
     private List<String> sortKeys = Lists.newArrayList();
 
     private List<Index> indexes = Lists.newArrayList();
+=======
+    private List<Column> columns;
+    private List<String> sortKeys = Lists.newArrayList();
+
+    private List<Index> indexes;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // for backup. set to -1 for normal use
     private int tableSignature;
 
+<<<<<<< HEAD
+=======
+    boolean hasHll = false;
+    boolean hasBitmap = false;
+    boolean hasReplace = false;
+    boolean hasGeneratedColumn = false;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public CreateTableStmt(boolean ifNotExists,
                            boolean isExternal,
                            TableName tableName,
@@ -190,6 +211,13 @@ public class CreateTableStmt extends DdlStmt {
         return this.columns;
     }
 
+<<<<<<< HEAD
+=======
+    public void setColumns(List<Column> columns) {
+        this.columns = columns;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public KeysDesc getKeysDesc() {
         return this.keysDesc;
     }
@@ -262,6 +290,13 @@ public class CreateTableStmt extends DdlStmt {
         return indexes;
     }
 
+<<<<<<< HEAD
+=======
+    public void setIndexes(List<Index> indexes) {
+        this.indexes = indexes;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<ColumnDef> getColumnDefs() {
         return columnDefs;
     }
@@ -278,20 +313,73 @@ public class CreateTableStmt extends DdlStmt {
         this.properties = properties;
     }
 
+<<<<<<< HEAD
+=======
+    public void updateProperties(Map<String, String> properties) {
+        if (this.properties == null) {
+            this.properties = properties;
+        } else {
+            this.properties.putAll(properties);
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setDistributionDesc(DistributionDesc distributionDesc) {
         this.distributionDesc = distributionDesc;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPartitionDesc(PartitionDesc partitionDesc) {
+        this.partitionDesc = partitionDesc;
+    }
+
+    public void setHasBitmap(boolean hasBitmap) {
+        this.hasBitmap = hasBitmap;
+    }
+
+    public boolean isHasBitmap() {
+        return hasBitmap;
+    }
+
+    public void setHasHll(boolean hasHll) {
+        this.hasHll = hasHll;
+    }
+
+    public boolean isHasHll() {
+        return hasHll;
+    }
+
+    public void setHasReplace(boolean hasReplace) {
+        this.hasReplace = hasReplace;
+    }
+
+    public boolean isHasReplace() {
+        return hasReplace;
+    }
+
+    public void setHasGeneratedColumn(boolean hasGeneratedColumn) {
+        this.hasGeneratedColumn = hasGeneratedColumn;
+    }
+
+    public boolean isHasGeneratedColumn() {
+        return hasGeneratedColumn;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static CreateTableStmt read(DataInput in) throws IOException {
         throw new RuntimeException("CreateTableStmt serialization is not supported anymore.");
     }
 
     @Override
+<<<<<<< HEAD
     public boolean needAuditEncryption() {
         return !Strings.isNullOrEmpty(engineName) && !isOlapEngine();
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableStatement(this, context);
     }

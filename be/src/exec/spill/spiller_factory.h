@@ -20,6 +20,7 @@
 
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sorting.h"
+<<<<<<< HEAD
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
 
@@ -27,6 +28,13 @@ namespace starrocks {
 namespace spill {
 struct SpilledOptions;
 class Spiller;
+=======
+#include "exec/spill/spill_fwd.h"
+#include "exprs/expr_context.h"
+#include "runtime/runtime_state.h"
+
+namespace starrocks::spill {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 class SpillerFactory : public std::enable_shared_from_this<SpillerFactory> {
 public:
@@ -46,5 +54,9 @@ private:
 
 using SpillerFactoryPtr = std::shared_ptr<SpillerFactory>;
 SpillerFactoryPtr make_spilled_factory();
+<<<<<<< HEAD
 } // namespace spill
 } // namespace starrocks
+=======
+} // namespace starrocks::spill
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

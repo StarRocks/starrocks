@@ -7,7 +7,11 @@ keywords: ['beifen']
 
 ## 功能
 
+<<<<<<< HEAD
 取消指定数据库中一个正在进行的恢复任务。更多信息，请见 [备份和恢复](../../../administration/management/Backup_and_restore.md)。
+=======
+取消指定数据库中一个正在进行的恢复任务。更多信息，请见 备份和恢复。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 > **注意**
 >

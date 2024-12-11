@@ -54,6 +54,13 @@ public class MetricCalculator extends TimerTask {
     private long lastQueryCounter = -1;
     private long lastRequestCounter = -1;
     private long lastQueryErrCounter = -1;
+<<<<<<< HEAD
+=======
+    private long lastQueryInternalErrCounter = -1;
+    private long lastQueryAnalysisErrCounter = -1;
+    private long lastQueryTimeOutCounter = -1;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private long lastQueryEventTime = -1;
 
     @Override
@@ -68,6 +75,12 @@ public class MetricCalculator extends TimerTask {
             lastQueryCounter = MetricRepo.COUNTER_QUERY_ALL.getValue();
             lastRequestCounter = MetricRepo.COUNTER_REQUEST_ALL.getValue();
             lastQueryErrCounter = MetricRepo.COUNTER_QUERY_ERR.getValue();
+<<<<<<< HEAD
+=======
+            lastQueryInternalErrCounter = MetricRepo.COUNTER_QUERY_INTERNAL_ERR.getValue();
+            lastQueryAnalysisErrCounter = MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.getValue();
+            lastQueryTimeOutCounter = MetricRepo.COUNTER_QUERY_TIMEOUT.getValue();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             lastQueryEventTime = System.currentTimeMillis() * 1000000;
             return;
         }
@@ -92,6 +105,27 @@ public class MetricCalculator extends TimerTask {
         MetricRepo.GAUGE_QUERY_ERR_RATE.setValue(errRate < 0 ? 0.0 : errRate);
         lastQueryErrCounter = currentErrCounter;
 
+<<<<<<< HEAD
+=======
+        // internal err rate
+        long currentInternalErrCounter = MetricRepo.COUNTER_QUERY_INTERNAL_ERR.getValue();
+        double internalErrRate = (double) (currentInternalErrCounter - lastQueryInternalErrCounter) / interval;
+        MetricRepo.GAUGE_QUERY_INTERNAL_ERR_RATE.setValue(errRate < 0 ? 0.0 : internalErrRate);
+        lastQueryInternalErrCounter = currentErrCounter;
+
+        // analysis error rate
+        long currentAnalysisErrCounter = MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.getValue();
+        double analysisErrRate = (double) (currentAnalysisErrCounter - lastQueryAnalysisErrCounter) / interval;
+        MetricRepo.GAUGE_QUERY_ANALYSIS_ERR_RATE.setValue(errRate < 0 ? 0.0 : analysisErrRate);
+        lastQueryAnalysisErrCounter = currentErrCounter;
+
+        // query timeout rate
+        long currentTimeoutErrCounter = MetricRepo.COUNTER_QUERY_TIMEOUT.getValue();
+        double timeoutErrRate = (double) (currentTimeoutErrCounter - lastQueryTimeOutCounter) / interval;
+        MetricRepo.GAUGE_QUERY_TIMEOUT_RATE.setValue(errRate < 0 ? 0.0 : timeoutErrRate);
+        lastQueryTimeOutCounter = currentErrCounter;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         lastTs = currentTs;
 
         // max tablet compaction score of all backends
@@ -153,6 +187,13 @@ public class MetricCalculator extends TimerTask {
             MetricRepo.updateRoutineLoadProcessMetrics();
         }
 
+<<<<<<< HEAD
+=======
+        if (Config.memory_tracker_enable)  {
+            MetricRepo.updateMemoryUsageMetrics();
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         MetricRepo.GAUGE_SAFE_MODE.setValue(GlobalStateMgr.getCurrentState().isSafeMode() ? 1 : 0);
     }
 }

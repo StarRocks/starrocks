@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dayofweek
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回指定日期的工作日索引值，即星期日为 1，星期一为 2，星期六为 7。
 

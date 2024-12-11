@@ -18,7 +18,11 @@ This statement is supported from v2.4.
 SHOW ANALYZE STATUS [WHERE]
 ```
 
+<<<<<<< HEAD
 You can use `LIKE or WHERE` to filter the information to return.
+=======
+You can use `LIKE` or `WHERE` to filter the information to return.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This statement returns the following columns.
 

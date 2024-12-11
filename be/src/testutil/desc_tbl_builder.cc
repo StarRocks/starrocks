@@ -94,7 +94,11 @@ DescriptorTbl* DescriptorTblBuilder::build() {
     }
 
     Status status = DescriptorTbl::create(_state, _obj_pool, thrift_desc_tbl, &desc_tbl, config::vector_chunk_size);
+<<<<<<< HEAD
     DCHECK(status.ok());
+=======
+    CHECK(status.ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return desc_tbl;
 }
 

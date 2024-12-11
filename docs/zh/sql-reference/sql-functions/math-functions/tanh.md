@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # tanh
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算输入数值的双曲正切值。
 

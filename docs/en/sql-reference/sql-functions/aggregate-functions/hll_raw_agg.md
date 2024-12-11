@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_raw_agg
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This function is an aggregate function that is used to aggregate HLL fields. It returns an HLL value.
 

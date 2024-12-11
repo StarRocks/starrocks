@@ -38,7 +38,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
+<<<<<<< HEAD
 import com.starrocks.http.action.HelpAction;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.LogAction;
 import com.starrocks.http.action.QueryAction;
@@ -63,6 +66,11 @@ import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.http.rest.CancelStreamLoad;
 import com.starrocks.http.rest.CheckDecommissionAction;
 import com.starrocks.http.rest.ConnectionAction;
+<<<<<<< HEAD
+=======
+import com.starrocks.http.rest.ExecuteSqlAction;
+import com.starrocks.http.rest.FeatureAction;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.http.rest.GetDdlStmtAction;
 import com.starrocks.http.rest.GetLoadInfoAction;
 import com.starrocks.http.rest.GetLogFileAction;
@@ -84,13 +92,21 @@ import com.starrocks.http.rest.ShowProcAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
 import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
+<<<<<<< HEAD
+=======
+import com.starrocks.http.rest.StreamLoadMetaAction;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.http.rest.SyncCloudTableMetaAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
+<<<<<<< HEAD
 import com.starrocks.http.rest.WarehouseAction;
+=======
+import com.starrocks.http.rest.v2.TablePartitionAction;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
@@ -148,6 +164,10 @@ public class HttpServer {
     private void registerActions() throws IllegalArgException {
         // add rest action
         LoadAction.registerAction(controller);
+<<<<<<< HEAD
+=======
+        StreamLoadMetaAction.registerAction(controller);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TransactionLoadAction.registerAction(controller);
         GetLoadInfoAction.registerAction(controller);
         SetConfigAction.registerAction(controller);
@@ -156,7 +176,10 @@ public class HttpServer {
         StorageTypeCheckAction.registerAction(controller);
         CancelStreamLoad.registerAction(controller);
         GetStreamLoadState.registerAction(controller);
+<<<<<<< HEAD
         WarehouseAction.registerAction(controller);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // add web action
         IndexAction.registerAction(controller);
@@ -167,12 +190,19 @@ public class HttpServer {
         QueryProfileAction.registerAction(controller);
         SessionAction.registerAction(controller);
         VariableAction.registerAction(controller);
+<<<<<<< HEAD
         HelpAction.registerAction(controller);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         StaticResourceAction.registerAction(controller);
         HaAction.registerAction(controller);
 
         // rest action
         HealthAction.registerAction(controller);
+<<<<<<< HEAD
+=======
+        FeatureAction.registerAction(controller);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         MetricsAction.registerAction(controller);
         ShowMetaInfoAction.registerAction(controller);
         ShowProcAction.registerAction(controller);
@@ -197,6 +227,10 @@ public class HttpServer {
         SyncCloudTableMetaAction.registerAction(controller);
         // for stop FE
         StopFeAction.registerAction(controller);
+<<<<<<< HEAD
+=======
+        ExecuteSqlAction.registerAction(controller);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // meta service action
         File imageDir = MetaHelper.getLeaderImageDir();
@@ -213,6 +247,11 @@ public class HttpServer {
         // external usage
         TableRowCountAction.registerAction(controller);
         TableSchemaAction.registerAction(controller);
+<<<<<<< HEAD
+=======
+        com.starrocks.http.rest.v2.TableSchemaAction.registerAction(controller);
+        TablePartitionAction.registerAction(controller);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TableQueryPlanAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);
@@ -229,7 +268,12 @@ public class HttpServer {
             ch.pipeline().addLast(new HttpServerCodec(
                             Config.http_max_initial_line_length,
                             Config.http_max_header_size,
+<<<<<<< HEAD
                             Config.http_max_chunk_size))
+=======
+                            Config.http_max_chunk_size,
+                            Config.enable_http_validate_headers))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536))
                     .addLast(new ChunkedWriteHandler())
                     // add content compressor
@@ -302,7 +346,11 @@ public class HttpServer {
         httpWorkersNum.setValue(0L);
         httpMetricRegistry.registerGauge(httpWorkersNum);
 
+<<<<<<< HEAD
         GaugeMetric<Long> pendingTasks = new GaugeMetric<Long>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,
+=======
+        GaugeMetric<Long> pendingTasks = new GaugeMetric<>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "the number of tasks that are pending for processing in the queues of http workers") {
             @Override
             public Long getValue() {

@@ -25,6 +25,13 @@ public class DropTableStmt extends DdlStmt {
     private final boolean isView;
     private final boolean forceDrop;
 
+<<<<<<< HEAD
+=======
+    // used to mark whether it should be treated as a temporary table to distinguish subsequent processing logic,
+    // it should be set during analysis phase
+    private boolean temporaryTableMark = false;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public DropTableStmt(boolean ifExists, TableName tableName, boolean forceDrop) {
         this(ifExists, tableName, false, forceDrop, NodePosition.ZERO);
     }
@@ -73,6 +80,17 @@ public class DropTableStmt extends DdlStmt {
         return this.forceDrop;
     }
 
+<<<<<<< HEAD
+=======
+    public void setTemporaryTableMark(boolean mark) {
+        this.temporaryTableMark = mark;
+    }
+
+    public boolean getTemporaryTableMark() {
+        return temporaryTableMark;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropTableStatement(this, context);

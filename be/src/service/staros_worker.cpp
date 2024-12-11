@@ -43,6 +43,13 @@ DECLARE_int32(cachemgr_evict_interval);
 DECLARE_double(cachemgr_evict_low_water);
 // cache will stop evict cache files if free space is above this value(percentage)
 DECLARE_double(cachemgr_evict_high_water);
+<<<<<<< HEAD
+=======
+// cache will evict file cache at this percent if star cache is turned on
+DECLARE_double(cachemgr_evict_percent);
+// cache will evict file cache at this speed if star cache is turned on
+DECLARE_int32(cachemgr_evict_throughput_mb);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // type:Integer. CacheManager cache directory allocation policy. (0:default, 1:random, 2:round-robin)
 DECLARE_int32(cachemgr_dir_allocate_policy);
 // buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
@@ -265,6 +272,7 @@ absl::StatusOr<std::string> StarOSWorker::build_scheme_from_shard_info(const Sha
 }
 
 absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(const ShardInfo& info) {
+<<<<<<< HEAD
     fslib::Configuration conf;
 
     switch (info.path_info.fs_info().fs_type()) {
@@ -343,6 +351,10 @@ absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(co
         }
     }
     return conf;
+=======
+    // use the remote fsroot as the default cache identifier
+    return info.fslib_conf_from_this(need_enable_cache(info), "");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shared_filesystem(
@@ -396,7 +408,11 @@ std::string StarOSWorker::get_cache_key(std::string_view scheme, const Configura
     return sha256.hex();
 }
 
+<<<<<<< HEAD
 Status to_status(absl::Status absl_status) {
+=======
+Status to_status(const absl::Status& absl_status) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     switch (absl_status.code()) {
     case absl::StatusCode::kOk:
         return Status::OK();
@@ -415,10 +431,22 @@ Status to_status(absl::Status absl_status) {
     }
 }
 
+<<<<<<< HEAD
 void init_staros_worker() {
     if (g_starlet.get() != nullptr) {
         return;
     }
+=======
+void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache) {
+    if (g_starlet.get() != nullptr) {
+        return;
+    }
+
+    if (star_cache) {
+        (void)fslib::set_star_cache(star_cache);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // skip staros reinit aws sdk
     staros::starlet::fslib::skip_aws_init_api = true;
 
@@ -444,11 +472,18 @@ void init_staros_worker() {
     FLAGS_fslib_s3client_max_connections = config::object_storage_max_connection;
     FLAGS_fslib_s3client_max_items = config::starlet_s3_client_max_cache_capacity;
     FLAGS_fslib_s3client_max_instance_per_item = config::starlet_s3_client_num_instances_per_cache;
+<<<<<<< HEAD
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     FLAGS_fslib_s3client_nonread_max_retries = config::starlet_fslib_s3client_nonread_max_retries;
     FLAGS_fslib_s3client_nonread_retry_scale_factor = config::starlet_fslib_s3client_nonread_retry_scale_factor;
     FLAGS_fslib_s3client_connect_timeout_ms = config::starlet_fslib_s3client_connect_timeout_ms;
     FLAGS_fslib_s3client_use_list_objects_v1 = config::s3_use_list_objects_v1;
+<<<<<<< HEAD
+=======
+    fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_async_init = config::starlet_star_cache_async_init;

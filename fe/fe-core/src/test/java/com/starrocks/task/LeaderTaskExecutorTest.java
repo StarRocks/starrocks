@@ -70,6 +70,18 @@ public class LeaderTaskExecutorTest {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testPoolSize() {
+        int size = executor.getCorePoolSize();
+        executor.setPoolSize(size + 1);
+        Assert.assertEquals(size + 1, executor.getCorePoolSize());
+        executor.setPoolSize(size);
+        Assert.assertEquals(size, executor.getCorePoolSize());
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private class TestLeaderTask extends LeaderTask {
 
         public TestLeaderTask(long signature) {

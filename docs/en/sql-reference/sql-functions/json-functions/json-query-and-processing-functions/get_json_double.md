@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # get_json_double
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This function analyzes and gets the floating point value from a specified path in json string. json_path must start with `$` and use `.` as the path separator.
 

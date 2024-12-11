@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitnot
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回参数 `x` 进行取反运算后的结果。
 

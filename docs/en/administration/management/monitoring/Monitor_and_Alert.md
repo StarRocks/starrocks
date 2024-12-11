@@ -423,7 +423,11 @@ After completing these steps, modify the Grafana configuration file on the node 
 vim /usr/share/grafana/conf/defaults.ini
 ```
 
+<<<<<<< HEAD
 Example: 
+=======
+Example:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```Properties
 ###################### SMTP / Emailing #####################

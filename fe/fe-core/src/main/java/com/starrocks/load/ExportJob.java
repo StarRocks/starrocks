@@ -54,7 +54,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -65,13 +69,26 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
+<<<<<<< HEAD
 import com.starrocks.common.util.TimeUtils;
+=======
+import com.starrocks.common.util.NetUtils;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -84,16 +101,30 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.UnlockTabletMetadataRequest;
+<<<<<<< HEAD
 import com.starrocks.qe.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+<<<<<<< HEAD
 import com.starrocks.task.AgentClient;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TInternalScanRange;
@@ -107,6 +138,10 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
+=======
+import org.apache.thrift.TException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -139,7 +174,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private final AtomicInteger nextId = new AtomicInteger(0);
     // backedn_address => snapshot path
     private List<Pair<TNetworkAddress, String>> snapshotPaths = Lists.newArrayList();
+<<<<<<< HEAD
     // backend id => backend lastStartTime 
+=======
+    // backend id => backend lastStartTime
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final Map<Long, Long> beLastStartTime = Maps.newHashMap();
 
     @SerializedName("id")
@@ -183,6 +222,12 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private int progress;
     @SerializedName("fm")
     private ExportFailMsg failMsg;
+<<<<<<< HEAD
+=======
+    @SerializedName("warehouseId")
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private TupleDescriptor exportTupleDesc;
     private Table exportTable;
     // when set to true, means this job instance is created by replay thread(FE restarted or master changed)
@@ -218,9 +263,24 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.queryIdString = queryId.toString();
     }
 
+<<<<<<< HEAD
     public void setJob(ExportStmt stmt) throws UserException {
         String dbName = stmt.getTblName().getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+    public ExportJob(long jobId, UUID queryId, long warehouseId) {
+        this(jobId, queryId);
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+    public void setJob(ExportStmt stmt) throws StarRocksException {
+        String dbName = stmt.getTblName().getDb();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -245,6 +305,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.partitions = stmt.getPartitions();
         this.columnNames = stmt.getColumnNames();
 
+<<<<<<< HEAD
         db.readLock();
         try {
             this.dbId = db.getId();
@@ -257,17 +318,39 @@ public class ExportJob implements Writable, GsonPostProcessable {
             genExecFragment(stmt);
         } finally {
             db.readUnlock();
+=======
+        this.dbId = db.getId();
+        this.exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), stmt.getTblName().getTbl());
+        if (exportTable == null) {
+            throw new DdlException("Table " + stmt.getTblName().getTbl() + " does not exist");
+        }
+        this.tableId = exportTable.getId();
+        this.tableName = stmt.getTblName();
+
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(this.tableId),
+                    LockType.READ)) {
+            genExecFragment(stmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         this.sql = stmt.toSql();
     }
 
+<<<<<<< HEAD
     private void genExecFragment(ExportStmt stmt) throws UserException {
+=======
+    private void genExecFragment(ExportStmt stmt) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         registerToDesc();
         plan(stmt);
     }
 
+<<<<<<< HEAD
     private void registerToDesc() throws UserException {
+=======
+    private void registerToDesc() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TableRef ref = new TableRef(tableName, null, partitions == null ? null : new PartitionNames(false, partitions));
         BaseTableRef tableRef = new BaseTableRef(ref, exportTable, tableName);
         exportTupleDesc = desc.createTupleDescriptor();
@@ -285,7 +368,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
         } else {
             for (String columnName : columnNames) {
                 if (!nameToColumn.containsKey(columnName)) {
+<<<<<<< HEAD
                     throw new UserException("Column [" + columnName + "] does not exist in table.");
+=======
+                    throw new StarRocksException("Column [" + columnName + "] does not exist in table.");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
                 exportColumns.add(nameToColumn.get(columnName));
             }
@@ -300,7 +387,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
         desc.computeMemLayout();
     }
 
+<<<<<<< HEAD
     private void plan(ExportStmt stmt) throws UserException {
+=======
+    private void plan(ExportStmt stmt) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<PlanFragment> fragments = Lists.newArrayList();
         List<ScanNode> scanNodes = Lists.newArrayList();
 
@@ -318,7 +409,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
         genCoordinators(stmt, fragments, scanNodes);
     }
 
+<<<<<<< HEAD
     private void genTaskFragments(List<PlanFragment> fragments, List<ScanNode> scanNodes) throws UserException {
+=======
+    private void genTaskFragments(List<PlanFragment> fragments, List<ScanNode> scanNodes) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Preconditions.checkNotNull(tabletLocations);
 
         for (TScanRangeLocations tablet : tabletLocations) {
@@ -328,7 +423,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
 
         long maxBytesPerBe = Config.export_max_bytes_per_be_per_task;
+<<<<<<< HEAD
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<TScanRangeLocations> copyTabletLocations = Lists.newArrayList(tabletLocations);
         int taskIdx = 0;
         while (!copyTabletLocations.isEmpty()) {
@@ -342,7 +441,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                 long dataSize = 0L;
                 if (tabletMeta.isLakeTablet()) {
+<<<<<<< HEAD
                     Partition partition = exportTable.getPartition(tabletMeta.getPartitionId());
+=======
+                    PhysicalPartition partition = exportTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (partition != null) {
                         MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
                         if (index != null) {
@@ -372,15 +475,26 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
 
         LOG.info("total {} tablets of export job {}, and assign them to {} coordinators",
+<<<<<<< HEAD
                 tabletLocations.size(), id, fragments.size());
     }
 
     private ScanNode genScanNode() throws UserException {
+=======
+                    tabletLocations.size(), id, fragments.size());
+    }
+
+    private ScanNode genScanNode() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ScanNode scanNode = null;
         switch (exportTable.getType()) {
             case OLAP:
             case CLOUD_NATIVE:
+<<<<<<< HEAD
                 scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
+=======
+                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", warehouseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
                 ((OlapScanNode) scanNode).setCanTurnOnPreAggr(false);
@@ -391,7 +505,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 scanNode = new MysqlScanNode(new PlanNodeId(0), exportTupleDesc, (MysqlTable) this.exportTable);
                 break;
             default:
+<<<<<<< HEAD
                 throw new UserException("Unsupported table type: " + exportTable.getType());
+=======
+                throw new StarRocksException("Unsupported table type: " + exportTable.getType());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         scanNode.finalizeStats(analyzer);
@@ -400,6 +518,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
     private OlapScanNode genOlapScanNodeByLocation(List<TScanRangeLocations> locations) {
         return OlapScanNode.createOlapScanNodeByLocation(
+<<<<<<< HEAD
                 new PlanNodeId(nextId.getAndIncrement()),
                 exportTupleDesc,
                 "OlapScanNodeForExport",
@@ -407,22 +526,45 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     private PlanFragment genPlanFragment(Table.TableType type, ScanNode scanNode, int taskIdx) throws UserException {
+=======
+                    new PlanNodeId(nextId.getAndIncrement()),
+                    exportTupleDesc,
+                    "OlapScanNodeForExport",
+                    locations,
+                    warehouseId);
+    }
+
+    private PlanFragment genPlanFragment(Table.TableType type, ScanNode scanNode, int taskIdx) throws
+            StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         PlanFragment fragment = null;
         switch (exportTable.getType()) {
             case OLAP:
             case CLOUD_NATIVE:
                 fragment = new PlanFragment(
+<<<<<<< HEAD
                         new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.RANDOM);
                 break;
             case MYSQL:
                 fragment = new PlanFragment(
                         new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.UNPARTITIONED);
+=======
+                            new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.RANDOM);
+                break;
+            case MYSQL:
+                fragment = new PlanFragment(
+                            new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.UNPARTITIONED);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             default:
                 break;
         }
         if (fragment == null) {
+<<<<<<< HEAD
             throw new UserException("invalid table type:" + exportTable.getType());
+=======
+            throw new StarRocksException("invalid table type:" + exportTable.getType());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         fragment.setOutputExprs(createOutputExprs());
 
@@ -432,12 +574,20 @@ public class ExportJob implements Writable, GsonPostProcessable {
             HdfsUtil.getTProperties(exportTempPath, brokerDesc, hdfsProperties);
         }
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
+<<<<<<< HEAD
                 rowDelimiter, brokerDesc, hdfsProperties));
+=======
+                    rowDelimiter, brokerDesc, hdfsProperties));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
         } catch (Exception e) {
             LOG.info("Fragment finalize failed. e=", e);
+<<<<<<< HEAD
             throw new UserException("Fragment finalize failed");
+=======
+            throw new StarRocksException("Fragment finalize failed");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         return fragment;
@@ -457,12 +607,20 @@ public class ExportJob implements Writable, GsonPostProcessable {
         return outputExprs;
     }
 
+<<<<<<< HEAD
+=======
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private void genCoordinators(ExportStmt stmt, List<PlanFragment> fragments, List<ScanNode> nodes) {
         UUID uuid = UUID.randomUUID();
         for (int i = 0; i < fragments.size(); ++i) {
             PlanFragment fragment = fragments.get(i);
             ScanNode scanNode = nodes.get(i);
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
+<<<<<<< HEAD
             Coordinator coord = new Coordinator(
                     id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
                     TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap());
@@ -470,6 +628,14 @@ public class ExportJob implements Writable, GsonPostProcessable {
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, job query id: {}, task idx: {}, task query id: {}",
                     id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
+=======
+            Coordinator coord = getCoordinatorFactory().createBrokerExportScheduler(
+                        id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
+                        TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit(), warehouseId);
+            this.coordList.add(coord);
+            LOG.info("split export job to tasks. job id: {}, job query id: {}, task idx: {}, task query id: {}",
+                        id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         LOG.info("create {} coordinators for export job: {}", coordList.size(), id);
     }
@@ -481,12 +647,20 @@ public class ExportJob implements Writable, GsonPostProcessable {
     // Also, if the version has been compacted in one BE's tablet, coord will return 
     // 'version already been compacted' error msg, find a new replica may be able to 
     // alleviate this problem.
+<<<<<<< HEAD
     public Coordinator resetCoord(int taskIndex, TUniqueId newQueryId) throws UserException {
+=======
+    public Coordinator resetCoord(int taskIndex, TUniqueId newQueryId) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Coordinator coord = coordList.get(taskIndex);
         OlapScanNode olapScanNode = (OlapScanNode) coord.getScanNodes().get(0);
         List<TScanRangeLocations> locations = olapScanNode.getScanRangeLocations(0);
         if (locations.size() == 0) {
+<<<<<<< HEAD
             throw new UserException("SubExportTask " + taskIndex + " scan range is empty");
+=======
+            throw new StarRocksException("SubExportTask " + taskIndex + " scan range is empty");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         OlapScanNode newOlapScanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
@@ -508,10 +682,16 @@ public class ExportJob implements Writable, GsonPostProcessable {
         OlapScanNode newTaskScanNode = genOlapScanNodeByLocation(newLocations);
         PlanFragment newFragment = genPlanFragment(exportTable.getType(), newTaskScanNode, taskIndex);
 
+<<<<<<< HEAD
         Coordinator newCoord = new Coordinator(
                 id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
                 TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTime(), Maps.newHashMap());
         newCoord.setExecMemoryLimit(getMemLimit());
+=======
+        Coordinator newCoord = getCoordinatorFactory().createBrokerExportScheduler(
+                    id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
+                    TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit(), warehouseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.coordList.set(taskIndex, newCoord);
         LOG.info("reset coordinator for export job: {}, taskIdx: {}", id, taskIndex);
         return newCoord;
@@ -722,7 +902,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
         if (!isReplay) {
             GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState, stateChangeTime,
+<<<<<<< HEAD
                     snapshotPaths, exportTempPath, exportedFiles, failMsg);
+=======
+                        snapshotPaths, exportTempPath, exportedFiles, failMsg);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return true;
     }
@@ -747,11 +931,16 @@ public class ExportJob implements Writable, GsonPostProcessable {
             String host = address.getHostname();
             int port = address.getPort();
 
+<<<<<<< HEAD
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+=======
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithBePort(host, port);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (backend == null) {
                 continue;
             }
             long backendId = backend.getId();
+<<<<<<< HEAD
             if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
                 continue;
             }
@@ -759,6 +948,22 @@ public class ExportJob implements Writable, GsonPostProcessable {
             AgentClient client = new AgentClient(host, port);
             TAgentResult result = client.releaseSnapshot(snapshotPath.second);
             if (result == null || result.getStatus().getStatus_code() != TStatusCode.OK) {
+=======
+            if (!GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAvailable(backendId)) {
+                continue;
+            }
+
+            try {
+                TAgentResult result = ThriftRPCRequestExecutor.callNoRetry(
+                            ThriftConnectionPool.backendPool,
+                            new TNetworkAddress(host, port),
+                            client -> client.release_snapshot(snapshotPath.second)
+                );
+                if (result.getStatus().getStatus_code() != TStatusCode.OK) {
+                    continue;
+                }
+            } catch (TException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 continue;
             }
         }
@@ -779,8 +984,14 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
+<<<<<<< HEAD
                 ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNodeWithBePort(host, port);
                 if (!GlobalStateMgr.getCurrentSystemInfo().checkNodeAvailable(node)) {
+=======
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .getBackendOrComputeNodeWithBePort(host, port);
+                if (!GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkNodeAvailable(node)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     continue;
                 }
                 try {
@@ -792,7 +1003,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
                     lakeService.unlockTabletMetadata(request);
                 } catch (Throwable e) {
                     LOG.error("Fail to release metadata lock, job id {}, tablet id {}, version {}", id,
+<<<<<<< HEAD
                             tableId, internalScanRange.getVersion());
+=======
+                                tableId, internalScanRange.getVersion());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         }
@@ -803,9 +1018,15 @@ public class ExportJob implements Writable, GsonPostProcessable {
         return state == JobState.FINISHED || state == JobState.CANCELLED;
     }
 
+<<<<<<< HEAD
     public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws UserException {
         if (isExportDone()) {
             throw new UserException("Export job [" + queryId.toString() + "] is already finished or cancelled");
+=======
+    public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws StarRocksException {
+        if (isExportDone()) {
+            throw new StarRocksException("Export job [" + queryId.toString() + "] is already finished or cancelled");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         cancelInternal(type, msg);
@@ -824,7 +1045,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
             // cancel all running coordinators
             for (Coordinator coord : coordList) {
+<<<<<<< HEAD
                 coord.cancel();
+=======
+                coord.cancel(msg);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
 
             // try to remove exported temp files
@@ -835,7 +1060,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
                     BrokerUtil.deletePath(exportTempPath, brokerDesc);
                 }
                 LOG.info("remove export temp path success, path: {}", exportTempPath);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 LOG.warn("remove export temp path fail, path: {}", exportTempPath);
             }
             // try to remove exported files
@@ -847,7 +1076,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
                         BrokerUtil.deletePath(exportedFile, brokerDesc);
                     }
                     LOG.info("remove exported file success, path: {}", exportedFile);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     LOG.warn("remove exported file fail, path: {}", exportedFile);
                 }
             }
@@ -878,7 +1111,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
                     BrokerUtil.deletePath(exportTempPath, brokerDesc);
                 }
                 LOG.info("remove export temp path success, path: {}", exportTempPath);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 LOG.warn("remove export temp path fail, path: {}", exportTempPath);
             }
         } finally {
@@ -890,6 +1127,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
     @Override
     public String toString() {
         return "ExportJob [jobId=" + id
+<<<<<<< HEAD
                 + ", dbId=" + dbId
                 + ", tableId=" + tableId
                 + ", state=" + state
@@ -903,10 +1141,26 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 + ", tmp files=(" + StringUtils.join(exportedTempFiles, ",") + ")"
                 + ", files=(" + StringUtils.join(exportedFiles, ",") + ")"
                 + "]";
+=======
+                    + ", dbId=" + dbId
+                    + ", tableId=" + tableId
+                    + ", state=" + state
+                    + ", path=" + exportPath
+                    + ", partitions=(" + StringUtils.join(partitions, ",") + ")"
+                    + ", progress=" + progress
+                    + ", createTimeMs=" + TimeUtils.longToTimeString(createTimeMs)
+                    + ", exportStartTimeMs=" + TimeUtils.longToTimeString(startTimeMs)
+                    + ", exportFinishTimeMs=" + TimeUtils.longToTimeString(finishTimeMs)
+                    + ", failMsg=" + failMsg
+                    + ", tmp files=(" + StringUtils.join(exportedTempFiles, ",") + ")"
+                    + ", files=(" + StringUtils.join(exportedFiles, ",") + ")"
+                    + "]";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
+<<<<<<< HEAD
         // base infos
         out.writeLong(id);
         out.writeLong(dbId);
@@ -999,6 +1253,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         tableName = new TableName();
         tableName.readFields(in);
+=======
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     /**
@@ -1055,11 +1312,19 @@ public class ExportJob implements Writable, GsonPostProcessable {
         isReplayed = true;
         GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
         Database db = null;
+<<<<<<< HEAD
         if (stateMgr.getMetadata() != null) {
             db = stateMgr.getDb(dbId);
         }
         if (db != null) {
             exportTable = db.getTable(tableId);
+=======
+        if (stateMgr.getLocalMetastore() != null) {
+            db = stateMgr.getLocalMetastore().getDb(dbId);
+        }
+        if (db != null) {
+            exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -1091,11 +1356,14 @@ public class ExportJob implements Writable, GsonPostProcessable {
             out.writeLong(jobId);
             Text.writeString(out, state.name());
         }
+<<<<<<< HEAD
 
         public void readFields(DataInput in) throws IOException {
             jobId = in.readLong();
             state = JobState.valueOf(Text.readString(in));
         }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static class ExportUpdateInfo implements Writable {
@@ -1117,7 +1385,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
         public ExportUpdateInfo() {
             this.jobId = -1;
             this.state = JobState.CANCELLED;
+<<<<<<< HEAD
             this.snapshotPaths =  Lists.newArrayList();
+=======
+            this.snapshotPaths = Lists.newArrayList();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             this.exportTempPath = "";
             this.exportedFiles = Sets.newConcurrentHashSet();
             this.failMsg = new ExportFailMsg();
@@ -1167,20 +1439,36 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         public List<Pair<NetworkAddress, String>> serialize(List<Pair<TNetworkAddress, String>> snapshotPaths) {
             return snapshotPaths
+<<<<<<< HEAD
                     .stream()
                     .map(snapshotPath
                             -> Pair.create(new NetworkAddress(snapshotPath.first.hostname, snapshotPath.first.port),
                             snapshotPath.second))
                     .collect(Collectors.toList());
+=======
+                        .stream()
+                        .map(snapshotPath
+                                    -> Pair.create(new NetworkAddress(snapshotPath.first.hostname, snapshotPath.first.port),
+                                    snapshotPath.second))
+                        .collect(Collectors.toList());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         public List<Pair<TNetworkAddress, String>> deserialize(List<Pair<NetworkAddress, String>> snapshotPaths) {
             return snapshotPaths
+<<<<<<< HEAD
                     .stream()
                     .map(snapshotPath
                             -> Pair.create(new TNetworkAddress(snapshotPath.first.hostname, snapshotPath.first.port),
                             snapshotPath.second))
                     .collect(Collectors.toList());
+=======
+                        .stream()
+                        .map(snapshotPath
+                                    -> Pair.create(new TNetworkAddress(snapshotPath.first.hostname, snapshotPath.first.port),
+                                    snapshotPath.second))
+                        .collect(Collectors.toList());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -1218,8 +1506,13 @@ public class ExportJob implements Writable, GsonPostProcessable {
         @Override
         public boolean equals(Object obj) {
             return obj instanceof NetworkAddress
+<<<<<<< HEAD
                     && this.hostname.equals(((NetworkAddress) obj).hostname)
                     && this.port == ((NetworkAddress) obj).port;
+=======
+                        && NetUtils.isSameIP(this.hostname, ((NetworkAddress) obj).hostname)
+                        && this.port == ((NetworkAddress) obj).port;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         @Override
@@ -1229,7 +1522,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         @Override
         public String toString() {
+<<<<<<< HEAD
             return hostname + ":" + port;
+=======
+            return NetUtils.getHostPortInAccessibleFormat(hostname, port);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 }

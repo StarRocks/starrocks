@@ -142,8 +142,16 @@ std::string generate_uuid_string();
 /// generates a 16 byte UUID
 TUniqueId generate_uuid();
 
+<<<<<<< HEAD
 std::ostream& operator<<(std::ostream& os, const UniqueId& uid);
 
+=======
+bool parse_id(const std::string& s, TUniqueId* id);
+
+std::ostream& operator<<(std::ostream& os, const UniqueId& uid);
+
+std::string print_id(const UniqueId& id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 std::string print_id(const TUniqueId& id);
 std::string print_id(const PUniqueId& id);
 

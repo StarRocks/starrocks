@@ -428,6 +428,7 @@ void RowReaderImpl::loadStripeIndex() {
 
     // obtain row indexes for selected columns
     uint64_t offset = currentStripeInfo.offset();
+<<<<<<< HEAD
 
     // usually row index size is small.
     uint64_t rowIndexSize = currentStripeInfo.indexlength();
@@ -436,6 +437,11 @@ void RowReaderImpl::loadStripeIndex() {
         const proto::Stream& pbStream = currentStripeFooter.streams(i);
         uint64_t colId = pbStream.column();
         // We only need to load active column's RowIndex
+=======
+    for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {
+        const proto::Stream& pbStream = currentStripeFooter.streams(i);
+        uint64_t colId = pbStream.column();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (selectedColumns[colId] && pbStream.has_kind() &&
             (pbStream.kind() == proto::Stream_Kind_ROW_INDEX ||
              pbStream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
@@ -1019,7 +1025,24 @@ void RowReaderImpl::buildIORanges(std::vector<InputStream::IORange>* io_ranges) 
         uint64_t length = stream.length();
         // ColumnId = 0 is root column, we always need it
         if (columnId == 0 || selectedColumns[columnId] || lazyLoadColumns[columnId]) {
+<<<<<<< HEAD
             io_ranges->emplace_back(InputStream::IORange{.offset = offset, .size = length});
+=======
+            bool is_active = true;
+
+            // We didn't support stripe index lazy load, so we will regard all index stream as active column
+            bool is_stripe_index = false;
+            if (stream.has_kind() && (stream.kind() == proto::Stream_Kind_ROW_INDEX ||
+                                      stream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
+                is_stripe_index = true;
+            }
+
+            // we only seperate io range for column's data, don't include column's index
+            if (!is_stripe_index && lazyLoadColumns[columnId]) {
+                is_active = false;
+            }
+            io_ranges->emplace_back(InputStream::IORange{.offset = offset, .size = length, .is_active = is_active});
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         offset += length;
     }
@@ -1029,7 +1052,11 @@ void RowReaderImpl::startNextStripe() {
     reader.reset(); // ColumnReaders use lots of memory; free old memory first
     rowIndexes.clear();
     bloomFilterIndex.clear();
+<<<<<<< HEAD
     bool streamIORangesEnabled = contents->stream->isIORangesEnabled();
+=======
+    const bool isIOCoalesceEnabled = contents->stream->isIOCoalesceEnabled();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // evaluate file statistics if it exists
     if (sargsApplier && !sargsApplier->evaluateFileStatistics(*footer, numRowGroupsInStripeRange)) {
@@ -1053,6 +1080,7 @@ void RowReaderImpl::startNextStripe() {
             throw ParseError(msg.str());
         }
 
+<<<<<<< HEAD
         bool skipStripe = false;
         if (sargsApplier && sargsApplier->getRowReaderFilter()) {
             if (sargsApplier->getRowReaderFilter()->filterOnOpeningStripe(currentStripe, &currentStripeInfo)) {
@@ -1069,12 +1097,52 @@ void RowReaderImpl::startNextStripe() {
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
         rowsInCurrentStripe = currentStripeInfo.numberofrows();
         if (streamIORangesEnabled) {
+=======
+        rowsInCurrentStripe = currentStripeInfo.numberofrows();
+
+        bool skipStripe = false;
+        bool skipStripeByScanRangeMisMatch = false;
+        if (sargsApplier) {
+            // check is existed RowReaderFilter
+            if (sargsApplier->getRowReaderFilter() &&
+                sargsApplier->getRowReaderFilter()->filterOnOpeningStripe(currentStripe, &currentStripeInfo)) {
+                skipStripe = true;
+                skipStripeByScanRangeMisMatch = true;
+                goto end;
+            }
+
+            // TODO(SmithCruise)
+            // We should contribute this code to apache-orc, we need to eval stripe's stats before load stripe footer
+            // Because If this stripe can skip by stripe's stats, we don't need to load stripe's footer anymore
+            // Stripe's stats is placed in orc tail's metadata
+            if (contents->metadata) {
+                const auto& currentStripeStats = contents->metadata->stripestats(static_cast<int>(currentStripe));
+                // skip this stripe after stats fail to satisfy sargs
+                uint64_t stripeRowGroupCount =
+                        (rowsInCurrentStripe + footer->rowindexstride() - 1) / footer->rowindexstride();
+                if (!sargsApplier->evaluateStripeStatistics(currentStripeStats, stripeRowGroupCount)) {
+                    skipStripe = true;
+                    goto end;
+                }
+            }
+        }
+
+        // release previous stripe's io ranges
+        if (isIOCoalesceEnabled) {
+            contents->stream->releaseToOffset(currentStripeInfo.offset());
+        }
+        currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
+        // We need to check this stripe is already set in shared buffer(tiny stripe optimize) to avoid shared buffer overlap
+        if (isIOCoalesceEnabled &&
+            !contents->stream->isAlreadyCollectedInSharedBuffer(currentStripeInfo.offset(), stripeSize)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             std::vector<InputStream::IORange> io_ranges;
             buildIORanges(&io_ranges);
             contents->stream->setIORanges(io_ranges);
         }
 
         if (sargsApplier) {
+<<<<<<< HEAD
             bool isStripeNeeded = true;
             if (contents->metadata) {
                 const auto& currentStripeStats = contents->metadata->stripestats(static_cast<int>(currentStripe));
@@ -1088,6 +1156,8 @@ void RowReaderImpl::startNextStripe() {
                 goto end;
             }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // read row group statistics and bloom filters of current stripe
             loadStripeIndex();
 
@@ -1142,6 +1212,15 @@ void RowReaderImpl::startNextStripe() {
             // advance to next stripe when current stripe has no matching rows
             currentStripe += 1;
             currentRowInStripe = 0;
+<<<<<<< HEAD
+=======
+
+            // We do not count the skipped stripes because the scan range does not match
+            if (!skipStripeByScanRangeMisMatch && contents->stream->get_lazy_column_coalesce_counter() != nullptr) {
+                // Skip entrie stripe, which means we didn't need to coalesce active and lazy column together
+                contents->stream->get_lazy_column_coalesce_counter()->fetch_sub(1, std::memory_order_relaxed);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             break;
         }
@@ -1444,7 +1523,10 @@ std::unique_ptr<Reader> createReader(std::unique_ptr<InputStream> stream, const 
             throw ParseError("File size too small");
         }
         std::unique_ptr<DataBuffer<char>> buffer(new DataBuffer<char>(*contents->pool, readSize));
+<<<<<<< HEAD
         stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_FILE, 0, fileLength);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         stream->read(buffer->data(), readSize, fileLength - readSize);
 
         postscriptLength = buffer->data()[readSize - 1] & 0xff;
@@ -1551,6 +1633,7 @@ uint64_t InputStream::getNaturalReadSizeAfterSeek() const {
     return 128 * 1024;
 }
 
+<<<<<<< HEAD
 void InputStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {}
 
 bool InputStream::isIORangesEnabled() const {
@@ -1561,4 +1644,26 @@ void InputStream::clearIORanges() {}
 
 void InputStream::setIORanges(std::vector<InputStream::IORange>& io_ranges) {}
 
+=======
+bool InputStream::isIOCoalesceEnabled() const {
+    return false;
+}
+
+bool InputStream::isIOAdaptiveCoalesceEnabled() const {
+    return false;
+}
+
+bool InputStream::isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const {
+    return false;
+}
+
+void InputStream::releaseToOffset(const int64_t offset) {}
+
+void InputStream::setIORanges(std::vector<InputStream::IORange>& io_ranges) {}
+
+std::atomic<int32_t>* InputStream::get_lazy_column_coalesce_counter() {
+    return nullptr;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace orc

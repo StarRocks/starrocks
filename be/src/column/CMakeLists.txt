@@ -16,6 +16,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
 add_library(Column STATIC
         array_column.cpp
+<<<<<<< HEAD
+=======
+        array_view_column.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         adaptive_nullable_column.cpp
         chunk.cpp
         chunk_extra_data.cpp

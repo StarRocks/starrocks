@@ -25,10 +25,14 @@ PROPERTIES ("key"="value"[, ...])
 
 ### resource_name
 
+<<<<<<< HEAD
 资源名称。命名要求如下：
 
 - 必须由数字(0-9)、下划线(_)或字母(a-z或A-Z)组成，且只能以字母开头。
 - 总长度不能超过 64 个字符。
+=======
+资源名称。命名要求参见[系统限制](../../System_limit.md)。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ### PROPERTIES
 

@@ -24,9 +24,16 @@
             "items": [
                 "quick_start/shared-nothing",
                 "quick_start/shared-data",
+<<<<<<< HEAD
                 "quick_start/deploy_with_docker",
                 "quick_start/Create_table",
                 "quick_start/Import_and_query"
+=======
+                "quick_start/iceberg",
+                "quick_start/hudi",
+                "quick_start/routine-load",
+                "quick_start/helm"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ]
         },
         {
@@ -65,6 +72,13 @@
                 {
                     "type": "category",
                     "label": "Shared-nothing deployment",
+<<<<<<< HEAD
+=======
+                    "link": {
+                        "type": "doc",
+                        "id": "cover_pages/shared_nothing_deployment"
+                    },
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "items": [
                         "deployment/deploy_manually",
                         "deployment/sr_operator",
@@ -74,6 +88,7 @@
                 {
                     "type": "category",
                     "label": "Shared-data deployment",
+<<<<<<< HEAD
                     "items": [
                         "deployment/deploy_shared_data",
                         "deployment/shared_data/s3",
@@ -81,6 +96,20 @@
                         "deployment/shared_data/azure",
                         "deployment/shared_data/minio",
                         "deployment/shared_data/competence_boundary-shared-data"
+=======
+                    "link": {
+                        "type": "doc",
+                        "id": "deployment/shared_data/shared_data"
+                    },
+                    "items": [
+                        "deployment/shared_data/s3",
+                        "deployment/shared_data/gcs",
+                        "deployment/shared_data/azure",
+                        "deployment/shared_data/other",
+                        "deployment/shared_data/minio",
+                        "deployment/shared_data/hdfs",
+                        "deployment/shared_data/feature-support-shared-data"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     ]
                 },
                 {
@@ -116,11 +145,32 @@
             "label": "Data Loading",
             "link": {
                 "type": "doc",
+<<<<<<< HEAD
                 "id": "loading/Loading_intro"
+=======
+                "id": "loading/loading"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             },
             "items": [
                 {
                     "type": "category",
+<<<<<<< HEAD
+=======
+                    "label": "Loading overview",
+                    "link": {
+                        "type": "doc",
+                        "id": "loading/loading_introduction/loading_overview"
+                    },
+                    "items": [
+                        "loading/Loading_intro",
+                        "loading/loading_introduction/loading_concepts",
+                        "loading/loading_introduction/loading_considerations",
+                        "loading/loading_introduction/feature-support-loading-and-unloading"
+                    ]
+                },
+                {
+                    "type": "category",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "label": "Load from Object Storage",
                     "link": {
                         "type": "doc",
@@ -130,7 +180,11 @@
                         "loading/s3",
                         "loading/azure",
                         "loading/gcs",
+<<<<<<< HEAD
                         "loading/cloud_storage_load"
+=======
+                        "loading/minio"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     ]
                 },
                 "loading/StreamLoad",
@@ -166,8 +220,13 @@
                 "loading/Flink-connector-starrocks",
                 "loading/Load_to_Primary_Key_tables",
                 "loading/Etl_in_loading",
+<<<<<<< HEAD
                 "loading/load_concept/strict_mode",
                 "loading/loading_introduction/feature-support-loading-and-unloading"
+=======
+                "loading/loading_tools",
+                "loading/load_concept/strict_mode"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ]
         },
         {
@@ -181,12 +240,20 @@
                 "unloading/Export",
                 "unloading/Spark_connector",
                 "unloading/Flink_connector",
+<<<<<<< HEAD
+=======
+                "unloading/unload_using_insert_into_files",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "unloading/feature-support-loading-and-unloading"
             ]
         },
         {
             "type": "category",
+<<<<<<< HEAD
             "label": "Query Data Lakes",
+=======
+            "label": "Data Lakes",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             "link": {
                 "type": "doc",
                 "id": "data_source/data_lakes"
@@ -209,12 +276,37 @@
                         "data_source/catalog/jdbc_catalog",
                         "data_source/catalog/elasticsearch_catalog",
                         "data_source/catalog/paimon_catalog",
+<<<<<<< HEAD
                         "data_source/catalog/query_external_data"
                     ]
                 },
                 "data_source/External_table",
                 "data_source/file_external_table",
                 "data_source/data_cache",
+=======
+                        "data_source/catalog/unified_catalog",
+                        "data_source/catalog/maxcompute_catalog",
+                        "data_source/catalog/kudu_catalog",
+                        "data_source/icebergtutorial",
+                        "data_source/catalog/query_external_data"
+                    ]
+                },
+                {
+                    "type": "category",
+                    "label": "Data cache",
+                    "link": {
+                        "type": "doc",
+                        "id": "cover_pages/data_cache"
+                    },
+                    "items": [
+                        "data_source/data_cache",
+                        "data_source/data_cache_warmup",
+                        "data_source/data_cache_observe"
+                    ]
+                },
+                "data_source/External_table",
+                "data_source/file_external_table",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "data_source/datalake_faq",
                 "data_source/feature-support-data-lake-analytics"
             ]
@@ -241,9 +333,100 @@
                 "id": "integrations/integrations"
             },
             "items": [
+<<<<<<< HEAD
                 "integrations/authenticate_to_aws_resources",
                 "integrations/authenticate_to_azure_storage",
                 "integrations/authenticate_to_gcs",
+=======
+                {
+                    "type": "category",
+                    "label": "Cloud Authentication",
+                    "description": "Use AWS, Azure, or GCP authentication",
+                    "link": {
+                        "type": "doc",
+                        "id": "cover_pages/csp_auth"
+                    },
+                    "items": [
+                        "integrations/authenticate_to_aws_resources",
+                        "integrations/authenticate_to_azure_storage",
+                        "integrations/authenticate_to_gcs"
+                    ]
+                },
+                "integrations/data_lakes",
+                {
+                    "type": "category",
+                    "label": "Streaming Data",
+                    "description": "Stream with Kafka, Flink, and StarRocks tools",
+                    "link": {
+                        "type": "doc",
+                        "id": "integrations/streaming"
+                    },
+                    "items": [
+                        "integrations/streaming/flink",
+                        {
+                            "type": "category",
+                            "label": "Apache Kafka",
+                            "description": "Streaming from Kafka",
+                            "link": {
+                                "type": "doc",
+                                "id": "integrations/streaming/apache_kafka"
+                            },
+                            "items": [
+                                "integrations/streaming/kafka/Kafka-connector-starrocks",
+                                "integrations/streaming/kafka/RoutineLoad",
+                                "loading/automq-routine-load"
+                            ]
+                        },
+                        {
+                            "type": "category",
+                            "label": "StarRocks Pipe",
+                            "description": "Pipe: Ideal for continuous loading at scale",
+                            "link": {
+                                "type": "doc",
+                                "id": "integrations/streaming/pipe"
+                            },
+                            "items": [
+                                "integrations/streaming/pipe/hdfs",
+                                "integrations/streaming/pipe/s3"
+                            ]
+                        },
+                        "integrations/streaming/rising_wave"
+                    ]
+                },
+                {
+                    "type": "category",
+                    "label": "Batch Loading Data",
+                    "description": "Batch loading and data transformation",
+                    "link": {
+                        "type": "doc",
+                        "id": "cover_pages/batch_loading_integration"
+                    },
+                    "items": [
+                        "integrations/batch/Spark-connector-starrocks",
+                        "integrations/batch/SparkLoad"
+                    ]
+                },
+                {
+                    "type": "category",
+                    "label": "Loading Tools",
+                    "description": "Integrations with more loading tools",
+                    "link": {
+                        "type": "doc",
+                        "id": "integrations/loading_tools/loading_tools_integration"
+                    },
+                    "items": [
+                        "integrations/loading_tools/SMT",
+                        "integrations/loading_tools/DataX-starrocks-writer",
+                        "integrations/loading_tools/CloudCanal",
+                        {
+                            "type": "link",
+                            "label": "Kettle connector",
+                            "description": "Integrations with Kettle",
+                            "href": "https://github.com/StarRocks/starrocks-connector-for-kettle"
+                        }
+                    ]
+                },
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 {
                     "type": "category",
                     "label": "BI Tools",
@@ -257,7 +440,12 @@
                         "integrations/BI_integrations/Hex",
                         "integrations/BI_integrations/Querybook",
                         "integrations/BI_integrations/QuickBI",
+<<<<<<< HEAD
                         "integrations/BI_integrations/Tableau_Desktop"
+=======
+                        "integrations/BI_integrations/Tableau_Desktop",
+                        "integrations/BI_integrations/Metabase"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     ]
                 },
                 {
@@ -274,7 +462,20 @@
                         "integrations/IDE_integrations/jupysql"
                     ]
                 },
+<<<<<<< HEAD
                 "integrations/other_integrations/intro"
+=======
+                {
+                    "type": "doc",
+                    "id": "integrations/other_integrations/datadog_support"
+                },
+                {
+                    "type": "link",
+                    "label": "DBT",
+                    "description": "Modeling and transformation with DBT",
+                    "href": "https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ]
         },
         {
@@ -306,6 +507,10 @@
                     },
                     "items": [
                         "administration/management/Scale_up_down",
+<<<<<<< HEAD
+=======
+                        "administration/management/BE_blacklist",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         "administration/management/Backup_and_restore",
                         {
                             "type": "category",
@@ -424,6 +629,10 @@
                         "faq/Exporting_faq"
                     ]
                 },
+<<<<<<< HEAD
+=======
+                "faq/datalake",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "faq/Sql_faq",
                 "faq/Dump_query",
                 "faq/Others"

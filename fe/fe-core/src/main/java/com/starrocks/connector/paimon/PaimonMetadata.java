@@ -23,11 +23,25 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
+<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.statistics.StatisticsUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -36,18 +50,25 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+<<<<<<< HEAD
 import org.apache.hadoop.hive.common.FileUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
+<<<<<<< HEAD
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.options.Options;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
+<<<<<<< HEAD
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
@@ -56,6 +77,19 @@ import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.RowType;
+=======
+import org.apache.paimon.table.source.ReadBuilder;
+import org.apache.paimon.table.source.Split;
+import org.apache.paimon.table.system.PartitionsTable;
+import org.apache.paimon.table.system.SchemasTable;
+import org.apache.paimon.table.system.SnapshotsTable;
+import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.DataTypeChecks;
+import org.apache.paimon.types.DateType;
+import org.apache.paimon.types.RowType;
+import org.apache.paimon.utils.DateTimeUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,6 +104,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Catalog paimonNativeCatalog;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
+<<<<<<< HEAD
     private final Options paimonOptions;
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
@@ -81,6 +116,20 @@ public class PaimonMetadata implements ConnectorMetadata {
         this.hdfsEnvironment = hdfsEnvironment;
         this.paimonOptions = paimonOptions;
         this.catalogName = catalogName;
+=======
+    private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
+    private final Map<String, Database> databases = new ConcurrentHashMap<>();
+    private final Map<PaimonFilter, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
+    private final Map<String, Long> partitionInfos = new ConcurrentHashMap<>();
+    private final ConnectorProperties properties;
+
+    public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
+                          ConnectorProperties properties) {
+        this.paimonNativeCatalog = paimonNativeCatalog;
+        this.hdfsEnvironment = hdfsEnvironment;
+        this.catalogName = catalogName;
+        this.properties = properties;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -102,6 +151,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName) {
         Identifier identifier = new Identifier(databaseName, tableName);
@@ -133,6 +183,82 @@ public class PaimonMetadata implements ConnectorMetadata {
             partitionNames.add(partitionName);
         }
         return partitionNames;
+=======
+    private void updatePartitionInfo(String databaseName, String tableName) {
+        Identifier identifier = new Identifier(databaseName, tableName);
+        org.apache.paimon.table.Table paimonTable;
+        RowType dataTableRowType;
+        try {
+            paimonTable = this.paimonNativeCatalog.getTable(identifier);
+            dataTableRowType = paimonTable.rowType();
+        } catch (Catalog.TableNotExistException e) {
+            throw new StarRocksConnectorException(String.format("Paimon table %s.%s does not exist.", databaseName, tableName));
+        }
+        List<String> partitionColumnNames = paimonTable.partitionKeys();
+        if (partitionColumnNames.isEmpty()) {
+            return;
+        }
+
+        List<DataType> partitionColumnTypes = new ArrayList<>();
+        for (String partitionColumnName : partitionColumnNames) {
+            partitionColumnTypes.add(dataTableRowType.getTypeAt(dataTableRowType.getFieldIndex(partitionColumnName)));
+        }
+
+        Identifier partitionTableIdentifier = new Identifier(databaseName, String.format("%s%s", tableName, "$partitions"));
+        RecordReaderIterator<InternalRow> iterator = null;
+        try {
+            PartitionsTable table = (PartitionsTable) paimonNativeCatalog.getTable(partitionTableIdentifier);
+            RowType partitionTableRowType = table.rowType();
+            DataType lastUpdateTimeType = partitionTableRowType.getTypeAt(partitionTableRowType
+                    .getFieldIndex("last_update_time"));
+            int[] projected = new int[] {0, 4};
+            RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected)
+                    .newRead().createReader(table.newScan().plan());
+            iterator = new RecordReaderIterator<>(recordReader);
+            while (iterator.hasNext()) {
+                InternalRow rowData = iterator.next();
+                String partition = rowData.getString(0).toString();
+                org.apache.paimon.data.Timestamp lastUpdateTime = rowData.getTimestamp(1,
+                        DataTypeChecks.getPrecision(lastUpdateTimeType));
+                String[] partitionValues = partition.replace("[", "").replace("]", "")
+                        .split(",");
+                if (partitionValues.length != partitionColumnNames.size()) {
+                    String errorMsg = String.format("The length of partitionValues %s is not equal to " +
+                            "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
+                    throw new IllegalArgumentException(errorMsg);
+                }
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < partitionValues.length; i++) {
+                    String column = partitionColumnNames.get(i);
+                    String value = partitionValues[i].trim();
+                    if (partitionColumnTypes.get(i) instanceof DateType) {
+                        value = DateTimeUtils.formatDate(Integer.parseInt(value));
+                    }
+                    sb.append(column).append("=").append(value);
+                    sb.append("/");
+                }
+                sb.deleteCharAt(sb.length() - 1);
+                String partitionName = sb.toString();
+                this.partitionInfos.put(partitionName, lastUpdateTime.getMillisecond());
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
+        } finally {
+            if (iterator != null) {
+                try {
+                    iterator.close();
+                } catch (Exception e) {
+                    LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
+                }
+            }
+        }
+    }
+
+    @Override
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+        updatePartitionInfo(databaseName, tableName);
+        return new ArrayList<>(this.partitionInfos.keySet());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -145,7 +271,11 @@ public class PaimonMetadata implements ConnectorMetadata {
             databases.put(dbName, db);
             return db;
         } else {
+<<<<<<< HEAD
             LOG.error("Paimon database {}.{} done not exist.", catalogName, dbName);
+=======
+            LOG.error("Paimon database {}.{} does not exist.", catalogName, dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return null;
         }
     }
@@ -160,7 +290,11 @@ public class PaimonMetadata implements ConnectorMetadata {
         try {
             paimonNativeTable = this.paimonNativeCatalog.getTable(identifier);
         } catch (Catalog.TableNotExistException e) {
+<<<<<<< HEAD
             LOG.error("Paimon table {}.{} does not exist.", dbName, tblName);
+=======
+            LOG.error("Paimon table {}.{} does not exist.", dbName, tblName, e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return null;
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
@@ -169,6 +303,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             String fieldName = field.name();
             DataType type = field.type();
             Type fieldType = ColumnTypeConverter.fromPaimonType(type);
+<<<<<<< HEAD
             Column column = new Column(fieldName, fieldType, true);
             fullSchema.add(column);
         }
@@ -180,11 +315,24 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         PaimonTable table = new PaimonTable(this.catalogName, dbName, tblName, fullSchema,
                 this.paimonOptions, paimonNativeTable, createTime);
+=======
+            Column column = new Column(fieldName, fieldType, true, field.description());
+            fullSchema.add(column);
+        }
+        long createTime = this.getTableCreateTime(dbName, tblName);
+        String comment = "";
+        if (paimonNativeTable.comment().isPresent()) {
+            comment = paimonNativeTable.comment().get();
+        }
+        PaimonTable table = new PaimonTable(this.catalogName, dbName, tblName, fullSchema, paimonNativeTable, createTime);
+        table.setComment(comment);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         tables.put(identifier, table);
         return table;
     }
 
     @Override
+<<<<<<< HEAD
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                    long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
@@ -194,15 +342,41 @@ public class PaimonMetadata implements ConnectorMetadata {
             ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
             int[] projected = fieldNames.stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, predicate);
+=======
+    public boolean tableExists(String dbName, String tableName) {
+        return paimonNativeCatalog.tableExists(Identifier.create(dbName, tableName));
+    }
+
+    @Override
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
+        PaimonTable paimonTable = (PaimonTable) table;
+        PaimonFilter filter =
+                new PaimonFilter(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(), params.getPredicate(),
+                        params.getFieldNames());
+        if (!paimonSplits.containsKey(filter)) {
+            ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
+            int[] projected =
+                    params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
+            List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             List<Split> splits = readBuilder.withFilter(predicates).withProjection(projected).newScan().plan().splits();
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
             paimonSplits.put(filter, paimonSplitsInfo);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
+<<<<<<< HEAD
                     RemoteFileDesc.createPamonRemoteFileDesc(paimonSplitsInfo));
             remoteFileInfo.setFiles(remoteFileDescs);
         } else {
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
                     RemoteFileDesc.createPamonRemoteFileDesc(paimonSplits.get(filter)));
+=======
+                    PaimonRemoteFileDesc.createPamonRemoteFileDesc(paimonSplitsInfo));
+            remoteFileInfo.setFiles(remoteFileDescs);
+        } else {
+            List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
+                    PaimonRemoteFileDesc.createPamonRemoteFileDesc(paimonSplits.get(filter)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             remoteFileInfo.setFiles(remoteFileDescs);
         }
 
@@ -214,16 +388,33 @@ public class PaimonMetadata implements ConnectorMetadata {
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
+<<<<<<< HEAD
                                          ScalarOperator predicate) {
+=======
+                                         ScalarOperator predicate,
+                                         long limit,
+                                         TableVersionRange versionRange) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
+            return StatisticsUtils.buildDefaultStatistics(columns.keySet());
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
 
         List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
+<<<<<<< HEAD
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 catalogName, table, null, -1, predicate, fieldNames);
         RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+=======
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit).build();
+        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
+        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
         long rowCount = getRowCount(splits);
         if (rowCount == 0) {
@@ -235,11 +426,18 @@ public class PaimonMetadata implements ConnectorMetadata {
         return builder.build();
     }
 
+<<<<<<< HEAD
     long getRowCount(List<? extends Split> splits) {
         long rowCount = 0;
         for (Split split : splits) {
             DataSplit dataSplit = (DataSplit) split;
             rowCount += dataSplit.dataFiles().stream().map(DataFileMeta::rowCount).reduce(0L, Long::sum);
+=======
+    public static long getRowCount(List<? extends Split> splits) {
+        long rowCount = 0;
+        for (Split split : splits) {
+            rowCount += split.rowCount();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return rowCount;
     }
@@ -258,40 +456,141 @@ public class PaimonMetadata implements ConnectorMetadata {
         return predicates;
     }
 
+<<<<<<< HEAD
     public long getTableCreateTime(String dbName, String tblName) throws Exception {
         Identifier sysIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$schemas"));
         RecordReaderIterator<InternalRow> iterator = null;
         try {
             SchemasTable table = (SchemasTable) paimonNativeCatalog.getTable(sysIdentifier);
+=======
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return hdfsEnvironment.getCloudConfiguration();
+    }
+
+    public long getTableCreateTime(String dbName, String tblName) {
+        Identifier schemaTableIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$schemas"));
+        RecordReaderIterator<InternalRow> iterator = null;
+        try {
+            SchemasTable table = (SchemasTable) paimonNativeCatalog.getTable(schemaTableIdentifier);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             RowType rowType = table.rowType();
             if (!rowType.getFieldNames().contains("update_time")) {
                 return 0;
             }
+<<<<<<< HEAD
             int[] projected = new int[] {0, 6};
             PredicateBuilder predicateBuilder = new PredicateBuilder(rowType);
             Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0);
             RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected).
                     withFilter(equal).newRead().createReader(table.newScan().plan());
+=======
+            DataType updateTimeType = rowType.getTypeAt(rowType.getFieldIndex("update_time"));
+            int[] projected = new int[] {0, 6};
+            PredicateBuilder predicateBuilder = new PredicateBuilder(rowType);
+            Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0);
+            RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected)
+                    .withFilter(equal).newRead().createReader(table.newScan().plan());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             iterator = new RecordReaderIterator<>(recordReader);
             while (iterator.hasNext()) {
                 InternalRow rowData = iterator.next();
                 Long schemaIdValue = rowData.getLong(0);
+<<<<<<< HEAD
                 org.apache.paimon.data.Timestamp updateTime = rowData.getTimestamp(1, 3);
+=======
+                org.apache.paimon.data.Timestamp updateTime = rowData
+                        .getTimestamp(1, DataTypeChecks.getPrecision(updateTimeType));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (schemaIdValue == 0) {
                     return updateTime.getMillisecond();
                 }
             }
         } catch (Exception e) {
+<<<<<<< HEAD
             LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
         } finally {
             if (iterator != null) {
                 iterator.close();
+=======
+            LOG.error("Failed to get update_time of paimon table {}.{}.", dbName, tblName, e);
+        } finally {
+            if (iterator != null) {
+                try {
+                    iterator.close();
+                } catch (Exception e) {
+                    LOG.error("Failed to get update_time of paimon table {}.{}.", dbName, tblName, e);
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         return 0;
     }
 
+<<<<<<< HEAD
     public CloudConfiguration getCloudConfiguration() {
         return hdfsEnvironment.getCloudConfiguration();
+=======
+    public long getTableUpdateTime(String dbName, String tblName) {
+        Identifier snapshotsTableIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$snapshots"));
+        RecordReaderIterator<InternalRow> iterator = null;
+        long lastCommitTime = -1;
+        try {
+            SnapshotsTable table = (SnapshotsTable) paimonNativeCatalog.getTable(snapshotsTableIdentifier);
+            RowType rowType = table.rowType();
+            if (!rowType.getFieldNames().contains("commit_time")) {
+                return System.currentTimeMillis();
+            }
+            DataType commitTimeType = rowType.getTypeAt(rowType.getFieldIndex("commit_time"));
+            int[] projected = new int[] {5};
+            RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected)
+                    .newRead().createReader(table.newScan().plan());
+            iterator = new RecordReaderIterator<>(recordReader);
+            while (iterator.hasNext()) {
+                InternalRow rowData = iterator.next();
+                org.apache.paimon.data.Timestamp commitTime = rowData
+                        .getTimestamp(0, DataTypeChecks.getPrecision(commitTimeType));
+                if (commitTime.getMillisecond() > lastCommitTime) {
+                    lastCommitTime = commitTime.getMillisecond();
+                }
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to get commit_time of paimon table {}.{}.", dbName, tblName, e);
+        } finally {
+            if (iterator != null) {
+                try {
+                    iterator.close();
+                } catch (Exception e) {
+                    LOG.error("Failed to get commit_time of paimon table {}.{}.", dbName, tblName, e);
+                }
+            }
+        }
+        if (lastCommitTime == -1) {
+            lastCommitTime = System.currentTimeMillis();
+        }
+        return lastCommitTime;
+    }
+
+    @Override
+    public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
+        PaimonTable paimonTable = (PaimonTable) table;
+        List<PartitionInfo> result = new ArrayList<>();
+        if (table.isUnPartitioned()) {
+            result.add(new Partition(paimonTable.getCatalogTableName(),
+                    this.getTableUpdateTime(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName())));
+            return result;
+        }
+        for (String partitionName : partitionNames) {
+            if (this.partitionInfos.get(partitionName) == null) {
+                this.updatePartitionInfo(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+            }
+            if (this.partitionInfos.get(partitionName) != null) {
+                result.add(new Partition(partitionName, this.partitionInfos.get(partitionName)));
+            } else {
+                LOG.warn("Cannot find the paimon partition info: {}", partitionName);
+            }
+        }
+        return result;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

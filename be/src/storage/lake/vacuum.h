@@ -38,6 +38,11 @@ void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, Va
 //  - response != NULL
 void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& request, DeleteTabletResponse* response);
 
+<<<<<<< HEAD
+=======
+void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& request, DeleteTxnLogResponse* response);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // Batch delete files.
 // REQUIRE: All files in |paths| have the same file system scheme.
 Status delete_files(const std::vector<std::string>& paths);

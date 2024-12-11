@@ -29,4 +29,11 @@ public abstract class AnalyzeTypeDesc implements ParseNode {
     public NodePosition getPos() {
         return pos;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean isHistogram() {
+        return false;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

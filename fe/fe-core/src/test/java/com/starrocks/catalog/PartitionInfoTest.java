@@ -46,7 +46,11 @@ public class PartitionInfoTest {
         { // ListPartitionInfo
             ListPartitionInfo info =
                     new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList(new Column("c0", Type.BIGINT)));
+<<<<<<< HEAD
             info.addPartition(partitionId, dataProperty, replicationNum, inMemory, dataCacheInfo, null, null);
+=======
+            info.addPartition(null, partitionId, dataProperty, replicationNum, inMemory, dataCacheInfo, null, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             validatePartitionInfo(info, partitionId);
         }
         { // SinglePartitionInfo

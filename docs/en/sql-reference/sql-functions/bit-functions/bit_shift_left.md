@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bit_shift_left
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Shifts the binary representation of a numeric expression to the left by a specified number of bits.
 

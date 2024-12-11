@@ -1732,6 +1732,7 @@ void RowConverter::convert(std::vector<Datum>* dst, const std::vector<Datum>& sr
     }
 }
 
+<<<<<<< HEAD
 Status ChunkConverter::init(const Schema& in_schema, const Schema& out_schema) {
     DCHECK_EQ(in_schema.num_fields(), out_schema.num_fields());
     DCHECK_EQ(in_schema.num_key_fields(), out_schema.num_key_fields());
@@ -1778,4 +1779,6 @@ std::unique_ptr<Chunk> ChunkConverter::move_convert(Chunk* from) const {
     return dest;
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

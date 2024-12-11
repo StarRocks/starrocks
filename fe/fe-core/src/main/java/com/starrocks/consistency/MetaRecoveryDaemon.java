@@ -21,12 +21,21 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PartitionVersionRecoveryInfo.PartitionVersion;
 import com.starrocks.server.GlobalStateMgr;
@@ -68,14 +77,25 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
         List<PartitionVersion> partitionsToRecover = new ArrayList<>();
         List<Long> dbIds = stateMgr.getLocalMetastore().getDbIds();
         for (long dbId : dbIds) {
+<<<<<<< HEAD
             Database database = stateMgr.getDb(dbId);
+=======
+            Database database = stateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (database == null || database.isSystemDatabase()) {
                 continue;
             }
 
+<<<<<<< HEAD
             database.readLock();
             try {
                 for (Table table : database.getTables()) {
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(database.getId(), LockType.READ);
+            try {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (!table.isOlapTableOrMaterializedView()) {
                         continue;
                     }
@@ -84,6 +104,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
 
                     for (Partition partition : olapTable.getAllPartitions()) {
                         short replicaNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
+<<<<<<< HEAD
                         long recoverVersion = -1L;
                         // commonVersion is used to record all replica versions on this partition.
                         // key is the version, value is a flag means whether this version is existing on all tablets.
@@ -127,10 +148,59 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                                     for (Map.Entry<Long, Boolean> entry : commonVersion.entrySet()) {
                                         if (!replicaVersions.contains(entry.getKey())) {
                                             entry.setValue(false);
+=======
+
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            long recoverVersion = -1L;
+                            // commonVersion is used to record all replica versions on this partition.
+                            // key is the version, value is a flag means whether this version is existing on all tablets.
+                            Map<Long, Boolean> commonVersion = new HashMap<>();
+                            StringBuilder info = new StringBuilder();
+                            boolean isFirstTablet = true;
+                            boolean foundCommonVersion = true;
+                            for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(
+                                    MaterializedIndex.IndexExtState.VISIBLE)) {
+                                for (Tablet tablet : idx.getTablets()) {
+                                    LocalTablet localTablet = (LocalTablet) tablet;
+                                    long quorumVersion = localTablet.getQuorumVersion(replicaNum / 2 + 1);
+                                    if (quorumVersion == -1L) {
+                                        foundCommonVersion = false;
+                                        info.append(String.format("cannot find quorum version for tablet: %d; ",
+                                                tablet.getId()));
+                                        LOG.warn("cannot find quorum version for tablet: {}, " +
+                                                "ignore partition: {}-{} table: {}-{} db: {}-{}",
+                                                tablet.getId(), physicalPartition.getId(), partition.getName(),
+                                                table.getId(), table.getName(), database.getId(), database.getFullName());
+                                    }
+                                    if (recoverVersion == -1L) {
+                                        recoverVersion = quorumVersion;
+                                    } else if (recoverVersion != quorumVersion) {
+                                        foundCommonVersion = false;
+                                        info.append(String.format("found different quorum versions: %d %d; ",
+                                                recoverVersion, quorumVersion));
+                                        LOG.warn("found different quorum versions: {} {}, " +
+                                                        "ignore partition: {}-{} table: {}-{} db: {}-{}",
+                                                recoverVersion, quorumVersion, physicalPartition.getId(), partition.getName(),
+                                                table.getId(), table.getName(), database.getId(), database.getFullName());
+                                    }
+
+                                    Set<Long> replicaVersions = localTablet.getAllReplicaVersions();
+                                    if (isFirstTablet) {
+                                        for (Long version : replicaVersions) {
+                                            commonVersion.put(version, true);
+                                        }
+                                        isFirstTablet = false;
+                                    } else {
+                                        for (Map.Entry<Long, Boolean> entry : commonVersion.entrySet()) {
+                                            if (!replicaVersions.contains(entry.getKey())) {
+                                                entry.setValue(false);
+                                            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                         }
                                     }
                                 }
                             }
+<<<<<<< HEAD
                         }
                         if (foundCommonVersion && recoverVersion != partition.getVisibleVersion()) {
                             if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
@@ -160,11 +230,46 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                                 recoveryInfo.setMaxCommonVersion(maxCommonVersion);
                             }
                             addToUnRecoveredPartitions(recoveryInfo);
+=======
+                            if (foundCommonVersion && recoverVersion != physicalPartition.getVisibleVersion()) {
+                                if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                                        .hasCommittedTxnOnPartition(dbId, table.getId(), physicalPartition.getId())) {
+                                    LOG.warn("There are committed txns waiting to publish, " +
+                                                    "ignore partition: {}-{} table: {}-{} db: {}-{}",
+                                            physicalPartition.getId(), partition.getName(), table.getId(),
+                                            table.getName(), database.getId(), database.getFullName());
+                                    UnRecoveredPartition recoveryInfo = new UnRecoveredPartition(database.getFullName(),
+                                            table.getName(), partition.getName(), physicalPartition.getId(),
+                                            "There are committed txns waiting to publish, ignore this partition");
+                                    addToUnRecoveredPartitions(recoveryInfo);
+                                } else {
+                                    partitionsToRecover.add(new PartitionVersion(dbId, table.getId(),
+                                            physicalPartition.getId(), recoverVersion));
+                                }
+                            } else if (!foundCommonVersion) {
+                                long maxCommonVersion = -1L;
+                                for (Map.Entry<Long, Boolean> entry : commonVersion.entrySet()) {
+                                    if (entry.getValue() && entry.getKey() > maxCommonVersion) {
+                                        maxCommonVersion = entry.getKey();
+                                    }
+                                }
+                                UnRecoveredPartition recoveryInfo = new UnRecoveredPartition(database.getFullName(),
+                                        table.getName(), partition.getName(), physicalPartition.getId(), info.toString());
+                                if (maxCommonVersion != -1L) {
+                                    recoveryInfo.setMaxCommonVersion(maxCommonVersion);
+                                }
+                                addToUnRecoveredPartitions(recoveryInfo);
+                            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         }
                     }
                 }
             } finally {
+<<<<<<< HEAD
                 database.readUnlock();
+=======
+                locker.unLockDatabase(database.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
@@ -179,14 +284,26 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
 
     public void recoverPartitionVersion(PartitionVersionRecoveryInfo recoveryInfo) {
         for (PartitionVersion version : recoveryInfo.getPartitionVersions()) {
+<<<<<<< HEAD
             Database database = GlobalStateMgr.getCurrentState().getDb(version.getDbId());
+=======
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(version.getDbId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (database == null) {
                 LOG.warn("recover partition version failed, db is null, versionInfo: {}", version);
                 continue;
             }
+<<<<<<< HEAD
             database.writeLock();
             try {
                 Table table = database.getTable(version.getTableId());
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(database.getId(), LockType.WRITE);
+            try {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(database.getId(), version.getTableId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (table == null) {
                     LOG.warn("recover partition version failed, table is null, versionInfo: {}", version);
                     continue;
@@ -195,17 +312,35 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                     LOG.warn("recover partition version failed, table is not OLAP table, versionInfo: {}", version);
                     continue;
                 }
+<<<<<<< HEAD
                 Partition partition = table.getPartition(version.getPartitionId());
+=======
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(version.getPartitionId());
+                if (physicalPartition == null) {
+                    LOG.warn("recover partition version failed, partition is null, versionInfo: {}", version);
+                    continue;
+                }
+
+                Partition partition = table.getPartition(physicalPartition.getParentId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (partition == null) {
                     LOG.warn("recover partition version failed, partition is null, versionInfo: {}", version);
                     continue;
                 }
 
+<<<<<<< HEAD
                 long originVisibleVersion = partition.getVisibleVersion();
                 long originNextVersion = partition.getNextVersion();
                 partition.setVisibleVersion(version.getVersion(), recoveryInfo.getRecoverTime());
                 partition.setNextVersion(version.getVersion() + 1);
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+=======
+                long originVisibleVersion = physicalPartition.getVisibleVersion();
+                long originNextVersion = physicalPartition.getNextVersion();
+                physicalPartition.setVisibleVersion(version.getVersion(), recoveryInfo.getRecoverTime());
+                physicalPartition.setNextVersion(version.getVersion() + 1);
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     for (Tablet tablet : index.getTablets()) {
                         if (!(tablet instanceof LocalTablet)) {
                             continue;
@@ -224,12 +359,21 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 }
                 LOG.info("set partition visible version from {} to {}, " +
                         "set partition next version from {} to {}, versionInfo: {}, db name: {}, table name: {}",
+<<<<<<< HEAD
                         originVisibleVersion, partition.getVisibleVersion(), originNextVersion,
                         partition.getNextVersion(), version, database.getFullName(), table.getName());
                 removeUnRecoveredPartitions(new UnRecoveredPartition(database.getFullName(),
                         table.getName(), partition.getName(), partition.getId(), null));
             } finally {
                 database.writeUnlock();
+=======
+                        originVisibleVersion, physicalPartition.getVisibleVersion(), originNextVersion,
+                        physicalPartition.getNextVersion(), version, database.getFullName(), table.getName());
+                removeUnRecoveredPartitions(new UnRecoveredPartition(database.getFullName(),
+                        table.getName(), partition.getName(), physicalPartition.getId(), null));
+            } finally {
+                locker.unLockDatabase(database.getId(), LockType.WRITE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }

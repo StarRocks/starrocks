@@ -23,6 +23,15 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 ]
 ```
 
+<<<<<<< HEAD
+=======
+:::note
+
+自 v3.3 起，如果单个物化视图刷新任务包含多个分区或 task_runs，`SHOW MATERIALIZED VIEWS` 语句将追踪所有 task_runs 的状态。仅当所有 task_runs 成功后，`last_refresh_state` 字段才会返回 `SUCCESS`。
+
+:::
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ## 参数
 
 | **参数**        | **必选** | **说明**                                                     |

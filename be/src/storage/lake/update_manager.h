@@ -30,9 +30,17 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 namespace lake {
 
 class TxnLogPB_OpWrite;
+=======
+class Cache;
+class TxnLogPB_OpWrite;
+
+namespace lake {
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class LocationProvider;
 class Tablet;
 class MetaFileBuilder;
@@ -40,6 +48,7 @@ class UpdateManager;
 struct AutoIncrementPartialUpdateState;
 using IndexEntry = DynamicCache<uint64_t, LakePrimaryIndex>::Entry;
 
+<<<<<<< HEAD
 class LakeDelvecLoader : public DelvecLoader {
 public:
     LakeDelvecLoader(UpdateManager* update_mgr, const MetaFileBuilder* pk_builder, bool fill_cache)
@@ -50,11 +59,49 @@ private:
     UpdateManager* _update_mgr = nullptr;
     const MetaFileBuilder* _pk_builder = nullptr;
     bool _fill_cache = false;
+=======
+class PersistentIndexBlockCache {
+public:
+    explicit PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit);
+
+    void update_memory_usage();
+
+    Cache* cache() { return _cache.get(); }
+
+private:
+    std::mutex _mutex;
+    size_t _memory_usage{0};
+    std::unique_ptr<Cache> _cache;
+    std::unique_ptr<MemTracker> _mem_tracker;
+};
+
+// This is a converter between rowset segment id and segment file info. We need this converter
+// because we store rowset segment id instead of real file info in PrimaryKey Index value to save memory,
+// and this converter can help us to find segment file info that we want.
+class RssidFileInfoContainer {
+public:
+    void add_rssid_to_file(const TabletMetadata& metadata);
+    void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_id,
+                           const std::map<int, FileInfo>& replace_segments);
+
+    const std::unordered_map<uint32_t, FileInfo>& rssid_to_file() const { return _rssid_to_file_info; }
+    const std::unordered_map<uint32_t, uint32_t>& rssid_to_rowid() const { return _rssid_to_rowid; }
+
+private:
+    // From rowset segment id to segment file
+    std::unordered_map<uint32_t, FileInfo> _rssid_to_file_info;
+    // From rowset segment id to rowset id
+    std::unordered_map<uint32_t, uint32_t> _rssid_to_rowid;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class UpdateManager {
 public:
+<<<<<<< HEAD
     UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker);
+=======
+    UpdateManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ~UpdateManager();
     void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
@@ -62,6 +109,7 @@ public:
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
 
     // publish primary key tablet, update primary index and delvec, then update meta file
+<<<<<<< HEAD
     Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadata& metadata,
                                       Tablet* tablet, IndexEntry* index_entry, MetaFileBuilder* builder,
                                       int64_t base_version);
@@ -77,6 +125,27 @@ public:
                              const TabletSchema& tablet_schema, std::vector<uint32_t>& column_ids, bool with_default,
                              bool include_op_write, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns,
+=======
+    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                      const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
+                                      MetaFileBuilder* builder, int64_t base_version);
+
+    Status publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                              const TabletMetadataPtr& metadata, Tablet* tablet,
+                                              MetaFileBuilder* builder, int64_t base_version);
+
+    // get rowids from primary index by each upserts
+    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
+                                   std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock);
+    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const ColumnUniquePtr& upsert,
+                                   std::vector<uint64_t>* rss_rowids, bool need_lock);
+
+    // get column data by rssid and rowids
+    Status get_column_values(const RowsetUpdateStateParams& params, std::vector<uint32_t>& column_ids,
+                             bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+                             vector<std::unique_ptr<Column>>* columns,
+                             const std::map<string, string>* column_to_expr_value = nullptr,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
     Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder, bool fill_cache,
@@ -92,12 +161,21 @@ public:
     size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
 
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+<<<<<<< HEAD
                                       const TabletMetadata& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
 
     Status light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                             const TabletMetadata& metadata, Tablet* tablet, IndexEntry* index_entry,
                                             MetaFileBuilder* builder, int64_t base_version);
+=======
+                                      const TabletMetadata& metadata, const Tablet& tablet, IndexEntry* index_entry,
+                                      MetaFileBuilder* builder, int64_t base_version);
+
+    Status light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+                                            const TabletMetadata& metadata, const Tablet& tablet,
+                                            IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
@@ -109,11 +187,20 @@ public:
     // update primary index data version when meta file finalize success.
     void update_primary_index_data_version(const Tablet& tablet, int64_t version);
 
+<<<<<<< HEAD
+=======
+    int64_t get_primary_index_data_version(int64_t tablet_id);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void expire_cache();
 
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
     void preload_update_state(const TxnLog& op_write, Tablet* tablet);
+<<<<<<< HEAD
     void preload_compaction_state(const TxnLog& txnlog, Tablet* tablet, const TabletSchema& tablet_schema);
+=======
+    void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // check if pk index's cache ref == ref_cnt
     bool TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt);
@@ -135,6 +222,7 @@ public:
 
     MemTracker* index_mem_tracker() const { return _index_cache_mem_tracker.get(); }
 
+<<<<<<< HEAD
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadata& metadata, Tablet* tablet,
                                                 MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
@@ -142,12 +230,25 @@ public:
 
     // commit primary index, only take affect when it is local persistent index
     Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
+=======
+    MemTracker* mem_tracker() const { return _update_mem_tracker; }
+
+    // get or create primary index, and prepare primary index state
+    StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
+                                                int64_t base_version, int64_t new_version,
+                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
     // remove index entry if it isn't nullptr
     void remove_primary_index_cache(IndexEntry* index_entry);
 
+<<<<<<< HEAD
+=======
+    void unload_and_remove_primary_index(int64_t tablet_id);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 
     void lock_shard_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).lock_shared(); }
@@ -162,6 +263,7 @@ public:
 
     void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
 
+<<<<<<< HEAD
 private:
     // print memory tracker state
     void _print_memory_stats();
@@ -176,6 +278,27 @@ private:
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
     Status _handle_index_op(Tablet* tablet, int64_t base_version, bool need_lock,
+=======
+    Status execute_index_major_compaction(const TabletMetadata& metadata, TxnLogPB* txn_log);
+
+    PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
+
+    Status pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir);
+
+private:
+    // print memory tracker state
+    void _print_memory_stats();
+    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const ColumnUniquePtr& upsert, PrimaryIndex& index,
+                      DeletesMap* new_deletes);
+
+    Status _do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
+                                     int32_t condition_column, const ColumnUniquePtr& upsert, PrimaryIndex& index,
+                                     DeletesMap* new_deletes);
+
+    int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
+
+    Status _handle_index_op(int64_t tablet_id, int64_t base_version, bool need_lock,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             const std::function<void(LakePrimaryIndex&)>& op);
 
     std::shared_mutex& _get_pk_index_shard_lock(int64_t tabletId) { return _get_pk_index_shard(tabletId).lock; }
@@ -203,7 +326,11 @@ private:
     // compaction cache
     DynamicCache<string, CompactionState> _compaction_cache;
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
+<<<<<<< HEAD
     LocationProvider* _location_provider = nullptr;
+=======
+    std::shared_ptr<LocationProvider> _location_provider;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TabletManager* _tablet_mgr = nullptr;
 
     // memory checkers
@@ -213,6 +340,11 @@ private:
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
 
     std::vector<PkIndexShard> _pk_index_shards;
+<<<<<<< HEAD
+=======
+
+    std::unique_ptr<PersistentIndexBlockCache> _block_cache;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace lake

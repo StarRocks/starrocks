@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # multiply
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Computes the product of the arguments.
 

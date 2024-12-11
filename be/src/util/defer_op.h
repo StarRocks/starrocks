@@ -45,7 +45,11 @@ class DeferOp {
 public:
     explicit DeferOp(DeferFunction func) : _func(std::move(func)) {}
 
+<<<<<<< HEAD
     ~DeferOp() noexcept { _func(); }
+=======
+    ~DeferOp() noexcept { (void)_func(); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     DeferFunction _func;

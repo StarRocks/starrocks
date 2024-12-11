@@ -38,9 +38,19 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RedirectStatus;
+<<<<<<< HEAD
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
+=======
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.OriginStatement;
+import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 
@@ -59,13 +69,43 @@ public abstract class StatementBase implements ParseNode {
         // True if the describe_stmt print verbose information, if `isVerbose` is true, `isExplain` must be set to true.
         VERBOSE,
         // True if the describe_stmt print costs information, if `isCosts` is true, `isExplain` must be set to true.
+<<<<<<< HEAD
         COST,
         OPTIMIZER,
         REWRITE
+=======
+        COSTS,
+        OPTIMIZER,
+        REWRITE,
+        SCHEDULER,
+        PLAN_ADVISOR;
+
+        public static ExplainLevel defaultValue() {
+            return NORMAL;
+        }
+
+        public static ExplainLevel parse(String value) {
+            if (StringUtils.isEmpty(value)) {
+                return defaultValue();
+            }
+            ExplainLevel result = EnumUtils.getEnumIgnoreCase(ExplainLevel.class, value);
+            if (result == null) {
+                return defaultValue();
+            }
+            return result;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private ExplainLevel explainLevel;
 
+<<<<<<< HEAD
+=======
+    private Tracers.Mode traceMode;
+
+    private String traceModule;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // True if this QueryStmt is the top level query from an EXPLAIN <query>
     protected boolean isExplain = false;
 
@@ -83,18 +123,40 @@ public abstract class StatementBase implements ParseNode {
         this.explainLevel = explainLevel;
     }
 
+<<<<<<< HEAD
+=======
+    public void setIsTrace(Tracers.Mode mode, String module) {
+        this.isExplain = true;
+        this.traceMode = mode;
+        this.traceModule = module;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isExplain() {
         return isExplain;
     }
 
+<<<<<<< HEAD
     public boolean isTrace() {
         return isExplain && (explainLevel == ExplainLevel.OPTIMIZER ||
                 explainLevel == ExplainLevel.REWRITE);
+=======
+    public Tracers.Mode getTraceMode() {
+        return traceMode;
+    }
+
+    public String getTraceModule() {
+        return traceModule;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public ExplainLevel getExplainLevel() {
         if (explainLevel == null) {
+<<<<<<< HEAD
             return ExplainLevel.NORMAL;
+=======
+            return ExplainLevel.defaultValue();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             return explainLevel;
         }
@@ -111,17 +173,24 @@ public abstract class StatementBase implements ParseNode {
         return origStmt;
     }
 
+<<<<<<< HEAD
     // Override this method and return true
     // if the stmt contains some information which need to be encrypted in audit log
     public boolean needAuditEncryption() {
         return false;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public NodePosition getPos() {
         return pos;
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<HintNode> getHintNodes() {
         return hintNodes;
     }
@@ -141,4 +210,11 @@ public abstract class StatementBase implements ParseNode {
     public boolean isExistQueryScopeHint() {
         return CollectionUtils.isNotEmpty(allQueryScopeHints);
     }
+<<<<<<< HEAD
+=======
+
+    public int getTimeout() {
+        return ConnectContext.get().getSessionVariable().getQueryTimeoutS();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

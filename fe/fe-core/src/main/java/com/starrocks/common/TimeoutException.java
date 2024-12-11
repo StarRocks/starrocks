@@ -18,7 +18,11 @@ package com.starrocks.common;
 /**
  * Exception for timeout, like Util.executeCommand
  */
+<<<<<<< HEAD
 public class TimeoutException extends UserException {
+=======
+public class TimeoutException extends StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public TimeoutException(String msg) {
         super(msg);
     }

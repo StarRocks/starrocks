@@ -47,6 +47,11 @@ public:
 protected:
     HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs) {
         auto ctx = _pool.add(new HdfsScannerContext());
+<<<<<<< HEAD
+=======
+        auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         std::vector<Utils::SlotDesc> slot_descs;
         for (auto& type_desc : type_descs) {
@@ -55,10 +60,18 @@ protected:
         }
         slot_descs.push_back({""});
 
+<<<<<<< HEAD
         ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
         Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_ranges.emplace_back(_create_scan_range(_file_path, file_size));
+=======
+        TupleDescriptor* tuple_desc =
+                parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
+        parquet::Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
+        ctx->scan_range = (_create_scan_range(_file_path, file_size));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ctx->timezone = "Asia/Shanghai";
         ctx->stats = &g_hdfs_scan_stats;
 
@@ -98,7 +111,12 @@ protected:
                         const std::shared_ptr<::parquet::schema::GroupNode>& schema) {
         ASSIGN_OR_ABORT(auto file, _fs.new_writable_file(_file_path));
         ASSIGN_OR_RETURN(auto properties, parquet::ParquetBuildHelper::make_properties(ParquetBuilderOptions()));
+<<<<<<< HEAD
         auto file_writer = std::make_shared<SyncFileWriter>(std::move(file), properties, schema, type_descs);
+=======
+        auto file_writer =
+                std::make_shared<SyncFileWriter>(std::move(file), properties, schema, type_descs, _runtime_state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         file_writer->init();
         auto st = file_writer->write(chunk.get());
         if (!st.ok()) {
@@ -193,19 +211,31 @@ TEST_F(FileWriterTest, TestWriteDecimal) {
     auto chunk = std::make_shared<Chunk>();
     {
         auto col0 = ColumnHelper::create_column(type_descs[0], true);
+<<<<<<< HEAD
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
+=======
+        std::vector<int32_t> int32_nums{-999999, 999999, 0, 1};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto count = col0->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col0, chunk->num_columns());
 
         auto col1 = ColumnHelper::create_column(type_descs[1], true);
+<<<<<<< HEAD
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
+=======
+        std::vector<int64_t> int64_nums{-999999999999, 999999999999, 0, 1};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         count = col1->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col1, chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(type_descs[2], true);
+<<<<<<< HEAD
         std::vector<int128_t> int128_nums{INT64_MIN, INT64_MAX, 0, 1};
+=======
+        std::vector<int128_t> int128_nums{-999999999999, 999999999999, 0, 1};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         count = col2->append_numbers(int128_nums.data(), size(int128_nums) * sizeof(int128_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col2, chunk->num_columns());
@@ -357,6 +387,7 @@ TEST_F(FileWriterTest, TestWriteDatetime) {
         auto data_column = TimestampColumn::create();
         {
             Datum datum;
+<<<<<<< HEAD
             datum.set_timestamp(TimestampValue::create(1999, 9, 9, 0, 0, 0));
             data_column->append_datum(datum);
             datum.set_timestamp(TimestampValue::create(1999, 9, 10, 1, 1, 1));
@@ -368,6 +399,20 @@ TEST_F(FileWriterTest, TestWriteDatetime) {
 
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
+=======
+            datum.set_timestamp(TimestampValue::create(2023, 9, 9, 23, 59, 59));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1999, 9, 10, 1, 1, 1));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1970, 1, 1, 0, 0, 0));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1970, 1, 1, 1, 1, 1));
+            data_column->append_datum(datum);
+        }
+
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {0, 0, 0, 0};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         null_column->append_numbers(nulls.data(), nulls.size());
         auto nullable_column = NullableColumn::create(data_column, null_column);
         chunk->append_column(nullable_column, chunk->num_columns());

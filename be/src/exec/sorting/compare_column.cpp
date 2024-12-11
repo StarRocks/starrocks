@@ -327,7 +327,11 @@ int compare_column(const ColumnPtr& column, CompareVector& cmp_vector, Datum rhs
     return compare.get_equal_count();
 }
 
+<<<<<<< HEAD
 void compare_columns(const Columns& columns, std::vector<int8_t>& cmp_vector, const std::vector<Datum>& rhs_values,
+=======
+void compare_columns(const Columns& columns, CompareVector& cmp_vector, const Buffer<Datum>& rhs_values,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                      const SortDescs& sort_desc) {
     if (columns.empty()) {
         return;

@@ -24,6 +24,7 @@ import mockit.Expectations;
 
 public class MockedAuth {
 
+<<<<<<< HEAD
     public static void mockedAuth(Auth auth) {
         new Expectations() {
             {
@@ -42,6 +43,8 @@ public class MockedAuth {
         };
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static void mockedConnectContext(ConnectContext ctx, String user, String ip) {
         new Expectations() {
             {

@@ -34,6 +34,7 @@
 
 package com.starrocks.mysql.privilege;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.UserDesc;
@@ -52,6 +53,16 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.UserIdentity;
+=======
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.ast.SetStmt;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -62,13 +73,19 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.util.Collections;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
 
 public class SetPasswordTest {
 
+<<<<<<< HEAD
     private Auth auth;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Mocked
     private Analyzer analyzer;
     @Mocked
@@ -82,6 +99,7 @@ public class SetPasswordTest {
 
     @Before
     public void setUp() throws NoSuchMethodException, SecurityException, AnalysisException {
+<<<<<<< HEAD
         auth = new Auth();
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -90,6 +108,10 @@ public class SetPasswordTest {
             }
 
             @Mock
+=======
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             public EditLog getEditLog() {
                 return editLog;
             }
@@ -97,10 +119,13 @@ public class SetPasswordTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
 
                 editLog.logCreateUser((PrivInfo) any);
                 minTimes = 0;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 MysqlPassword.checkPassword(anyString);
                 minTimes = 0;
                 result = new byte[10];
@@ -109,6 +134,7 @@ public class SetPasswordTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void test() throws DdlException {
         UserIdentity userIdentity = new UserIdentity("cmy", "%");
         CreateUserStmt stmt = new CreateUserStmt(false, new UserDesc(userIdentity), Collections.emptyList());
@@ -169,6 +195,8 @@ public class SetPasswordTest {
     }
 
     @Test
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testAuditSetPasswordWithoutUser() {
         String sql = "SET PASSWORD = PASSWORD('testPass'), pipeline_dop = 2";
         SetStmt setStmt = (SetStmt) parseSql(sql);

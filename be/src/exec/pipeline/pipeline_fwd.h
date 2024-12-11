@@ -31,6 +31,11 @@ using FragmentFuture = std::future<void>;
 class Pipeline;
 using PipelinePtr = std::shared_ptr<Pipeline>;
 using Pipelines = std::vector<PipelinePtr>;
+<<<<<<< HEAD
+=======
+using PipelineRawPtr = Pipeline*;
+using PipelineRawPtrs = std::vector<Pipeline*>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using DriverRawPtr = PipelineDriver*;
@@ -48,4 +53,13 @@ class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
 class GlobalDriverExecutor;
 class ExecStateReporter;
+<<<<<<< HEAD
 } // namespace starrocks::pipeline
+=======
+class PipelineBuilderContext;
+} // namespace starrocks::pipeline
+
+namespace starrocks {
+using OperatorFactoryPtr = pipeline::OpFactoryPtr;
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

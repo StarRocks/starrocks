@@ -19,12 +19,20 @@ package com.starrocks.authentication;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -53,6 +61,7 @@ public class UserPropertyInfo implements Writable {
         return properties;
     }
 
+<<<<<<< HEAD
     public static UserPropertyInfo read(DataInput in) throws IOException {
         UserPropertyInfo info = new UserPropertyInfo();
         info.readFields(in);
@@ -77,5 +86,10 @@ public class UserPropertyInfo implements Writable {
             String val = Text.readString(in);
             properties.add(Pair.create(key, val));
         }
+=======
+    @Override
+    public void write(DataOutput out) throws IOException {
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

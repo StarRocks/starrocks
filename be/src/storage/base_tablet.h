@@ -37,6 +37,10 @@
 #include <memory>
 
 #include "storage/olap_define.h"
+<<<<<<< HEAD
+=======
+#include "storage/rowset/base_rowset.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
 
@@ -82,6 +86,10 @@ public:
 
     // Property encapsulated in TabletMeta
     const TabletMetaSharedPtr tablet_meta();
+<<<<<<< HEAD
+=======
+    const TabletMetaSharedPtr tablet_meta() const;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     void set_tablet_meta(const TabletMetaSharedPtr& tablet_meta) { _tablet_meta = tablet_meta; }
 
@@ -91,7 +99,11 @@ public:
     // The result string will often be printed to the log.
     const std::string full_name() const;
     int64_t partition_id() const;
+<<<<<<< HEAD
     int64_t tablet_id() const;
+=======
+    virtual int64_t tablet_id() const;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int32_t schema_hash() const;
     int16_t shard_id();
     const int64_t creation_time() const;
@@ -99,8 +111,32 @@ public:
     bool equal(int64_t tablet_id, int32_t schema_hash);
 
     // properties encapsulated in TabletSchema
+<<<<<<< HEAD
     const TabletSchema& tablet_schema() const;
 
+=======
+    virtual const TabletSchema& unsafe_tablet_schema_ref() const;
+
+    virtual const TabletSchemaCSPtr tablet_schema() const;
+
+    bool set_tablet_schema_into_rowset_meta() {
+        bool flag = false;
+        for (const RowsetMetaSharedPtr& rowset_meta : _tablet_meta->all_rs_metas()) {
+            if (!rowset_meta->has_tablet_schema_pb()) {
+                rowset_meta->set_tablet_schema(tablet_schema());
+                rowset_meta->set_skip_tablet_schema(true);
+                flag = true;
+            }
+        }
+        return flag;
+    }
+
+    virtual size_t num_rows() const = 0;
+
+    virtual StatusOr<bool> has_delete_predicates(const Version& version) = 0;
+
+protected:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     virtual void on_shutdown() {}
 
 protected:
@@ -111,10 +147,13 @@ protected:
 
     DataDir* _data_dir;
     std::string _tablet_path; // TODO: remove this variable for less memory occupation
+<<<<<<< HEAD
 
 private:
     BaseTablet(const BaseTablet&) = delete;
     const BaseTablet& operator=(const BaseTablet&) = delete;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 inline DataDir* BaseTablet::data_dir() const {
@@ -129,6 +168,13 @@ inline const TabletMetaSharedPtr BaseTablet::tablet_meta() {
     return _tablet_meta;
 }
 
+<<<<<<< HEAD
+=======
+inline const TabletMetaSharedPtr BaseTablet::tablet_meta() const {
+    return _tablet_meta;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 inline TabletUid BaseTablet::tablet_uid() const {
     return _tablet_meta->tablet_uid();
 }
@@ -172,8 +218,19 @@ inline bool BaseTablet::equal(int64_t id, int32_t hash) {
     return tablet_id() == id && schema_hash() == hash;
 }
 
+<<<<<<< HEAD
 inline const TabletSchema& BaseTablet::tablet_schema() const {
     return _tablet_meta->tablet_schema();
 }
 
+=======
+inline const TabletSchema& BaseTablet::unsafe_tablet_schema_ref() const {
+    return _tablet_meta->tablet_schema();
+}
+
+inline const TabletSchemaCSPtr BaseTablet::tablet_schema() const {
+    return _tablet_meta->tablet_schema_ptr();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } /* namespace starrocks */

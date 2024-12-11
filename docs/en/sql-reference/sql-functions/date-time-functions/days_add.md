@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # days_add
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Adds a specified number of days to a given date or date time.
 

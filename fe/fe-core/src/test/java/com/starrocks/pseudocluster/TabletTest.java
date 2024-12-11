@@ -34,7 +34,11 @@ public class TabletTest {
         Tablet src = buildTabletWithVersions(2, 3, 4, 5, 6);
         Tablet dest = buildTabletWithVersions(2, 4, 6);
         Assert.assertEquals(Lists.newArrayList(3L, 5L, 7L), dest.getMissingVersions());
+<<<<<<< HEAD
         dest.cloneFrom(src, 0);
+=======
+        dest.cloneFrom(src, 0, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(6, dest.maxContinuousVersion());
     }
 
@@ -43,7 +47,11 @@ public class TabletTest {
         Tablet src = buildTabletWithVersions(2, 3, 4, 5, 6);
         Tablet dest = buildTabletWithVersions(2, 3, 4);
         Assert.assertEquals(Lists.newArrayList(5L), dest.getMissingVersions());
+<<<<<<< HEAD
         dest.cloneFrom(src, 0);
+=======
+        dest.cloneFrom(src, 0, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(6, dest.maxContinuousVersion());
     }
 
@@ -60,7 +68,11 @@ public class TabletTest {
         }
         Tablet dest = buildTabletWithVersions(2, 3, 4);
         Assert.assertEquals(Lists.newArrayList(5L), dest.getMissingVersions());
+<<<<<<< HEAD
         dest.cloneFrom(src, 0);
+=======
+        dest.cloneFrom(src, 0, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(6, dest.minVersion());
     }
 

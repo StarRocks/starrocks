@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_disc
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算百分位数。和 percentile_cont 不同的是，该函数如果未找到与百分位完全匹配的值，则默认返回临近两个值中较大的值。
 

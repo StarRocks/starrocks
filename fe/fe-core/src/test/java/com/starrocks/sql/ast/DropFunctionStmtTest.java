@@ -32,4 +32,18 @@ public class DropFunctionStmtTest {
         Assert.assertEquals("ABC", stmt.getFunctionName().getDb());
         Assert.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testDropIfExists() throws Exception {
+        String dropFunctionSql = "DROP FUNCTION IF EXISTS ABC.MY_UDF_JSON_GET(string, string)";
+        DropFunctionStmt stmt = (DropFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                dropFunctionSql, 32).get(0);
+
+        Assert.assertEquals("ABC", stmt.getFunctionName().getDb());
+        Assert.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
+        Assert.assertTrue(stmt.dropIfExists());
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

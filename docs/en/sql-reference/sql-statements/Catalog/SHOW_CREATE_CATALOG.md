@@ -6,7 +6,13 @@ displayed_sidebar: docs
 
 ## Description
 
+<<<<<<< HEAD
 Queries the creation statement of an external catalog, such as a Hive, Iceberg, Hudi, Delta Lake, or JDBC catalog. See [Hive Catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg Catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi Catalog](../../../data_source/catalog/hudi_catalog.md), [Delta Lake Catalog](../../../data_source/catalog/deltalake_catalog.md), and [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md). Note that authentication-related information in the return result will be anonymized.
+=======
+Queries the creation statement of an [external catalog](../../../data_source/catalog/catalog_overview.md).
+
+Note that authentication-related information in the return result will be anonymized.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This command is supported from v3.0 onwards.
 

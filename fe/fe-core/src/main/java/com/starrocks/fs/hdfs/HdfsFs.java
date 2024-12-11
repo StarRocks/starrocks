@@ -37,6 +37,13 @@ public class HdfsFs {
     private Configuration configuration;
     private String userName;
 
+<<<<<<< HEAD
+=======
+    public HdfsFs() {
+
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public HdfsFs(HdfsFsIdentity identity) {
         this.identity = identity;
         this.lock = new ReentrantLock();

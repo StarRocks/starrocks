@@ -55,8 +55,13 @@ public:
     struct IORange {
         uint64_t offset;
         uint64_t size;
+<<<<<<< HEAD
     };
     enum class PrepareCacheScope { READ_FULL_FILE, READ_FULL_STRIPE, READ_FULL_ROW_INDEX };
+=======
+        bool is_active;
+    };
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     virtual ~InputStream();
 
@@ -91,10 +96,18 @@ public:
      */
     virtual const std::string& getName() const = 0;
 
+<<<<<<< HEAD
     virtual void prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length);
 
     virtual bool isIORangesEnabled() const;
     virtual void clearIORanges();
+=======
+    virtual std::atomic<int32_t>* get_lazy_column_coalesce_counter();
+    virtual bool isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const;
+    virtual bool isIOCoalesceEnabled() const;
+    virtual bool isIOAdaptiveCoalesceEnabled() const;
+    virtual void releaseToOffset(const int64_t offset);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     virtual void setIORanges(std::vector<InputStream::IORange>& io_ranges);
 };
 

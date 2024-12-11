@@ -35,6 +35,11 @@ public class BackupJobInfoTest {
 
     private static String fileName = "job_info.txt";
 
+<<<<<<< HEAD
+=======
+    private static String newFileName = "new_job_info.txt";
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @BeforeClass
     public static void createFile() {
         String json = "{\n"
@@ -121,6 +126,61 @@ public class BackupJobInfoTest {
             e.printStackTrace();
             Assert.fail();
         }
+<<<<<<< HEAD
+=======
+
+        String newJson = "{\n"
+                + "    \"backup_time\": 1522231864000,\n"
+                + "    \"name\": \"snapshot1\",\n"
+                + "    \"database\": \"db1\",\n"
+                + "    \"id\": 10000,\n"
+                + "    \"backup_result\": \"succeed\",\n"
+                + "    \"backup_objects\": {\n"
+                + "        \"table1\": {\n"
+                + "            \"partitions\": {\n"
+                + "                \"partition1\": {\n"
+                + "                    \"indexes\": {\n"
+                + "                        \"table1\": {\n"
+                + "                            \"id\": 10001,\n"
+                + "                            \"schema_hash\": 444444,\n"
+                + "                            \"tablets\": {\n"
+                + "                                \"10004\": [\"__10023_seg1.dat\", \"__10023_seg2.dat\"],\n"
+                + "                                \"10005\": [\"__10024_seg1.dat\", \"__10024_seg2.dat\"]\n"
+                + "                            }\n"
+                + "                        }\n"
+                + "                    },\n"
+                + "                    \"id\": 10002,\n"
+                + "                    \"version\": 21,\n"
+                + "                    \"subPartitions\": {\n"
+                + "                        \"10002\": {\n"
+                + "                            \"indexes\": {\n"
+                + "                                \"rollup1\": {\n"
+                + "                                    \"id\": 10009,\n"
+                + "                                    \"schema_hash\": 333333,\n"
+                + "                                    \"tablets\": {\n"
+                + "                                        \"10008\": [\"__10029_seg1.dat\", \"__10029_seg2.dat\"],\n"
+                + "                                        \"10007\": [\"__10029_seg1.dat\", \"__10029_seg2.dat\"]\n"
+                + "                                    }\n"
+                + "                                },\n"
+                + "                            },\n"
+                + "                            \"id\": 10007,\n"
+                + "                            \"version\": 20\n"
+                + "                        }\n"
+                + "                    }\n"
+                + "                }\n"
+                + "            },\n"
+                + "            \"id\": 10001\n"
+                + "        }\n"
+                + "    }\n"
+                + "}";
+
+        try (PrintWriter out = new PrintWriter(newFileName)) {
+            out.print(newJson);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @AfterClass
@@ -129,6 +189,13 @@ public class BackupJobInfoTest {
         if (file.exists()) {
             file.delete();
         }
+<<<<<<< HEAD
+=======
+        File newFile = new File(fileName);
+        if (newFile.exists()) {
+            newFile.delete();
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -173,4 +240,48 @@ public class BackupJobInfoTest {
             tmpFile.delete();
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testReadWriteWithSubPartition() {
+        BackupJobInfo jobInfo = null;
+        try {
+            jobInfo = BackupJobInfo.fromFile(newFileName);
+        } catch (IOException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+        Assert.assertNotNull(jobInfo);
+
+        Assert.assertEquals(1522231864000L, jobInfo.backupTime);
+        Assert.assertEquals("snapshot1", jobInfo.name);
+        Assert.assertEquals(1, jobInfo.tables.size());
+
+        Assert.assertEquals(1, jobInfo.getTableInfo("table1").partitions.size());
+        Assert.assertEquals(1, jobInfo.getTableInfo("table1").getPartInfo("partition1").indexes.size());
+
+        File tmpFile = new File("./tmp1");
+        try {
+            DataOutputStream out = new DataOutputStream(new FileOutputStream(tmpFile));
+            jobInfo.write(out);
+            out.flush();
+            out.close();
+
+            DataInputStream in = new DataInputStream(new FileInputStream(tmpFile));
+            BackupJobInfo newInfo = BackupJobInfo.read(in);
+            in.close();
+
+            Assert.assertEquals(jobInfo.backupTime, newInfo.backupTime);
+            Assert.assertEquals(jobInfo.dbId, newInfo.dbId);
+            Assert.assertEquals(jobInfo.dbName, newInfo.dbName);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            Assert.fail();
+        } finally {
+            tmpFile.delete();
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -81,9 +81,12 @@ public:
         data->config.heapGrowthPercent = heapGrowth;
         data->config.userData = data.get();
 #if WREN_VERSION_NUMBER >= 4000 // >= 0.4.0
+<<<<<<< HEAD
         data->config.reallocateFn = [](void* memory, size_t newSize, void* userData) -> void* {
             return std::realloc(memory, newSize);
         };
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         data->config.loadModuleFn = [](WrenVM* vm, const char* name) -> WrenLoadModuleResult {
             auto res = WrenLoadModuleResult();
             auto& self = *reinterpret_cast<VM::Data*>(wrenGetUserData(vm));

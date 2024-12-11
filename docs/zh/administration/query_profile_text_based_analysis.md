@@ -88,7 +88,11 @@ ANALYZE PROFILE FROM '<Query_ID>' [, <Node_ID> [, ...] ]
 
 ## 使用 EXPLAIN ANALYZE 语句模拟分析查询
 
+<<<<<<< HEAD
 StarRocs 提供了 EXPLAIN ANALYZE 语句，方便您对查询直接进行模拟并分析其 Profile，语法如下：
+=======
+StarRocks 提供了 EXPLAIN ANALYZE 语句，方便您对查询直接进行模拟并分析其 Profile，语法如下：
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```SQL
 EXPLAIN ANALYZE <sql_statement>

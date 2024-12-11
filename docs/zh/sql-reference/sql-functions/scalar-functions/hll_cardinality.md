@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_cardinality
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 用于计算 HLL 类型值的基数。
 

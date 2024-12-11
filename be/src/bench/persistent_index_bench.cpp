@@ -81,7 +81,11 @@ public:
         _index = std::make_unique<PersistentIndex>(_index_dir);
     }
 
+<<<<<<< HEAD
     ~PersistentIndexBenchTest() { fs::remove_all(_index_dir); }
+=======
+    ~PersistentIndexBenchTest() { (void)fs::remove_all(_index_dir); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     void do_bench(benchmark::State& state);
     void do_verify();
@@ -144,11 +148,19 @@ void PersistentIndexBenchTest::do_bench(benchmark::State& state) {
         ASSERT_CHECK(_index->commit(&_index_meta, &stat));
         uint64_t tail = watch.elapsed_time();
         ASSERT_CHECK(_index->on_commited());
+<<<<<<< HEAD
+=======
+        /* `_index->get_write_amp_score` interface is removed
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (config::enable_pindex_minor_compaction) {
             if (_index->get_write_amp_score() > 0.0) {
                 ASSERT_CHECK(_index->TEST_major_compaction(_index_meta));
             }
         }
+<<<<<<< HEAD
+=======
+        */
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (stat.compaction_cost > 0) {
             LOG(INFO) << stat.print_str();
         }
@@ -193,4 +205,8 @@ BENCHMARK(bench_func)->Apply(process_args);
 
 } // namespace starrocks
 
+<<<<<<< HEAD
 BENCHMARK_MAIN();
+=======
+BENCHMARK_MAIN();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

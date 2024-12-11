@@ -8,7 +8,11 @@ This topic describes the rules and limits that apply when you use StarRocks.
 
 - StarRocks uses the MySQL protocol for communication. You can connect to the StarRocks cluster via a MySQL client or JDBC. We recommend that you use a MySQL client whose version is 5.1 or later. Versions earlier than 5.1 do not support usernames that are longer than 16 characters.
 
+<<<<<<< HEAD
 - Naming conventions for objects such as catalogs, databases, tables, views, partitions, columns, usernames, and roles:
+=======
+- Naming conventions for objects such as catalogs, databases, tables, views, partitions, columns, indexes, usernames, roles, repositories, resources, storage volumes, and pipes:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
   - The name can only consist of digits (0-9), letters (a-z or A-Z), and underscores (\_). **Usernames can be all digits.**
   - The name can start with a letter or an underscore (\_).
@@ -19,7 +23,10 @@ This topic describes the rules and limits that apply when you use StarRocks.
   - Column name (column alias), partition name, and index name are **not** case-sensitive. Other names are **case-sensitive**.
 
 - Naming conventions for labels:
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   You can specify the label of a job when you load data. The label name can consist of digits (0-9), letters (a-z or A-Z), and underscores (\_), and cannot exceed 128 characters in length. Label names can start with a letter or an underscore (\_).
 
 - When you create a table, the key column cannot be of the FLOAT or DOUBLE type. You can use the DECIMAL type to represent decimals.
@@ -32,8 +39,11 @@ This topic describes the rules and limits that apply when you use StarRocks.
 
 - StarRocks supports only UTF-8 encoding, not GBK.
 
+<<<<<<< HEAD
 - StarRocks does not support modifying column names in tables.
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - StarRocks does not support modifying the table types of an existing table. For example, you cannot change a Duplicate Key table to a Primary Key table. You must create a new table.
 
 - By default, a query can be nested with a maximum of 10,000 subqueries, which is controlled by the FE parameter `expr_children_limit`.

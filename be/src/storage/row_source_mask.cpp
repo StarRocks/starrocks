@@ -143,7 +143,11 @@ Status RowSourceMaskBuffer::_serialize_masks() {
         PLOG(WARNING) << "fail to write masks size to mask file. write size=" << w_size;
         return Status::InternalError("fail to write masks size to mask file");
     }
+<<<<<<< HEAD
     const std::vector<uint16_t>& data = _mask_column->get_data();
+=======
+    const auto& data = _mask_column->get_data();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     w_size = ::write(_tmp_file_fd, data.data(), data.size() * sizeof(data[0]));
     if (w_size != data.size() * sizeof(data[0])) {
         PLOG(WARNING) << "fail to write masks to mask file. write size=" << w_size;
@@ -162,7 +166,11 @@ Status RowSourceMaskBuffer::_deserialize_masks() {
         return Status::InternalError("fail to read masks size from mask file");
     }
 
+<<<<<<< HEAD
     std::vector<uint16_t> content;
+=======
+    Buffer<uint16_t> content;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     raw::stl_vector_resize_uninitialized(&content, num_rows);
     r_size = ::read(_tmp_file_fd, content.data(), content.size() * sizeof(content[0]));
     if (r_size != content.size() * sizeof(content[0])) {

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_or
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Calculates the union of two input bitmaps and return a new bitmap.
 

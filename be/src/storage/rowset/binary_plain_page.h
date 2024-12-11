@@ -214,7 +214,11 @@ public:
 
     Status next_batch(size_t* count, Column* dst) override;
 
+<<<<<<< HEAD
     Status next_batch(const SparseRange& range, Column* dst) override;
+=======
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     bool append_range(uint32_t idx, uint32_t end, Column* dst) const;
 

@@ -20,7 +20,10 @@ import com.starrocks.analysis.ExprId;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+<<<<<<< HEAD
 import com.starrocks.analysis.SlotRef;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.IdGenerator;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
@@ -56,8 +59,11 @@ public class AnalyzeState {
     private Scope orderScope;
     private List<Expr> orderSourceExpressions;
 
+<<<<<<< HEAD
     private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * outputExprInOrderByScope is used to record which expressions in outputExpression are to be
      * recorded in the first level of OrderByScope (order by expressions can refer to columns in output)
@@ -257,6 +263,7 @@ public class AnalyzeState {
     public List<Expr> getColumnNotInGroupBy() {
         return columnNotInGroupBy;
     }
+<<<<<<< HEAD
 
     public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {
         this.generatedExprToColumnRef = generatedExprToColumnRef;
@@ -265,4 +272,6 @@ public class AnalyzeState {
     public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
         return generatedExprToColumnRef;
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

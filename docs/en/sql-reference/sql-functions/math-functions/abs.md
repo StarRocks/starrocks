@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # abs
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the absolute value of the numeric value `x`. If the input value is NULL, NULL is returned.
 

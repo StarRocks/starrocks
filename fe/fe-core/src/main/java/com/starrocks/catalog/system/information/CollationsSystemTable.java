@@ -23,9 +23,19 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class CollationsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.COLLATIONS_ID,
                 "collations",
+=======
+    private static final String NAME = "collations";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.COLLATIONS_ID,
+                NAME,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("COLLATION_NAME", ScalarType.createVarchar(512))

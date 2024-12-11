@@ -40,8 +40,11 @@ Users can choose to deploy StarRocks in public clouds, private clouds, or on-pre
 
 StarRocks in storage-compute separation mode provides the same functionalities as the storage-compute coupled mode. The data write and hot data query performance are also the same. Users can perform data updates, data lake analytics, and materialized view acceleration as they do in storage-compute coupled mode.
 
+<<<<<<< HEAD
 For information about how to deploy a StarRocks cluster with decoupled storage and compute, see [Deploy shared-data cluster](../deployment/shared_data/s3.md).
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ## Cost-based optimizer
 
 ![CBO](../_assets/1.1-5-cbo.png)

@@ -25,6 +25,14 @@ public:
 
     Status _fill_buffer() override;
 
+<<<<<<< HEAD
+=======
+    char* _find_line_delimiter(CSVBuffer& buffer, size_t pos) override {
+        // Intend no implementation just for compiling
+        return nullptr;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     std::shared_ptr<SequentialFile> _file;
 };

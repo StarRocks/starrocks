@@ -7,7 +7,11 @@ keywords: ['suoyin']
 
 ## 功能
 
+<<<<<<< HEAD
 查看索引，当前仅支持查看指定表的所有 [Bitmap 索引](../../../using_starrocks/Bitmap_index.md)。创建 bitmap 索引为异步过程，使用该语句只能查看到已经创建完成的索引。
+=======
+查看索引，当前仅支持查看指定表的所有 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md)。创建 bitmap 索引为异步过程，使用该语句只能查看到已经创建完成的索引。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 :::tip
 

@@ -22,13 +22,24 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.RemoteScanRangeLocations;
 import com.starrocks.credential.CloudConfiguration;
+=======
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.hive.HiveConnectorScanRangeSource;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.datacache.DataCacheOptions;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TDataCacheOptions;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -48,19 +59,30 @@ import static com.starrocks.thrift.TExplainLevel.VERBOSE;
  * 2. Min-max pruning: creates an additional list of conjuncts that are used to
  * prune a row group if any fail the row group's min-max parquet::Statistics.
  * 3. Get scan range locations.
+<<<<<<< HEAD
  * 4. Compute stats, like cardinality, avgRowSize and numNodes.
+=======
+ * 4. Compute stats, like cardinality, avgRowSize.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
  * <p>
  * TODO: Dictionary pruning
  */
 public class HdfsScanNode extends ScanNode {
+<<<<<<< HEAD
     private final RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
+=======
+    private HiveConnectorScanRangeSource scanRangeSource = null;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private HiveTable hiveTable = null;
     private CloudConfiguration cloudConfiguration = null;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
+<<<<<<< HEAD
     private DescriptorTable descTbl;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         hiveTable = (HiveTable) desc.getTable();
@@ -84,8 +106,13 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(DescriptorTable descTbl) {
+<<<<<<< HEAD
         this.descTbl = descTbl;
         scanRangeLocations.setup(descTbl, hiveTable, scanNodePredicates);
+=======
+        this.scanRangeSource = new HiveConnectorScanRangeSource(descTbl, hiveTable, scanNodePredicates);
+        this.scanRangeSource.setup();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void setupCloudCredential() {
@@ -93,8 +120,12 @@ public class HdfsScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
+<<<<<<< HEAD
 
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+=======
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalog));
         cloudConfiguration = connector.getMetadata().getCloudConfiguration();
@@ -104,7 +135,19 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+<<<<<<< HEAD
         return scanRangeLocations.getScanRangeLocations(descTbl, hiveTable, scanNodePredicates);
+=======
+        if (maxScanRangeLength == 0) {
+            return scanRangeSource.getAllOutputs();
+        }
+        return scanRangeSource.getOutputs((int) maxScanRangeLength);
+    }
+
+    @Override
+    public boolean hasMoreScanRanges() {
+        return scanRangeSource.hasMoreOutput();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -147,10 +190,16 @@ public class HdfsScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
+<<<<<<< HEAD
         output.append(prefix).append(String.format("numNodes=%s", numNodes));
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+=======
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -165,11 +214,14 @@ public class HdfsScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return scanRangeLocations.getScanRangeLocationsSize();
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
@@ -186,6 +238,17 @@ public class HdfsScanNode extends ScanNode {
         setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
+<<<<<<< HEAD
+=======
+        setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+    }
+
+    public static void appendDataCacheOptionsInExplain(StringBuilder output, String prefix, DataCacheOptions dataCacheOptions) {
+        if (dataCacheOptions != null) {
+            output.append(prefix).append(String.format("dataCacheOptions={populate: %s}", dataCacheOptions.isEnablePopulate()));
+            output.append("\n");
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static void setScanOptimizeOptionToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode) {
@@ -203,6 +266,17 @@ public class HdfsScanNode extends ScanNode {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static void setDataCacheOptionsToThrift(THdfsScanNode tHdfsScanNode, DataCacheOptions options) {
+        if (options != null) {
+            TDataCacheOptions tDataCacheOptions = new TDataCacheOptions();
+            tDataCacheOptions.setEnable_populate_datacache(options.isEnablePopulate());
+            tHdfsScanNode.setDatacache_options(tDataCacheOptions);
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static void setMinMaxConjunctsToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode,
                                                   HDFSScanNodePredicates scanNodePredicates) {
         List<Expr> minMaxConjuncts = scanNodePredicates.getMinMaxConjuncts();
@@ -227,7 +301,11 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public static void setPartitionConjunctsToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode,
+<<<<<<< HEAD
                                                             HDFSScanNodePredicates scanNodePredicates) {
+=======
+                                                     HDFSScanNodePredicates scanNodePredicates) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<Expr> partitionConjuncts = scanNodePredicates.getPartitionConjuncts();
         String partitionSqlPredicate = scanNode.getExplainString(partitionConjuncts);
         for (Expr expr : partitionConjuncts) {
@@ -252,12 +330,20 @@ public class HdfsScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
+=======
+    public boolean canUseRuntimeAdaptiveDop() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return true;
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUseRuntimeAdaptiveDop() {
+=======
+    protected boolean supportTopNRuntimeFilter() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return true;
     }
 }

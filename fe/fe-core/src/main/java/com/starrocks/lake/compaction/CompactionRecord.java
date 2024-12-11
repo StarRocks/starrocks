@@ -14,6 +14,11 @@
 
 package com.starrocks.lake.compaction;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Objects;
 import java.util.Optional;
 
@@ -24,6 +29,10 @@ public class CompactionRecord {
     private final long finishTs;
     private final String partitionName;
     private final String errorMessage;
+<<<<<<< HEAD
+=======
+    private final String executionProfile;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private CompactionRecord(CompactionJob context, String errorMessage) {
         Objects.requireNonNull(context.getFullPartitionName());
@@ -33,6 +42,10 @@ public class CompactionRecord {
         this.finishTs = context.getFinishTs();
         this.partitionName = context.getFullPartitionName();
         this.errorMessage = errorMessage;
+<<<<<<< HEAD
+=======
+        this.executionProfile = context.getExecutionProfile();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     static CompactionRecord build(CompactionJob context) {
@@ -66,4 +79,11 @@ public class CompactionRecord {
     public Optional<String> getErrorMessage() {
         return errorMessage != null ? Optional.of(errorMessage) : Optional.empty();
     }
+<<<<<<< HEAD
+=======
+
+    public Optional<String> getExecutionProfile() {
+        return Strings.isNullOrEmpty(executionProfile) ? Optional.empty() : Optional.of(executionProfile);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

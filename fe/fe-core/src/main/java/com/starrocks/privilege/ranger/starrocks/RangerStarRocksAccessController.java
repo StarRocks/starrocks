@@ -23,12 +23,21 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.privilege.AccessDeniedException;
+<<<<<<< HEAD
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.RangerAccessController;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
+=======
+import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.privilege.ranger.RangerAccessController;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.PipeName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 import java.util.Map;
@@ -37,12 +46,16 @@ import java.util.Set;
 import static java.util.Locale.ENGLISH;
 
 public class RangerStarRocksAccessController extends RangerAccessController {
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public RangerStarRocksAccessController() {
         super("starrocks", null);
     }
 
     @Override
+<<<<<<< HEAD
     public void checkSystemAction(UserIdentity currentUser, Set<Long> roleIds, PrivilegeType privilegeType) {
         if (!hasPermission(
                 RangerStarRocksResource.builder().setSystem().build(),
@@ -50,22 +63,38 @@ public class RangerStarRocksAccessController extends RangerAccessController {
                 privilegeType)) {
             AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.SYSTEM, null);
         }
+=======
+    public void checkSystemAction(UserIdentity currentUser, Set<Long> roleIds, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        hasPermission(
+                RangerStarRocksResource.builder().setSystem().build(),
+                currentUser,
+                privilegeType);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public void checkUserAction(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser,
                                 PrivilegeType privilegeType) throws AccessDeniedException {
+<<<<<<< HEAD
         if (!hasPermission(
                 RangerStarRocksResource.builder().setUser(impersonateUser.getUser()).build(),
                 currentUser,
                 privilegeType)) {
             AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.USER, impersonateUser.getUser());
         }
+=======
+        hasPermission(
+                RangerStarRocksResource.builder().setUser(impersonateUser.getUser()).build(),
+                currentUser,
+                privilegeType);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public void checkCatalogAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, PrivilegeType privilegeType)
             throws AccessDeniedException {
+<<<<<<< HEAD
         if (!hasPermission(
                 RangerStarRocksResource.builder().setCatalog(catalogName).build(),
                 currentUser,
@@ -82,10 +111,26 @@ public class RangerStarRocksAccessController extends RangerAccessController {
                 PrivilegeType.ANY)) {
             AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(), ObjectType.CATALOG, catalogName);
         }
+=======
+        hasPermission(
+                RangerStarRocksResource.builder().setCatalog(catalogName).build(),
+                currentUser,
+                privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnCatalog(UserIdentity currentUser, Set<Long> roleIds, String catalogName)
+            throws AccessDeniedException {
+        hasPermission(
+                RangerStarRocksResource.builder().setCatalog(catalogName).build(),
+                currentUser,
+                PrivilegeType.ANY);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public void checkDbAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db,
+<<<<<<< HEAD
                               PrivilegeType privilegeType) {
         if (!hasPermission(
                 RangerStarRocksResource.builder().setCatalog(catalogName).setDatabase(db).build(),
@@ -109,12 +154,37 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     public void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType) {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
         if (!hasPermission(
+=======
+                              PrivilegeType privilegeType) throws AccessDeniedException {
+        hasPermission(
+                RangerStarRocksResource.builder().setCatalog(catalogName).setDatabase(db).build(),
+                currentUser,
+                privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
+            throws AccessDeniedException {
+        hasPermission(
+                RangerStarRocksResource.builder().setCatalog(catalogName).setDatabase(db).build(),
+                currentUser,
+                PrivilegeType.ANY);
+    }
+
+    @Override
+    public void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setCatalog(catalog)
                         .setDatabase(tableName.getDb())
                         .setTable(tableName.getTbl())
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 privilegeType)) {
             AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.TABLE, tableName.getTbl());
         }
@@ -124,12 +194,24 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     public void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
         if (!hasPermission(
+=======
+                privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+            throws AccessDeniedException {
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setCatalog(catalog)
                         .setDatabase(tableName.getDb())
                         .setTable(tableName.getTbl())
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 PrivilegeType.ANY)) {
             AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(), ObjectType.TABLE, tableName.getTbl());
         }
@@ -156,12 +238,56 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType) {
         if (!hasPermission(
+=======
+                PrivilegeType.ANY);
+    }
+
+    @Override
+    public void checkAnyActionOnAnyTable(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db)
+            throws AccessDeniedException {
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalog, db);
+        for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
+            try {
+                hasPermission(
+                        RangerStarRocksResource.builder()
+                                .setCatalog(catalog)
+                                .setDatabase(database.getFullName())
+                                .setTable(table.getName())
+                                .build(),
+                        currentUser,
+                        PrivilegeType.ANY);
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+            return;
+        }
+        throw new AccessDeniedException();
+    }
+
+    @Override
+    public void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                  String column, PrivilegeType privilegeType) throws AccessDeniedException {
+        hasPermission(RangerStarRocksResource.builder()
+                        .setCatalog(tableName.getCatalog())
+                        .setDatabase(tableName.getDb())
+                        .setTable(tableName.getTbl())
+                        .setColumn(column)
+                        .build(),
+                currentUser, privilegeType);
+    }
+
+    @Override
+    public void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                         .setDatabase(tableName.getDb())
                         .setView(tableName.getTbl())
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 privilegeType)) {
             AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.VIEW, tableName.getTbl());
         }
@@ -170,12 +296,22 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
         if (!hasPermission(
+=======
+                privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+            throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                         .setDatabase(tableName.getDb())
                         .setView(tableName.getTbl())
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 PrivilegeType.ANY)) {
             AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(), ObjectType.VIEW, tableName.getTbl());
         }
@@ -197,18 +333,48 @@ public class RangerStarRocksAccessController extends RangerAccessController {
             }
         }
         AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(), ObjectType.VIEW, db);
+=======
+                PrivilegeType.ANY);
+    }
+
+    @Override
+    public void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String db) throws AccessDeniedException {
+        Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(db);
+        for (Table table : database.getViews()) {
+            try {
+                hasPermission(
+                        RangerStarRocksResource.builder()
+                                .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                                .setDatabase(database.getFullName())
+                                .setView(table.getName())
+                                .build(),
+                        currentUser,
+                        PrivilegeType.ANY);
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+            return;
+        }
+        throw new AccessDeniedException();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public void checkMaterializedViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+<<<<<<< HEAD
                                             PrivilegeType privilegeType) {
         if (!hasPermission(
+=======
+                                            PrivilegeType privilegeType) throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                         .setDatabase(tableName.getDb())
                         .setMaterializedView(tableName.getTbl())
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 privilegeType)) {
             AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.MATERIALIZED_VIEW, tableName.getTbl());
         }
@@ -217,12 +383,22 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkAnyActionOnMaterializedView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
         if (!hasPermission(
+=======
+                privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnMaterializedView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+            throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                         .setDatabase(tableName.getDb())
                         .setMaterializedView(tableName.getTbl())
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 PrivilegeType.ANY)) {
             AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(),
                     ObjectType.MATERIALIZED_VIEW, tableName.getTbl());
@@ -245,18 +421,49 @@ public class RangerStarRocksAccessController extends RangerAccessController {
             }
         }
         AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(), ObjectType.MATERIALIZED_VIEW, db);
+=======
+                PrivilegeType.ANY);
+    }
+
+    @Override
+    public void checkAnyActionOnAnyMaterializedView(UserIdentity currentUser, Set<Long> roleIds, String db)
+            throws AccessDeniedException {
+        Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(db);
+        for (Table table : database.getMaterializedViews()) {
+            try {
+                hasPermission(
+                        RangerStarRocksResource.builder()
+                                .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                                .setDatabase(database.getFullName())
+                                .setMaterializedView(table.getName())
+                                .build(),
+                        currentUser,
+                        PrivilegeType.ANY);
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+            return;
+        }
+        throw new AccessDeniedException();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public void checkFunctionAction(UserIdentity currentUser, Set<Long> roleIds, Database database, Function function,
+<<<<<<< HEAD
                                     PrivilegeType privilegeType) {
         if (!hasPermission(
+=======
+                                    PrivilegeType privilegeType) throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                         .setDatabase(database.getFullName())
                         .setFunction(function.getSignature())
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 privilegeType)) {
             AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.FUNCTION, function.getSignature());
         }
@@ -265,12 +472,22 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String database, Function function) {
         if (!hasPermission(
+=======
+                privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String database, Function function)
+            throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                         .setDatabase(database)
                         .setFunction(function.getSignature())
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 PrivilegeType.ANY)) {
             AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(), ObjectType.FUNCTION, function.getSignature());
         }
@@ -292,16 +509,46 @@ public class RangerStarRocksAccessController extends RangerAccessController {
             }
         }
         AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(), ObjectType.FUNCTION, db);
+=======
+                PrivilegeType.ANY);
+    }
+
+    @Override
+    public void checkAnyActionOnAnyFunction(UserIdentity currentUser, Set<Long> roleIds, String db) throws AccessDeniedException {
+        Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(db);
+        for (Function function : database.getFunctions()) {
+            try {
+                hasPermission(
+                        RangerStarRocksResource.builder()
+                                .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                                .setDatabase(database.getFullName())
+                                .setFunction(function.getSignature())
+                                .build(),
+                        currentUser,
+                        PrivilegeType.ANY);
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+            return;
+        }
+        throw new AccessDeniedException();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public void checkGlobalFunctionAction(UserIdentity currentUser, Set<Long> roleIds, Function function,
+<<<<<<< HEAD
                                           PrivilegeType privilegeType) {
         if (!hasPermission(
+=======
+                                          PrivilegeType privilegeType) throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setGlobalFunction(function.getSignature())
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 privilegeType)) {
             AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.GLOBAL_FUNCTION, function.getSignature());
         }
@@ -312,16 +559,38 @@ public class RangerStarRocksAccessController extends RangerAccessController {
         if (!currentUser.equals(UserIdentity.ROOT)) {
             AccessDeniedException.reportAccessDenied("ANY", ObjectType.GLOBAL_FUNCTION, function.getSignature());
         }
+=======
+                privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnGlobalFunction(UserIdentity currentUser, Set<Long> roleIds, Function function)
+            throws AccessDeniedException {
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setGlobalFunction(function.getSignature())
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     /**
      * Check whether current user has specified privilege action on any object(table/view/mv) in the db.
      */
     @Override
+<<<<<<< HEAD
     public void checkActionInDb(UserIdentity userIdentity, Set<Long> roleIds, String db, PrivilegeType privilegeType) {
         Database database = GlobalStateMgr.getCurrentState().getDb(db);
         for (Table table : database.getTables()) {
             if (table.isView()) {
+=======
+    public void checkActionInDb(UserIdentity userIdentity, Set<Long> roleIds, String db, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db);
+        for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
+            if (table.isOlapView()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 checkViewAction(userIdentity, roleIds, new TableName(database.getFullName(), table.getName()), privilegeType);
             } else if (table.isMaterializedView()) {
                 checkMaterializedViewAction(userIdentity, roleIds,
@@ -333,12 +602,19 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     }
 
     @Override
+<<<<<<< HEAD
     public void checkResourceAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType) {
         if (!hasPermission(
+=======
+    public void checkResourceAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setResource(name)
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 privilegeType)) {
             AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.RESOURCE, name);
         }
@@ -347,10 +623,19 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkAnyActionOnResource(UserIdentity currentUser, Set<Long> roleIds, String name) {
         if (!hasPermission(
+=======
+                privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnResource(UserIdentity currentUser, Set<Long> roleIds, String name) throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setResource(name)
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 PrivilegeType.ANY)) {
             AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(), ObjectType.RESOURCE, name);
         }
@@ -359,23 +644,66 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkResourceGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType) {
         if (!hasPermission(
+=======
+                PrivilegeType.ANY);
+    }
+
+    @Override
+    public void checkResourceGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setResourceGroup(name)
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 privilegeType)) {
             AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.RESOURCE_GROUP, name);
         }
+=======
+                privilegeType);
+    }
+
+    @Override
+    public void checkPipeAction(UserIdentity currentUser, Set<Long> roleIds, PipeName name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setDatabase(name.getDbName())
+                        .setPipe(name.getPipeName())
+                        .build(),
+                currentUser,
+                privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, PipeName pipeName)
+            throws AccessDeniedException {
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setDatabase(pipeName.getDbName())
+                        .setPipe(pipeName.getPipeName())
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public void checkStorageVolumeAction(UserIdentity currentUser, Set<Long> roleIds, String storageVolume,
+<<<<<<< HEAD
                                          PrivilegeType privilegeType) {
         if (!hasPermission(
+=======
+                                         PrivilegeType privilegeType) throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setStorageVolume(storageVolume)
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 privilegeType)) {
             AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.STORAGE_VOLUME, storageVolume);
         }
@@ -384,13 +712,26 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String storageVolume) {
         if (!hasPermission(
+=======
+                privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String storageVolume)
+            throws AccessDeniedException {
+        hasPermission(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RangerStarRocksResource.builder()
                         .setStorageVolume(storageVolume)
                         .build(),
                 currentUser,
+<<<<<<< HEAD
                 PrivilegeType.ANY)) {
             AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(), ObjectType.STORAGE_VOLUME, storageVolume);
         }
+=======
+                PrivilegeType.ANY);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -424,4 +765,18 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     public String convertToAccessType(PrivilegeType privilegeType) {
         return privilegeType.name().toLowerCase(ENGLISH);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    @Override
+    public void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name) throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

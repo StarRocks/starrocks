@@ -47,7 +47,11 @@ std::string EpochInfo::debug_string() const {
     return ss.str();
 }
 
+<<<<<<< HEAD
 StreamChunkPtr StreamChunkConverter::make_stream_chunk(ChunkPtr chunk, Int8ColumnPtr ops) {
+=======
+StreamChunkPtr StreamChunkConverter::make_stream_chunk(ChunkPtr chunk, const Int8ColumnPtr& ops) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::vector<ChunkExtraColumnsMeta> stream_extra_data_meta = {
             ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_TINYINT), .is_null = false, .is_const = false}};
     std::vector<ColumnPtr> stream_extra_data = {ops};

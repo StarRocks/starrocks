@@ -29,6 +29,10 @@ import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
+<<<<<<< HEAD
+=======
+import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -50,8 +54,13 @@ public class HudiTableFactory extends ExternalTableFactory {
     public static void copyFromCatalogTable(HudiTable.Builder builder, HudiTable catalogTable, Map<String, String> properties) {
         builder.setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
+<<<<<<< HEAD
                 .setHiveDbName(catalogTable.getDbName())
                 .setHiveTableName(catalogTable.getTableName())
+=======
+                .setHiveDbName(catalogTable.getCatalogDBName())
+                .setHiveTableName(catalogTable.getCatalogTableName())
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .setPartitionColNames(catalogTable.getPartitionColumnNames())
                 .setDataColNames(catalogTable.getDataColumnNames())
                 .setHudiProperties(catalogTable.getProperties())
@@ -107,7 +116,11 @@ public class HudiTableFactory extends ExternalTableFactory {
 
     private static void validateHudiColumnType(List<Column> columns, HudiTable oTable) throws DdlException {
         String hudiBasePath = oTable.getTableLocation();
+<<<<<<< HEAD
         Configuration conf = new Configuration();
+=======
+        HadoopStorageConfiguration conf = new HadoopStorageConfiguration(new Configuration());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);

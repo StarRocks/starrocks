@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
         sum(l_extendedprice) / 7.0 as avg_yearly
@@ -16,6 +17,8 @@ where
     where
             l_partkey = p_partkey
 ) ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [planCount]
 2
 [plan-1]

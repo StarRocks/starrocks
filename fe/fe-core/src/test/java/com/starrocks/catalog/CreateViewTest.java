@@ -43,7 +43,11 @@ public class CreateViewTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -74,7 +78,11 @@ public class CreateViewTest {
                 .withView("create view test_null_view as select * from site_access;");
 
         Table view = starRocksAssert.getCtx().getGlobalStateMgr()
+<<<<<<< HEAD
                 .getDb("test").getTable("test_null_view");
+=======
+                .getLocalMetastore().getDb("test").getTable("test_null_view");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(view instanceof View);
         List<Column> columns = view.getColumns();
         for (Column column : columns) {
@@ -135,7 +143,11 @@ public class CreateViewTest {
                         ", lead(price ignore nulls,1,0) over (partition by username) as leadValue\n" +
                         "from sample_data;");
 
+<<<<<<< HEAD
         Table view = starRocksAssert.getCtx().getGlobalStateMgr()
+=======
+        Table view = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .getDb("test").getTable("test_ignore_nulls");
         Assert.assertTrue(view instanceof View);
         String str = ((View) view).getInlineViewDef();

@@ -23,6 +23,10 @@
 #include "fs/fs.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "simdjson.h"
+<<<<<<< HEAD
+=======
+#include "util/compression/stream_compression.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/raw_container.h"
 #include "util/slice.h"
 
@@ -73,6 +77,14 @@ private:
     std::vector<std::vector<SimpleJsonPath>> _json_paths;
     std::vector<SimpleJsonPath> _root_paths;
     bool _strip_outer_array = false;
+<<<<<<< HEAD
+=======
+
+    // An empty chunk that can be reused as the container for the result of get_next().
+    // It's mainly for optimizing the performance where get_next() returns Status::Timeout
+    // frequently by avoiding creating a chunk in each call
+    ChunkPtr _reusable_empty_chunk = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 // Reader to parse the json.
@@ -82,7 +94,12 @@ private:
 class JsonReader {
 public:
     JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner, std::shared_ptr<SequentialFile> file,
+<<<<<<< HEAD
                bool strict_mode, std::vector<SlotDescriptor*> slot_descs);
+=======
+               bool strict_mode, std::vector<SlotDescriptor*> slot_descs, std::vector<TypeDescriptor> types,
+               const TBrokerRangeDesc& range_desc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ~JsonReader();
 
@@ -107,6 +124,12 @@ private:
     Status _read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);
 
     Status _read_and_parse_json();
+<<<<<<< HEAD
+=======
+    Status _read_file_stream();
+    Status _read_file_broker();
+    Status _parse_payload();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk);
 
@@ -116,6 +139,11 @@ private:
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
 
+<<<<<<< HEAD
+=======
+    Status _check_ndjson();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;
@@ -125,14 +153,25 @@ private:
     std::shared_ptr<SequentialFile> _file;
     bool _closed = false;
     std::vector<SlotDescriptor*> _slot_descs;
+<<<<<<< HEAD
     //Attention: _slot_desc_dict's key is the string_view of the column of _slot_descs,
     // so the lifecycle of _slot_descs should be longer than _slot_desc_dict;
     std::unordered_map<std::string_view, SlotDescriptor*> _slot_desc_dict;
+=======
+    std::vector<TypeDescriptor> _type_descs;
+    //Attention: _slot_desc_dict's key is the string_view of the column of _slot_descs,
+    // so the lifecycle of _slot_descs should be longer than _slot_desc_dict;
+    std::unordered_map<std::string_view, SlotDescriptor*> _slot_desc_dict;
+    std::unordered_map<std::string_view, TypeDescriptor> _type_desc_dict;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // For performance reason, the simdjson parser should be reused over several files.
     //https://github.com/simdjson/simdjson/blob/master/doc/performance.md
     simdjson::ondemand::parser _simdjson_parser;
+<<<<<<< HEAD
     ByteBufferPtr _parser_buf;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool _is_ndjson = false;
 
     std::unique_ptr<JsonParser> _parser;
@@ -145,6 +184,7 @@ private:
     // record the "__op" column's index
     int _op_col_index;
 
+<<<<<<< HEAD
     // only used in unit test.
     // TODO: The semantics of Streaming Load And Routine Load is non-consistent.
     //       Import a json library supporting streaming parse.
@@ -152,6 +192,19 @@ private:
     size_t _buf_size = 1048576; // 1MB, the buf size for parsing json in unit test
     raw::RawVector<char> _buf;
 #endif
+=======
+    ByteBufferPtr _file_stream_buffer;
+
+    std::unique_ptr<char[]> _file_broker_buffer = nullptr;
+    size_t _file_broker_buffer_size = 0;
+    size_t _file_broker_buffer_capacity = 0;
+
+    char* _payload = nullptr;
+    size_t _payload_size = 0;
+    size_t _payload_capacity = 0;
+
+    TBrokerRangeDesc _range_desc;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

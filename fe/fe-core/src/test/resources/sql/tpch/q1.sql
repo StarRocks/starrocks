@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_returnflag,
@@ -20,6 +21,8 @@ group by
 order by
     l_returnflag,
     l_linestatus ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 TOP-N (order by [[9: L_RETURNFLAG ASC NULLS FIRST, 10: L_LINESTATUS ASC NULLS FIRST]])
     TOP-N (order by [[9: L_RETURNFLAG ASC NULLS FIRST, 10: L_LINESTATUS ASC NULLS FIRST]])

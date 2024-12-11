@@ -104,5 +104,8 @@ public:
 private:
     BfdParser* _parser;
 };
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

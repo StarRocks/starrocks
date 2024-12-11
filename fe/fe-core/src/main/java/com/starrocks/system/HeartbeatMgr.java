@@ -39,33 +39,59 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FsBroker;
+<<<<<<< HEAD
 import com.starrocks.common.ClientPool;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
 import com.starrocks.common.util.Util;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.persist.HbPackage;
+=======
+import com.starrocks.common.util.NetUtils;
+import com.starrocks.common.util.Util;
+import com.starrocks.encryption.KeyMgr;
+import com.starrocks.http.rest.ActionStatus;
+import com.starrocks.http.rest.BootstrapFinishAction.BootstrapResult;
+import com.starrocks.monitor.jvm.JvmStats;
+import com.starrocks.persist.HbPackage;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
+<<<<<<< HEAD
 import com.starrocks.thrift.HeartbeatService;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TBackendInfo;
 import com.starrocks.thrift.TBrokerOperationStatus;
 import com.starrocks.thrift.TBrokerOperationStatusCode;
 import com.starrocks.thrift.TBrokerPingBrokerRequest;
 import com.starrocks.thrift.TBrokerVersion;
+<<<<<<< HEAD
 import com.starrocks.thrift.TFileBrokerService;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
+<<<<<<< HEAD
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
+=======
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 import java.util.Map;
@@ -92,13 +118,24 @@ public class HeartbeatMgr extends FrontendDaemon {
     }
 
     public void setLeader(int clusterId, String token, long epoch) {
+<<<<<<< HEAD
         TMasterInfo tMasterInfo = new TMasterInfo(
                 new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port), clusterId, epoch);
+=======
+        TMasterInfo tMasterInfo = new TMasterInfo(new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port),
+                epoch);
+        tMasterInfo.setCluster_id(clusterId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         tMasterInfo.setToken(token);
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = HeartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
+<<<<<<< HEAD
         tMasterInfo.setMin_active_txn_id(GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId());
+=======
+        tMasterInfo.setMin_active_txn_id(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnId());
+        tMasterInfo.setEncrypted(KeyMgr.isEncrypted());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         MASTER_INFO.set(tMasterInfo);
     }
 
@@ -109,7 +146,12 @@ public class HeartbeatMgr extends FrontendDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
+<<<<<<< HEAD
         ImmutableMap<Long, Backend> idToBackendRef = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+=======
+        ImmutableMap<Long, Backend> idToBackendRef =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (idToBackendRef == null) {
             return;
         }
@@ -124,12 +166,18 @@ public class HeartbeatMgr extends FrontendDaemon {
         }
 
         // send compute node heartbeat
+<<<<<<< HEAD
         for (ComputeNode computeNode : GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode().values()) {
+=======
+        for (ComputeNode computeNode : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdComputeNode()
+                .values()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             BackendHeartbeatHandler handler = new BackendHeartbeatHandler(computeNode);
             hbResponses.add(executor.submit(handler));
         }
 
         // send frontend heartbeat
+<<<<<<< HEAD
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
         String masterFeNodeName = "";
         for (Frontend frontend : frontends) {
@@ -139,6 +187,13 @@ public class HeartbeatMgr extends FrontendDaemon {
             FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
                     GlobalStateMgr.getCurrentState().getClusterId(),
                     GlobalStateMgr.getCurrentState().getToken());
+=======
+        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
+        for (Frontend frontend : frontends) {
+            FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getToken());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             hbResponses.add(executor.submit(handler));
         }
 
@@ -175,6 +230,7 @@ public class HeartbeatMgr extends FrontendDaemon {
             }
         } // end for all results
 
+<<<<<<< HEAD
         // we also add a 'mocked' master Frontend heartbeat response to synchronize master info to other Frontends.
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
                 GlobalStateMgr.getCurrentState().getMaxJournalId(),
@@ -190,13 +246,27 @@ public class HeartbeatMgr extends FrontendDaemon {
 
         ClientPool.beHeartbeatPool.setTimeoutMs(Config.heartbeat_timeout_second * 1000);
         ClientPool.brokerHeartbeatPool.setTimeoutMs(Config.heartbeat_timeout_second * 1000);
+=======
+        // write edit log
+        GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
+
+        GlobalStateMgr.getCurrentState().getResourceGroupMgr().createBuiltinResourceGroupsIfNotExist();
+
+        // set sleep time to (heartbeat_timeout - timeUsed),
+        // so that the frequency of calling the heartbeat rpc can be stabilized at heartbeat_timeout
+        setInterval(Math.max(1L, Config.heartbeat_timeout_second * 1000L - (System.currentTimeMillis() - startTime)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private boolean handleHbResponse(HeartbeatResponse response, boolean isReplay) {
         switch (response.getType()) {
             case FRONTEND: {
                 FrontendHbResponse hbResponse = (FrontendHbResponse) response;
+<<<<<<< HEAD
                 Frontend fe = GlobalStateMgr.getCurrentState().getFeByName(hbResponse.getName());
+=======
+                Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(hbResponse.getName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (fe != null) {
                     return fe.handleHbResponse(hbResponse, isReplay);
                 }
@@ -204,15 +274,28 @@ public class HeartbeatMgr extends FrontendDaemon {
             }
             case BACKEND: {
                 BackendHbResponse hbResponse = (BackendHbResponse) response;
+<<<<<<< HEAD
                 ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(hbResponse.getBeId());
                 if (computeNode == null) {
                     computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(hbResponse.getBeId());
+=======
+                ComputeNode computeNode =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(hbResponse.getBeId());
+                if (computeNode == null) {
+                    computeNode =
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(hbResponse.getBeId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
                 if (computeNode != null) {
                     boolean isChanged = computeNode.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
+<<<<<<< HEAD
                         ClientPool.backendPool.clearPool(new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()));
+=======
+                        ThriftConnectionPool.backendPool.clearPool(
+                                new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         if (!isReplay && !computeNode.isAlive()) {
                             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
@@ -222,6 +305,7 @@ public class HeartbeatMgr extends FrontendDaemon {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {
+<<<<<<< HEAD
                                 Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
                                         getDefaultWarehouse();
                                 long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
@@ -229,6 +313,13 @@ public class HeartbeatMgr extends FrontendDaemon {
 
                                 GlobalStateMgr.getCurrentStarOSAgent().
                                             addWorker(computeNode.getId(), workerAddr, workerGroupId);
+=======
+                                String workerAddr = NetUtils.getHostPortInAccessibleFormat(computeNode.getHost(),
+                                        starletPort);
+
+                                GlobalStateMgr.getCurrentState().getStarOSAgent().
+                                        addWorker(computeNode.getId(), workerAddr, computeNode.getWorkerGroupId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             }
                         }
                     }
@@ -244,7 +335,11 @@ public class HeartbeatMgr extends FrontendDaemon {
                     boolean isChanged = broker.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
+<<<<<<< HEAD
                         ClientPool.brokerPool.clearPool(new TNetworkAddress(broker.ip, broker.port));
+=======
+                        ThriftConnectionPool.brokerPool.clearPool(new TNetworkAddress(broker.ip, broker.port));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     }
                     return isChanged;
                 }
@@ -267,30 +362,52 @@ public class HeartbeatMgr extends FrontendDaemon {
         @Override
         public HeartbeatResponse call() {
             long computeNodeId = computeNode.getId();
+<<<<<<< HEAD
             HeartbeatService.Client client = null;
             TNetworkAddress beAddr = new TNetworkAddress(computeNode.getHost(), computeNode.getHeartbeatPort());
             boolean ok = false;
             try {
                 client = ClientPool.beHeartbeatPool.borrowObject(beAddr);
 
+=======
+            TNetworkAddress beAddr = new TNetworkAddress(computeNode.getHost(), computeNode.getHeartbeatPort());
+            boolean ok = false;
+            try {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 TMasterInfo copiedMasterInfo = new TMasterInfo(MASTER_INFO.get());
                 copiedMasterInfo.setBackend_ip(computeNode.getHost());
                 long flags = HeartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(computeNodeId);
+<<<<<<< HEAD
                 copiedMasterInfo.setMin_active_txn_id(GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId());
+=======
+                copiedMasterInfo.setMin_active_txn_id(
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 copiedMasterInfo.setRun_mode(RunMode.toTRunMode(RunMode.getCurrentRunMode()));
                 if (computeNode instanceof Backend) {
                     copiedMasterInfo.setDisabled_disks(((Backend) computeNode).getDisabledDisks());
                     copiedMasterInfo.setDecommissioned_disks(((Backend) computeNode).getDecommissionedDisks());
                 }
+<<<<<<< HEAD
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
+=======
+                THeartbeatResult result = ThriftRPCRequestExecutor.callNoRetry(
+                        ThriftConnectionPool.beHeartbeatPool,
+                        beAddr,
+                        client -> client.heartbeat(copiedMasterInfo));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                 ok = true;
                 if (result.getStatus().getStatus_code() == TStatusCode.OK) {
                     TBackendInfo tBackendInfo = result.getBackend_info();
                     int bePort = tBackendInfo.getBe_port();
                     int httpPort = tBackendInfo.getHttp_port();
+<<<<<<< HEAD
+=======
+                    int arrowPort = tBackendInfo.getArrow_flight_port();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     int brpcPort = -1;
                     int starletPort = 0;
                     boolean isSetStoragePath = false;
@@ -311,23 +428,37 @@ public class HeartbeatMgr extends FrontendDaemon {
                     // Update number of hardware of cores of corresponding backend.
                     // BackendCoreStat will be updated in ComputeNode.handleHbResponse.
                     int cpuCores = tBackendInfo.isSetNum_hardware_cores() ? tBackendInfo.getNum_hardware_cores() : 0;
+<<<<<<< HEAD
+=======
+                    long memLimitBytes = tBackendInfo.isSetMem_limit_bytes() ? tBackendInfo.getMem_limit_bytes() : 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
                     BackendHbResponse backendHbResponse = new BackendHbResponse(
                             computeNodeId, bePort, httpPort, brpcPort, starletPort,
+<<<<<<< HEAD
                             System.currentTimeMillis(), version, cpuCores, isSetStoragePath);
+=======
+                            System.currentTimeMillis(), version, cpuCores, memLimitBytes, isSetStoragePath,
+                            arrowPort);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (tBackendInfo.isSetReboot_time()) {
                         backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
                     }
                     return backendHbResponse;
                 } else {
+<<<<<<< HEAD
                     return new BackendHbResponse(computeNodeId,
+=======
+                    return new BackendHbResponse(computeNodeId, result.getStatus().getStatus_code(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"
                                     : result.getStatus().getError_msgs().get(0));
                 }
             } catch (Exception e) {
                 LOG.warn("backend heartbeat got exception, addr: {}:{}",
                         computeNode.getHost(), computeNode.getHeartbeatPort(), e);
+<<<<<<< HEAD
                 return new BackendHbResponse(computeNodeId,
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             } finally {
@@ -336,15 +467,25 @@ public class HeartbeatMgr extends FrontendDaemon {
                 } else {
                     ClientPool.beHeartbeatPool.invalidateObject(beAddr, client);
                 }
+=======
+                return new BackendHbResponse(computeNodeId, TStatusCode.UNKNOWN,
+                        Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
 
     // frontend heartbeat
     public static class FrontendHeartbeatHandler implements Callable<HeartbeatResponse> {
+<<<<<<< HEAD
         private Frontend fe;
         private int clusterId;
         private String token;
+=======
+        private final Frontend fe;
+        private final int clusterId;
+        private final String token;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         public FrontendHeartbeatHandler(Frontend fe, int clusterId, String token) {
             this.fe = fe;
@@ -354,6 +495,7 @@ public class HeartbeatMgr extends FrontendDaemon {
 
         @Override
         public HeartbeatResponse call() {
+<<<<<<< HEAD
             if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
                 // heartbeat to self
                 if (GlobalStateMgr.getCurrentState().isReady()) {
@@ -361,21 +503,40 @@ public class HeartbeatMgr extends FrontendDaemon {
                             GlobalStateMgr.getCurrentState().getReplayedJournalId(), System.currentTimeMillis(),
                             GlobalStateMgr.getCurrentState().getFeStartTime(),
                             Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
+=======
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
+                // heartbeat to self
+                if (GlobalStateMgr.getCurrentState().isReady()) {
+                    return new FrontendHbResponse(fe.getNodeName(), Config.query_port, Config.rpc_port,
+                            GlobalStateMgr.getCurrentState().getMaxJournalId(), System.currentTimeMillis(),
+                            GlobalStateMgr.getCurrentState().getFeStartTime(),
+                            Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH,
+                            JvmStats.getJvmHeapUsedPercent());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 } else {
                     return new FrontendHbResponse(fe.getNodeName(), "not ready");
                 }
             }
 
+<<<<<<< HEAD
             String url = "http://" + fe.getHost() + ":" + Config.http_port
                     + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
             try {
                 String result = Util.getResultForUrl(url, null,
+=======
+            String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(fe.getHost(), Config.http_port);
+            String url = "http://" + accessibleHostPort
+                    + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
+            try {
+                String resultStr = Util.getResultForUrl(url, null,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         Config.heartbeat_timeout_second * 1000, Config.heartbeat_timeout_second * 1000);
                 /*
                  * return:
                  * {"replayedJournalId":191224,"queryPort":9131,"rpcPort":9121,"status":"OK","msg":"Success"}
                  * {"replayedJournalId":0,"queryPort":0,"rpcPort":0,"status":"FAILED","msg":"not ready"}
                  */
+<<<<<<< HEAD
                 JSONObject root = new JSONObject(result);
                 String status = root.getString("status");
                 if (!"OK".equals(status)) {
@@ -388,6 +549,15 @@ public class HeartbeatMgr extends FrontendDaemon {
                     String feVersion = root.getString(BootstrapFinishAction.FE_VERSION);
                     return new FrontendHbResponse(fe.getNodeName(), queryPort, rpcPort, replayedJournalId,
                             System.currentTimeMillis(), feStartTime, feVersion);
+=======
+                BootstrapResult result = BootstrapResult.fromJson(resultStr);
+                if (result.getStatus() != ActionStatus.OK) {
+                    return new FrontendHbResponse(fe.getNodeName(), result.getMessage());
+                } else {
+                    return new FrontendHbResponse(fe.getNodeName(), result.getQueryPort(), result.getRpcPort(),
+                            result.getReplayedJournal(), System.currentTimeMillis(),
+                            result.getFeStartTime(), result.getFeVersion(), result.getHeapUsedPercent());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             } catch (Exception e) {
                 return new FrontendHbResponse(fe.getNodeName(),
@@ -410,6 +580,7 @@ public class HeartbeatMgr extends FrontendDaemon {
 
         @Override
         public HeartbeatResponse call() {
+<<<<<<< HEAD
             TFileBrokerService.Client client = null;
             TNetworkAddress addr = new TNetworkAddress(broker.ip, broker.port);
             boolean ok = false;
@@ -419,6 +590,15 @@ public class HeartbeatMgr extends FrontendDaemon {
                         clientId);
                 TBrokerOperationStatus status = client.ping(request);
                 ok = true;
+=======
+            try {
+                TBrokerPingBrokerRequest request = new TBrokerPingBrokerRequest(TBrokerVersion.VERSION_ONE,
+                        clientId);
+                TBrokerOperationStatus status = ThriftRPCRequestExecutor.callNoRetry(
+                        ThriftConnectionPool.brokerHeartbeatPool,
+                        new TNetworkAddress(broker.ip, broker.port),
+                        client -> client.ping(request));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                 if (status.getStatusCode() != TBrokerOperationStatusCode.OK) {
                     return new BrokerHbResponse(brokerName, broker.ip, broker.port, status.getMessage());
@@ -429,12 +609,15 @@ public class HeartbeatMgr extends FrontendDaemon {
             } catch (Exception e) {
                 return new BrokerHbResponse(brokerName, broker.ip, broker.port,
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
+<<<<<<< HEAD
             } finally {
                 if (ok) {
                     ClientPool.brokerHeartbeatPool.returnObject(addr, client);
                 } else {
                     ClientPool.brokerHeartbeatPool.invalidateObject(addr, client);
                 }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
@@ -444,6 +627,10 @@ public class HeartbeatMgr extends FrontendDaemon {
             handleHbResponse(hbResult, true);
         }
     }
+<<<<<<< HEAD
 
 }
 
+=======
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # week_iso
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the ISO standard week of the year for the specified date as an integer within the range of `1` to `53`.
 
@@ -33,4 +37,8 @@ MySQL > select week_iso ('2008-02-20 00:00:00');
 
 ## Keywords
 
+<<<<<<< HEAD
 WEEK_I
+=======
+WEEK_ISO
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

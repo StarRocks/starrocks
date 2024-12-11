@@ -33,7 +33,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -47,6 +50,10 @@ import org.apache.commons.collections4.MapUtils;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 
 /*
@@ -71,6 +78,10 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     // record all push down column on scan node
     // for check the group bys which is generated in join node(on/where)
     private ColumnRefSet allPushDownGroupBys;
+<<<<<<< HEAD
+=======
+    private Set<OptExpression> pushDownTargets;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public PushDownAggregateRewriter(TaskContext taskContext) {
         this.factory = taskContext.getOptimizerContext().getColumnRefFactory();
@@ -98,6 +109,14 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 .flatMap(Collection::stream)
                 .map(ScalarOperator::getUsedColumns).forEach(allPushDownGroupBys::union);
 
+<<<<<<< HEAD
+=======
+        pushDownTargets = allRewriteContext.values().stream()
+                .flatMap(List::stream)
+                .map(AggregatePushDownContext::getTargetPosition)
+                .collect(Collectors.toSet());
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return root.getOp().accept(this, root, AggregatePushDownContext.EMPTY);
     }
 
@@ -141,7 +160,14 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         LogicalProjectOperator project = (LogicalProjectOperator) optExpression.getOp();
         Map<ColumnRefOperator, ScalarOperator> originProjectMap = Maps.newHashMap(project.getColumnRefMap());
 
+<<<<<<< HEAD
         if (!originProjectMap.values().stream().allMatch(ScalarOperator::isColumnRef)) {
+=======
+        // Some rules will change the output columns of an operator, e.g. from c1 to c2, by adding a Project on top of the
+        // operator with the mapping of c2->c1. At this time, c2 and c1 are both columnRef, but they are different.
+        if (!originProjectMap.values().stream().allMatch(ScalarOperator::isColumnRef) ||
+                !originProjectMap.entrySet().stream().allMatch(e -> e.getKey().equals(e.getValue()))) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             rewriteProject(context, originProjectMap);
         }
 
@@ -311,6 +337,14 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
         }
+<<<<<<< HEAD
+=======
+
+        if (pushDownHere(optExpression)) {
+            return rewrite(optExpression, context);
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // push down aggregate
         optExpression.getInputs().set(0, pushDownJoinAggregate(optExpression, context, 0));
         optExpression.getInputs().set(1, pushDownJoinAggregate(optExpression, context, 1));
@@ -359,8 +393,12 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         return optExpression;
     }
 
+<<<<<<< HEAD
     @Override
     public OptExpression visitLogicalTableScan(OptExpression optExpression, AggregatePushDownContext context) {
+=======
+    private OptExpression rewrite(OptExpression optExpression, AggregatePushDownContext context) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
         }
@@ -376,13 +414,22 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         Preconditions.checkState(context.groupBys.values().stream().allMatch(ScalarOperator::isColumnRef));
 
+<<<<<<< HEAD
         LogicalScanOperator scan = (LogicalScanOperator) optExpression.getOp();
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         OptExpression result = optExpression;
         // if the aggregation is complex expression, need create project
         if (context.aggregations.values().stream().map(c -> c.getChild(0)).anyMatch(s -> !s.isColumnRef())) {
             Map<ColumnRefOperator, ScalarOperator> refs = Maps.newHashMap();
+<<<<<<< HEAD
             scan.getOutputColumns().forEach(c -> refs.put(c, c));
+=======
+            optExpression.getOutputColumns().getStream()
+                    .map(factory::getColumnRef)
+                    .forEach(c -> refs.put(c, c));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : context.aggregations.entrySet()) {
                 ScalarOperator input = entry.getValue().getChild(0);
@@ -406,10 +453,25 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         } else {
             aggregate = new LogicalAggregationOperator(AggType.GLOBAL, groupBys, context.aggregations);
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return OptExpression.create(aggregate, result);
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public OptExpression visitLogicalTableScan(OptExpression optExpression, AggregatePushDownContext context) {
+        if (pushDownHere(optExpression)) {
+            return rewrite(optExpression, context);
+        }
+        return visit(optExpression, context);
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public OptExpression visitLogicalUnion(OptExpression optExpression, AggregatePushDownContext context) {
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
@@ -469,4 +531,11 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     private boolean isInvalid(OptExpression optExpression, AggregatePushDownContext context) {
         return context.isEmpty() || optExpression.getOp().hasLimit();
     }
+<<<<<<< HEAD
+=======
+
+    private boolean pushDownHere(OptExpression optExpression) {
+        return pushDownTargets.contains(optExpression);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

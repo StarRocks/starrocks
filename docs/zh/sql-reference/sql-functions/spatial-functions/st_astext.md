@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_AsText, ST_AsWKT
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将一个几何图形转化为 WKT（Well Known Text）的表示形式。
 

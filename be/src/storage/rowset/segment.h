@@ -45,6 +45,10 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "storage/delta_column_group.h"
+<<<<<<< HEAD
+=======
+#include "storage/index/inverted/inverted_index_iterator.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -81,6 +85,7 @@ using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 // change finished, client should disable all cached Segment for old TabletSchema.
 class Segment : public std::enable_shared_from_this<Segment> {
 public:
+<<<<<<< HEAD
     // Does NOT take the ownership of |tablet_schema|.
     static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info,
                                                    uint32_t segment_id, const TabletSchema* tablet_schema,
@@ -111,10 +116,34 @@ public:
     ~Segment();
 
     Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
+=======
+    // Like above but share the ownership of |unsafe_tablet_schema_ref|.
+    static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info,
+                                                   uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
+                                                   size_t* footer_length_hint = nullptr,
+                                                   const FooterPointerPB* partial_rowset_footer = nullptr,
+                                                   const LakeIOOptions& lake_io_opts = {},
+                                                   lake::TabletManager* tablet_manager = nullptr);
+
+    static StatusOr<size_t> parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                                 size_t* footer_length_hint,
+                                                 const FooterPointerPB* partial_rowset_footer);
+
+    static Status write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer);
+
+    Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
+            TabletSchemaCSPtr tablet_schema, lake::TabletManager* tablet_manager);
+
+    ~Segment();
+
+    Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                const LakeIOOptions& lake_io_opts);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
+<<<<<<< HEAD
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx);
 
     uint64_t id() const { return _segment_id; }
@@ -124,6 +153,44 @@ public:
 
     [[nodiscard]] Status new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options,
                                                    BitmapIndexIterator** iter);
+=======
+    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
+                                                       const TabletSchemaCSPtr& read_tablet_schema);
+
+    uint64_t id() const { return _segment_id; }
+
+    // Creates a new iterator for a specific column in a segment.
+    //
+    // This function initializes a new iterator object that can be used to traverse
+    // the elements in a column of a segment. The iterator starts from the beginning
+    // of the column.
+    //
+    // @param column The column that need to be read.
+    // @param path A pointer to the access path of the column.
+    // @return A new iterator object for the specified column, or NotFound if the segment does not have the column.
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(const TabletColumn& column, ColumnAccessPath* path);
+
+    // Creates a new iterator for a specific column in a segment.
+    //
+    // Difference from `new_iterator`:
+    //  - If the segment does not have the column, `new_column_iterator_or_default` will return an iterator that
+    //    can read the default value of the column, if there is one.
+    //  - If the type of the data stored in the segment file does not match the type of |column|, the iterator
+    //    returned from `new_column_iterator_or_default` will perform type conversion and return data that matches
+    //    the type of |column|.
+    //
+    // Note: If this column does not have a default value defined, but is nullable, then
+    // NULL will be used as the default value.
+    //
+    // @param id The unique identifier of the column.
+    // @param path A pointer to the access path of the column.
+    // @return A new iterator object for the specified column. If the segment does not have the column and the
+    // column does not hava a default value, an error will be returned.
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator_or_default(const TabletColumn& column,
+                                                                             ColumnAccessPath* path);
+
+    Status new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& options, BitmapIndexIterator** iter);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
@@ -153,6 +220,7 @@ public:
 
     size_t num_columns() const { return _column_readers.size(); }
 
+<<<<<<< HEAD
     const ColumnReader* column(size_t i) const { return _column_readers[i].get(); }
 
     FileSystem* file_system() const { return _fs.get(); }
@@ -161,6 +229,23 @@ public:
 
     const TabletSchema& tablet_schema() const { return *_tablet_schema; }
 
+=======
+    const ColumnReader* column(size_t i) const {
+        auto unique_id = _tablet_schema->column(i).unique_id();
+        return _column_readers.count(unique_id) > 0 ? _column_readers.at(unique_id).get() : nullptr;
+    }
+
+    const ColumnReader* column_with_uid(size_t uid) const {
+        return _column_readers.count(uid) > 0 ? _column_readers.at(uid).get() : nullptr;
+    }
+
+    FileSystem* file_system() const { return _fs.get(); }
+
+    const TabletSchema& tablet_schema() const { return *_tablet_schema; }
+
+    const TabletSchemaCSPtr tablet_schema_share_ptr() { return _tablet_schema.schema(); }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const std::string& file_name() const { return _segment_file_info.path; }
 
     const FileInfo& file_info() const { return _segment_file_info; }
@@ -169,26 +254,56 @@ public:
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
+<<<<<<< HEAD
     [[nodiscard]] Status load_index(bool skip_fill_local_cache = true);
     bool has_loaded_index() const;
 
+=======
+    Status load_index(const LakeIOOptions& lake_io_opts = {});
+    bool has_loaded_index() const;
+
+    Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
     size_t mem_usage() const;
 
     StatusOr<int64_t> get_data_size() const;
 
+<<<<<<< HEAD
     // read short_key_index, for data check, just used in unit test now
     [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
+=======
+    lake::TabletManager* lake_tablet_manager() { return _tablet_manager; }
+
+    // read short_key_index, for data check, just used in unit test now
+    Status get_short_key_index(std::vector<std::string>* sk_index_values);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // for cloud native tablet metadata cache.
     // after the segment is inserted into metadata cache, various indexes will be loaded later when used,
     // so the segment size in the cache needs to be updated when indexes are loading.
     void update_cache_size();
 
+<<<<<<< HEAD
     DISALLOW_COPY_AND_MOVE(Segment);
 
 private:
+=======
+    bool is_default_column(const TabletColumn& column) { return !_column_readers.contains(column.unique_id()); }
+
+    const FileEncryptionInfo* encryption_info() const { return _encryption_info.get(); };
+
+    DISALLOW_COPY_AND_MOVE(Segment);
+
+    // for ut test
+    void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
+
+private:
+    friend struct SegmentZoneMapPruner;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     struct DummyDeleter {
         void operator()(const TabletSchema*) {}
     };
@@ -199,8 +314,15 @@ private:
         // Does not take the ownership of TabletSchema pointed by |raw_ptr|.
         explicit TabletSchemaWrapper(const TabletSchema* raw_ptr) : _schema(raw_ptr, DummyDeleter()) {}
 
+<<<<<<< HEAD
         // Shard the ownership of |ptr|.
         explicit TabletSchemaWrapper(std::shared_ptr<const TabletSchema> ptr) : _schema(std::move(ptr)) {}
+=======
+        explicit TabletSchemaWrapper(const TabletSchemaCSPtr* shared_ptr) : _schema(*shared_ptr) {}
+
+        // Shard the ownership of |ptr|.
+        explicit TabletSchemaWrapper(TabletSchemaCSPtr ptr) : _schema(std::move(ptr)) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         DISALLOW_COPY_AND_MOVE(TabletSchemaWrapper);
 
@@ -208,11 +330,21 @@ private:
 
         const TabletSchema& operator*() const { return *_schema; }
 
+<<<<<<< HEAD
     private:
         std::shared_ptr<const TabletSchema> _schema;
     };
 
     Status _load_index(bool skip_fill_local_cache);
+=======
+        const TabletSchemaCSPtr& schema() { return _schema; };
+
+    private:
+        TabletSchemaCSPtr _schema;
+    };
+
+    Status _load_index(const LakeIOOptions& lake_io_opts);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     void _reset();
 
@@ -229,13 +361,21 @@ private:
     size_t _column_index_mem_usage() const;
 
     // open segment file and read the minimum amount of necessary information (footer)
+<<<<<<< HEAD
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
+=======
+    Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                 const LakeIOOptions& lake_io_opts);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status _create_column_readers(SegmentFooterPB* footer);
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
+<<<<<<< HEAD
     void _prepare_adapter_info();
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options);
 
     friend class SegmentIterator;
@@ -250,7 +390,11 @@ private:
     // ColumnReader for each column in TabletSchema. If ColumnReader is nullptr,
     // This means that this segment has no data for that column, which may be added
     // after this segment is generated.
+<<<<<<< HEAD
     std::vector<std::unique_ptr<ColumnReader>> _column_readers;
+=======
+    std::map<int32_t, std::unique_ptr<ColumnReader>> _column_readers;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // used to guarantee that short key index will be loaded at most once in a thread-safe way
     OnceFlag _load_index_once;
@@ -259,10 +403,14 @@ private:
     // short key index decoder
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
 
+<<<<<<< HEAD
     // Actual storage type for each column, used to rewrite the input readoptions
     std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
     // When reading old type format data this will be set to true.
     bool _needs_chunk_adapter = false;
+=======
+    std::unique_ptr<FileEncryptionInfo> _encryption_info;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // for cloud native tablet
     lake::TabletManager* _tablet_manager = nullptr;

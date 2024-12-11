@@ -104,7 +104,11 @@ public:
     merge_path::MergePathCascadeMerger* get_merge_path_merger(RuntimeState* state);
     void close_stream_recvr();
 
+<<<<<<< HEAD
     SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+=======
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     const int32_t _num_sender;

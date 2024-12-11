@@ -15,10 +15,22 @@
 
 package com.starrocks.connector;
 
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
+
+import java.io.IOException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 
 public interface RemoteFileIO {
 
     Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey);
+<<<<<<< HEAD
+=======
+
+    FileStatus[] getFileStatus(Path... files) throws IOException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

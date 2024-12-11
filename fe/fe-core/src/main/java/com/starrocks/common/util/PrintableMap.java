@@ -44,6 +44,11 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("fs.s3a.secret.key");
         SENSITIVE_KEY.add("aws.s3.access_key");
         SENSITIVE_KEY.add("aws.s3.secret_key");
+<<<<<<< HEAD
+=======
+        SENSITIVE_KEY.add("aws.glue.access_key");
+        SENSITIVE_KEY.add("aws.glue.secret_key");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         SENSITIVE_KEY.add("fs.oss.accessKeyId");
         SENSITIVE_KEY.add("fs.oss.accessKeySecret");
         SENSITIVE_KEY.add("fs.cosn.userinfo.secretId");

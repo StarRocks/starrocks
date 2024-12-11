@@ -37,6 +37,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.ColumnIdExpr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -234,7 +238,11 @@ public class ColumnFilterConverterTest {
     }
 
     private OlapTable buildOlapTable(String timeKey) {
+<<<<<<< HEAD
         List<Expr> exprList = new ArrayList<>();
+=======
+        List<ColumnIdExpr> exprList = new ArrayList<>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<Expr> params = new ArrayList<>();
         List<Column> columns = new ArrayList<>();
         StringLiteral stringLiteral = new StringLiteral(timeKey);
@@ -245,12 +253,20 @@ public class ColumnFilterConverterTest {
         params.add(slotRefDate);
         FunctionCallExpr zdtestCallExpr = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
                 params);
+<<<<<<< HEAD
         exprList.add(zdtestCallExpr);
+=======
+        exprList.add(ColumnIdExpr.create(zdtestCallExpr));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         columns.add(new Column("date_col", ScalarType.DATE));
         ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(exprList, columns,
                 PartitionType.RANGE);
 
+<<<<<<< HEAD
         return new OlapTable(1L, "table1", new ArrayList<>(), KeysType.AGG_KEYS, expressionRangePartitionInfo,
+=======
+        return new OlapTable(1L, "table1", columns, KeysType.AGG_KEYS, expressionRangePartitionInfo,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 new RandomDistributionInfo(10));
     }
 
@@ -263,9 +279,15 @@ public class ColumnFilterConverterTest {
         argument.add(constantOperator);
         ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, argument);
 
+<<<<<<< HEAD
         Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("bill_detail");
         ExpressionRangePartitionInfoV2 partitionInfo = (ExpressionRangePartitionInfoV2) ((OlapTable) table).getPartitionInfo();
         ScalarOperator afterConvert = ColumnFilterConverter.convertPredicate(predicate, partitionInfo);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("bill_detail");
+        ExpressionRangePartitionInfoV2 partitionInfo = (ExpressionRangePartitionInfoV2) ((OlapTable) table).getPartitionInfo();
+        ScalarOperator afterConvert = ColumnFilterConverter.convertPredicate(predicate, partitionInfo, table.getIdToColumn());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(2921712368984L, ((ConstantOperator) afterConvert.getChild(1)).getValue());
     }
 

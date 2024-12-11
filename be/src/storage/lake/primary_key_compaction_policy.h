@@ -21,8 +21,11 @@
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/compaction_policy.h"
+<<<<<<< HEAD
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::lake {
 
@@ -34,7 +37,12 @@ struct RowsetStat {
 
 class RowsetCandidate {
 public:
+<<<<<<< HEAD
     RowsetCandidate(RowsetMetadataPtr rp, const RowsetStat& rs) : rowset_meta_ptr(std::move(rp)), stat(rs) {
+=======
+    RowsetCandidate(const RowsetMetadataPB* rp, const RowsetStat& rs, int index)
+            : rowset_meta_ptr(rp), stat(rs), rowset_index(index) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         calculate_score();
     }
     // The goal of lake primary table compaction is to reduce the overhead of reading data.
@@ -69,8 +77,14 @@ public:
     }
     bool operator<(const RowsetCandidate& other) const { return score < other.score; }
 
+<<<<<<< HEAD
     RowsetMetadataPtr rowset_meta_ptr;
     RowsetStat stat;
+=======
+    const RowsetMetadataPB* rowset_meta_ptr;
+    RowsetStat stat;
+    int rowset_index;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     double score;
 };
 
@@ -114,12 +128,30 @@ struct PKSizeTieredLevel {
 
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
+<<<<<<< HEAD
     explicit PrimaryCompactionPolicy(TabletPtr tablet) : CompactionPolicy(tablet) {}
     ~PrimaryCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(TabletMetadataPtr tablet_metadata, bool calc_score,
                                                   std::vector<bool>* has_dels);
+=======
+    explicit PrimaryCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata,
+                                     bool force_base_compaction)
+            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), force_base_compaction) {}
+
+    ~PrimaryCompactionPolicy() override = default;
+
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
+                                                  bool calc_score, std::vector<bool>* has_dels);
+
+    // Common function to return the picked rowset indexes.
+    // For compaction score, only picked rowset indexes are needed.
+    // For compaction, picked rowsets can be constructed by picked rowset indexes.
+    StatusOr<std::vector<int64_t>> pick_rowset_indexes(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
+                                                       bool calc_score, std::vector<bool>* has_dels);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // When using Sized-tiered compaction policy, we need this function to pick highest score level.
     static StatusOr<std::unique_ptr<PKSizeTieredLevel>> pick_max_level(bool calc_score,

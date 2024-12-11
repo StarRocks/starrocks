@@ -40,22 +40,39 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAlterJobType;
 import com.starrocks.thrift.TAlterMaterializedViewParam;
 import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
 import com.starrocks.thrift.TAlterTabletReqV2;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TColumn;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TTabletType;
@@ -68,6 +85,10 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 /*
  * This task is used for alter table process, such as rollup and schema change
@@ -76,6 +97,10 @@ import java.util.Map;
  * The new replica can be a rollup replica, or a shadow replica of schema change.
  */
 public class AlterReplicaTask extends AgentTask implements Runnable {
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static final Logger LOG = LogManager.getLogger(AlterReplicaTask.class);
 
     private final long baseTabletId;
@@ -88,14 +113,19 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private final TTabletType tabletType;
     private final long txnId;
     private final TAlterTabletMaterializedColumnReq generatedColumnReq;
+<<<<<<< HEAD
 
     private List<Column> baseSchemaColumns;
+=======
+    private List<TColumn> baseSchemaColumns;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private RollupJobV2Params rollupJobV2Params;
 
     public static class RollupJobV2Params {
         private final Map<String, Expr> defineExprs;
         private final Expr whereExpr;
         private final DescriptorTable descTabl;
+<<<<<<< HEAD
         private final List<String> baseTableColNames;
         public RollupJobV2Params(Map<String, Expr> defineExprs,
                                  Expr whereExpr,
@@ -105,6 +135,18 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             this.whereExpr = whereExpr;
             this.descTabl = descTabl;
             this.baseTableColNames = baseTableColNames;
+=======
+        private final List<ColumnId> baseTableColIds;
+
+        public RollupJobV2Params(Map<String, Expr> defineExprs,
+                                 Expr whereExpr,
+                                 DescriptorTable descTabl,
+                                 List<ColumnId> baseTableColIds) {
+            this.defineExprs = defineExprs;
+            this.whereExpr = whereExpr;
+            this.descTabl = descTabl;
+            this.baseTableColIds = baseTableColIds;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         public Map<String, Expr> getDefineExprs() {
@@ -119,18 +161,31 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             return descTabl;
         }
 
+<<<<<<< HEAD
         public List<String> getBaseTableColNames() {
             return baseTableColNames;
+=======
+        public List<ColumnId> getBaseTableColIds() {
+            return baseTableColIds;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     public static AlterReplicaTask alterLocalTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
                                                     long rollupTabletId, long baseTabletId, long newReplicaId, int newSchemaHash,
                                                     int baseSchemaHash, long version, long jobId,
+<<<<<<< HEAD
                                                     TAlterTabletMaterializedColumnReq generatedColumnReq) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
                 TTabletType.TABLET_TYPE_DISK, 0, generatedColumnReq, Collections.emptyList(), null);
+=======
+                                                    TAlterTabletMaterializedColumnReq generatedColumnReq,
+                                                    List<TColumn> baseSchemaColumns) {
+        return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
+                baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
+                TTabletType.TABLET_TYPE_DISK, 0, generatedColumnReq, baseSchemaColumns, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
@@ -141,6 +196,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     }
 
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
+<<<<<<< HEAD
             long rollupIndexId, long rollupTabletId, long baseTabletId,
             long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
             long jobId, RollupJobV2Params rollupJobV2Params) {
@@ -148,13 +204,38 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
                 TTabletType.TABLET_TYPE_DISK, 0, null,
                 Collections.emptyList(), rollupJobV2Params);
+=======
+                                                     long rollupIndexId, long rollupTabletId, long baseTabletId,
+                                                     long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
+                                                     long jobId, RollupJobV2Params rollupJobV2Params,
+                                                     List<TColumn> baseSchemaColumns) {
+        return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
+                baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
+                TTabletType.TABLET_TYPE_DISK, 0, null,
+                baseSchemaColumns, rollupJobV2Params);
+    }
+
+    public static AlterReplicaTask rollupLakeTablet(long backendId, long dbId, long tableId, long partitionId,
+                                                     long rollupIndexId, long rollupTabletId, long baseTabletId,
+                                                     long version, long jobId, RollupJobV2Params rollupJobV2Params,
+                                                    List<TColumn> baseSchemaColumns, long txnId) {
+        return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
+                baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.ROLLUP,
+                TTabletType.TABLET_TYPE_LAKE, txnId, null,
+                baseSchemaColumns, rollupJobV2Params);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
                              long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
                              long jobId, AlterJobV2.JobType jobType,
+<<<<<<< HEAD
                              TTabletType tabletType, long txnId, TAlterTabletMaterializedColumnReq generatedColumnReq, 
                              List<Column> baseSchemaColumns, RollupJobV2Params rollupJobV2Params) {
+=======
+                             TTabletType tabletType, long txnId, TAlterTabletMaterializedColumnReq generatedColumnReq,
+                             List<TColumn> baseSchemaColumns, RollupJobV2Params rollupJobV2Params) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
         this.baseTabletId = baseTabletId;
@@ -171,7 +252,10 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         this.txnId = txnId;
 
         this.generatedColumnReq = generatedColumnReq;
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.baseSchemaColumns = baseSchemaColumns;
 
         this.rollupJobV2Params = rollupJobV2Params;
@@ -225,7 +309,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             Map<String, Expr> defineExprs = rollupJobV2Params.getDefineExprs();
             Expr whereExpr = rollupJobV2Params.getWhereExpr();
             DescriptorTable descTable = rollupJobV2Params.getDescTabl();
+<<<<<<< HEAD
             List<String> baseTableColNames = rollupJobV2Params.getBaseTableColNames();
+=======
+            List<ColumnId> baseTableColIds = rollupJobV2Params.getBaseTableColIds();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (defineExprs != null) {
                 for (Map.Entry<String, Expr> entry : defineExprs.entrySet()) {
                     List<SlotRef> slots = Lists.newArrayList();
@@ -252,13 +340,25 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             if (descTable != null) {
                 req.setDesc_tbl(descTable.toThrift());
             }
+<<<<<<< HEAD
             req.setBase_table_column_names(baseTableColNames);
+=======
+            req.setBase_table_column_names(baseTableColIds.stream().map(ColumnId::getId)
+                    .collect(Collectors.toList()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         req.setMaterialized_column_req(generatedColumnReq);
 
         req.setTablet_type(tabletType);
         req.setTxn_id(txnId);
         req.setJob_id(jobId);
+<<<<<<< HEAD
+=======
+
+        if (baseSchemaColumns != null) {
+            req.setColumns(baseSchemaColumns);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return req;
     }
 
@@ -280,15 +380,24 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
      *      So the replica's version should be larger than X. So we don't need to modify the replica version
      *      because its already looks like normal.
      * Case 3:
+<<<<<<< HEAD
      *      There are new load jobs after alter task, and their version and LFV is smaller or equal to X. 
      *      And because alter request report success, it means that we can increase replica's version to X.
      */
     public void handleFinishAlterTask() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb(getDbId());
+=======
+     *      There are new load jobs after alter task, and their version and LFV is smaller or equal to X.
+     *      And because alter request report success, it means that we can increase replica's version to X.
+     */
+    public void handleFinishAlterTask() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(getDbId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             throw new MetaNotFoundException("database " + getDbId() + " does not exist");
         }
 
+<<<<<<< HEAD
         db.writeLock();
         try {
             OlapTable tbl = (OlapTable) db.getTable(getTableId());
@@ -296,6 +405,17 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");
             }
             Partition partition = tbl.getPartition(getPartitionId());
+=======
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), getTableId());
+        if (tbl == null) {
+            throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        try {
+            PhysicalPartition partition = tbl.getPhysicalPartition(getPartitionId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (partition == null) {
                 throw new MetaNotFoundException("partition " + getPartitionId() + " does not exist");
             }
@@ -334,7 +454,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);
             }
         } finally {
+<<<<<<< HEAD
             db.writeUnlock();
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         setFinished(true);
     }

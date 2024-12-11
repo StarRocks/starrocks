@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # months_add
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Adds a specified number of months to the date, accurate to the month.
 

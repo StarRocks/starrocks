@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_max
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 求取一个ARRAY中的所有数据中的最大值，返回这个结果。
 

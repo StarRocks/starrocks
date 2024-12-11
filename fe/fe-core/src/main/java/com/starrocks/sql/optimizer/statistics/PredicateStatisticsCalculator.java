@@ -118,9 +118,14 @@ public class PredicateStatisticsCalculator {
 
                 double rowCount = Math.max(1, statistics.getOutputRowCount() * selectivity);
 
+<<<<<<< HEAD
                 // only columnRefOperator could add column statistic to statistics
                 Optional<ColumnRefOperator> childOpt =
                         firstChild.isColumnRef() ? Optional.of((ColumnRefOperator) firstChild) : Optional.empty();
+=======
+                // only columnRefOperator could add column statistic to statistics.
+                ColumnRefOperator childOpt = (ColumnRefOperator) firstChild;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ColumnStatistic newInColumnStatistic =
                         ColumnStatistic.builder()
                                 .setDistinctValuesCount(Math.min(inColumnStatistic.getDistinctValuesCount(),
@@ -129,10 +134,15 @@ public class PredicateStatisticsCalculator {
                                 .setNullsFraction(0)
                                 .build();
 
+<<<<<<< HEAD
                 Statistics inStatistics = childOpt.map(operator ->
                                 Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
                                         addColumnStatistic(operator, newInColumnStatistic).build()).
                         orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+=======
+                Statistics inStatistics = Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
+                        addColumnStatistic(childOpt, newInColumnStatistic).build();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(inStatistics, rowCount);
             }
 

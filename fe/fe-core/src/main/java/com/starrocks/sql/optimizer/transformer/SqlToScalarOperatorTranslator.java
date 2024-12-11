@@ -27,6 +27,10 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.DictQueryExpr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -36,14 +40,25 @@ import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+<<<<<<< HEAD
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
+=======
+import com.starrocks.analysis.MatchExpr;
+import com.starrocks.analysis.MultiInPredicate;
+import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.Parameter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.UserVariableExpr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -57,6 +72,10 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.DictionaryGetExpr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -67,6 +86,10 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.SubqueryUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.Utils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -82,12 +105,21 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.DictQueryOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryGetOperator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -182,6 +214,12 @@ public final class SqlToScalarOperatorTranslator {
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
         result = scalarRewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
 
+<<<<<<< HEAD
+=======
+        result = ScalarOperatorRewriter.replaceScalarOperatorByColumnRef(result,
+                                        expressionMapping.getGeneratedColumnExprOpToColumnRef());
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         requireNonNull(result, "translated expression is null");
         return result;
     }
@@ -191,6 +229,15 @@ public final class SqlToScalarOperatorTranslator {
         return visitor.visit(expression, new Context());
     }
 
+<<<<<<< HEAD
+=======
+    public static ScalarOperator translateWithSlotRef(Expr expr,
+                                                      java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
+        ResolveSlotVisitor visitor = new ResolveSlotVisitor(resolver);
+        return visitor.visit(expr, new Context());
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static final class Context {
 
         public final boolean hasSubquery;
@@ -250,7 +297,11 @@ public final class SqlToScalarOperatorTranslator {
         }
     }
 
+<<<<<<< HEAD
     private static class Visitor extends AstVisitor<ScalarOperator, Context> {
+=======
+    private static class Visitor implements AstVisitor<ScalarOperator, Context> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         private ExpressionMapping expressionMapping;
         private final ColumnRefFactory columnRefFactory;
         private final List<ColumnRefOperator> correlation;
@@ -279,12 +330,33 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visit(ParseNode node, Context context) {
             Expr expr = (Expr) node;
+<<<<<<< HEAD
             if (expressionMapping.get(expr) != null && !(expr.isConstant())) {
                 return expressionMapping.get(expr);
             }
 
             return super.visit(node, context);
 
+=======
+            if (!expressionMapping.getExpressionToColumns().isEmpty() &&
+                    !expr.isConstant()) {
+                ScalarOperator res = Utils.getValueIfExists(expressionMapping.getExpressionToColumns(), expr);
+                if (res != null) {
+                    ScalarOperator constantOperator = expressionMapping.getColumnRefToConstOperators().get(res);
+                    return constantOperator == null ? res : constantOperator;
+                }
+            }
+
+            return node.accept(this, context);
+        }
+
+        @Override
+        public ScalarOperator visitParameterExpr(Parameter node, Context context) {
+            if (node.getExpr() == null) {
+                throw new SemanticException("Unknown parameter");
+            }
+            return visit(node.getExpr());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         @Override
@@ -305,9 +377,23 @@ public final class SqlToScalarOperatorTranslator {
                         "an non-empty usedStructFiledPos!");
                 Preconditions.checkArgument(node.getUsedStructFieldPos().size() > 0);
                 return SubfieldOperator.build(columnRefOperator, node.getOriginType(), node.getUsedStructFieldPos());
+<<<<<<< HEAD
             } else {
                 return columnRefOperator;
             }
+=======
+            }
+
+            ScalarOperator constOperator = expressionMapping.getConstOperator(columnRefOperator);
+            if (constOperator != null) {
+                // this columnRefOp is generated by project's const expr
+                // instead of using project's output columnRef, we replace it with const expr
+                // because project operator in BE will unpacking const column
+                // if using columnRefOp instead of const expr, BE will lose some opportunities to optimize const expr
+                return constOperator;
+            }
+            return columnRefOperator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         @Override
@@ -391,7 +477,11 @@ public final class SqlToScalarOperatorTranslator {
             }
             Scope scope = new Scope(args, expressionMapping.getScope());
             ExpressionMapping old = expressionMapping;
+<<<<<<< HEAD
             expressionMapping = new ExpressionMapping(scope, refs, expressionMapping);
+=======
+            expressionMapping = new ExpressionMapping(scope, refs, expressionMapping, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ScalarOperator lambda = visit(node.getChild(0), context.clone(node));
             expressionMapping = old; // recover it
             return new LambdaFunctionOperator(refs, lambda, Type.FUNCTION);
@@ -639,6 +729,20 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public ScalarOperator visitMatchExpr(MatchExpr node, Context context)
+                throws SemanticException {
+            ScalarOperator[] children = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .toArray(ScalarOperator[]::new);
+
+            return new MatchExprOperator(children);
+        }
+
+        @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public ScalarOperator visitLiteral(LiteralExpr node, Context context) {
             if (node instanceof NullLiteral) {
                 return ConstantOperator.createNull(node.getType());
@@ -717,6 +821,7 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
+<<<<<<< HEAD
         public ScalarOperator visitInformationFunction(InformationFunction node,
                                                        Context context) {
             if (node.getFuncType().equalsIgnoreCase("CONNECTION_ID")) {
@@ -727,15 +832,33 @@ public final class SqlToScalarOperatorTranslator {
             return new CallOperator(node.getFuncType(), node.getType(), Lists.newArrayList(
                     ConstantOperator.createVarchar(node.getStrValue()),
                     ConstantOperator.createBigint(node.getIntValue())));
+=======
+        public ScalarOperator visitInformationFunction(InformationFunction node, Context context) {
+            String funcType = node.getFuncType();
+            if (funcType.equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
+                return ConstantOperator.createBigint(node.getIntValue());
+            } else {
+                return ConstantOperator.createVarchar(node.getStrValue());
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         @Override
         public ScalarOperator visitVariableExpr(VariableExpr node, Context context) {
+<<<<<<< HEAD
             if (node.isNull()) {
                 return ConstantOperator.createNull(node.getType());
             } else {
                 return new ConstantOperator(node.getValue(), node.getType());
             }
+=======
+            return new ConstantOperator(node.getValue(), node.getType());
+        }
+
+        @Override
+        public ScalarOperator visitUserVariableExpr(UserVariableExpr node, Context context) {
+            return visit(node.getValue(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         @Override
@@ -822,6 +945,56 @@ public final class SqlToScalarOperatorTranslator {
         public ScalarOperator visitCloneExpr(CloneExpr node, Context context) {
             return new CloneOperator(visit(node.getChild(0), context.clone(node)));
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public ScalarOperator visitDictQueryExpr(DictQueryExpr node, Context context) {
+            List<ScalarOperator> arguments = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .collect(Collectors.toList());
+            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn(), node.getType());
+        }
+
+        @Override
+        public ScalarOperator visitDictionaryGetExpr(DictionaryGetExpr node, Context context) {
+            List<ScalarOperator> arguments = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .collect(Collectors.toList());
+
+            DictionaryGetOperator op = new DictionaryGetOperator(arguments, node.getType(), node.getDictionaryId(),
+                    node.getDictionaryTxnId(), node.getKeySize(), node.getNullIfNotExist());
+            return op;
+        }
+    }
+
+    /**
+     * Resolve the SlotRef
+     */
+    static class ResolveSlotVisitor extends Visitor {
+
+        private final java.util.function.Function<SlotRef, ColumnRefOperator> resolver;
+
+        public ResolveSlotVisitor(java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
+            super(new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                    new ColumnRefFactory(), Collections.emptyList(),
+                    null, null, null, null);
+            this.resolver = resolver;
+        }
+
+        @Override
+        public ScalarOperator visitSlot(SlotRef node, Context context) {
+            if (!node.isAnalyzed()) {
+                ColumnRefOperator ref = resolver.apply(node);
+                if (ref != null) {
+                    return ref;
+                }
+            }
+            throw unsupportedException("unknown slot: " + node.toSql());
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     static class IgnoreSlotVisitor extends Visitor {

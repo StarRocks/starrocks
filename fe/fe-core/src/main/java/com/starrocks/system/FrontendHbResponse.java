@@ -62,12 +62,22 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
     @SerializedName(value = "feVersion")
     private String feVersion;
 
+<<<<<<< HEAD
+=======
+    private float heapUsedPercent;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public FrontendHbResponse() {
         super(HeartbeatResponse.Type.FRONTEND);
     }
 
     public FrontendHbResponse(String name, int queryPort, int rpcPort,
+<<<<<<< HEAD
                               long replayedJournalId, long hbTime, long feStartTime, String feVersion) {
+=======
+                              long replayedJournalId, long hbTime, long feStartTime,
+                              String feVersion, float heapUsedPercent) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(HeartbeatResponse.Type.FRONTEND);
         this.status = HbStatus.OK;
         this.name = name;
@@ -77,6 +87,10 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         this.hbTime = hbTime;
         this.feStartTime = feStartTime;
         this.feVersion = feVersion;
+<<<<<<< HEAD
+=======
+        this.heapUsedPercent = heapUsedPercent;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public FrontendHbResponse(String name, String errMsg) {
@@ -110,6 +124,17 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         return feVersion;
     }
 
+<<<<<<< HEAD
+=======
+    public float getHeapUsedPercent() {
+        return heapUsedPercent;
+    }
+
+    public void setHeapUsedPercent(float heapUsedPercent) {
+        this.heapUsedPercent = heapUsedPercent;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static FrontendHbResponse read(DataInput in) throws IOException {
         FrontendHbResponse result = new FrontendHbResponse();
         result.readFields(in);

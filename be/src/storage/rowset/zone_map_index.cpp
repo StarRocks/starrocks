@@ -56,6 +56,7 @@ struct ZoneMapDatumBase {
     using CppType = typename TypeTraits<type>::CppType;
     CppType value;
 
+<<<<<<< HEAD
     void init([[maybe_unused]] TypeInfo* type_info, [[maybe_unused]] int length) {}
     void set_to_max(TypeInfo* type_info) { type_info->set_to_max(&value); }
     void set_to_min(TypeInfo* type_info) { type_info->set_to_min(&value); }
@@ -78,10 +79,42 @@ struct ZoneMapDatum<TYPE_DECIMAL64> : public ZoneMapDatumBase<TYPE_DECIMAL64> {
 template <>
 struct ZoneMapDatum<TYPE_DECIMAL128> : public ZoneMapDatumBase<TYPE_DECIMAL128> {
     std::string to_zone_map_string(TypeInfo* type_info) const { return get_decimal_zone_map_string(type_info, &value); }
+=======
+    virtual ~ZoneMapDatumBase() = default;
+
+    virtual void reset(TypeInfo* type_info) { type_info->set_to_min(&value); }
+    virtual void resize_container_for_fit(TypeInfo* type_info, const void* v) {}
+    virtual std::string to_zone_map_string(TypeInfo* type_info) const { return type_info->to_string(&value); }
+};
+
+template <LogicalType type>
+struct ZoneMapDatum final : public ZoneMapDatumBase<type> {};
+
+template <>
+struct ZoneMapDatum<TYPE_DECIMAL32> final : public ZoneMapDatumBase<TYPE_DECIMAL32> {
+    std::string to_zone_map_string(TypeInfo* type_info) const override {
+        return get_decimal_zone_map_string(type_info, &value);
+    }
+};
+
+template <>
+struct ZoneMapDatum<TYPE_DECIMAL64> final : public ZoneMapDatumBase<TYPE_DECIMAL64> {
+    std::string to_zone_map_string(TypeInfo* type_info) const override {
+        return get_decimal_zone_map_string(type_info, &value);
+    }
+};
+
+template <>
+struct ZoneMapDatum<TYPE_DECIMAL128> final : public ZoneMapDatumBase<TYPE_DECIMAL128> {
+    std::string to_zone_map_string(TypeInfo* type_info) const override {
+        return get_decimal_zone_map_string(type_info, &value);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 template <>
 struct ZoneMapDatum<TYPE_CHAR> : public ZoneMapDatumBase<TYPE_CHAR> {
+<<<<<<< HEAD
     void init([[maybe_unused]] TypeInfo* type_info_, int length) {
         _length = length;
         raw::make_room(&_value_container, length);
@@ -94,10 +127,30 @@ struct ZoneMapDatum<TYPE_CHAR> : public ZoneMapDatumBase<TYPE_CHAR> {
     }
     void set_to_min([[maybe_unused]] TypeInfo* type_info) { value.size = 0; }
     int _length;
+=======
+    void resize_container_for_fit(TypeInfo* type_info, const void* v) override {
+        static const int INIT_SIZE = 64;
+        const Slice* slice = reinterpret_cast<const Slice*>(v);
+        if (slice->size > _length) {
+            _length = std::max<int>(BitUtil::next_power_of_two(slice->size), INIT_SIZE);
+            raw::stl_string_resize_uninitialized(&_value_container, _length);
+            value.data = _value_container.data();
+            value.size = 0;
+        }
+    }
+
+    void reset(TypeInfo* type_info) override {
+        value.data = _value_container.data();
+        value.size = 0;
+    }
+
+    int _length = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string _value_container;
 };
 
 template <>
+<<<<<<< HEAD
 struct ZoneMapDatum<TYPE_VARCHAR> : public ZoneMapDatum<TYPE_CHAR> {};
 
 template <LogicalType type>
@@ -105,6 +158,13 @@ struct ZoneMap {
     // min value of zone
     ZoneMapDatum<type> min_value;
     // max value of zone
+=======
+struct ZoneMapDatum<TYPE_VARCHAR> final : public ZoneMapDatum<TYPE_CHAR> {};
+
+template <LogicalType type>
+struct ZoneMap {
+    ZoneMapDatum<type> min_value;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ZoneMapDatum<type> max_value;
 
     // if both has_null and has_not_null is false, means no rows.
@@ -131,7 +191,11 @@ class ZoneMapIndexWriterImpl final : public ZoneMapIndexWriter {
 public:
     // TypeInfo is used for all kinds of types. It is used to change the content of datum of the max/min value.
     // length is only used for CHAR/VARCHAR, and used to allocate enough memory for min/max value.
+<<<<<<< HEAD
     explicit ZoneMapIndexWriterImpl(TypeInfo* type_info, int length);
+=======
+    explicit ZoneMapIndexWriterImpl(TypeInfo* type_info);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     void add_values(const void* values, size_t count) override;
 
@@ -147,8 +211,13 @@ public:
 private:
     void _reset_zone_map(ZoneMap<type>* zone_map) {
         // we should allocate max varchar length and set to max for min value
+<<<<<<< HEAD
         zone_map->min_value.set_to_max(_type_info);
         zone_map->max_value.set_to_min(_type_info);
+=======
+        zone_map->min_value.reset(_type_info);
+        zone_map->max_value.reset(_type_info);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         zone_map->has_null = false;
         zone_map->has_not_null = false;
     }
@@ -164,18 +233,24 @@ private:
 };
 
 template <LogicalType type>
+<<<<<<< HEAD
 ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(TypeInfo* type_info, int length) : _type_info(type_info) {
     _page_zone_map.min_value.init(_type_info, length);
     _page_zone_map.max_value.init(_type_info, length);
     _reset_zone_map(&_page_zone_map);
     _segment_zone_map.min_value.init(_type_info, length);
     _segment_zone_map.max_value.init(_type_info, length);
+=======
+ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(TypeInfo* type_info) : _type_info(type_info) {
+    _reset_zone_map(&_page_zone_map);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _reset_zone_map(&_segment_zone_map);
 }
 
 template <LogicalType type>
 void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) {
     if (count > 0) {
+<<<<<<< HEAD
         _page_zone_map.has_not_null = true;
         const auto* vals = reinterpret_cast<const CppType*>(values);
         auto [pmin, pmax] = std::minmax_element(vals, vals + count);
@@ -185,12 +260,35 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
         if (unaligned_load<CppType>(pmax) > _page_zone_map.max_value.value) {
             _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
         }
+=======
+        const auto* vals = reinterpret_cast<const CppType*>(values);
+        auto [pmin, pmax] = std::minmax_element(vals, vals + count);
+
+        if (_page_zone_map.has_not_null) {
+            if (unaligned_load<CppType>(pmin) < _page_zone_map.min_value.value) {
+                _page_zone_map.min_value.resize_container_for_fit(_type_info, pmin);
+                _type_info->direct_copy(&_page_zone_map.min_value.value, pmin);
+            }
+            if (unaligned_load<CppType>(pmax) > _page_zone_map.max_value.value) {
+                _page_zone_map.max_value.resize_container_for_fit(_type_info, pmax);
+                _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
+            }
+        } else {
+            _page_zone_map.min_value.resize_container_for_fit(_type_info, pmin);
+            _type_info->direct_copy(&_page_zone_map.min_value.value, pmin);
+
+            _page_zone_map.max_value.resize_container_for_fit(_type_info, pmax);
+            _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
+        }
+        _page_zone_map.has_not_null = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
 template <LogicalType type>
 Status ZoneMapIndexWriterImpl<type>::flush() {
     // Update segment zone map.
+<<<<<<< HEAD
     if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
         _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value);
     }
@@ -203,6 +301,31 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
     if (_page_zone_map.has_not_null) {
         _segment_zone_map.has_not_null = true;
     }
+=======
+    if (_page_zone_map.has_not_null) {
+        if (_segment_zone_map.has_not_null) {
+            if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
+                _segment_zone_map.min_value.resize_container_for_fit(_type_info, &_page_zone_map.min_value.value);
+                _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value);
+            }
+            if (_page_zone_map.max_value.value > _segment_zone_map.max_value.value) {
+                _segment_zone_map.max_value.resize_container_for_fit(_type_info, &_page_zone_map.max_value.value);
+                _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
+            }
+        } else {
+            _segment_zone_map.min_value.resize_container_for_fit(_type_info, &_page_zone_map.min_value.value);
+            _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value);
+
+            _segment_zone_map.max_value.resize_container_for_fit(_type_info, &_page_zone_map.max_value.value);
+            _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
+        }
+        _segment_zone_map.has_not_null = true;
+    }
+
+    if (_page_zone_map.has_null) {
+        _segment_zone_map.has_null = true;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ZoneMapPB zone_map_pb;
     _page_zone_map.to_proto(&zone_map_pb, _type_info);
@@ -220,6 +343,7 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
 
 struct ZoneMapIndexWriterBuilder {
     template <LogicalType ftype>
+<<<<<<< HEAD
     std::unique_ptr<ZoneMapIndexWriter> operator()(TypeInfo* type_info, int length) {
         return std::make_unique<ZoneMapIndexWriterImpl<ftype>>(type_info, length);
     }
@@ -227,6 +351,15 @@ struct ZoneMapIndexWriterBuilder {
 
 std::unique_ptr<ZoneMapIndexWriter> ZoneMapIndexWriter::create(TypeInfo* type_info, int length) {
     return field_type_dispatch_zonemap_index(type_info->type(), ZoneMapIndexWriterBuilder(), type_info, length);
+=======
+    std::unique_ptr<ZoneMapIndexWriter> operator()(TypeInfo* type_info) {
+        return std::make_unique<ZoneMapIndexWriterImpl<ftype>>(type_info);
+    }
+};
+
+std::unique_ptr<ZoneMapIndexWriter> ZoneMapIndexWriter::create(TypeInfo* type_info) {
+    return field_type_dispatch_zonemap_index(type_info->type(), ZoneMapIndexWriterBuilder(), type_info);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 template <LogicalType type>
@@ -267,7 +400,11 @@ StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const Zone
         Status st = _do_load(opts, meta);
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+<<<<<<< HEAD
                                      mem_usage() - sizeof(ZoneMapIndexReader));
+=======
+                                     mem_usage() - sizeof(ZoneMapIndexReader))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             _reset();
         }

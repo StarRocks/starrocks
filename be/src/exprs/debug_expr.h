@@ -14,7 +14,11 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DebugExpr(*this)); }
 
+<<<<<<< HEAD
     [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
+=======
+    Status prepare(RuntimeState* state, ExprContext* context) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 

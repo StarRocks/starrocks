@@ -261,7 +261,11 @@ static void BM_primitive(benchmark::State& state) {
         size_t totalNumRows = 0;
         while (rr->next(*batch, &pos)) {
             ColumnPtr column = ColumnHelper::create_column(c0Type, isNullable);
+<<<<<<< HEAD
             orcColumnReader->get_next(c0, column, 0, columnSize);
+=======
+            CHECK(orcColumnReader->get_next(c0, column, 0, columnSize).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             DCHECK_EQ(columnSize, column->size());
             totalNumRows += columnSize;
         }
@@ -354,4 +358,8 @@ BENCHMARK_TEMPLATE(BM_primitive, NON_NULLABLE, LogicalType::TYPE_DATETIME)
 
 } // namespace starrocks
 
+<<<<<<< HEAD
 BENCHMARK_MAIN();
+=======
+BENCHMARK_MAIN();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

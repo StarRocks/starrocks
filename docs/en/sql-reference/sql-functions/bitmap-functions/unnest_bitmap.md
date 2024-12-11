@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # unnest_bitmap
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 unnest_bitmap is a table function that takes a bitmap and converts elements in that bitmap into multiple rows of a table.
 

@@ -14,15 +14,21 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <atomic>
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/logging.h"
 
 namespace starrocks {
 class ExecEnv;
 
+<<<<<<< HEAD
 extern std::atomic<bool> k_starrocks_exit;
 extern std::atomic<bool> k_starrocks_exit_quick;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void start_be(const std::vector<StorePath>& paths, bool as_cn);
 } // namespace starrocks

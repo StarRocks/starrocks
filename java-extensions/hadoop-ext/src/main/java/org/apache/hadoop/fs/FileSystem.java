@@ -4106,6 +4106,10 @@ public abstract class FileSystem extends Configured
             private volatile long bytesReadDistanceOfThreeOrFour;
             private volatile long bytesReadDistanceOfFiveOrLarger;
             private volatile long bytesReadErasureCoded;
+<<<<<<< HEAD
+=======
+            private volatile long remoteReadTimeMS;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             /**
              * Add another StatisticsData object to this one.
@@ -4123,6 +4127,10 @@ public abstract class FileSystem extends Configured
                 this.bytesReadDistanceOfFiveOrLarger +=
                         other.bytesReadDistanceOfFiveOrLarger;
                 this.bytesReadErasureCoded += other.bytesReadErasureCoded;
+<<<<<<< HEAD
+=======
+                this.remoteReadTimeMS += other.remoteReadTimeMS;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
 
             /**
@@ -4141,6 +4149,10 @@ public abstract class FileSystem extends Configured
                 this.bytesReadDistanceOfFiveOrLarger =
                         -this.bytesReadDistanceOfFiveOrLarger;
                 this.bytesReadErasureCoded = -this.bytesReadErasureCoded;
+<<<<<<< HEAD
+=======
+                this.remoteReadTimeMS = -this.remoteReadTimeMS;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
 
             @Override
@@ -4189,6 +4201,13 @@ public abstract class FileSystem extends Configured
             public long getBytesReadErasureCoded() {
                 return bytesReadErasureCoded;
             }
+<<<<<<< HEAD
+=======
+
+            public long getRemoteReadTimeMS() {
+                return remoteReadTimeMS;
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         private interface StatisticsAggregator<T> {
@@ -4235,6 +4254,10 @@ public abstract class FileSystem extends Configured
             STATS_DATA_CLEANER.
                     setName(StatisticsDataReferenceCleaner.class.getName());
             STATS_DATA_CLEANER.setDaemon(true);
+<<<<<<< HEAD
+=======
+            STATS_DATA_CLEANER.setContextClassLoader(null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             STATS_DATA_CLEANER.start();
         }
 
@@ -4426,6 +4449,17 @@ public abstract class FileSystem extends Configured
         }
 
         /**
+<<<<<<< HEAD
+=======
+         * Increment the time taken to read bytes from remote in the statistics.
+         * @param durationMS time taken in ms to read bytes from remote
+         */
+        public void increaseRemoteReadTime(final long durationMS) {
+            getThreadStatistics().remoteReadTimeMS += durationMS;
+        }
+
+        /**
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
          * Apply the given aggregator to all StatisticsData objects associated with
          * this Statistics object.
          * <p>
@@ -4579,6 +4613,28 @@ public abstract class FileSystem extends Configured
         }
 
         /**
+<<<<<<< HEAD
+=======
+         * Get total time taken in ms for bytes read from remote.
+         * @return time taken in ms for remote bytes read.
+         */
+        public long getRemoteReadTime() {
+            return visitAll(new StatisticsAggregator<Long>() {
+                private long remoteReadTimeMS = 0;
+
+                @Override
+                public void accept(StatisticsData data) {
+                    remoteReadTimeMS += data.remoteReadTimeMS;
+                }
+
+                public Long aggregate() {
+                    return remoteReadTimeMS;
+                }
+            });
+        }
+
+        /**
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
          * Get all statistics data.
          * MR or other frameworks can use the method to get all statistics at once.
          *
@@ -5109,6 +5165,27 @@ public abstract class FileSystem extends Configured
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Return path of the enclosing root for a given path.
+     * The enclosing root path is a common ancestor that should be used for temp and staging dirs
+     * as well as within encryption zones and other restricted directories.
+     *
+     * Call makeQualified on the param path to ensure its part of the correct filesystem.
+     *
+     * @param path file path to find the enclosing root path for
+     * @return a path to the enclosing root
+     * @throws IOException early checks like failure to resolve path cause IO failures
+     */
+    @InterfaceAudience.Public
+    @InterfaceStability.Unstable
+    public Path getEnclosingRoot(Path path) throws IOException {
+        this.makeQualified(path);
+        return this.makeQualified(new Path("/"));
+    }
+
+    /**
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
      * Create a multipart uploader.
      *
      * @param basePath file path under which all files are uploaded

@@ -38,6 +38,10 @@
 #include <functional>
 #include <map>
 #include <mutex>
+<<<<<<< HEAD
+=======
+#include <string_view>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/routine_load/data_consumer_pool.h"
@@ -84,7 +88,11 @@ private:
     // execute the task
     void exec_task(StreamLoadContext* ctx, DataConsumerPool* pool, const ExecFinishCallback& cb);
 
+<<<<<<< HEAD
     void err_handler(StreamLoadContext* ctx, const Status& st, const std::string& err_msg);
+=======
+    void err_handler(StreamLoadContext* ctx, const Status& st, std::string_view err_msg);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ExecEnv* _exec_env;
     std::unique_ptr<ThreadPool> _thread_pool;

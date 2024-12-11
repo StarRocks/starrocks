@@ -34,11 +34,18 @@ Status ProfileReportWorker::register_non_pipeline_load(const TUniqueId& fragment
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status ProfileReportWorker::unregister_non_pipeline_load(const TUniqueId& fragment_instance_id) {
     VLOG(3) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_non_pipeline_report_mutex);
     _non_pipeline_report_tasks.erase(fragment_instance_id);
     return Status::OK();
+=======
+void ProfileReportWorker::unregister_non_pipeline_load(const TUniqueId& fragment_instance_id) {
+    VLOG(3) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
+    std::lock_guard lg(_non_pipeline_report_mutex);
+    _non_pipeline_report_tasks.erase(fragment_instance_id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
@@ -57,12 +64,19 @@ Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, co
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
+=======
+void ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     VLOG(3) << "unregister_pipeline_load query_id=" << print_id(query_id)
             << ", fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_pipeline_report_mutex);
     _pipeline_report_tasks.erase(PipeLineReportTaskKey(query_id, fragment_instance_id));
+<<<<<<< HEAD
     return Status::OK();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void ProfileReportWorker::_start_report_profile() {

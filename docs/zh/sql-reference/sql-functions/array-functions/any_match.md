@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # any_match
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 判断数组中是否有元素匹配谓词中 (predicate) 指定的条件。
 

@@ -61,6 +61,10 @@ struct TNormalHashJoinNode {
   5: optional PlanNodes.TJoinDistributionMode distribution_mode
   6: optional list<binary> partition_exprs
   7: optional list<Types.TSlotId> output_columns
+<<<<<<< HEAD
+=======
+  8: optional bool late_materialization
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 

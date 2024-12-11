@@ -40,7 +40,11 @@ public class ShowProcesslistStmtTest {
         ShowProcesslistStmt stmt = (ShowProcesslistStmt)UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
+<<<<<<< HEAD
         Assert.assertEquals(11, metaData.getColumnCount());
+=======
+        Assert.assertEquals(10, metaData.getColumnCount());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals("Id", metaData.getColumn(0).getName());
         Assert.assertEquals("User", metaData.getColumn(1).getName());
         Assert.assertEquals("Host", metaData.getColumn(2).getName());

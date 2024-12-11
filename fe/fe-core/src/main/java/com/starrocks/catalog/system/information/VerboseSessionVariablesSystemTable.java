@@ -23,9 +23,17 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class VerboseSessionVariablesSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.VERBOSE_SESSION_VARIABLES_ID,
                 "verbose_session_variables",
+=======
+    private static final String NAME = "verbose_session_variables";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.VERBOSE_SESSION_VARIABLES_ID,
+                NAME,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("VARIABLE_NAME", ScalarType.createVarchar(64))

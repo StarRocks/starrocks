@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_to_array
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将 BITMAP 中的所有值组合成 BIGINT 类型的数组。
 

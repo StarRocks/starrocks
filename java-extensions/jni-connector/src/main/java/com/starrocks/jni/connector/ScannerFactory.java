@@ -15,5 +15,9 @@
 package com.starrocks.jni.connector;
 
 public interface ScannerFactory {
+<<<<<<< HEAD
     Class getScannerClass() throws ClassNotFoundException;
+=======
+    Class getScannerClass(String scannerType) throws ClassNotFoundException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

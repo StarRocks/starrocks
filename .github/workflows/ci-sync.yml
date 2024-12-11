@@ -11,16 +11,25 @@ on:
 
 jobs:
   sync:
+<<<<<<< HEAD
     runs-on: [self-hosted, quick]
     if: github.event.pull_request.merged == true && github.repository == 'StarRocks/starrocks'
     env:
       PR_NUMBER: ${{ github.event.number }}
       GH_TOKEN: ${{ secrets.PAT }}
+=======
+    runs-on: [self-hosted, sync]
+    if: github.event.pull_request.merged == true && github.repository == 'StarRocks/starrocks'
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT2 }}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     steps:
       - name: commit_sha
         id: commit_sha
         run: |
           set -x
+<<<<<<< HEAD
           commit_sha=`curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
@@ -31,6 +40,19 @@ jobs:
           echo "commit_sha=${commit_sha:0:7}" >> $GITHUB_OUTPUT
 
       - name: sync
+=======
+          pr_info=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json mergeCommit,labels)
+          labels=`echo $pr_info | jq -r '.labels[].name'`
+          if [[ "${labels}" =~ sync ]]; then
+            echo "is_sync=true" >> $GITHUB_OUTPUT         
+          else
+            commit_sha=`echo $pr_info | jq -r '.mergeCommit.oid'`
+            echo "commit_sha=${commit_sha:0:7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: sync
+        if: steps.commit_sha.outputs.is_sync != 'true'
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         env:
           PR_ID: ${{ github.event.number }}
           COMMIT_ID: ${{ steps.commit_sha.outputs.commit_sha }}

@@ -32,10 +32,20 @@ Status CumulativeCompaction::compact() {
         return Status::InvalidArgument("cumulative compaction input parameter error.");
     }
 
+<<<<<<< HEAD
+=======
+    StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
+    StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(1);
+    DeferOp op([&] { StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(-1); });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::unique_lock lock(_tablet->get_cumulative_lock(), std::try_to_lock);
     if (!lock.owns_lock()) {
         return Status::OK();
     }
+<<<<<<< HEAD
+=======
+    int64_t start_time = UnixMillis();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TRACE("got cumulative compaction lock");
 
     // 1.calculate cumulative point
@@ -62,8 +72,18 @@ Status CumulativeCompaction::compact() {
     }
 
     // 6. add metric to cumulative compaction
+<<<<<<< HEAD
     StarRocksMetrics::instance()->cumulative_compaction_deltas_total.increment(_input_rowsets.size());
     StarRocksMetrics::instance()->cumulative_compaction_bytes_total.increment(_input_rowsets_size);
+=======
+    int64_t end_time = UnixMillis();
+    int64_t cost_time = end_time - start_time;
+    StarRocksMetrics::instance()->cumulative_compaction_deltas_total.increment(_input_rowsets.size());
+    StarRocksMetrics::instance()->cumulative_compaction_bytes_total.increment(_input_rowsets_size);
+    StarRocksMetrics::instance()->cumulative_compaction_task_cost_time_ms.set_value(cost_time);
+    StarRocksMetrics::instance()->cumulative_compaction_task_byte_per_second.set_value(_input_rowsets_size /
+                                                                                       (cost_time / 1000.0 + 1));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TRACE("save cumulative compaction metrics");
 
     return Status::OK();

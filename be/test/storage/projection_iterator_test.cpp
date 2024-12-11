@@ -18,8 +18,13 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
+<<<<<<< HEAD
 #include "column/column_pool.h"
 #include "column/datum.h"
+=======
+#include "column/datum.h"
+#include "common/config.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -67,7 +72,11 @@ private:
 class ProjectionIteratorTest : public testing::Test {
 protected:
     void SetUp() override {}
+<<<<<<< HEAD
     void TearDown() override { TEST_clear_all_columns_this_thread(); }
+=======
+    void TearDown() override {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 // NOLINTNEXTLINE
@@ -83,7 +92,11 @@ TEST_F(ProjectionIteratorTest, all) {
         schema.remove(2);
         schema.remove(1);
         auto iter = new_projection_iterator(schema, child);
+<<<<<<< HEAD
         iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+=======
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->encoded_schema(), config::vector_chunk_size);
         auto st = iter->get_next(chunk.get());
         ASSERT_TRUE(st.ok());
@@ -99,7 +112,11 @@ TEST_F(ProjectionIteratorTest, all) {
         Schema schema = child->schema();
         schema.remove(0);
         auto iter = new_projection_iterator(schema, child);
+<<<<<<< HEAD
         iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+=======
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->encoded_schema(), config::vector_chunk_size);
         auto st = iter->get_next(chunk.get());
         ASSERT_TRUE(st.ok());
@@ -117,7 +134,11 @@ TEST_F(ProjectionIteratorTest, all) {
         FieldPtr f3 = child->schema().field(2);
         Schema schema({f3, f1});
         auto iter = new_projection_iterator(schema, child);
+<<<<<<< HEAD
         iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+=======
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->encoded_schema(), config::vector_chunk_size);
         auto st = iter->get_next(chunk.get());
         ASSERT_TRUE(st.ok());

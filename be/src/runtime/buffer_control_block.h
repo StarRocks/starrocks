@@ -34,6 +34,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <butil/iobuf.h>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <condition_variable>
 #include <deque>
 #include <list>
@@ -44,6 +49,15 @@
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/query_statistics.h"
+<<<<<<< HEAD
+=======
+#include "util/race_detect.h"
+#include "util/runtime_profile.h"
+
+namespace arrow {
+class RecordBatch;
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace google::protobuf {
 class Closure;
@@ -53,11 +67,26 @@ namespace brpc {
 class Controller;
 }
 
+<<<<<<< HEAD
+=======
+namespace butil {
+class IOBuf;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 namespace starrocks {
 
 class TFetchDataResult;
 class PFetchDataResult;
 
+<<<<<<< HEAD
+=======
+struct SerializeRes {
+    butil::IOBuf attachment;
+    size_t row_size;
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct GetResultBatchCtx {
     brpc::Controller* cntl = nullptr;
     PFetchDataResult* result = nullptr;
@@ -69,6 +98,10 @@ struct GetResultBatchCtx {
     void on_failure(const Status& status);
     void on_close(int64_t packet_seq, QueryStatistics* statistics = nullptr);
     void on_data(TFetchDataResult* t_result, int64_t packet_seq, bool eos = false);
+<<<<<<< HEAD
+=======
+    void on_data(SerializeRes* t_result, int64_t packet_seq, bool eos = false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 // buffer used for result customer and productor
@@ -80,23 +113,43 @@ public:
     Status init();
     // In order not to affect the current implementation of the non-pipeline engine,
     // this method is reserved and is only used in the non-pipeline engine
+<<<<<<< HEAD
     Status add_batch(TFetchDataResult* result);
     Status add_batch(std::unique_ptr<TFetchDataResult>& result);
 
     // non-blocking version of add_batch
     StatusOr<bool> try_add_batch(std::unique_ptr<TFetchDataResult>& result);
     StatusOr<bool> try_add_batch(std::vector<std::unique_ptr<TFetchDataResult>>& results);
+=======
+    Status add_batch(TFetchDataResult* result, bool need_free = true);
+    Status add_batch(std::unique_ptr<TFetchDataResult>& result);
+    Status add_arrow_batch(std::shared_ptr<arrow::RecordBatch>& result);
+
+    // non-blocking version of add_batch
+    Status add_to_result_buffer(std::vector<std::unique_ptr<TFetchDataResult>>&& results);
+    bool is_full() const;
+    // cancel all pending rpc. this is called from pipeline->cancelled
+    void cancel_pending_rpc();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // get result from batch, use timeout?
     Status get_batch(TFetchDataResult* result);
 
     void get_batch(GetResultBatchCtx* ctx);
+<<<<<<< HEAD
+=======
+    Status get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* result);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // close buffer block, set _status to exec_status and set _is_close to true;
     // called because data has been read or error happened.
     Status close(Status exec_status);
     // this is called by RPC, called from coordinator
+<<<<<<< HEAD
     Status cancel();
+=======
+    void cancel();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     const TUniqueId& fragment_id() const { return _fragment_id; }
 
@@ -114,6 +167,7 @@ public:
     }
 
 private:
+<<<<<<< HEAD
     void _process_batch_without_lock(std::unique_ptr<TFetchDataResult>& result);
 
     typedef std::list<TFetchDataResult*> ResultQueue;
@@ -131,6 +185,35 @@ private:
     ResultQueue _batch_queue;
     // protects all subsequent data in this block
     std::mutex _lock;
+=======
+    void _process_batch_without_lock(std::unique_ptr<SerializeRes>& result);
+
+    void _process_arrow_batch_without_lock(std::shared_ptr<arrow::RecordBatch>& result);
+
+    StatusOr<std::unique_ptr<SerializeRes>> _serialize_result(TFetchDataResult*);
+
+    // as no idea of whether sending sorted results, can't use concurrentQueue here.
+    typedef std::list<std::unique_ptr<SerializeRes>> ResultQueue;
+    typedef std::list<std::shared_ptr<arrow::RecordBatch>> ArrowResultQueue;
+
+    // result's query id
+    TUniqueId _fragment_id;
+    std::atomic_bool _is_close;
+    std::atomic_bool _is_cancelled;
+    Status _status;
+    std::atomic_int64_t _buffer_bytes;
+    int _buffer_limit;
+    std::atomic<int64_t> _packet_num;
+    int _arrow_rows_limit;
+    int _arrow_rows;
+
+    // blocking queue for batch
+    ResultQueue _batch_queue;
+    ArrowResultQueue _arrow_batch_queue;
+
+    // protects all subsequent data in this block
+    mutable std::mutex _lock;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // signal arrival of new batch or the eos/cancelled condition
     std::condition_variable _data_arriaval;
     // signal removal of data by stream consumer
@@ -142,6 +225,10 @@ private:
     // threads. But their calls are all at different time, there is no problem of
     // multithreaded access.
     std::shared_ptr<QueryStatistics> _query_statistics;
+<<<<<<< HEAD
+=======
+    static const size_t _max_memory_usage = 1UL << 28; // 256MB
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

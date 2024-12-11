@@ -11,8 +11,12 @@ map5  map<INT, STRUCT<c INT, b string>>
 DUPLICATE KEY(pk)
 DISTRIBUTED BY HASH(pk) BUCKETS 3
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false"
+=======
+"replication_num" = "1"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 );
 
 insert into map_test values (0, map(0,'ab'),map(0,'ab'),map(0,['1','2']),map('1',map(1,'abc')),map(1,json_object('name','abc','age',23)),map(0, row(1,'a')));
@@ -99,4 +103,8 @@ select t.map3, s.map5 from map_test t full join map_test s where s.map3 => t.map
 select t.map5, s.map5 from map_test t full join map_test s where s.map5 = t.map5 order by t.pk;
 
 select t.map2, s.map2 from map_test t join map_test s on map_apply((k,v)->(k+1,array_length(v)),s.map2) = map_apply((k,v)->(k+1,array_length(v)),t.map2) order by t.pk;
+<<<<<<< HEAD
 select t.map2, s.map2 from map_test t join map_test s on map_apply((k,v)->(k+1,v),s.map2) = map_apply((k,v)->(k+1,v),t.map2) order by t.pk;
+=======
+select t.map2, s.map2 from map_test t join map_test s on map_apply((k,v)->(k+1,v),s.map2) = map_apply((k,v)->(k+1,v),t.map2) order by t.pk;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -19,10 +19,18 @@
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "exec/pipeline/fragment_context.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/function_context.h"
 #include "storage/chunk_helper.h"
+<<<<<<< HEAD
+=======
+#include "testutil/assert.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 #include "util/thrift_util.h"
@@ -53,7 +61,12 @@ OpFactories PipelineTestBase::maybe_interpolate_local_passthrough_exchange(OpFac
         // Add LocalExchangeSinkOperator to predecessor pipeline.
         pred_operators.emplace_back(std::move(local_exchange_sink));
         // predecessor pipeline comes to end.
+<<<<<<< HEAD
         _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipeline_id(), pred_operators));
+=======
+        _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipeline_id(), pred_operators,
+                                                           _fragment_ctx->_execution_groups[0].get()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         OpFactories operators_source_with_local_exchange;
         // Multiple LocalChangeSinkOperators pipe into one LocalChangeSourceOperator.
@@ -91,7 +104,11 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
                                            _request.query_options, _request.query_globals, _exec_env));
+<<<<<<< HEAD
     _fragment_ctx->set_workgroup(workgroup::WorkGroupManager::instance()->get_default_workgroup());
+=======
+    _fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
@@ -105,6 +122,7 @@ void PipelineTestBase::_prepare() {
     _obj_pool = _runtime_state->obj_pool();
 
     ASSERT_TRUE(_pipeline_builder != nullptr);
+<<<<<<< HEAD
     _pipelines.clear();
     _pipeline_builder(_fragment_ctx->runtime_state());
     _fragment_ctx->set_pipelines(std::move(_pipelines));
@@ -127,6 +145,25 @@ void PipelineTestBase::_execute() {
         exec_env->wg_driver_executor()->submit(driver.get());
         return Status::OK();
     });
+=======
+    exec_group = ExecutionGroupBuilder::create_normal_exec_group();
+    _pipeline_builder(_fragment_ctx->runtime_state());
+    for (auto pipeline : _pipelines) {
+        exec_group->add_pipeline(std::move(pipeline.get()));
+    }
+    _fragment_ctx->set_pipelines({exec_group}, std::move(_pipelines));
+    _pipelines.clear();
+    ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
+    _fragment_ctx->iterate_pipeline([this](Pipeline* pipeline) { pipeline->instantiate_drivers(_runtime_state); });
+}
+
+void PipelineTestBase::_execute() {
+    _fragment_ctx->iterate_drivers(
+            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { CHECK_OK(driver->prepare(state)); });
+
+    _fragment_ctx->iterate_drivers(
+            [exec_env = _exec_env](const DriverPtr& driver) { exec_env->wg_driver_executor()->submit(driver.get()); });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescriptor*>& slots, size_t row_num) {
@@ -301,11 +338,22 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(size_t row_num) {
     TDescriptorTable tbl;
     const uint8_t* buf = reinterpret_cast<uint8_t*>(content.data());
     uint32_t len = content.size();
+<<<<<<< HEAD
     deserialize_thrift_msg(buf, &len, TProtocolType::JSON, &tbl);
 
     std::vector<SlotDescriptor> slots;
     for (auto& t_slot : tbl.slotDescriptors) {
         slots.emplace_back(t_slot);
+=======
+    CHECK(deserialize_thrift_msg(buf, &len, TProtocolType::JSON, &tbl).ok());
+
+    std::vector<SlotDescriptor> slots;
+    phmap::flat_hash_set<SlotId> seen_slots;
+    for (auto& t_slot : tbl.slotDescriptors) {
+        if (auto [_, is_new] = seen_slots.insert(t_slot.id); is_new) {
+            slots.emplace_back(t_slot);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     std::vector<SlotDescriptor*> p_slots;

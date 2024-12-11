@@ -31,10 +31,19 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -128,10 +137,25 @@ public class LogicalJoinOperator extends LogicalOperator {
     public ScalarOperator getSkewColumn() {
         return skewColumn;
     }
+<<<<<<< HEAD
+=======
+
+    public void setSkewColumn(ScalarOperator skewColumn) {
+        this.skewColumn = skewColumn;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<ScalarOperator> getSkewValues() {
         return skewValues;
     }
 
+<<<<<<< HEAD
+=======
+    public void setSkewValues(List<ScalarOperator> skewValues) {
+        this.skewValues = skewValues;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public int getTransformMask() {
         return transformMask;
     }
@@ -196,6 +220,19 @@ public class LogicalJoinOperator extends LogicalOperator {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        DomainProperty leftDomainProperty = inputs.get(0).getDomainProperty();
+        DomainProperty rightDomainProperty = inputs.get(1).getDomainProperty();
+        return DomainProperty.mergeDomainProperty(List.of(leftDomainProperty, rightDomainProperty));
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalJoin(this, context);
     }

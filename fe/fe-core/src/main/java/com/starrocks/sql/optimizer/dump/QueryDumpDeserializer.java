@@ -101,7 +101,11 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
             try {
                 dumpInfo.getSessionVariable().replayFromJson(dumpJsonObject.get("session_variables").getAsString());
             } catch (IOException e) {
+<<<<<<< HEAD
                 LOG.warn("deserialize from json failed. " + e);
+=======
+                LOG.warn("deserialize from json failed. ", e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         // column statistics

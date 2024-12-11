@@ -14,6 +14,10 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include "column/datum.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
@@ -29,6 +33,10 @@ public:
 
 private:
     Status fill_chunk(ChunkPtr* chunk);
+<<<<<<< HEAD
+=======
+    DatumArray _build_row();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     int _task_index{0};
     TGetTaskInfoResult _task_result;

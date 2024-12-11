@@ -94,7 +94,11 @@ public:
     // On error, the value of |*count| is undefined.
     virtual Status read(Column* column, size_t* count) = 0;
 
+<<<<<<< HEAD
     virtual Status read(Column* column, const SparseRange& range) {
+=======
+    virtual Status read(Column* column, const SparseRange<>& range) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::NotSupported("Read by range Not Support");
     }
 
@@ -110,7 +114,13 @@ public:
     // On error, the value of |*count| is undefined.
     virtual Status read_dict_codes(Column* column, size_t* count) = 0;
 
+<<<<<<< HEAD
     virtual Status read_dict_codes(Column* column, const SparseRange& range) = 0;
+=======
+    virtual Status read_dict_codes(Column* column, const SparseRange<>& range) = 0;
+
+    virtual size_t read_null_count() { return 0; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 protected:
     uint32_t _page_index{0};

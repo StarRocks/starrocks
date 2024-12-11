@@ -15,12 +15,24 @@
 package com.starrocks.credential;
 
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
 import com.starrocks.credential.aliyun.AliyunCloudConfigurationProvider;
 import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
 import com.starrocks.credential.aws.AWSCloudCredential;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
 import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.aliyun.AliyunCloudConfigurationProvider;
+import com.starrocks.credential.aws.AwsCloudConfigurationProvider;
+import com.starrocks.credential.aws.AwsCloudCredential;
+import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
+import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
+import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
+import com.starrocks.credential.hdfs.StrictHDFSCloudConfigurationProvider;
+import com.starrocks.credential.tencent.TencentCloudConfigurationProvider;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.aws.AwsClientProperties;
 import org.apache.iceberg.aws.s3.S3FileIOProperties;
@@ -31,6 +43,7 @@ import java.util.Map;
 public class CloudConfigurationFactory {
 
     static ImmutableList<CloudConfigurationProvider> cloudConfigurationFactoryChain = ImmutableList.of(
+<<<<<<< HEAD
             new AWSCloudConfigurationProvider(),
             new AzureCloudConfigurationProvider(),
             new GCPCloudConfigurationProvoder(),
@@ -45,6 +58,36 @@ public class CloudConfigurationFactory {
 
     public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties) {
         for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {
+=======
+            new AwsCloudConfigurationProvider(),
+            new AzureCloudConfigurationProvider(),
+            new GCPCloudConfigurationProvoder(),
+            new AliyunCloudConfigurationProvider(),
+            new TencentCloudConfigurationProvider(),
+            new HDFSCloudConfigurationProvider(),
+            (Map<String, String> properties) -> new CloudConfiguration());
+
+    static ImmutableList<CloudConfigurationProvider> strictCloudConfigurationFactoryChain = ImmutableList.of(
+            new AwsCloudConfigurationProvider(),
+            new AzureCloudConfigurationProvider(),
+            new GCPCloudConfigurationProvoder(),
+            new AliyunCloudConfigurationProvider(),
+            new TencentCloudConfigurationProvider(),
+            new HDFSCloudConfigurationProvider(),
+            new StrictHDFSCloudConfigurationProvider(),
+            (Map<String, String> properties) -> new CloudConfiguration());
+
+    public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties) {
+        return buildCloudConfigurationForStorage(properties, false);
+    }
+
+    public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties, boolean strictMode) {
+        ImmutableList<CloudConfigurationProvider> factories = cloudConfigurationFactoryChain;
+        if (strictMode) {
+            factories = strictCloudConfigurationFactoryChain;
+        }
+        for (CloudConfigurationProvider factory : factories) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             CloudConfiguration cloudConfiguration = factory.build(properties);
             if (cloudConfiguration != null) {
                 cloudConfiguration.loadCommonFields(properties);
@@ -55,10 +98,17 @@ public class CloudConfigurationFactory {
         return null;
     }
 
+<<<<<<< HEAD
     public static AWSCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
         for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {
             if (factory instanceof AWSCloudConfigurationProvider) {
                 AWSCloudConfigurationProvider provider = ((AWSCloudConfigurationProvider) factory);
+=======
+    public static AwsCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
+        for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {
+            if (factory instanceof AwsCloudConfigurationProvider) {
+                AwsCloudConfigurationProvider provider = ((AwsCloudConfigurationProvider) factory);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return provider.buildGlueCloudCredential(hiveConf);
             }
         }

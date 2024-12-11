@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.connector;
 
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -22,9 +25,17 @@ import java.util.List;
 
 public class RemoteFileInfo {
     private RemoteFileInputFormat format;
+<<<<<<< HEAD
     private List<RemoteFileDesc> files = new ArrayList<>();
     private String fullPath;
 
+=======
+    private List<RemoteFileDesc> files;
+    private String fullPath;
+
+    private Object attachment;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public RemoteFileInfo(RemoteFileInputFormat format, List<RemoteFileDesc> files, String fullPath) {
         this.format = format;
         this.files = files;
@@ -32,6 +43,10 @@ public class RemoteFileInfo {
     }
 
     public RemoteFileInfo() {
+<<<<<<< HEAD
+=======
+        this.files = new ArrayList<>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public RemoteFileInputFormat getFormat() {
@@ -54,6 +69,22 @@ public class RemoteFileInfo {
         return fullPath;
     }
 
+<<<<<<< HEAD
+=======
+    public Object getAttachment() {
+        return attachment;
+    }
+
+    public void setAttachment(Object attachment) {
+        this.attachment = attachment;
+    }
+
+    @SuppressWarnings("unchecked")
+    public  <T extends RemoteFileInfo> T cast() {
+        return (T) this;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("RemoteFileInfo{");

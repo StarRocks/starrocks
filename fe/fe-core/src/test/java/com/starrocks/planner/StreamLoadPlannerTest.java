@@ -34,10 +34,20 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
+<<<<<<< HEAD
+=======
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -45,15 +55,25 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadParam;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.load.routineload.KafkaRoutineLoadJob;
+import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TCompressionType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
+<<<<<<< HEAD
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -64,6 +84,27 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+=======
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
+import mockit.Expectations;
+import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_PARTIAL_UPDATE_MODE;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class StreamLoadPlannerTest {
     @Injectable
     Database db;
@@ -80,8 +121,45 @@ public class StreamLoadPlannerTest {
     @Mocked
     Partition partition;
 
+<<<<<<< HEAD
     @Test
     public void testNormalPlan() throws UserException {
+=======
+    @Before
+    public void before() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
+    }
+
+    @Test
+    public void testNormalPlan() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -114,6 +192,7 @@ public class StreamLoadPlannerTest {
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
         request.setLoad_dop(2);
+<<<<<<< HEAD
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
         StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
         planner.plan(streamLoadInfo.getId());
@@ -121,6 +200,17 @@ public class StreamLoadPlannerTest {
 
     @Test
     public void testPartialUpdatePlan() throws UserException {
+=======
+        request.setPayload_compression_type("LZ4_FRAME");
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
+        planner.plan(streamLoadInfo.getId());
+        Assert.assertEquals(TCompressionType.LZ4_FRAME, streamLoadInfo.getPayloadCompressionType());
+    }
+
+    @Test
+    public void testPartialUpdatePlan() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -163,6 +253,7 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPartialUpdateMode() throws UserException {
         StreamLoadParam param = new StreamLoadParam();
         param.partialUpdateMode = "column";
@@ -171,6 +262,16 @@ public class StreamLoadPlannerTest {
         StreamLoadInfo streamLoadInfo2 = StreamLoadInfo.fromStreamLoadContext(loadId, 100, 100, param);
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         StreamLoadInfo streamLoadInfo3 = StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
+=======
+    public void testPartialUpdateMode() throws StarRocksException {
+        StreamLoadKvParams param = new StreamLoadKvParams(
+                Collections.singletonMap(HTTP_PARTIAL_UPDATE_MODE, "column"));
+        UUID uuid = UUID.randomUUID();
+        TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        StreamLoadInfo.fromHttpStreamLoadRequest(loadId, 100, Optional.of(100), param);
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_empty
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Generates an empty HLL column to supplement the default values when inserting or loading data.
 

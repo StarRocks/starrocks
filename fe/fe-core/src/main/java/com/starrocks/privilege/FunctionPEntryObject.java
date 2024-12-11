@@ -83,7 +83,11 @@ public class FunctionPEntryObject implements PEntryObject {
         if (databaseId == PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID) {
             allFunctions = globalStateMgr.getGlobalFunctionMgr().getFunctions();
         } else {
+<<<<<<< HEAD
             Database db = globalStateMgr.getDbIncludeRecycleBin(this.databaseId);
+=======
+            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(this.databaseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 return false;
             }
@@ -158,7 +162,11 @@ public class FunctionPEntryObject implements PEntryObject {
             if (databaseId == PrivilegeBuiltinConstants.ALL_DATABASE_ID) {
                 return "ALL FUNCTIONS IN ALL DATABASES";
             } else {
+<<<<<<< HEAD
                 Database database = GlobalStateMgr.getCurrentState().getDb(databaseId);
+=======
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (database == null) {
                     throw new MetaNotFoundException("Can't find database : " + databaseId);
                 }

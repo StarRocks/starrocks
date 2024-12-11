@@ -32,8 +32,13 @@ Status IntersectProbeSinkOperator::push_chunk(RuntimeState* state, const ChunkPt
 Status IntersectProbeSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
+<<<<<<< HEAD
     Expr::prepare(_dst_exprs, state);
     Expr::open(_dst_exprs, state);
+=======
+    RETURN_IF_ERROR(Expr::prepare(_dst_exprs, state));
+    RETURN_IF_ERROR(Expr::open(_dst_exprs, state));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     return Status::OK();
 }

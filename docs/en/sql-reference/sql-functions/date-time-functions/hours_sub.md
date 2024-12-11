@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hours_sub
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Reduces the specified date and time by a specified number of hours.
 

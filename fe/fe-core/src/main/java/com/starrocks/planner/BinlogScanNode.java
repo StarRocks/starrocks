@@ -21,12 +21,20 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.StreamSourceType;
@@ -93,12 +101,17 @@ public class BinlogScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super.init(analyzer);
     }
 
     @Override
     public void computeStats(Analyzer analyzer) {
+<<<<<<< HEAD
         if (CollectionUtils.isNotEmpty(scanBackendIds)) {
             numNodes = scanBackendIds.size();
         }
@@ -106,6 +119,12 @@ public class BinlogScanNode extends ScanNode {
 
     @Override
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    }
+
+    @Override
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (isFinalized) {
             return;
         }
@@ -129,6 +148,7 @@ public class BinlogScanNode extends ScanNode {
     }
 
     // TODO: support partition prune and bucket prune
+<<<<<<< HEAD
     public void computeScanRanges() throws UserException {
         scanRanges = new ArrayList<>();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
@@ -136,6 +156,15 @@ public class BinlogScanNode extends ScanNode {
         long dbId = -1;
         String dbName = null;
         for (Partition partition : CollectionUtils.emptyIfNull(olapTable.getAllPartitions())) {
+=======
+    public void computeScanRanges() throws StarRocksException {
+        scanRanges = new ArrayList<>();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        long localBeId = -1;
+        long dbId = -1;
+        String dbName = null;
+        for (PhysicalPartition partition : CollectionUtils.emptyIfNull(olapTable.getAllPhysicalPartitions())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             MaterializedIndex table = partition.getBaseIndex();
             long partitionId = partition.getId();
             long tableId = olapTable.getId();
@@ -144,7 +173,11 @@ public class BinlogScanNode extends ScanNode {
                 if (dbId == -1) {
                     TabletMeta meta = invertedIndex.getTabletMeta(tablet.getId());
                     dbId = meta.getDbId();
+<<<<<<< HEAD
                     dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
+=======
+                    dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId).getFullName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
 
                 long tabletId = tablet.getId();
@@ -170,11 +203,19 @@ public class BinlogScanNode extends ScanNode {
                 List<Replica> localReplicas = Lists.newArrayList();
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas, visibleVersion, localBeId, schemaHash);
                 if (CollectionUtils.isEmpty(allQueryableReplicas)) {
+<<<<<<< HEAD
                     throw new UserException("No queryable replica for tablet " + tabletId);
                 }
                 for (Replica replica : allQueryableReplicas) {
                     Backend backend = Preconditions.checkNotNull(
                             GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId()),
+=======
+                    throw new StarRocksException("No queryable replica for tablet " + tabletId);
+                }
+                for (Replica replica : allQueryableReplicas) {
+                    Backend backend = Preconditions.checkNotNull(
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(replica.getBackendId()),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             "backend not found: " + replica.getBackendId());
                     scanBackendIds.add(backend.getId());
                     TScanRangeLocation replicaLocation = new TScanRangeLocation(backend.getAddress());
@@ -193,10 +234,13 @@ public class BinlogScanNode extends ScanNode {
         return scanRanges;
     }
 
+<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return scanRanges.size();
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @Override
     public boolean canDoReplicatedJoin() {

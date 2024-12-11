@@ -12,9 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.connector;
 
 public interface PartitionInfo {
     long getModifiedTime();
+=======
+package com.starrocks.connector;
+
+import com.starrocks.connector.hive.RemoteFileInputFormat;
+
+import java.util.concurrent.TimeUnit;
+
+public interface PartitionInfo {
+    long getModifiedTime();
+
+    default TimeUnit getModifiedTimeUnit()  {
+        return TimeUnit.SECONDS;
+    }
+
+    default RemoteFileInputFormat getFileFormat() {
+        throw new UnsupportedOperationException("");
+    }
+
+    default String getFullPath() {
+        throw new UnsupportedOperationException("");
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

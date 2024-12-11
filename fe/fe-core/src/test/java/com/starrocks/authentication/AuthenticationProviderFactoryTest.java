@@ -15,7 +15,11 @@
 
 package com.starrocks.authentication;
 
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Password;
+=======
+import com.starrocks.sql.ast.UserAuthOption;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.UserIdentity;
 import org.junit.Assert;
 import org.junit.Test;
@@ -25,8 +29,12 @@ public class AuthenticationProviderFactoryTest {
     public void testNormal() throws Exception {
         AuthenticationProvider fakeProvider = new AuthenticationProvider() {
             @Override
+<<<<<<< HEAD
             public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity, String password,
                                                                   String textForAuthPlugin)
+=======
+            public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     throws AuthenticationException {
                 return null;
             }
@@ -36,12 +44,15 @@ public class AuthenticationProviderFactoryTest {
                                      UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
 
             }
+<<<<<<< HEAD
 
             @Override
             public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
                     throws AuthenticationException {
                 return null;
             }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         };
         String fakeName = "fake";
 

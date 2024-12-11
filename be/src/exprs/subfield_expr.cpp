@@ -26,7 +26,15 @@ namespace starrocks {
 
 class SubfieldExpr final : public Expr {
 public:
+<<<<<<< HEAD
     explicit SubfieldExpr(const TExprNode& node) : Expr(node), _used_subfield_names(node.used_subfield_names) {}
+=======
+    explicit SubfieldExpr(const TExprNode& node) : Expr(node), _used_subfield_names(node.used_subfield_names) {
+        if (node.__isset.copy_flag) {
+            _copy_flag = node.copy_flag;
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     SubfieldExpr(const SubfieldExpr&) = default;
     SubfieldExpr(SubfieldExpr&&) = default;
@@ -66,19 +74,38 @@ public:
 
         DCHECK_EQ(col->size(), union_null_column->size());
 
+<<<<<<< HEAD
         // We need clone a new subfield column
         return NullableColumn::create(col->clone_shared(), union_null_column);
+=======
+        // We need to clone a new subfield column
+        if (_copy_flag) {
+            return NullableColumn::create(col->clone_shared(), union_null_column);
+        } else {
+            return NullableColumn::create(col, union_null_column);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new SubfieldExpr(*this)); }
 
     int get_subfields(std::vector<std::vector<std::string>>* subfields) const override {
+<<<<<<< HEAD
         subfields->push_back(_used_subfield_names);
+=======
+        if (subfields != nullptr) {
+            subfields->push_back(_used_subfield_names);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return 1;
     }
 
 private:
     std::vector<std::string> _used_subfield_names;
+<<<<<<< HEAD
+=======
+    bool _copy_flag = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 Expr* SubfieldExprFactory::from_thrift(const TExprNode& node) {
@@ -87,4 +114,8 @@ Expr* SubfieldExprFactory::from_thrift(const TExprNode& node) {
     return new SubfieldExpr(node);
 }
 
+<<<<<<< HEAD
 } // namespace starrocks
+=======
+} // namespace starrocks
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -42,7 +42,11 @@ public class ShowLoadStmtAnalyzer {
         new ShowLoadStmtAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class ShowLoadStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ShowLoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         private boolean isAccurateMatch;
         private String labelValue;

@@ -35,20 +35,38 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
+=======
+import com.starrocks.privilege.AccessDeniedException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -71,7 +89,11 @@ public class RowCountAction extends RestBaseAction {
     }
 
     @Override
+<<<<<<< HEAD
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+=======
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
         checkUserOwnsAdminRole(currentUser);
 
@@ -87,6 +109,7 @@ public class RowCountAction extends RestBaseAction {
 
         Map<String, Long> indexRowCountMap = Maps.newHashMap();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
@@ -104,6 +127,24 @@ public class RowCountAction extends RestBaseAction {
 
             OlapTable olapTable = (OlapTable) table;
             for (Partition partition : olapTable.getAllPartitions()) {
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            throw new DdlException("Database[" + dbName + "] does not exist");
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        if (table == null) {
+            throw new DdlException("Table[" + tableName + "] does not exist");
+        }
+        if (table.getType() != TableType.OLAP) {
+            throw new DdlException("Table[" + tableName + "] is not OLAP table");
+        }
+
+        try (AutoCloseableLock ignore
+                    = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
+            OlapTable olapTable = (OlapTable) table;
+            for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 long version = partition.getVisibleVersion();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     long indexRowCount = 0L;
@@ -115,8 +156,11 @@ public class RowCountAction extends RestBaseAction {
                     indexRowCountMap.put(indexName, indexRowCountMap.getOrDefault(indexName, 0L) + indexRowCount);
                 } // end for indices
             } // end for partitions            
+<<<<<<< HEAD
         } finally {
             db.writeUnlock();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // to json response

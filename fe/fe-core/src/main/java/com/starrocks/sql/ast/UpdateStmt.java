@@ -16,6 +16,10 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.Parameter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.parser.NodePosition;
@@ -49,7 +53,11 @@ public class UpdateStmt extends DmlStmt {
         this.fromRelations = fromRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
+<<<<<<< HEAD
         this.assignmentColumns = Sets.newHashSet();
+=======
+        this.assignmentColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (ColumnAssignment each : assignments) {
             this.assignmentColumns.add(each.getColumn());
         }
@@ -69,6 +77,18 @@ public class UpdateStmt extends DmlStmt {
         return assignments;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean assignmentsContainsParameter() {
+        for (ColumnAssignment assignment : assignments) {
+            if (assignment.getExpr().contains(Parameter.class)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<Relation> getFromRelations() {
         return fromRelations;
     }

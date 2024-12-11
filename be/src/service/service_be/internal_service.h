@@ -35,7 +35,10 @@
 #pragma once
 
 #include "common/status.h"
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/internal_service.pb.h"
 #include "service/internal_service.h"
 
@@ -67,6 +70,17 @@ public:
                                   const PTabletWriterAddChunksRequest* request, PTabletWriterAddBatchResult* response,
                                   google::protobuf::Closure* done) override;
 
+<<<<<<< HEAD
+=======
+    void tablet_writer_add_chunk_via_http(google::protobuf::RpcController* controller, const PHttpRequest* request,
+                                          PTabletWriterAddBatchResult* response,
+                                          google::protobuf::Closure* done) override;
+
+    void tablet_writer_add_chunks_via_http(google::protobuf::RpcController* controller, const PHttpRequest* request,
+                                           PTabletWriterAddBatchResult* response,
+                                           google::protobuf::Closure* done) override;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void tablet_writer_add_segment(google::protobuf::RpcController* controller,
                                    const PTabletWriterAddSegmentRequest* request,
                                    PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) override;

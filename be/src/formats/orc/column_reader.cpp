@@ -74,6 +74,11 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
         } else {
             return Status::InternalError("Failed to create column reader about TYPE_DATETIME");
         }
+<<<<<<< HEAD
+=======
+    case TYPE_TIME:
+        return std::make_unique<TimeColumnReader>(type, orc_type, nullable, reader);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     case TYPE_STRUCT: {
         std::vector<std::unique_ptr<ORCColumnReader>> child_readers;
         for (size_t i = 0; i < type.children.size(); i++) {
@@ -742,6 +747,28 @@ Status TimestampColumnReader<IsInstant>::get_next(orc::ColumnVectorBatch* cvb, C
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status TimeColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& column, size_t from, size_t size) {
+    auto* data = down_cast<orc::LongVectorBatch*>(cvb);
+    size_t column_start = column->size();
+    column->resize_uninitialized(column_start + size);
+    if (_nullable) {
+        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(column);
+        handle_null(cvb, null_column, column_start, from, size);
+    }
+
+    Column* data_column = ColumnHelper::get_data_column(column.get());
+    auto* values = ColumnHelper::cast_to_raw<TYPE_TIME>(data_column)->get_data().data();
+    auto* cvb_data = data->data.data();
+    for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size; column_pos++, vb_pos++) {
+        values[column_pos] = cvb_data[vb_pos] / 1000000;
+    }
+
+    return Status::OK();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 Status ArrayColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* orc_list = down_cast<orc::ListVectorBatch*>(cvb);

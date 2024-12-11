@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_iso8601
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将某一个日期转换为 ISO 8601 标准格式的字符串。
 

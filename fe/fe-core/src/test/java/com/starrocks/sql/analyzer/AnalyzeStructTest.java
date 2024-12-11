@@ -112,8 +112,12 @@ public class AnalyzeStructTest {
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
 
         ShowCreateTableStmt stmt = (ShowCreateTableStmt) analyzeSuccess("SHOW CREATE TABLE deeper_table");
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String res = resultSet.getResultRows().get(0).get(1);
         Assert.assertTrue(res.contains("`b` struct<b struct<c struct<d struct<e int(11)>>>> NULL COMMENT \"\""));
         Assert.assertTrue(

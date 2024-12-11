@@ -14,6 +14,11 @@
 
 package com.starrocks.memory;
 
+<<<<<<< HEAD
+=======
+import java.util.Map;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class MemoryStat {
 
     private long currentConsumption;
@@ -22,6 +27,12 @@ public class MemoryStat {
 
     private String counterInfo;
 
+<<<<<<< HEAD
+=======
+    // objectName -> objectCount, Count the number of objects of a type.
+    private Map<String, Long> counterMap;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public long getCurrentConsumption() {
         return currentConsumption;
     }
@@ -45,4 +56,15 @@ public class MemoryStat {
     public void setCounterInfo(String counterInfo) {
         this.counterInfo = counterInfo;
     }
+<<<<<<< HEAD
+=======
+
+    public Map<String, Long> getCounterMap() {
+        return counterMap;
+    }
+
+    public void setCounterMap(Map<String, Long> counterMap) {
+        this.counterMap = counterMap;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

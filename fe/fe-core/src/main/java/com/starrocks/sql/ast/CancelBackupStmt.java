@@ -21,6 +21,7 @@ public class CancelBackupStmt extends CancelStmt {
 
     private String dbName;
     private final boolean isRestore;
+<<<<<<< HEAD
 
     public CancelBackupStmt(String dbName, boolean isRestore) {
         this(dbName, isRestore, NodePosition.ZERO);
@@ -30,6 +31,24 @@ public class CancelBackupStmt extends CancelStmt {
         super(pos);
         this.dbName = dbName;
         this.isRestore = isRestore;
+=======
+    private final boolean isExternalCatalog;
+
+    public CancelBackupStmt(String dbName, boolean isRestore) {
+        this(dbName, isRestore, false, NodePosition.ZERO);
+    }
+
+    public CancelBackupStmt(String dbName, boolean isRestore, boolean isExternalCatalog) {
+        this(dbName, isRestore, isExternalCatalog, NodePosition.ZERO);
+    }
+
+    public CancelBackupStmt(String dbName, boolean isRestore, boolean isExternalCatalog,
+                            NodePosition pos) {
+        super(pos);
+        this.dbName = dbName;
+        this.isRestore = isRestore;
+        this.isExternalCatalog = isExternalCatalog;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public String getDbName() {
@@ -44,6 +63,13 @@ public class CancelBackupStmt extends CancelStmt {
         return isRestore;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isExternalCatalog() {
+        return isExternalCatalog;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCancelBackupStatement(this, context);

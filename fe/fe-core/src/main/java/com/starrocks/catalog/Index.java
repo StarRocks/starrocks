@@ -35,10 +35,22 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+=======
+import com.starrocks.catalog.IndexParams.IndexParamItem;
+import com.starrocks.catalog.IndexParams.IndexParamType;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PrintableMap;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
 
@@ -46,35 +58,94 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Objects;
+=======
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.stream.Collectors;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 /**
  * Internal representation of index, including index type, name, columns and comments.
  * This class will used in olaptable
  */
 public class Index implements Writable {
+<<<<<<< HEAD
     @SerializedName(value = "indexName")
     private String indexName;
     @SerializedName(value = "columns")
     private List<String> columns;
+=======
+
+    @SerializedName(value = "indexId")
+    private long indexId;
+    @SerializedName(value = "indexName")
+    private String indexName;
+    @SerializedName(value = "columns")
+    private List<ColumnId> columns;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "indexType")
     private IndexDef.IndexType indexType;
     @SerializedName(value = "comment")
     private String comment;
+<<<<<<< HEAD
 
     public Index(String indexName, List<String> columns, IndexDef.IndexType indexType, String comment) {
+=======
+    @SerializedName(value = "properties")
+    private Map<String, String> properties;
+
+    public Index(String indexName, List<ColumnId> columns, IndexDef.IndexType indexType, String comment) {
+        this(-1, indexName, columns, indexType, comment, Collections.emptyMap());
+    }
+
+    public Index(String indexName, List<ColumnId> columns, IndexDef.IndexType indexType, String comment,
+                 Map<String, String> properties) {
+        this(-1, indexName, columns, indexType, comment, properties);
+    }
+
+    public Index(long indexId, String indexName, List<ColumnId> columns, IndexDef.IndexType indexType,
+                 String comment, Map<String, String> properties) {
+        this.indexId = indexId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.indexName = indexName;
         this.columns = columns;
         this.indexType = indexType;
         this.comment = comment;
+<<<<<<< HEAD
     }
 
     public Index() {
+=======
+        this.properties = properties;
+    }
+
+    public Index() {
+        this.indexId = -1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.indexName = null;
         this.columns = null;
         this.indexType = null;
         this.comment = null;
+<<<<<<< HEAD
+=======
+        this.properties = null;
+    }
+
+    public long getIndexId() {
+        return indexId;
+    }
+
+    public void setIndexId(long indexId) {
+        this.indexId = indexId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public String getIndexName() {
@@ -85,11 +156,19 @@ public class Index implements Writable {
         this.indexName = indexName;
     }
 
+<<<<<<< HEAD
     public List<String> getColumns() {
         return columns;
     }
 
     public void setColumns(List<String> columns) {
+=======
+    public List<ColumnId> getColumns() {
+        return columns;
+    }
+
+    public void setColumns(List<ColumnId> columns) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.columns = columns;
     }
 
@@ -109,6 +188,17 @@ public class Index implements Writable {
         this.comment = comment;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
@@ -121,7 +211,13 @@ public class Index implements Writable {
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return 31 * (indexName.hashCode() + columns.hashCode() + indexType.hashCode());
+=======
+        return 31 * (Long.hashCode(indexId) + indexName.hashCode()
+                + columns.hashCode() + ((indexType != null) ? indexType.hashCode() : 0) +
+                ((properties != null) ? properties.hashCode() : 0));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -135,36 +231,88 @@ public class Index implements Writable {
         }
 
         Index other = (Index) obj;
+<<<<<<< HEAD
         return Objects.equals(indexName, other.indexName) && Objects.equals(columns, other.columns)
+=======
+        return this.indexId == other.indexId && Objects.equals(indexName, other.indexName)
+                && Objects.equals(columns, other.columns)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 && Objects.equals(indexType, other.indexType);
 
     }
 
+<<<<<<< HEAD
     public Index clone() {
         return new Index(indexName, new ArrayList<>(columns), indexType, comment);
+=======
+    @Override
+    public Index clone() {
+        return new Index(indexId, indexName, new ArrayList<>(columns), indexType, comment, properties);
+    }
+
+    public boolean isValidIndex() {
+        return !IndexType.isCompatibleIndex(indexType) || indexId >= 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         return toSql();
     }
 
     public String toSql() {
+=======
+        return toSql(null);
+    }
+
+    public String getPropertiesString() {
+        if (properties == null || properties.isEmpty()) {
+            return "";
+        }
+
+        return String.format("(%s)",
+                new PrintableMap<>(properties, "=", true, false, ","));
+    }
+
+    public String toSql(Table table) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         StringBuilder sb = new StringBuilder("INDEX ");
         sb.append(indexName);
         sb.append(" (");
         boolean first = true;
+<<<<<<< HEAD
         for (String col : columns) {
+=======
+        List<String> columnNames;
+        if (table != null) {
+            columnNames = MetaUtils.getColumnNamesByColumnIds(table, columns);
+        } else {
+            columnNames = columns.stream().map(ColumnId::getId).collect(Collectors.toList());
+        }
+        for (String col : columnNames) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (first) {
                 first = false;
             } else {
                 sb.append(",");
             }
+<<<<<<< HEAD
             sb.append("`" + col + "`");
         }
         sb.append(")");
         if (indexType != null) {
             sb.append(" USING ").append(indexType.toString());
+=======
+            sb.append("`").append(col).append("`");
+        }
+        sb.append(")");
+        if (indexType != null) {
+            sb.append(" USING ").append(indexType.getDisplayName());
+        }
+        if (properties != null) {
+            sb.append(getPropertiesString());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         if (comment != null) {
             sb.append(" COMMENT '" + comment + "'");
@@ -174,12 +322,59 @@ public class Index implements Writable {
 
     public TOlapTableIndex toThrift() {
         TOlapTableIndex tIndex = new TOlapTableIndex();
+<<<<<<< HEAD
         tIndex.setIndex_name(indexName);
         tIndex.setColumns(columns);
+=======
+        tIndex.setIndex_id(indexId);
+        tIndex.setIndex_name(indexName);
+        tIndex.setColumns(columns.stream().map(ColumnId::getId).collect(Collectors.toList()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         tIndex.setIndex_type(TIndexType.valueOf(indexType.toString()));
         if (columns != null) {
             tIndex.setComment(comment);
         }
+<<<<<<< HEAD
+=======
+
+        if (properties != null) {
+            Map<String, String> commonProperties = new HashMap<>();
+            Map<String, String> indexProperties = new HashMap<>();
+            Map<String, String> searchProperties = new HashMap<>();
+            Map<String, String> extraProperties = new HashMap<>();
+
+            IndexParams indexParams = IndexParams.getInstance();
+            Map<String, IndexParamItem> commonIndexParams = indexParams.getKeySetByIndexTypeAndParamType(
+                    indexType, IndexParamType.COMMON);
+            Map<String, IndexParamItem> indexIndexParams = indexParams.getKeySetByIndexTypeAndParamType(
+                    indexType, IndexParamType.INDEX);
+            Map<String, IndexParamItem> searchIndexParams = indexParams.getKeySetByIndexTypeAndParamType(
+                    indexType, IndexParamType.SEARCH);
+            for (Entry<String, String> propEntry : properties.entrySet()) {
+                String key = propEntry.getKey();
+                String value = propEntry.getValue();
+                String upperKey = key.toUpperCase(Locale.ROOT);
+                if (commonIndexParams.containsKey(upperKey)) {
+                    commonProperties.put(key, value);
+                    commonIndexParams.remove(upperKey);
+                } else if (indexIndexParams.containsKey(upperKey)) {
+                    indexProperties.put(key, value);
+                    indexIndexParams.remove(upperKey);
+                } else if (searchIndexParams.containsKey(upperKey)) {
+                    searchProperties.put(key, value);
+                    searchIndexParams.remove(upperKey);
+                } else {
+                    extraProperties.put(key, value);
+                }
+            }
+
+            tIndex.setCommon_properties(commonProperties);
+            tIndex.setIndex_properties(indexProperties);
+            tIndex.setSearch_properties(searchProperties);
+            tIndex.setExtra_properties(extraProperties);
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return tIndex;
     }
 }

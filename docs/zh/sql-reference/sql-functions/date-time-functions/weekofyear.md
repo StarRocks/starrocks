@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # weekofyear
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算指定时间为一年中的第几周。
 

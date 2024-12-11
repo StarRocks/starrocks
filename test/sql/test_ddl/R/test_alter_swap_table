@@ -1,0 +1,264 @@
+-- name: test_alter_swap_table
+create database db_test_alter_swap_table;
+-- result:
+-- !result
+use db_test_alter_swap_table;
+-- result:
+-- !result
+CREATE TABLE s1 
+(
+    k1 int not null, k2 int, k3 int
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY RANDOM 
+PROPERTIES("replication_num" = "1", 'unique_constraints'='s1.k1');
+-- result:
+-- !result
+CREATE TABLE s2 
+(
+    k1 int not null, k2 int, k3 int
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY RANDOM 
+PROPERTIES("replication_num" = "1", 'foreign_key_constraints'='s2(k1) REFERENCES s1(k1)');
+-- result:
+-- !result
+CREATE TABLE s3 
+(
+    k1 int not null, k2 int, k3 int
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY RANDOM 
+PROPERTIES("replication_num" = "1", 'foreign_key_constraints'='s3(k1) REFERENCES s1(k1)');
+-- result:
+-- !result
+INSERT INTO s1 values (1, 1, 1), (2, 2, 2);
+-- result:
+-- !result
+INSERT INTO s2 values (1, 1, 1), (2, 2, 2);
+-- result:
+-- !result
+INSERT INTO s3 values (1, 1, 1), (2, 2, 2);
+-- result:
+-- !result
+set enable_rbo_table_prune = true;
+-- result:
+-- !result
+set enable_cbo_table_prune = true;
+-- result:
+-- !result
+function: assert_explain_not_contains('select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;', 's1')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;', 's1')
+-- result:
+None
+-- !result
+select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;
+-- result:
+1	1
+2	2
+-- !result
+select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;
+-- result:
+1	1
+2	2
+-- !result
+ALTER TABLE s2 SWAP WITH s3;
+-- result:
+-- !result
+SHOW CREATE TABLE s2;
+-- result:
+s2	CREATE TABLE `s2` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` int(11) NULL COMMENT "",
+  `k3` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+SHOW CREATE TABLE s3;
+-- result:
+s3	CREATE TABLE `s3` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` int(11) NULL COMMENT "",
+  `k3` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+function: assert_explain_not_contains('select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;', 's1')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;', 's1')
+-- result:
+None
+-- !result
+select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;
+-- result:
+1	1
+2	2
+-- !result
+select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;
+-- result:
+1	1
+2	2
+-- !result
+CREATE TABLE s1_new
+(
+    k1 int, k2 int, k3 int
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY RANDOM 
+PROPERTIES("replication_num" = "1", 'unique_constraints'='s1_new.k1');
+-- result:
+-- !result
+ALTER TABLE s1 SWAP WITH s1_new;
+-- result:
+-- !result
+SHOW CREATE TABLE s1;
+-- result:
+s1	CREATE TABLE `s1` (
+  `k1` int(11) NULL COMMENT "",
+  `k2` int(11) NULL COMMENT "",
+  `k3` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1",
+"unique_constraints" = "default_catalog.db_test_alter_swap_table.s1.k1"
+);
+-- !result
+SHOW CREATE TABLE s1_new;
+-- result:
+s1_new	CREATE TABLE `s1_new` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` int(11) NULL COMMENT "",
+  `k3` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1",
+"unique_constraints" = "default_catalog.db_test_alter_swap_table.s1_new.k1"
+);
+-- !result
+SHOW CREATE TABLE s2;
+-- result:
+s2	CREATE TABLE `s2` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` int(11) NULL COMMENT "",
+  `k3` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+SHOW CREATE TABLE s3;
+-- result:
+s3	CREATE TABLE `s3` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` int(11) NULL COMMENT "",
+  `k3` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+function: assert_explain_not_contains('select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;', 's1')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;', 's1')
+-- result:
+None
+-- !result
+select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;
+-- result:
+-- !result
+select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;
+-- result:
+-- !result
+DROP TABLE s1;
+-- result:
+-- !result
+SHOW CREATE TABLE s2;
+-- result:
+s2	CREATE TABLE `s2` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` int(11) NULL COMMENT "",
+  `k3` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+SHOW CREATE TABLE s3;
+-- result:
+s3	CREATE TABLE `s3` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` int(11) NULL COMMENT "",
+  `k3` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP DATABASE db_test_alter_swap_table;
+-- result:
+-- !result

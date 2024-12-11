@@ -31,8 +31,14 @@ CompactionState::~CompactionState() {
     }
 }
 
+<<<<<<< HEAD
 Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager, const TabletSchema& tablet_schema,
                                       uint32_t segment_id) {
+=======
+Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager,
+                                      const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
+    CHECK_MEM_LIMIT("CompactionState::load_segments");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
     std::lock_guard<std::mutex> lg(_state_lock);
     if (pk_cols.empty() && rowset->num_segments() > 0) {
@@ -53,21 +59,36 @@ Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_mana
     return _load_segments(rowset, tablet_schema, segment_id);
 }
 
+<<<<<<< HEAD
 Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id) {
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
+=======
+Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
+    vector<uint32_t> pk_columns;
+    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 
     Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     std::unique_ptr<Column> pk_column;
+<<<<<<< HEAD
     CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok());
 
     if (_segment_iters.empty()) {
         ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, &_stats));
     }
     CHECK_EQ(_segment_iters.size(), rowset->num_segments());
+=======
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
+
+    if (_segment_iters.empty()) {
+        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, false, &_stats));
+    }
+    RETURN_ERROR_IF_FALSE(_segment_iters.size() == rowset->num_segments());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // only hold pkey, so can use larger chunk size
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
@@ -88,13 +109,21 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& table
             } else if (!st.ok()) {
                 return st;
             } else {
+<<<<<<< HEAD
                 PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+=======
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         itr->close();
     }
     dest = std::move(col);
+<<<<<<< HEAD
     dest->raw_data();
+=======
+    TRY_CATCH_BAD_ALLOC(dest->raw_data());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _memory_usage += dest->memory_usage();
     _update_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
     return Status::OK();

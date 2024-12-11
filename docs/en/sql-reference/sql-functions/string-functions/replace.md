@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # replace
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Replaces all occurrences of characters in a string with another string. This function performs a case-sensitive match when searching for `pattern`.
 

@@ -18,7 +18,11 @@ package com.starrocks.sql.optimizer.task;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+=======
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.Collections;
 import java.util.List;
@@ -29,7 +33,11 @@ public class TaskContext {
     private final PhysicalPropertySet requiredProperty;
     private ColumnRefSet requiredColumns;
     private double upperBoundCost;
+<<<<<<< HEAD
     private List<LogicalOlapScanOperator> allScanOperators;
+=======
+    private List<PhysicalOlapScanOperator> allPhysicalOlapScanOperators;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public TaskContext(OptimizerContext context,
                        PhysicalPropertySet physicalPropertySet,
@@ -39,7 +47,11 @@ public class TaskContext {
         this.requiredProperty = physicalPropertySet;
         this.requiredColumns = requiredColumns;
         this.upperBoundCost = cost;
+<<<<<<< HEAD
         this.allScanOperators = Collections.emptyList();
+=======
+        this.allPhysicalOlapScanOperators = Collections.emptyList();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public OptimizerContext getOptimizerContext() {
@@ -66,11 +78,20 @@ public class TaskContext {
         this.upperBoundCost = upperBoundCost;
     }
 
+<<<<<<< HEAD
     public void setAllScanOperators(List<LogicalOlapScanOperator> allScanOperators) {
         this.allScanOperators = allScanOperators;
     }
 
     public List<LogicalOlapScanOperator> getAllScanOperators() {
         return allScanOperators;
+=======
+    public void setAllPhysicalOlapScanOperators(List<PhysicalOlapScanOperator> allScanOperators) {
+        this.allPhysicalOlapScanOperators = allScanOperators;
+    }
+
+    public List<PhysicalOlapScanOperator> getAllPhysicalOlapScanOperators() {
+        return allPhysicalOlapScanOperators;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

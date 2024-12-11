@@ -15,7 +15,11 @@ StarRocks provides two methods of loading data from a local file system:
 Each of these options has its own advantages:
 
 - Stream Load supports CSV and JSON file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB.
+<<<<<<< HEAD
 - Broker Load supports Parquet, ORC, CSV, and JSON file formats (JSON file format is supported from v3.2.3 onwards). This method is recommended if you want to load data from a large number of files whose individual sizes exceed 10 GB, or if the files are stored in a network attached storage (NAS) device. **Using Broker Load to load data from a local file system is supported from v2.5 onwards. Note that before you can use Broker Load to load data from a local file system, you must [deploy a broker](../deployment/deploy_broker.md) on the machine on which your data files are located.**
+=======
+- Broker Load supports Parquet, ORC, CSV, and JSON file formats (JSON file format is supported from v3.2.3 onwards). This method is recommended if you want to load data from a large number of files whose individual sizes exceed 10 GB, or if the files are stored in a network attached storage (NAS) device. **Using Broker Load to load data from a local file system is supported from v2.5 onwards.**
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 For CSV data, take note of the following points:
 
@@ -106,7 +110,11 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
+<<<<<<< HEAD
 Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [Determine the number of buckets](../table_design/data_distribution/Data_distribution.md#determine-the-number-of-buckets).
+=======
+Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 :::
 
@@ -149,6 +157,11 @@ SELECT * FROM table1;
 
 #### Load JSON data
 
+<<<<<<< HEAD
+=======
+Since v3.2.7, Stream Load supports compressing JSON data during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, and ZSTD. For the syntax, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### Prepare datasets
 
 In your local file system, create a JSON file named `example2.json`. The file consists of two columns, which represent city ID and city name in sequence.
@@ -181,7 +194,11 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
+<<<<<<< HEAD
 Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [Determine the number of buckets](../table_design/data_distribution/Data_distribution.md#determine-the-number-of-buckets).
+=======
+Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 :::
 
@@ -300,6 +317,7 @@ Broker Load is an asynchronous loading method. After you submit a load job, Star
 - Currently Broker Load supports loading from a local file system only through a single broker whose version is v2.5 or later.
 - Highly concurrent queries against a single broker may cause issues such as timeout and OOM. To mitigate the impact, you can use the `pipeline_dop` variable (see [System variable](../sql-reference/System_variable.md#pipeline_dop)) to set the query parallelism for Broker Load. For queries against a single broker, we recommend that you set `pipeline_dop` to a value smaller than `16`.
 
+<<<<<<< HEAD
 ### Before you begin
 
 Before you can use Broker Load to load data from a local file system, finish the following preparations:
@@ -316,6 +334,8 @@ Before you can use Broker Load to load data from a local file system, finish the
    ALTER SYSTEM ADD BROKER sole_broker "172.26.199.40:8000";
    ```
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ### Typical example
 
 Broker Load supports loading from a single data file to a single table, loading from multiple data files to a single table, and loading from multiple data files to multiple tables. This section uses loading from multiple data files to a single table as an example.
@@ -391,7 +411,10 @@ This job has four main sections:
 
 - `LABEL`: A string used when querying the state of the load job.
 - `LOAD` declaration: The source URI, source data format, and destination table name.
+<<<<<<< HEAD
 - `BROKER`: The name of the broker.
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - `PROPERTIES`: The timeout value and any other properties to apply to the load job.
 
 For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
@@ -400,7 +423,11 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 
 In v3.0 and earlier, use the [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) statement or the curl command to view the progress of Broker Load jobs.
 
+<<<<<<< HEAD
 In v3.1 and later, you can view the progress of Broker Load jobs from the [`information_schema.loads`](../sql-reference/information_schema.md#loads) view:
+=======
+In v3.1 and later, you can view the progress of Broker Load jobs from the [`information_schema.loads`](../sql-reference/information_schema/loads.md) view:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```SQL
 SELECT * FROM information_schema.loads;

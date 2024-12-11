@@ -22,6 +22,10 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.Authorizer;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -38,7 +42,11 @@ public class StopFeAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
+<<<<<<< HEAD
         checkActionOnSystem(currentUser, PrivilegeType.OPERATE);
+=======
+        Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         response.setContentType("application/json");
         RestResult result = new RestResult();

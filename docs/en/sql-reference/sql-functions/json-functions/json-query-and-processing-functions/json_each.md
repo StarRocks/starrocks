@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_each
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Expands the outermost elements of a JSON object into a set of key-value pairs held in two columns and returns a table that consists of one row for each element.
 

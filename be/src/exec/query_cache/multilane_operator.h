@@ -21,6 +21,10 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/pipeline/operator.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/pipeline_fwd.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/query_cache/lane_arbiter.h"
 #include "runtime/runtime_state.h"
 
@@ -82,6 +86,10 @@ public:
     const RuntimeFilterProbeCollector* runtime_bloom_filters() const override;
 
     void set_precondition_ready(starrocks::RuntimeState* state) override;
+<<<<<<< HEAD
+=======
+    bool ignore_empty_eos() const override { return false; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     StatusOr<ChunkPtr> _pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode);

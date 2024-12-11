@@ -138,8 +138,13 @@ public class LogicalSlot {
         return expiredAllocatedTimeMs;
     }
 
+<<<<<<< HEAD
     public boolean isPendingExpired(long nowMs) {
         return nowMs >= expiredPendingTimeMs;
+=======
+    public boolean isPendingTimeout() {
+        return System.currentTimeMillis() >= expiredPendingTimeMs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public boolean isAllocatedExpired(long nowMs) {

@@ -49,7 +49,11 @@ public class ConsistencyCheckInfo implements Writable {
     @SerializedName("tb")
     private long tableId;
     @SerializedName("pt")
+<<<<<<< HEAD
     private long partitionId;
+=======
+    private long physicalPartitionId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName("idx")
     private long indexId;
     @SerializedName("tt")
@@ -65,12 +69,20 @@ public class ConsistencyCheckInfo implements Writable {
         // for persist
     }
 
+<<<<<<< HEAD
     public ConsistencyCheckInfo(long dbId, long tableId, long partitionId, long indexId, long tabletId,
+=======
+    public ConsistencyCheckInfo(long dbId, long tableId, long physicalPartitionId, long indexId, long tabletId,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                 long lastCheckTime, long checkedVersion,
                                 boolean isConsistent) {
         this.dbId = dbId;
         this.tableId = tableId;
+<<<<<<< HEAD
         this.partitionId = partitionId;
+=======
+        this.physicalPartitionId = physicalPartitionId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.indexId = indexId;
         this.tabletId = tabletId;
 
@@ -88,8 +100,13 @@ public class ConsistencyCheckInfo implements Writable {
         return tableId;
     }
 
+<<<<<<< HEAD
     public long getPartitionId() {
         return partitionId;
+=======
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public long getIndexId() {
@@ -116,7 +133,11 @@ public class ConsistencyCheckInfo implements Writable {
     public void write(DataOutput out) throws IOException {
         out.writeLong(dbId);
         out.writeLong(tableId);
+<<<<<<< HEAD
         out.writeLong(partitionId);
+=======
+        out.writeLong(physicalPartitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         out.writeLong(indexId);
         out.writeLong(tabletId);
 
@@ -130,7 +151,11 @@ public class ConsistencyCheckInfo implements Writable {
     public void readFields(DataInput in) throws IOException {
         dbId = in.readLong();
         tableId = in.readLong();
+<<<<<<< HEAD
         partitionId = in.readLong();
+=======
+        physicalPartitionId = in.readLong();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         indexId = in.readLong();
         tabletId = in.readLong();
 

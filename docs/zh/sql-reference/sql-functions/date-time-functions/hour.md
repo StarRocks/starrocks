@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hour
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 获得指定日期中的小时信息。
 

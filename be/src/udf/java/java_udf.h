@@ -21,6 +21,10 @@
 #include "exprs/function_context.h"
 #include "jni.h"
 #include "types/logical_type.h"
+<<<<<<< HEAD
+=======
+#include "util/slice.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 // implements by libhdfs
 // hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
@@ -161,9 +165,15 @@ private:
     jclass _object_class;
     jclass _object_array_class;
     jclass _string_class;
+<<<<<<< HEAD
     jclass _throwable_class;
     jclass _jarrays_class;
     jclass _list_class;
+=======
+    jclass _jarrays_class;
+    jclass _list_class;
+    jclass _exception_util_class;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     jmethodID _string_construct_with_bytes;
 

@@ -34,6 +34,11 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.Serializable;
 
 public class QueryDetail implements Serializable {
@@ -46,11 +51,19 @@ public class QueryDetail implements Serializable {
 
     // When query received, FE will construct a QueryDetail
     // object. This object will set queryId, startTime, sql
+<<<<<<< HEAD
     // fields. As well state is be set as RUNNING. 
     // After query finished, endTime and latency will
     // be set and state will be updated to be FINISHED/FAILED/CANCELLED
     // according to the query execution results.
     // So, one query will be inserted into as a item and 
+=======
+    // fields. As well state is be set as RUNNING.
+    // After query finished, endTime and latency will
+    // be set and state will be updated to be FINISHED/FAILED/CANCELLED
+    // according to the query execution results.
+    // So, one query will be inserted into as a item and
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // be udpated upon finished. To indicate the two event,
     // a extra field named eventTime is added.
     private long eventTime;
@@ -63,6 +76,13 @@ public class QueryDetail implements Serializable {
     // default value will set to be minus one(-1).
     private long endTime;
     private long latency;
+<<<<<<< HEAD
+=======
+
+    private long pendingTime = -1;
+    private long netTime = -1;
+    private long netComputeTime = -1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private QueryMemState state;
     private String database;
     private String sql;
@@ -77,14 +97,24 @@ public class QueryDetail implements Serializable {
     private long cpuCostNs = -1;
     private long memCostBytes = -1;
     private long spillBytes = -1;
+<<<<<<< HEAD
     private String digest;
+=======
+    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    private String digest;
+    private String catalog;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public QueryDetail() {
     }
 
     public QueryDetail(String queryId, boolean isQuery, int connId, String remoteIP,
                        long startTime, long endTime, long latency, QueryMemState state,
+<<<<<<< HEAD
                        String database, String sql, String user, String resourceGroupName) {
+=======
+                       String database, String sql, String user, String resourceGroupName, String catalog) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.queryId = queryId;
         this.isQuery = isQuery;
         this.connId = connId;
@@ -105,6 +135,19 @@ public class QueryDetail implements Serializable {
         }
         this.sql = sql;
         this.user = user;
+<<<<<<< HEAD
+=======
+        this.catalog = catalog;
+    }
+
+    public QueryDetail(String queryId, boolean isQuery, int connId, String remoteIP,
+                        long startTime, long endTime, long latency, QueryMemState state,
+                        String database, String sql, String user, String resourceGroupName,
+                        String warehouse, String catalog) {
+        this(queryId, isQuery, connId, remoteIP, startTime, endTime, latency,
+                state, database, sql, user, resourceGroupName, catalog);
+        this.warehouse = warehouse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public QueryDetail copy() {
@@ -130,7 +173,14 @@ public class QueryDetail implements Serializable {
         queryDetail.cpuCostNs = this.cpuCostNs;
         queryDetail.memCostBytes = this.memCostBytes;
         queryDetail.spillBytes = this.spillBytes;
+<<<<<<< HEAD
         queryDetail.digest = this.digest;
+=======
+        queryDetail.warehouse = this.warehouse;
+        queryDetail.digest = this.digest;
+        queryDetail.resourceGroupName = this.resourceGroupName;
+        queryDetail.catalog = this.catalog;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return queryDetail;
     }
 
@@ -190,6 +240,33 @@ public class QueryDetail implements Serializable {
         return latency;
     }
 
+<<<<<<< HEAD
+=======
+    public long getPendingTime() {
+        return pendingTime;
+    }
+
+    public void setPendingTime(long pendingTime) {
+        this.pendingTime = pendingTime;
+    }
+
+    public long getNetTime() {
+        return netTime;
+    }
+
+    public void setNetTime(long netTime) {
+        this.netTime = netTime;
+    }
+
+    public long getNetComputeTime() {
+        return netComputeTime;
+    }
+
+    public void setNetComputeTime(long netComputeTime) {
+        this.netComputeTime = netComputeTime;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setState(QueryMemState state) {
         this.state = state;
     }
@@ -298,6 +375,17 @@ public class QueryDetail implements Serializable {
         this.spillBytes = spillBytes;
     }
 
+<<<<<<< HEAD
+=======
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getDigest() {
         return digest;
     }
@@ -305,4 +393,15 @@ public class QueryDetail implements Serializable {
     public void setDigest(String digest) {
         this.digest = digest;
     }
+<<<<<<< HEAD
+=======
+
+    public String getCatalog() {
+        return catalog;
+    }
+
+    public void setCatalog(String catalog) {
+        this.catalog = catalog;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # char
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 根据输入的 ASCII 值返回对应的字符。
 

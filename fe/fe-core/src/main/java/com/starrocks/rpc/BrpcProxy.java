@@ -15,13 +15,19 @@
 
 package com.starrocks.rpc;
 
+<<<<<<< HEAD
 import com.baidu.bjf.remoting.protobuf.utils.JDKCompilerHelper;
 import com.baidu.bjf.remoting.protobuf.utils.compiler.JdkCompiler;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.baidu.jprotobuf.pbrpc.client.ProtobufRpcProxy;
 import com.baidu.jprotobuf.pbrpc.transport.RpcClient;
 import com.baidu.jprotobuf.pbrpc.transport.RpcClientOptions;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.util.JdkUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,12 +38,15 @@ public class BrpcProxy {
     private final ConcurrentHashMap<TNetworkAddress, PBackendService> backendServiceMap;
     private final ConcurrentHashMap<TNetworkAddress, LakeService> lakeServiceMap;
 
+<<<<<<< HEAD
     static {
         int javaRuntimeVersion = JdkUtils.getJavaVersionAsInteger(System.getProperty("java.version"));
         JDKCompilerHelper
                 .setCompiler(new JdkCompiler(JdkCompiler.class.getClassLoader(), String.valueOf(javaRuntimeVersion)));
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public BrpcProxy() {
         final RpcClientOptions rpcOptions = new RpcClientOptions();
         // If false, different methods to a service endpoint use different connection pool,

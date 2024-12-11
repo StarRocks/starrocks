@@ -54,7 +54,11 @@ namespace starrocks {
 class KVStoreTest : public testing::Test {
 public:
     void SetUp() override {
+<<<<<<< HEAD
         _root_path = "./ut_dir/kv_store_test";
+=======
+        _root_path = "./kv_store_test";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
 
@@ -76,7 +80,11 @@ private:
 
 TEST_F(KVStoreTest, TestGetRootPath) {
     std::string root_path = _kv_store->get_root_path();
+<<<<<<< HEAD
     ASSERT_EQ("./ut_dir/kv_store_test", root_path);
+=======
+    ASSERT_EQ("./kv_store_test", root_path);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 TEST_F(KVStoreTest, TestPutAndGet) {

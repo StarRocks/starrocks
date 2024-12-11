@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
@@ -177,4 +178,17 @@ public class SlotProvider {
             LOG.warn("[Slot] failed to release slot [slot={}]", slot, e);
         }
     }
+=======
+import java.util.concurrent.Future;
+
+/**
+ * The slot provider interface. It is used to require and release slots.
+ */
+public interface SlotProvider {
+    Future<LogicalSlot> requireSlot(LogicalSlot slot);
+
+    void cancelSlotRequirement(LogicalSlot slot);
+
+    void releaseSlot(LogicalSlot slot);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

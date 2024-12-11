@@ -16,22 +16,36 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.google.common.collect.Range;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.IndexDef;
+=======
+import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
+import com.google.gson.annotations.SerializedName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;
@@ -53,17 +67,25 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.ByteArrayInputStream;
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+=======
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 
 public class ExternalOlapTable extends OlapTable {
     private static final Logger LOG = LogManager.getLogger(ExternalOlapTable.class);
 
+<<<<<<< HEAD
     private static final String JSON_KEY_HOST = "host";
     private static final String JSON_KEY_PORT = "port";
     private static final String JSON_KEY_USER = "user";
@@ -79,6 +101,17 @@ public class ExternalOlapTable extends OlapTable {
 
     public class ExternalTableInfo {
         // remote doris cluster fe addr
+=======
+    private static final String PROPERTIES_HOST = "host";
+    private static final String PROPERTIES_PORT = "port";
+    private static final String PROPERTIES_USER = "user";
+    private static final String PROPERTIES_PASSWORD = "password";
+    private static final String PROPERTIES_DATABASE = "database";
+    private static final String PROPERTIES_TABLE = "table";
+
+    public static class ExternalTableInfo {
+        // remote starrocks cluster fe addr
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         @SerializedName("ht")
         private String host;
         @SerializedName("pt")
@@ -162,6 +195,7 @@ public class ExternalOlapTable extends OlapTable {
             this.tableType = tableType;
         }
 
+<<<<<<< HEAD
         public void toJsonObj(JsonObject obj) {
             obj.addProperty(JSON_KEY_HOST, host);
             obj.addProperty(JSON_KEY_PORT, port);
@@ -189,50 +223,80 @@ public class ExternalOlapTable extends OlapTable {
             }
         }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public void parseFromProperties(Map<String, String> properties) throws DdlException {
             if (properties == null) {
                 throw new DdlException("miss properties for external table, "
                         + "they are: host, port, user, password, database and table");
             }
 
+<<<<<<< HEAD
             host = properties.get("host");
+=======
+            host = properties.get(PROPERTIES_HOST);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (Strings.isNullOrEmpty(host)) {
                 throw new DdlException("Host of external table is null. "
                         + "Please add properties('host'='xxx.xxx.xxx.xxx') when create table");
             }
 
+<<<<<<< HEAD
             String portStr = properties.get("port");
+=======
+            String portStr = properties.get(PROPERTIES_PORT);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (Strings.isNullOrEmpty(portStr)) {
                 // Maybe null pointer or number convert
                 throw new DdlException("miss port of external table is null. "
                         + "Please add properties('port'='3306') when create table");
             }
             try {
+<<<<<<< HEAD
                 port = Integer.valueOf(portStr);
+=======
+                port = Integer.parseInt(portStr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } catch (Exception e) {
                 throw new DdlException("port of external table must be a number."
                         + "Please add properties('port'='3306') when create table");
             }
 
+<<<<<<< HEAD
             user = properties.get("user");
+=======
+            user = properties.get(PROPERTIES_USER);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (Strings.isNullOrEmpty(user)) {
                 throw new DdlException("User of external table is null. "
                         + "Please add properties('user'='root') when create table");
             }
 
+<<<<<<< HEAD
             password = properties.get("password");
+=======
+            password = properties.get(PROPERTIES_PASSWORD);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (password == null) {
                 throw new DdlException("Password of external table is null. "
                         + "Please add properties('password'='xxxx') when create table");
             }
 
+<<<<<<< HEAD
             dbName = properties.get("database");
+=======
+            dbName = properties.get(PROPERTIES_DATABASE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (Strings.isNullOrEmpty(dbName)) {
                 throw new DdlException("Database of external table is null. "
                         + "Please add properties('database'='xxxx') when create table");
             }
 
+<<<<<<< HEAD
             tableName = properties.get("table");
+=======
+            tableName = properties.get(PROPERTIES_TABLE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (Strings.isNullOrEmpty(tableName)) {
                 throw new DdlException("external table name missing."
                         + "Please add properties('table'='xxxx') when create table");
@@ -247,6 +311,11 @@ public class ExternalOlapTable extends OlapTable {
     @SerializedName(value = "ef")
     private ExternalTableInfo externalTableInfo;
 
+<<<<<<< HEAD
+=======
+    private SystemInfoService externalSystemInfoService;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ExternalOlapTable() {
         super();
         setType(TableType.OLAP_EXTERNAL);
@@ -321,6 +390,7 @@ public class ExternalOlapTable extends OlapTable {
         return isSourceTableCloudNativeTable() || isSourceTableCloudNativeMaterializedView();
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
@@ -343,6 +413,10 @@ public class ExternalOlapTable extends OlapTable {
         dbId = obj.getAsJsonPrimitive(JSON_KEY_DB_ID).getAsLong();
         externalTableInfo = new ExternalTableInfo();
         externalTableInfo.fromJsonObj(obj);
+=======
+    public SystemInfoService getExternalSystemInfoService() {
+        return externalSystemInfoService;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -354,6 +428,7 @@ public class ExternalOlapTable extends OlapTable {
 
     public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)
             throws DdlException, IOException {
+<<<<<<< HEAD
         MetaContext metaContext = new MetaContext();
         metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
         metaContext.setThreadLocalInfo();
@@ -362,6 +437,9 @@ public class ExternalOlapTable extends OlapTable {
         } finally {
             MetaContext.remove();
         }
+=======
+        updateMetaInternal(dbName, meta, backendMetas);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void updateMetaInternal(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)
@@ -371,7 +449,10 @@ public class ExternalOlapTable extends OlapTable {
             return;
         }
 
+<<<<<<< HEAD
         clusterId = meta.getCluster_id();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         externalTableInfo.setDbId(meta.getDb_id());
         externalTableInfo.setTableId(meta.getTable_id());
         if (meta.isSetTable_type()) {
@@ -379,8 +460,11 @@ public class ExternalOlapTable extends OlapTable {
         }
         long start = System.currentTimeMillis();
 
+<<<<<<< HEAD
         lastExternalMeta = meta;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         state = OlapTableState.valueOf(meta.getState());
         baseIndexId = meta.getBase_index_id();
         colocateGroup = meta.getColocate_group();
@@ -399,8 +483,15 @@ public class ExternalOlapTable extends OlapTable {
         if (meta.isSetIndex_infos()) {
             List<Index> indexList = new ArrayList<>();
             for (TIndexInfo indexInfo : meta.getIndex_infos()) {
+<<<<<<< HEAD
                 Index index = new Index(indexInfo.getIndex_name(), indexInfo.getColumns(),
                         IndexDef.IndexType.valueOf(indexInfo.getIndex_type()), indexInfo.getComment());
+=======
+                Index index = new Index(indexInfo.getIndex_name(),
+                        MetaUtils.getColumnIdsByColumnNames(this, indexInfo.getColumns()),
+                        IndexDef.IndexType.valueOf(indexInfo.getIndex_type()), indexInfo.getComment(),
+                        Collections.emptyMap());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 indexList.add(index);
             }
             indexes = new TableIndexes(indexList);
@@ -411,6 +502,10 @@ public class ExternalOlapTable extends OlapTable {
         switch (partitionType) {
             case RANGE:
             case EXPR_RANGE:
+<<<<<<< HEAD
+=======
+            case EXPR_RANGE_V2:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 TRangePartitionDesc rangePartitionDesc = tPartitionInfo.getRange_partition_desc();
                 List<Column> columns = new ArrayList<Column>();
                 for (TColumnMeta columnMeta : rangePartitionDesc.getColumns()) {
@@ -449,7 +544,12 @@ public class ExternalOlapTable extends OlapTable {
                             thriftDataProperty.getCold_time());
                     // TODO: confirm false is ok
                     RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+<<<<<<< HEAD
                     rangePartitionInfo.addPartition(partitionId, false, range, dataProperty, replicaNum, inMemory);
+=======
+                    rangePartitionInfo.addPartition(partitionId, tRange.isSetIs_temp() && tRange.isIs_temp(),
+                            range, dataProperty, replicaNum, inMemory);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
                 break;
             case UNPARTITIONED:
@@ -477,7 +577,11 @@ public class ExternalOlapTable extends OlapTable {
         indexNameToId.clear();
 
         for (TIndexMeta indexMeta : meta.getIndexes()) {
+<<<<<<< HEAD
             List<Column> columns = new ArrayList();
+=======
+            List<Column> columns = new ArrayList<>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (TColumnMeta columnMeta : indexMeta.getSchema_meta().getColumns()) {
                 Type type = Type.fromThrift(columnMeta.getColumnType());
                 Column column = new Column(columnMeta.getColumnName(), type, columnMeta.isAllowNull());
@@ -525,12 +629,28 @@ public class ExternalOlapTable extends OlapTable {
         }
 
         for (TPartitionMeta partitionMeta : meta.getPartitions()) {
+<<<<<<< HEAD
             Partition partition = new Partition(partitionMeta.getPartition_id(),
                     partitionMeta.getPartition_name(),
                     null, // TODO(wulei): fix it
                     defaultDistributionInfo);
             partition.setNextVersion(partitionMeta.getNext_version());
             partition.updateVisibleVersion(partitionMeta.getVisible_version(),
+=======
+            Partition logicalPartition = new Partition(partitionMeta.getPartition_id(),
+                    partitionMeta.getPartition_name(),
+                    defaultDistributionInfo);
+
+            PhysicalPartition physicalPartition = new PhysicalPartition(GlobalStateMgr.getCurrentState().getNextId(),
+                    partitionMeta.getPartition_name(),
+                    partitionMeta.getPartition_id(), // TODO(wulei): fix it
+                    null);
+
+            logicalPartition.addSubPartition(physicalPartition);
+
+            physicalPartition.setNextVersion(partitionMeta.getNext_version());
+            physicalPartition.updateVisibleVersion(partitionMeta.getVisible_version(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     partitionMeta.getVisible_time());
             for (TIndexMeta indexMeta : meta.getIndexes()) {
                 MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),
@@ -557,6 +677,7 @@ public class ExternalOlapTable extends OlapTable {
                             tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
                     index.addTablet(tablet, tabletMeta, false);
                 }
+<<<<<<< HEAD
                 if (indexMeta.getPartition_id() == partition.getId()) {
                     if (index.getId() != baseIndexId) {
                         partition.createRollupIndex(index);
@@ -593,6 +714,39 @@ public class ExternalOlapTable extends OlapTable {
             }
         }
 
+=======
+                if (indexMeta.getPartition_id() == physicalPartition.getId()) {
+                    if (index.getId() != baseIndexId) {
+                        physicalPartition.createRollupIndex(index);
+                    } else {
+                        physicalPartition.setBaseIndex(index);
+                    }
+                }
+            }
+            if (partitionMeta.isSetIs_temp() && partitionMeta.isIs_temp()) {
+                addTempPartition(logicalPartition);
+            } else {
+                addPartition(logicalPartition);
+            }
+        }
+        long endOfTabletMetaBuild = System.currentTimeMillis();
+
+        SystemInfoService systemInfoService = new SystemInfoService();
+        for (TBackendMeta backendMeta : backendMetas) {
+            Backend backend = new Backend();
+            backend.setId(backendMeta.getBackend_id());
+            backend.setHost(backendMeta.getHost());
+            backend.setBePort(backendMeta.getBe_port());
+            backend.setHttpPort(backendMeta.getHttp_port());
+            backend.setBrpcPort(backendMeta.getRpc_port());
+            backend.setAlive(backendMeta.isAlive());
+            backend.setBackendState(BackendState.values()[backendMeta.getState()]);
+            systemInfoService.addBackend(backend);
+        }
+        externalSystemInfoService = systemInfoService;
+
+        lastExternalMeta = meta;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG.info("TableMetaSyncer finish meta update. partition build cost: {}ms, " +
                         "index meta build cost: {}ms, schema rebuild cost: {}ms, " +
                         "tablet meta build cost: {}ms, total cost: {}ms",
@@ -600,4 +754,19 @@ public class ExternalOlapTable extends OlapTable {
                 endOfSchemaRebuild - endOfIndexMetaBuild, endOfTabletMetaBuild - endOfSchemaRebuild,
                 System.currentTimeMillis() - start);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public Map<String, String> getUniqueProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(PROPERTIES_HOST, getSourceTableHost());
+        properties.put(PROPERTIES_PORT, String.valueOf(getSourceTablePort()));
+        properties.put(PROPERTIES_USER, getSourceTableUser());
+        properties.put(PROPERTIES_PASSWORD, getSourceTablePassword());
+        properties.put(PROPERTIES_DATABASE, getSourceTableDbName());
+        properties.put(PROPERTIES_TABLE, getSourceTableName());
+        return properties;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

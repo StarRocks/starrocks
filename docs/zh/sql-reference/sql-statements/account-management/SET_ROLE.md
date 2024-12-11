@@ -48,7 +48,11 @@ SET ROLE ALL;
 
 2. 激活 `db_admin` 角色。
 
+<<<<<<< HEAD
     ```undefined
+=======
+    ```plain
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     SET ROLE db_admin;
     ```
 

@@ -15,9 +15,18 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
+=======
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.ShowDataStmt;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
@@ -59,8 +68,12 @@ public class ShowTablesTest {
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
         ShowTableStmt stmt = new ShowTableStmt("testDb", false, null);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testMv", resultSet.getString(0));
@@ -75,8 +88,12 @@ public class ShowTablesTest {
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
         ShowTableStmt stmt = new ShowTableStmt("testDb", true, null);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testMv", resultSet.getString(0));
@@ -92,10 +109,36 @@ public class ShowTablesTest {
         ctx.setCurrentCatalog("hive_catalog");
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
         ShowTableStmt stmt = new ShowTableStmt("hive_db", true, null);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         Assert.assertFalse(resultSet.next());
 
         ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
     }
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+        Assert.assertFalse(resultSet.next());
+
+        Assert.assertThrows(ErrorReportException.class,
+                () -> ctx.changeCatalog("hive_catalog"));
+        Assert.assertThrows(ErrorReportException.class,
+                () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
+
+        String sql = "grant usage on catalog hive_catalog to test_user";
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+        Assert.assertThrows(ErrorReportException.class,
+                () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
+
+        ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+    }
+
+    @Test
+    public void testShowData() {
+        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
+        ShowDataStmt stmt = new ShowDataStmt("test", "testTbl", null);
+        Assert.assertThrows(ErrorReportException.class, () -> ShowExecutor.execute(stmt, ctx));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

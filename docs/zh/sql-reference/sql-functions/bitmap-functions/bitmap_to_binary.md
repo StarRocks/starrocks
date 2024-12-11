@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_to_binary
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将 Bitmap 根据 StarRocks 定义的规则，转换为二进制字符串。
 

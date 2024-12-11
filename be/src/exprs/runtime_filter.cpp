@@ -158,8 +158,14 @@ void SimdBlockFilter::clear() {
 
 size_t JoinRuntimeFilter::max_serialized_size() const {
     // todo(yan): noted that it's not serialize compatible with 32-bit and 64-bit.
+<<<<<<< HEAD
     size_t size = sizeof(_has_null) + sizeof(_size) + sizeof(_num_hash_partitions) + sizeof(_join_mode);
     if (_num_hash_partitions == 0) {
+=======
+    auto num_partitions = _hash_partition_bf.size();
+    size_t size = sizeof(_has_null) + sizeof(_size) + sizeof(num_partitions) + sizeof(_join_mode);
+    if (num_partitions == 0) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         size += _bf.max_serialized_size();
     } else {
         for (const auto& bf : _hash_partition_bf) {
@@ -171,16 +177,28 @@ size_t JoinRuntimeFilter::max_serialized_size() const {
 
 size_t JoinRuntimeFilter::serialize(int serialize_version, uint8_t* data) const {
     size_t offset = 0;
+<<<<<<< HEAD
+=======
+    auto num_partitions = _hash_partition_bf.size();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #define JRF_COPY_FIELD(field)                     \
     memcpy(data + offset, &field, sizeof(field)); \
     offset += sizeof(field);
     JRF_COPY_FIELD(_has_null);
     JRF_COPY_FIELD(_size);
+<<<<<<< HEAD
     JRF_COPY_FIELD(_num_hash_partitions);
     JRF_COPY_FIELD(_join_mode);
 #undef JRF_COPY_FIELD
 
     if (_num_hash_partitions == 0) {
+=======
+    JRF_COPY_FIELD(num_partitions);
+    JRF_COPY_FIELD(_join_mode);
+#undef JRF_COPY_FIELD
+
+    if (num_partitions == 0) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         offset += _bf.serialize(data + offset);
 
     } else {
@@ -193,11 +211,16 @@ size_t JoinRuntimeFilter::serialize(int serialize_version, uint8_t* data) const 
 
 size_t JoinRuntimeFilter::deserialize(int serialize_version, const uint8_t* data) {
     size_t offset = 0;
+<<<<<<< HEAD
+=======
+    size_t num_partitions = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #define JRF_COPY_FIELD(field)                     \
     memcpy(&field, data + offset, sizeof(field)); \
     offset += sizeof(field);
     JRF_COPY_FIELD(_has_null);
     JRF_COPY_FIELD(_size);
+<<<<<<< HEAD
     JRF_COPY_FIELD(_num_hash_partitions);
     JRF_COPY_FIELD(_join_mode);
 #undef JRF_COPY_FIELD
@@ -206,6 +229,16 @@ size_t JoinRuntimeFilter::deserialize(int serialize_version, const uint8_t* data
         offset += _bf.deserialize(data + offset);
     } else {
         for (size_t i = 0; i < _num_hash_partitions; i++) {
+=======
+    JRF_COPY_FIELD(num_partitions);
+    JRF_COPY_FIELD(_join_mode);
+#undef JRF_COPY_FIELD
+
+    if (num_partitions == 0) {
+        offset += _bf.deserialize(data + offset);
+    } else {
+        for (size_t i = 0; i < num_partitions; i++) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             SimdBlockFilter bf;
             offset += bf.deserialize(data + offset);
             _hash_partition_bf.emplace_back(std::move(bf));
@@ -216,6 +249,7 @@ size_t JoinRuntimeFilter::deserialize(int serialize_version, const uint8_t* data
 }
 
 bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
+<<<<<<< HEAD
     bool first = (_has_null == rf._has_null && _size == rf._size && _num_hash_partitions == rf._num_hash_partitions &&
                   _join_mode == rf._join_mode);
     if (!first) return false;
@@ -223,6 +257,17 @@ bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
         if (!_bf.check_equal(rf._bf)) return false;
     } else {
         for (size_t i = 0; i < _num_hash_partitions; i++) {
+=======
+    auto lhs_num_partitions = _hash_partition_bf.size();
+    auto rhs_num_partitions = rf._hash_partition_bf.size();
+    bool first = (_has_null == rf._has_null && _size == rf._size && lhs_num_partitions == rhs_num_partitions &&
+                  _join_mode == rf._join_mode);
+    if (!first) return false;
+    if (lhs_num_partitions == 0) {
+        if (!_bf.check_equal(rf._bf)) return false;
+    } else {
+        for (size_t i = 0; i < lhs_num_partitions; ++i) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!_hash_partition_bf[i].check_equal(rf._hash_partition_bf[i])) {
                 return false;
             }
@@ -232,10 +277,17 @@ bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
 }
 
 void JoinRuntimeFilter::clear_bf() {
+<<<<<<< HEAD
     if (_num_hash_partitions == 0) {
         _bf.clear();
     } else {
         for (size_t i = 0; i < _num_hash_partitions; i++) {
+=======
+    if (_hash_partition_bf.empty()) {
+        _bf.clear();
+    } else {
+        for (size_t i = 0; i < _hash_partition_bf.size(); i++) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             _hash_partition_bf[i].clear();
         }
     }

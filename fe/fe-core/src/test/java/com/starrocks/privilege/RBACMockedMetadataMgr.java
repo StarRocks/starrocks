@@ -23,6 +23,10 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.TemporaryTableMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,7 +41,11 @@ public class RBACMockedMetadataMgr extends MetadataMgr {
     private final Map<String, Table> tableMap;
 
     public RBACMockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
+<<<<<<< HEAD
         super(localMetastore, connectorMgr, new ConnectorTblMetaInfoMgr());
+=======
+        super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.localMetastore = localMetastore;
         idGenerator = new IdGenerator();
         this.databaseSet = new HashMap<>();
@@ -117,6 +125,7 @@ public class RBACMockedMetadataMgr extends MetadataMgr {
     }
 
     @Override
+<<<<<<< HEAD
     public Table getTable(Long databaseId, Long tableId) {
         for (Table table : tableMap.values()) {
             if (table.getId() == tableId) {
@@ -128,6 +137,8 @@ public class RBACMockedMetadataMgr extends MetadataMgr {
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<String> listTableNames(String catalogName, String dbName) {
         return new ArrayList<>(tableMap.keySet());
     }

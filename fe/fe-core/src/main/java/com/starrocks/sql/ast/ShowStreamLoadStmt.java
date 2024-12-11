@@ -23,7 +23,10 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -89,6 +92,10 @@ public class ShowStreamLoadStmt extends ShowStmt {
                     .add("EndTimeMs")
                     .add("ChannelState")
                     .add("Type")
+<<<<<<< HEAD
+=======
+                    .add("TrackingSQL")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .build();
 
     private final LabelName labelName;
@@ -130,7 +137,11 @@ public class ShowStreamLoadStmt extends ShowStmt {
         return includeHistory;
     }
 
+<<<<<<< HEAD
     public StreamLoadFunctionalExprProvider getFunctionalExprProvider(ConnectContext context) throws AnalysisException {
+=======
+    public StreamLoadFunctionalExprProvider getFunctionalExprProvider(ConnectContext context) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (null == functionalExprProvider) {
             functionalExprProvider = new StreamLoadFunctionalExprProvider();
         }

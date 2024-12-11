@@ -18,6 +18,10 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.UUIDUtil;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.InsertStmt;
@@ -28,6 +32,10 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+<<<<<<< HEAD
+=======
+import org.junit.Before;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -44,7 +52,11 @@ public class InsertIntoValuesDecimalV3Test {
     private static ConnectContext ctx;
 
     @BeforeClass
+<<<<<<< HEAD
     public static void setUp() throws Exception {
+=======
+    public static void beforeClass() throws Exception {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         UtFrameUtils.createMinStarRocksCluster();
         String createTblStmtStr =
                 "CREATE TABLE if not exists test_table (\n" +
@@ -74,6 +86,15 @@ public class InsertIntoValuesDecimalV3Test {
                 ");");
     }
 
+<<<<<<< HEAD
+=======
+    @Before
+    public void setUp() {
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testInsertIntoValuesInvolvingDecimalV3() throws Exception {
         Config.enable_decimal_v3 = true;

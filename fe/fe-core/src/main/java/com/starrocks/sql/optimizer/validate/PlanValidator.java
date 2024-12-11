@@ -15,8 +15,14 @@
 package com.starrocks.sql.optimizer.validate;
 
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.PlannerProfile;
+=======
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -50,14 +56,22 @@ public final class PlanValidator {
         boolean enablePlanValidation = ConnectContext.get().getSessionVariable().getEnablePlanValidation();
         try {
             for (Checker checker : checkerList) {
+<<<<<<< HEAD
                 try (PlannerProfile.ScopedTimer tracer = PlannerProfile.getScopedTimer(checker.getClass().getSimpleName())) {
+=======
+                try (Timer tracer = Tracers.watchScope(checker.getClass().getSimpleName())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     checker.validate(optExpression, taskContext);
                 }
             }
         } catch (IllegalArgumentException e) {
             String message = e.getMessage();
             if (!message.contains("Invalid plan")) {
+<<<<<<< HEAD
                 message = "Invalid plan:\n" + optExpression.explain() + message;
+=======
+                message = "Invalid plan:\n" + optExpression.debugString() + message;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             LOGGER.debug("Failed to validate plan.", e);
             if (enablePlanValidation) {

@@ -27,9 +27,15 @@ import java.util.stream.Collectors;
 
 public class ObjectType {
     @SerializedName("id")
+<<<<<<< HEAD
     private final int id;
 
     private ObjectType(int id) {
+=======
+    protected final int id;
+
+    protected ObjectType(int id) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.id = id;
     }
 
@@ -65,6 +71,16 @@ public class ObjectType {
     public static final ObjectType RESOURCE_GROUP = new ObjectType(10);
     public static final ObjectType GLOBAL_FUNCTION = new ObjectType(11);
     public static final ObjectType STORAGE_VOLUME = new ObjectType(12);
+<<<<<<< HEAD
+=======
+    public static final ObjectType PIPE = new ObjectType(13);
+    public static final ObjectType COLUMN = new ObjectType(14);
+
+    /**
+     * NOTICE: ObjectType cannot use a value exceeding 20000, please follow the above sequence number
+     */
+    public static final ObjectType WAREHOUSE = new ObjectType(20003);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static final Set<ObjectType> VALID_OBJECT_TYPE = new ImmutableSet.Builder<ObjectType>().add(
             TABLE,
@@ -78,7 +94,14 @@ public class ObjectType {
             FUNCTION,
             RESOURCE_GROUP,
             GLOBAL_FUNCTION,
+<<<<<<< HEAD
             STORAGE_VOLUME
+=======
+            STORAGE_VOLUME,
+            PIPE,
+            COLUMN,
+            WAREHOUSE
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ).build();
 
     public static final Map<Integer, Pair<String, String>> OBJECT_TO_NAME =
@@ -95,6 +118,12 @@ public class ObjectType {
                     .put(10, new Pair<>("RESOURCE GROUP", "RESOURCE GROUPS"))
                     .put(11, new Pair<>("GLOBAL FUNCTION", "GLOBAL FUNCTIONS"))
                     .put(12, new Pair<>("STORAGE VOLUME", "STORAGE VOLUMES"))
+<<<<<<< HEAD
+=======
+                    .put(13, new Pair<>("PIPE", "PIPES"))
+                    .put(14, new Pair<>("COLUMN", "COLUMNS"))
+                    .put(20003, new Pair<>("WAREHOUSE", "WAREHOUSES"))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .build();
 
     public static final Map<String, ObjectType> NAME_TO_OBJECT = VALID_OBJECT_TYPE.stream().collect(Collectors.toMap(
@@ -113,7 +142,11 @@ public class ObjectType {
         if (this == o) {
             return true;
         }
+<<<<<<< HEAD
         if (o == null || getClass() != o.getClass()) {
+=======
+        if (!(o instanceof ObjectType)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return false;
         }
         ObjectType that = (ObjectType) o;

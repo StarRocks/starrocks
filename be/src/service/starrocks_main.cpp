@@ -37,8 +37,11 @@
 #include <sys/file.h>
 #include <unistd.h>
 
+<<<<<<< HEAD
 #include "block_cache/block_cache.h"
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif
@@ -54,23 +57,42 @@
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/logging.h"
+<<<<<<< HEAD
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
+=======
+#include "common/process_exit.h"
+#include "common/status.h"
+#include "exec/pipeline/query_context.h"
+#include "fs/s3/poco_http_client_factory.h"
+#include "runtime/exec_env.h"
+#include "runtime/heartbeat_flags.h"
+#include "runtime/jdbc_driver_manager.h"
+#include "runtime/memory/roaring_hook.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "service/backend_options.h"
 #include "service/service.h"
 #include "service/staros_worker.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/debug_util.h"
+<<<<<<< HEAD
+=======
+#include "util/failpoint/fail_point.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
 #include "util/uid_util.h"
 
+<<<<<<< HEAD
 #if !_GLIBCXX_USE_CXX11_ABI
+=======
+#if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero
 #endif
 
@@ -99,10 +121,17 @@ static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& 
     };
     std::string slevel = boost::algorithm::to_upper_copy(s);
     Aws::Utils::Logging::LogLevel level = Aws::Utils::Logging::LogLevel::Warn;
+<<<<<<< HEAD
     for (int idx = 0; idx < sizeof(levels) / sizeof(levels[0]); idx++) {
         auto s = Aws::Utils::Logging::GetLogLevelName(levels[idx]);
         if (s == slevel) {
             level = levels[idx];
+=======
+    for (auto& idx : levels) {
+        auto s = Aws::Utils::Logging::GetLogLevelName(idx);
+        if (s == slevel) {
+            level = idx;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             break;
         }
     }
@@ -179,12 +208,37 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+<<<<<<< HEAD
+=======
+    starrocks::init_roaring_hook();
+
+#ifdef FIU_ENABLE
+    if (!starrocks::failpoint::init_failpoint_from_conf(std::string(getenv("STARROCKS_HOME")) +
+                                                        "/conf/failpoint.json")) {
+        fprintf(stderr, "fail to init failpoint from json file. ignore it...");
+    }
+#endif
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #if defined(ENABLE_STATUS_FAILED)
     // read range of source code for inject errors.
     starrocks::Status::access_directory_of_inject();
 #endif
+<<<<<<< HEAD
 
     Aws::SDKOptions aws_sdk_options;
+=======
+    // Initialize libcurl here to avoid concurrent initialization.
+    auto curl_ret = curl_global_init(CURL_GLOBAL_ALL);
+    if (curl_ret != 0) {
+        LOG(FATAL) << "fail to initialize libcurl, curl_ret=" << curl_ret;
+        exit(-1);
+    }
+
+    Aws::SDKOptions aws_sdk_options;
+    // it is already initialized beforehead
+    aws_sdk_options.httpOptions.initAndCleanupCurl = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (starrocks::config::aws_sdk_logging_trace_enabled) {
         auto level = parse_aws_sdk_log_level(starrocks::config::aws_sdk_logging_trace_level);
         std::cerr << "enable aws sdk logging trace. log level = " << Aws::Utils::Logging::GetLogLevelName(level)
@@ -195,6 +249,12 @@ int main(int argc, char** argv) {
         aws_sdk_options.httpOptions.compliantRfc3986Encoding = true;
     }
     Aws::InitAPI(aws_sdk_options);
+<<<<<<< HEAD
+=======
+    if (starrocks::config::enable_poco_client_for_aws_sdk) {
+        Aws::Http::SetHttpClientFactory(std::make_shared<starrocks::poco::PocoHttpClientFactory>());
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
@@ -229,19 +289,26 @@ int main(int argc, char** argv) {
         }
     }
 
+<<<<<<< HEAD
     // Initilize libcurl here to avoid concurrent initialization.
     auto curl_ret = curl_global_init(CURL_GLOBAL_ALL);
     if (curl_ret != 0) {
         LOG(FATAL) << "fail to initialize libcurl, curl_ret=" << curl_ret;
         exit(-1);
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Add logger for thrift internal.
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
     // cn need to support all ops for cloudnative table, so just start_be
     starrocks::start_be(paths, as_cn);
 
+<<<<<<< HEAD
     if (starrocks::k_starrocks_exit_quick.load()) {
+=======
+    if (starrocks::process_quick_exit_in_progress()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG(INFO) << "BE is shutting down，will exit quickly";
         exit(0);
     }

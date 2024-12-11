@@ -34,6 +34,13 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <sys/un.h>
+
+#include <array>
+#include <cstdint>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <string>
 
 namespace starrocks {
@@ -42,6 +49,7 @@ namespace starrocks {
 class CIDR {
 public:
     CIDR();
+<<<<<<< HEAD
     void reset();
     bool reset(const std::string& cidr_str);
     bool contains(const std::string& ip);
@@ -52,6 +60,16 @@ private:
 
     uint32_t _address{0};
     uint32_t _netmask{0xffffffff};
+=======
+    bool reset(const std::string& cidr_str);
+    bool contains(const CIDR& ip) const;
+    static bool ip_to_int(const std::string& ip_str, uint32_t* value);
+
+private:
+    sa_family_t _family;
+    std::array<std::uint8_t, 16> _address;
+    std::uint8_t _netmask_len;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // end namespace starrocks

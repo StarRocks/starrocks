@@ -126,7 +126,11 @@ struct TraceEntry;
 // This class is thread-safe.
 class Trace : public RefCountedThreadSafe<Trace> {
 public:
+<<<<<<< HEAD
     Trace();
+=======
+    Trace() = default;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Logs a message into the trace buffer.
     //

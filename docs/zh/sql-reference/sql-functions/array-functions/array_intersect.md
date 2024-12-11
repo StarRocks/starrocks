@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_intersect
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 对于多个同类型数组，返回交集。
 

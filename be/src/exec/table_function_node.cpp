@@ -225,7 +225,11 @@ void TableFunctionNode::close(RuntimeState* state) {
         return;
     }
     if (_table_function != nullptr && _table_function_state != nullptr) {
+<<<<<<< HEAD
         _table_function->close(state, _table_function_state);
+=======
+        (void)_table_function->close(state, _table_function_state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     ExecNode::close(state);
 }

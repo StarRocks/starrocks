@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # parse_url
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Parses a URL and extracts a component from this URL.
 

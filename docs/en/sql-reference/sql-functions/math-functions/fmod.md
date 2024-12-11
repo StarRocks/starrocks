@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # fmod
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the floating point remainder of the division ( `dividend`/`divisor` ). It is a modulo function.
 

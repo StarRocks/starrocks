@@ -31,7 +31,12 @@ public class Status {
         BAD_CONNECTION,
         COMMON_ERROR,
         OLAP_VERSION_ALREADY_MERGED,
+<<<<<<< HEAD
         UNSUPPORTED
+=======
+        UNSUPPORTED,
+        BAD_REPLACE
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @SerializedName("ec")

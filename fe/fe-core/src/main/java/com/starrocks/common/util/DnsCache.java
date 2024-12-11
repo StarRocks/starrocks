@@ -23,7 +23,11 @@ import java.net.UnknownHostException;
 // Because JVM has DNS cache already, this class doesn't maintain its own cache.
 public class DnsCache {
     public static String lookup(String hostname) throws UnknownHostException {
+<<<<<<< HEAD
         if (InetAddressValidator.getInstance().isValidInet4Address(hostname)) {
+=======
+        if (InetAddressValidator.getInstance().isValid(hostname)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return hostname;
         }
         return InetAddress.getByName(hostname).getHostAddress();

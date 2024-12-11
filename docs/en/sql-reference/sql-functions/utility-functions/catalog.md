@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # catalog
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the name of the current catalog. The catalog can be a StarRocks internal catalog or an external catalog that is mapped to an external data source. For more information about catalogs, see [Catalog overview](../../../data_source/catalog/catalog_overview.md).
 

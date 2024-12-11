@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # database
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the name of the current database. If no database is selected, an empty value is returned.
 

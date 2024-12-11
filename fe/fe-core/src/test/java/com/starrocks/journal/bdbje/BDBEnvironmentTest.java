@@ -77,6 +77,10 @@ public class BDBEnvironmentTest {
     }
 
 
+<<<<<<< HEAD
+=======
+    @Ignore
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testSetupStandalone() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -103,6 +107,10 @@ public class BDBEnvironmentTest {
     }
 
     // address already in use
+<<<<<<< HEAD
+=======
+    @Ignore
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test(expected = JournalException.class)
     public void testSetupStandaloneMultitimes() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -155,7 +163,11 @@ public class BDBEnvironmentTest {
         BDBEnvironment.RETRY_TIME = 3;
         // give leader time to update membership
         // otherwise may get error Conflicting node types: uses: SECONDARY Replica is configured as type: ELECTABLE
+<<<<<<< HEAD
         BDBEnvironment.SLEEP_INTERVAL_SEC = ThreadLocalRandom.current().nextInt(5, 15);;
+=======
+        BDBEnvironment.SLEEP_INTERVAL_SEC = ThreadLocalRandom.current().nextInt(5, 15);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // set timeout to a really long time so that ut can pass even when IO load is very high
         Config.bdbje_heartbeat_timeout_second = 60;
         Config.bdbje_replica_ack_timeout_second = 60;
@@ -193,6 +205,7 @@ public class BDBEnvironmentTest {
         BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
     }
 
+<<<<<<< HEAD
     @Test
     public void testNormalCluster() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -251,6 +264,8 @@ public class BDBEnvironmentTest {
         System.out.println("testNormalCluster cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * see https://github.com/StarRocks/starrocks/issues/4977
      *

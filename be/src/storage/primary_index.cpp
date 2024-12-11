@@ -20,7 +20,10 @@
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
@@ -29,6 +32,10 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
+<<<<<<< HEAD
+=======
+#include "types/large_int_value.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/xxh3.h"
@@ -54,14 +61,20 @@ public:
     virtual Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, uint32_t idx_begin,
                           uint32_t idx_end) = 0;
     // batch upsert a range [idx_begin, idx_end) of keys
+<<<<<<< HEAD
     virtual void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                         DeletesMap* deletes) = 0;
+=======
+    virtual Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                          DeletesMap* deletes) = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // replace values, return error if not exist. replace a range [indexes[idx_begin], indexes[idx_end-1]]
     virtual Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes,
                            uint32_t idx_begin, uint32_t idx_end, const Column& pks) = 0;
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch try_replace a range [idx_begin, idx_end) of keys
+<<<<<<< HEAD
     [[maybe_unused]] virtual void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                               const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                                               vector<uint32_t>* failed) = 0;
@@ -72,6 +85,18 @@ public:
     virtual void erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) = 0;
 
     virtual void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) = 0;
+=======
+    [[maybe_unused]] virtual Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                                const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                                                vector<uint32_t>* failed) = 0;
+
+    virtual Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                               uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) = 0;
+    // batch erase a range [idx_begin, idx_end) of keys
+    virtual Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) = 0;
+
+    virtual Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // just an estimate value for now
     virtual std::size_t memory_usage() const = 0;
@@ -123,6 +148,10 @@ public:
 
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
+<<<<<<< HEAD
+=======
+        CHECK_MEM_LIMIT("HashIndexImpl::insert");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
@@ -146,6 +175,10 @@ public:
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
                    uint32_t idx_end, const Column& pks) override {
+<<<<<<< HEAD
+=======
+        CHECK_MEM_LIMIT("HashIndexImpl::insert");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -159,8 +192,14 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                 DeletesMap* deletes) override {
+=======
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::upsert");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -178,11 +217,21 @@ public:
                 p.first->second = v;
             }
         }
+<<<<<<< HEAD
     }
 
     [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                       const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                                       vector<uint32_t>* failed) override {
+=======
+        return Status::OK();
+    }
+
+    [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                        const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                                        vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::try_replace");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -197,10 +246,19 @@ public:
                 failed->push_back(rowid_start + i);
             }
         }
+<<<<<<< HEAD
     }
 
     void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
                      uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+=======
+        return Status::OK();
+    }
+
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                       uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::try_replace");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -213,9 +271,17 @@ public:
                 failed->push_back(rowid_start + i);
             }
         }
+<<<<<<< HEAD
     }
 
     void erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+=======
+        return Status::OK();
+    }
+
+    Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::erase");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         for (auto i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
@@ -227,9 +293,17 @@ public:
                 _map.erase(iter);
             }
         }
+<<<<<<< HEAD
     }
 
     void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+=======
+        return Status::OK();
+    }
+
+    Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::get");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         for (auto i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
@@ -241,6 +315,10 @@ public:
                 (*rowids)[i] = -1;
             }
         }
+<<<<<<< HEAD
+=======
+        return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     std::size_t memory_usage() const final {
@@ -295,6 +373,10 @@ public:
 
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
+<<<<<<< HEAD
+=======
+        CHECK_MEM_LIMIT("FixSliceHashIndex::insert");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
@@ -349,6 +431,10 @@ public:
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
                    uint32_t idx_end, const Column& pks) override {
+<<<<<<< HEAD
+=======
+        CHECK_MEM_LIMIT("FixSliceHashIndex::replace");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -361,8 +447,14 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                 DeletesMap* deletes) override {
+=======
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::upsert");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
@@ -409,10 +501,19 @@ public:
                 }
             }
         }
+<<<<<<< HEAD
     }
     [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                       const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                                       vector<uint32_t>* failed) override {
+=======
+        return Status::OK();
+    }
+    [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                        const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                                        vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::try_replace");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
@@ -453,10 +554,19 @@ public:
                 }
             }
         }
+<<<<<<< HEAD
     }
 
     void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
                      uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+=======
+        return Status::OK();
+    }
+
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                       uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::try_replace");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
@@ -497,9 +607,17 @@ public:
                 }
             }
         }
+<<<<<<< HEAD
     }
 
     void erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+=======
+        return Status::OK();
+    }
+
+    Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::erase");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -535,9 +653,17 @@ public:
                 }
             }
         }
+<<<<<<< HEAD
     }
 
     void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+=======
+        return Status::OK();
+    }
+
+    Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::get");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -573,6 +699,10 @@ public:
                 }
             }
         }
+<<<<<<< HEAD
+=======
+        return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     std::size_t memory_usage() const final { return _map.capacity() * (1 + S * 4 + sizeof(RowIdPack4)); }
@@ -611,6 +741,10 @@ public:
     void reserve(size_t size) override { _map.reserve(size); }
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
+<<<<<<< HEAD
+=======
+        CHECK_MEM_LIMIT("SliceHashIndex::insert");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
@@ -632,8 +766,14 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                 DeletesMap* deletes) override {
+=======
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::upsert");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -651,10 +791,18 @@ public:
                 _total_length += keys[i].size;
             }
         }
+<<<<<<< HEAD
+=======
+        return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
                    uint32_t idx_end, const Column& pks) override {
+<<<<<<< HEAD
+=======
+        CHECK_MEM_LIMIT("SliceHashIndex::replace");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -669,9 +817,16 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                       const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                                       vector<uint32_t>* failed) override {
+=======
+    [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                        const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                                        vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::try_replace");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -684,10 +839,19 @@ public:
                 failed->push_back(rowid_start + i);
             }
         }
+<<<<<<< HEAD
     }
 
     void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
                      uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+=======
+        return Status::OK();
+    }
+
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                       uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::try_replace");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -700,9 +864,17 @@ public:
                 failed->push_back(rowid_start + i);
             }
         }
+<<<<<<< HEAD
     }
 
     void erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+=======
+        return Status::OK();
+    }
+
+    Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::erase");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         for (uint32_t i = idx_begin; i < idx_end; i++) {
             auto p = _map.find(keys[i].to_string());
@@ -713,9 +885,17 @@ public:
                 _total_length -= keys[i].size;
             }
         }
+<<<<<<< HEAD
     }
 
     void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+=======
+        return Status::OK();
+    }
+
+    Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::get");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         for (uint32_t i = idx_begin; i < idx_end; i++) {
             auto p = _map.find(keys[i].to_string());
@@ -725,6 +905,10 @@ public:
                 (*rowids)[i] = -1;
             }
         }
+<<<<<<< HEAD
+=======
+        return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     std::size_t memory_usage() const final {
@@ -855,18 +1039,35 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                 DeletesMap* deletes) override {
+=======
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes) override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
+<<<<<<< HEAD
                     get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, i, deletes);
                     idx_begin = i;
                 }
             }
             get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
         }
+=======
+                    RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)
+                                            ->upsert(rssid, rowid_start, pks, idx_begin, i, deletes));
+                    idx_begin = i;
+                }
+            }
+            RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)
+                                    ->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes));
+        }
+        return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
@@ -886,13 +1087,20 @@ public:
         return Status::OK();
     } // namespace starrocks
 
+<<<<<<< HEAD
     [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                       const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                                       vector<uint32_t>* failed) override {
+=======
+    [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                        const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                                        vector<uint32_t>* failed) override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
+<<<<<<< HEAD
                     get_index_by_length(keys[idx_begin].size)
                             ->try_replace(rssid, rowid_start, pks, src_rssid, idx_begin, i, failed);
                     idx_begin = i;
@@ -905,10 +1113,26 @@ public:
 
     void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
                      uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+=======
+                    RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)
+                                            ->try_replace(rssid, rowid_start, pks, src_rssid, idx_begin, i, failed));
+                    idx_begin = i;
+                }
+            }
+            RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)
+                                    ->try_replace(rssid, rowid_start, pks, src_rssid, idx_begin, idx_end, failed));
+        }
+        return Status::OK();
+    }
+
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                       uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
+<<<<<<< HEAD
                     get_index_by_length(keys[idx_begin].size)
                             ->try_replace(rssid, rowid_start, pks, max_src_rssid, idx_begin, i, failed);
                     idx_begin = i;
@@ -920,10 +1144,26 @@ public:
     }
 
     void erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+=======
+                    RETURN_IF_ERROR(
+                            get_index_by_length(keys[idx_begin].size)
+                                    ->try_replace(rssid, rowid_start, pks, max_src_rssid, idx_begin, i, failed));
+                    idx_begin = i;
+                }
+            }
+            RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)
+                                    ->try_replace(rssid, rowid_start, pks, max_src_rssid, idx_begin, idx_end, failed));
+        }
+        return Status::OK();
+    }
+
+    Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
+<<<<<<< HEAD
                     get_index_by_length(keys[idx_begin].size)->erase(pks, idx_begin, i, deletes);
                     idx_begin = i;
                 }
@@ -933,16 +1173,38 @@ public:
     }
 
     void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+=======
+                    RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)->erase(pks, idx_begin, i, deletes));
+                    idx_begin = i;
+                }
+            }
+            RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)->erase(pks, idx_begin, idx_end, deletes));
+        }
+        return Status::OK();
+    }
+
+    Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
+<<<<<<< HEAD
                     get_index_by_length(keys[idx_begin].size)->get(pks, idx_begin, i, rowids);
                     idx_begin = i;
                 }
             }
             get_index_by_length(keys[idx_begin].size)->get(pks, idx_begin, idx_end, rowids);
         }
+=======
+                    RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)->get(pks, idx_begin, i, rowids));
+                    idx_begin = i;
+                }
+            }
+            RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)->get(pks, idx_begin, idx_end, rowids));
+        }
+        return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     std::size_t memory_usage() const final {
@@ -1123,6 +1385,10 @@ Status PrimaryIndex::abort() {
 }
 
 Status PrimaryIndex::_do_load(Tablet* tablet) {
+<<<<<<< HEAD
+=======
+    CHECK_MEM_LIMIT("PrimaryIndex::_do_load");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _table_id = tablet->belonged_table_id();
     _tablet_id = tablet->tablet_id();
     auto span = Tracer::Instance().start_trace_tablet("primary_index_load", tablet->tablet_id());
@@ -1130,6 +1396,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     MonotonicStopWatch timer;
     timer.start();
 
+<<<<<<< HEAD
     const TabletSchema& tablet_schema = tablet->tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
     for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
@@ -1141,6 +1408,19 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     // load persistent index if enable persistent index meta
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
     if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
+=======
+    const TabletSchemaCSPtr tablet_schema_ptr = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
+    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
+    _set_schema(pkey_schema);
+
+    // load persistent index if enable persistent index meta
+
+    if (tablet->get_enable_persistent_index()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // TODO
         // PersistentIndex and tablet data are currently stored in the same directory
         // We may need to support the separation of PersistentIndex and Tablet data
@@ -1181,9 +1461,13 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     OlapReaderStatistics stats;
     std::unique_ptr<Column> pk_column;
     if (pk_columns.size() > 1) {
+<<<<<<< HEAD
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
             CHECK(false) << "create column for primary key encoder failed";
         }
+=======
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     // only hold pkey, so can use larger chunk size
     vector<uint32_t> rowids;
@@ -1192,13 +1476,22 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
+<<<<<<< HEAD
         auto res = rowset->get_segment_iterators2(pkey_schema, tablet->data_dir()->get_meta(), apply_version, &stats);
+=======
+        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->tablet_schema(), tablet->data_dir()->get_meta(),
+                                                  apply_version, &stats);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!res.ok()) {
             return res.status();
         }
         auto& itrs = res.value();
         // TODO(cbl): auto close iterators on failure
+<<<<<<< HEAD
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+=======
+        RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (size_t i = 0; i < itrs.size(); i++) {
             auto itr = itrs[i].get();
             if (itr == nullptr) {
@@ -1216,12 +1509,21 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
                     Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
+<<<<<<< HEAD
                         PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+=======
+                        TRY_CATCH_BAD_ALLOC(
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
                     }
+<<<<<<< HEAD
                     auto st = insert(rowset->rowset_meta()->get_rowset_seg_id() + i, rowids, *pkc);
+=======
+                    st = insert(rowset->rowset_meta()->get_rowset_seg_id() + i, rowids, *pkc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (!st.ok()) {
                         LOG(ERROR) << "load index failed: tablet=" << tablet->tablet_id()
                                    << " rowsets:" << int_list_to_string(rowset_ids)
@@ -1273,7 +1575,11 @@ const Slice* PrimaryIndex::_build_persistent_keys(const Column& pks, uint32_t id
         const Slice* vkeys = reinterpret_cast<const Slice*>(pks.raw_data());
         return vkeys + idx_begin;
     } else {
+<<<<<<< HEAD
         CHECK(_key_size > 0);
+=======
+        DCHECK(_key_size > 0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const uint8_t* keys = pks.raw_data() + idx_begin * _key_size;
         for (size_t i = idx_begin; i < idx_end; i++) {
             key_slices->emplace_back(keys, _key_size);
@@ -1287,7 +1593,11 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
+<<<<<<< HEAD
     _build_persistent_values(rssid, rowids, 0, pks.size(), &values);
+=======
+    RETURN_IF_ERROR(_build_persistent_values(rssid, rowids, 0, pks.size(), &values));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const Slice* vkeys = _build_persistent_keys(pks, 0, pks.size(), &keys);
     RETURN_IF_ERROR(_persistent_index->insert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), true));
     return Status::OK();
@@ -1399,6 +1709,7 @@ Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& 
 Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes,
                             IOStat* stat) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+<<<<<<< HEAD
     Status st;
     if (_persistent_index != nullptr) {
         st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat);
@@ -1407,11 +1718,21 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
         _calc_memory_usage();
     }
     return st;
+=======
+    if (_persistent_index != nullptr) {
+        return _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat);
+    } else {
+        auto st = _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
+        _calc_memory_usage();
+        return st;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
                             uint32_t idx_end, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+<<<<<<< HEAD
     Status st;
     if (_persistent_index != nullptr) {
         st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
@@ -1420,6 +1741,15 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
         _calc_memory_usage();
     }
     return st;
+=======
+    if (_persistent_index != nullptr) {
+        return _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
+    } else {
+        auto st = _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+        _calc_memory_usage();
+        return st;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status PrimaryIndex::_replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
@@ -1453,6 +1783,7 @@ Status PrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::ve
 [[maybe_unused]] Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                   const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+<<<<<<< HEAD
     Status st;
     if (_persistent_index != nullptr) {
         st = _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes);
@@ -1461,11 +1792,21 @@ Status PrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::ve
         _calc_memory_usage();
     }
     return st;
+=======
+    if (_persistent_index != nullptr) {
+        return _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes);
+    } else {
+        auto st = _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
+        _calc_memory_usage();
+        return st;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
                                  vector<uint32_t>* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+<<<<<<< HEAD
     Status st;
     if (_persistent_index != nullptr) {
         st = _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes);
@@ -1474,10 +1815,20 @@ Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Col
         _calc_memory_usage();
     }
     return st;
+=======
+    if (_persistent_index != nullptr) {
+        return _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes);
+    } else {
+        auto st = _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, max_src_rssid, 0, pks.size(), deletes);
+        _calc_memory_usage();
+        return st;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+<<<<<<< HEAD
     Status st;
     if (_persistent_index != nullptr) {
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
@@ -1487,10 +1838,21 @@ Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
         _calc_memory_usage();
     }
     return st;
+=======
+    if (_persistent_index != nullptr) {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
+        return _erase_persistent_index(key_col, deletes);
+    } else {
+        auto st = _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
+        _calc_memory_usage();
+        return st;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) const {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+<<<<<<< HEAD
     Status st;
     if (_persistent_index != nullptr) {
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
@@ -1499,6 +1861,14 @@ Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) c
         _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids);
     }
     return st;
+=======
+    if (_persistent_index != nullptr) {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
+        return _get_from_persistent_index(key_col, rowids);
+    } else {
+        return _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 std::size_t PrimaryIndex::memory_usage() const {
@@ -1529,7 +1899,11 @@ std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema)
     return std::make_unique<PrimaryIndex>(pk_schema);
 }
 
+<<<<<<< HEAD
 Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex) {
+=======
+Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // `_persistent_index` could be reset when call `unload()`, so we need to fetch reference first.
     std::shared_ptr<PersistentIndex> pindex;
     {
@@ -1547,6 +1921,7 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
     std::lock_guard<std::mutex> lg(_lock);
     _table_id = tablet->belonged_table_id();
     _tablet_id = tablet->tablet_id();
+<<<<<<< HEAD
     const TabletSchema& tablet_schema = tablet->tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
     for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
@@ -1557,6 +1932,17 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
 
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
     if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
+=======
+    const TabletSchemaCSPtr tablet_schema_ptr = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
+    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
+    _set_schema(pkey_schema);
+
+    if (tablet->get_enable_persistent_index()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (_persistent_index != nullptr) {
             _persistent_index.reset();
         }

@@ -74,7 +74,11 @@ public class SyncCloudTableMetaAction extends RestBaseAction {
                     "both database and table should be provided.");
         }
 
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentStarMgrMetaSyncer().syncTableMeta(dbName, tableName, force);
+=======
+        GlobalStateMgr.getCurrentState().getStarMgrMetaSyncer().syncTableMeta(dbName, tableName, force);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         response.appendContent("OK");
         sendResult(request, response);
     }

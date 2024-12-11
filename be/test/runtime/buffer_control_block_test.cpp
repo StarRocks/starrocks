@@ -37,6 +37,11 @@
 #include <gtest/gtest.h>
 #include <pthread.h>
 
+<<<<<<< HEAD
+=======
+#include <future>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
@@ -86,7 +91,11 @@ TEST_F(BufferControlBlockTest, get_add_after_cancel) {
     BufferControlBlock control_block(TUniqueId(), 1024);
     ASSERT_TRUE(control_block.init().ok());
 
+<<<<<<< HEAD
     ASSERT_TRUE(control_block.cancel().ok());
+=======
+    control_block.cancel();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
     add_result->result_batch.rows.emplace_back("hello test");
     ASSERT_FALSE(control_block.add_batch(add_result).ok());
@@ -107,16 +116,34 @@ TEST_F(BufferControlBlockTest, add_then_cancel) {
     BufferControlBlock control_block(TUniqueId(), 1);
     ASSERT_TRUE(control_block.init().ok());
 
+<<<<<<< HEAD
     pthread_t id;
     pthread_create(&id, nullptr, cancel_thread, &control_block);
+=======
+    // add_batch in main thread -> cancel in cancel_thread -> add_batch in main thread
+    std::promise<void> p1, p2;
+    std::future<void> f1 = p1.get_future(), f2 = p2.get_future();
+    auto cancel_thread = std::thread([&]() {
+        f1.wait();
+        control_block.cancel();
+        p2.set_value();
+    });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     {
         std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.emplace_back("hello test1");
         add_result->result_batch.rows.emplace_back("hello test2");
         ASSERT_TRUE(control_block.add_batch(add_result).ok());
+<<<<<<< HEAD
     }
     {
+=======
+        p1.set_value();
+    }
+    {
+        f2.wait();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.emplace_back("hello test1");
         add_result->result_batch.rows.emplace_back("hello test2");
@@ -126,7 +153,11 @@ TEST_F(BufferControlBlockTest, add_then_cancel) {
     TFetchDataResult get_result;
     ASSERT_FALSE(control_block.get_batch(&get_result).ok());
 
+<<<<<<< HEAD
     pthread_join(id, nullptr);
+=======
+    cancel_thread.join();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 TEST_F(BufferControlBlockTest, get_then_cancel) {

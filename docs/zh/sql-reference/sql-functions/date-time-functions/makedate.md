@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # makedate
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 根据给定的年份和天数值，构造一个日期值。
 

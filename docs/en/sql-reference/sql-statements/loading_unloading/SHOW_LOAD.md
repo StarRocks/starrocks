@@ -107,7 +107,11 @@ LoadFinishTime: 2022-10-17 19:35:06
 
 Example 2: Display two load jobs whose labels contain the string `null` in your current database.
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plaintext
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 SHOW LOAD 
 WHERE LABEL LIKE "null" 
 LIMIT 2;
@@ -122,7 +126,11 @@ LIMIT 2;
 
 Example 3: Display the load jobs whose labels contain the string `table` in `example_db`. In addition, the load jobs returned are displayed in descending order of the `LoadStartTime` field.
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plaintext
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 SHOW LOAD FROM example_db 
 WHERE LABEL Like "table" 
 ORDER BY LoadStartTime DESC;
@@ -137,7 +145,11 @@ ORDER BY LoadStartTime DESC;
 
 Example 4: Display the load job whose label is `duplicate_table_with_null` and state is `FINISHED` in `example_db`.
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plaintext
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 SHOW LOAD FROM example_db 
 WHERE LABEL = "duplicate_table_with_null" AND STATE = "FINISHED";
 
@@ -150,7 +162,11 @@ WHERE LABEL = "duplicate_table_with_null" AND STATE = "FINISHED";
 
 Example 5: Skip the first load job and display the next two load jobs. In addition, these two load jobs are sorted in ascending order.
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plaintext
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 SHOW LOAD FROM example_db 
 ORDER BY CreateTime ASC 
 LIMIT 2 OFFSET 1;
@@ -158,7 +174,11 @@ LIMIT 2 OFFSET 1;
 
 Or
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plaintext
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 SHOW LOAD FROM example_db 
 ORDER BY CreateTime ASC 
 LIMIT 1,2;
@@ -166,7 +186,11 @@ LIMIT 1,2;
 
 The output of the preceding statements is as follows.
 
+<<<<<<< HEAD
 ```undefined
+=======
+```plaintext
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 +-------+---------------------------------------------+----------+---------------------+--------+---------------------------------------------------------+---------------------------------------------------------------------------------------------------------+----------+---------------------+---------------------+---------------------+---------------------+---------------------+--------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | JobId | Label                                       | State    | Progress            | Type   | EtlInfo                                                 | TaskInfo                                                                                                | ErrorMsg | CreateTime          | EtlStartTime        | EtlFinishTime       | LoadStartTime       | LoadFinishTime      | URL                                                                            | JobDetails                                                                                                                                                                                            |
 +-------+---------------------------------------------+----------+---------------------+--------+---------------------------------------------------------+---------------------------------------------------------------------------------------------------------+----------+---------------------+---------------------+---------------------+---------------------+---------------------+--------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+

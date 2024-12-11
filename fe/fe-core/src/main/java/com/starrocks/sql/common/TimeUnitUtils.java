@@ -21,6 +21,10 @@ public class TimeUnitUtils {
     public static final String SECOND = "second";
     public static final String MINUTE = "minute";
     public static final String HOUR = "hour";
+<<<<<<< HEAD
+=======
+    public static final String WEEK = "week";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final String DAY = "day";
     public static final String MONTH = "month";
     public static final String QUARTER = "quarter";
@@ -29,6 +33,7 @@ public class TimeUnitUtils {
     // "week" can not exist in timeMap due "month" not sure contains week
     public static final ImmutableMap<String, Integer> TIME_MAP =
             new ImmutableMap.Builder<String, Integer>()
+<<<<<<< HEAD
                     .put("second", 1)
                     .put("minute", 2)
                     .put("hour", 3)
@@ -36,5 +41,27 @@ public class TimeUnitUtils {
                     .put("month", 5)
                     .put("quarter", 6)
                     .put("year", 7)
+=======
+                    .put(SECOND, 1)
+                    .put(MINUTE, 2)
+                    .put(HOUR, 3)
+                    .put(DAY, 4)
+                    .put(MONTH, 5)
+                    .put(QUARTER, 6)
+                    .put(YEAR, 7)
+                    .build();
+
+    // all time units which date_trunc supported
+    public static final ImmutableMap<String, Integer> DATE_TRUNC_SUPPORTED_TIME_MAP =
+            new ImmutableMap.Builder<String, Integer>()
+                    .put(SECOND, 1)
+                    .put(MINUTE, 2)
+                    .put(HOUR, 3)
+                    .put(DAY, 4)
+                    .put(WEEK, 5)
+                    .put(MONTH, 6)
+                    .put(QUARTER, 7)
+                    .put(YEAR, 8)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .build();
 }

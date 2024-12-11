@@ -26,7 +26,11 @@
 namespace orc {
 
 Int128 Int128::maximumValue() {
+<<<<<<< HEAD
     return {0x7fffffffffffffff, 0xfffffffffffffff};
+=======
+    return {0x7fffffffffffffff, 0xffffffffffffffff};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Int128 Int128::minimumValue() {

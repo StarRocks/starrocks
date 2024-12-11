@@ -58,9 +58,18 @@
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
+<<<<<<< HEAD
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
 #include "storage/replication_txn_manager.h"
+=======
+#include "storage/dictionary_cache_manager.h"
+#include "storage/lake/local_pk_index_manager.h"
+#include "storage/memtable_flush_executor.h"
+#include "storage/publish_version_manager.h"
+#include "storage/replication_txn_manager.h"
+#include "storage/rowset/metadata_cache.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
@@ -70,6 +79,10 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
+<<<<<<< HEAD
+=======
+#include "testutil/sync_point.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/bthreads/executor.h"
 #include "util/lru_cache.h"
 #include "util/scoped_cleanup.h"
@@ -115,7 +128,12 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _memtable_flush_executor(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()),
+<<<<<<< HEAD
           _publish_version_manager(new PublishVersionManager()) {
+=======
+          _publish_version_manager(new PublishVersionManager()),
+          _dictionary_cache_manager(new DictionaryCacheManager()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;
@@ -128,12 +146,31 @@ StorageEngine::StorageEngine(const EngineOptions& options)
         return _unused_rowsets.size();
     })
     _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
+<<<<<<< HEAD
+=======
+#ifdef USE_STAROS
+    _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
+#endif
+#ifndef BE_TEST
+    const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+    const int64_t lru_cache_limit = process_limit * (int64_t)config::metadata_cache_memory_limit_percent / (int64_t)100;
+    MetadataCache::create_cache(lru_cache_limit);
+    REGISTER_GAUGE_STARROCKS_METRIC(metadata_cache_bytes_total,
+                                    [&]() { return MetadataCache::instance()->get_memory_usage(); });
+#endif
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 StorageEngine::~StorageEngine() {
     // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
     // engine instance during their destruction.
     _tablet_manager.reset();
+<<<<<<< HEAD
+=======
+
+    // _store can be still referenced by any tablet, make sure it is destroyed after `_tablet_manager`
+    _store_map.clear();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #ifdef BE_TEST
     if (_s_instance == this) {
         _s_instance = _p_instance;
@@ -181,6 +218,10 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
         Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
+<<<<<<< HEAD
+=======
+        DCHECK(thread.joinable());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         thread.join();
     }
 }
@@ -239,10 +280,18 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
 
+<<<<<<< HEAD
+=======
+#ifdef USE_STAROS
+    RETURN_IF_ERROR_WITH_WARN(_local_pk_index_manager->init(), "init LocalPkIndexManager failed");
+#endif
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
 Status StorageEngine::_init_store_map() {
+<<<<<<< HEAD
     std::vector<std::pair<bool, DataDir*>> tmp_stores;
     ScopedCleanup release_guard([&] {
         for (const auto& item : tmp_stores) {
@@ -251,14 +300,25 @@ Status StorageEngine::_init_store_map() {
             }
         }
     });
+=======
+    std::map<std::string, std::unique_ptr<DataDir>> tmp_stores;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::vector<std::thread> threads;
     SpinLock error_msg_lock;
     std::string error_msg;
     for (auto& path : _options.store_paths) {
+<<<<<<< HEAD
         auto* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
         ScopedCleanup store_release_guard([&]() { delete store; });
         tmp_stores.emplace_back(true, store);
         store_release_guard.cancel();
+=======
+        auto store_ptr =
+                std::make_unique<DataDir>(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
+        DataDir* store = store_ptr.get();
+        tmp_stores.emplace(path.path, std::move(store_ptr));
+        // store_ptr will be invalid ever since
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         threads.emplace_back([store, &error_msg_lock, &error_msg]() {
             auto st = store->init();
             if (!st.ok()) {
@@ -272,6 +332,10 @@ Status StorageEngine::_init_store_map() {
         Thread::set_thread_name(threads.back(), "init_store_path");
     }
     for (auto& thread : threads) {
+<<<<<<< HEAD
+=======
+        DCHECK(thread.joinable());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         thread.join();
     }
 
@@ -279,12 +343,16 @@ Status StorageEngine::_init_store_map() {
         return Status::InternalError(strings::Substitute("init path failed, error=$0", error_msg));
     }
 
+<<<<<<< HEAD
     for (auto& store : tmp_stores) {
         _store_map.emplace(store.second->path(), store.second);
         store.first = false;
     }
 
     release_guard.cancel();
+=======
+    _store_map.swap(tmp_stores);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -331,12 +399,20 @@ std::vector<DataDir*> StorageEngine::get_stores() {
     std::lock_guard<std::mutex> l(_store_lock);
     if (include_unused) {
         for (auto& it : _store_map) {
+<<<<<<< HEAD
             stores.push_back(it.second);
+=======
+            stores.push_back(it.second.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     } else {
         for (auto& it : _store_map) {
             if (it.second->is_used()) {
+<<<<<<< HEAD
                 stores.push_back(it.second);
+=======
+                stores.push_back(it.second.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
@@ -346,7 +422,11 @@ std::vector<DataDir*> StorageEngine::get_stores() {
 template std::vector<DataDir*> StorageEngine::get_stores<false>();
 template std::vector<DataDir*> StorageEngine::get_stores<true>();
 
+<<<<<<< HEAD
 Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, bool need_update) {
+=======
+void StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, bool need_update) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     data_dir_infos->clear();
 
     // 1. update available capacity of each data dir
@@ -357,7 +437,11 @@ Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos,
         std::lock_guard<std::mutex> l(_store_lock);
         for (auto& it : _store_map) {
             if (need_update) {
+<<<<<<< HEAD
                 it.second->update_capacity();
+=======
+                WARN_IF_ERROR(it.second->update_capacity(), "update available capacity failed");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             path_map.emplace(it.first, it.second->get_dir_info());
         }
@@ -371,8 +455,11 @@ Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos,
     for (auto& entry : path_map) {
         data_dir_infos->emplace_back(entry.second);
     }
+<<<<<<< HEAD
 
     return Status::OK();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void StorageEngine::_start_disk_stat_monitor() {
@@ -442,7 +529,11 @@ Status StorageEngine::_check_all_root_path_cluster_id() {
 
     // write cluster id into cluster_id_path if get effective cluster id success
     if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist && _need_write_cluster_id) {
+<<<<<<< HEAD
         set_cluster_id(_effective_cluster_id);
+=======
+        RETURN_IF_ERROR(set_cluster_id(_effective_cluster_id));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     return Status::OK();
@@ -477,7 +568,11 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
             if (it.second->get_state() == DiskState::ONLINE) {
                 if (_available_storage_medium_type_count == 1 || it.second->storage_medium() == storage_medium) {
                     if (!it.second->capacity_limit_reached(0)) {
+<<<<<<< HEAD
                         stores.push_back(it.second);
+=======
+                        stores.push_back(it.second.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     }
                 }
             }
@@ -518,14 +613,22 @@ DataDir* StorageEngine::get_store(const std::string& path) {
     if (it == std::end(_store_map)) {
         return nullptr;
     }
+<<<<<<< HEAD
     return it->second;
+=======
+    return it->second.get();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 DataDir* StorageEngine::get_store(int64_t path_hash) {
     std::lock_guard<std::mutex> l(_store_lock);
     for (auto& it : _store_map) {
         if (it.second->path_hash() == path_hash) {
+<<<<<<< HEAD
             return it.second;
+=======
+            return it.second.get();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     return nullptr;
@@ -618,7 +721,13 @@ void StorageEngine::stop() {
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)
     wake_finish_publish_vesion_thread();
+<<<<<<< HEAD
     JOIN_THREAD(_finish_publish_version_thread)
+=======
+    wake_schedule_apply_thread();
+    JOIN_THREAD(_finish_publish_version_thread)
+    JOIN_THREAD(_schedule_apply_thread)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     JOIN_THREADS(_base_compaction_threads)
     JOIN_THREADS(_cumulative_compaction_threads)
@@ -649,6 +758,7 @@ void StorageEngine::stop() {
 #undef JOIN_THREADS
 #undef JOIN_THREAD
 
+<<<<<<< HEAD
     {
         std::lock_guard<std::mutex> l(_store_lock);
         for (auto& store_pair : _store_map) {
@@ -658,6 +768,8 @@ void StorageEngine::stop() {
         _store_map.clear();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _checker_cv.notify_all();
     if (_compaction_checker_thread.joinable()) {
         _compaction_checker_thread.join();
@@ -666,6 +778,13 @@ void StorageEngine::stop() {
     if (_update_manager) {
         _update_manager->stop();
     }
+<<<<<<< HEAD
+=======
+
+    if (_compaction_manager) {
+        _compaction_manager->stop();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {
@@ -695,7 +814,11 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
                           << " tablet_uid=" << tablet_info.first.tablet_uid;
                 continue;
             }
+<<<<<<< HEAD
             StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
+=======
+            (void)StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     LOG(INFO) << "Cleared transaction task txn_id: " << transaction_id;
@@ -811,13 +934,21 @@ static void do_manual_compaction(TabletManager* tablet_manager, ManualCompaction
     auto st = tablet->updates()->get_rowsets_for_compaction(t.rowset_size_threshold, t.input_rowset_ids, t.total_bytes);
     if (!st.ok()) {
         t.status = st.to_string();
+<<<<<<< HEAD
         LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.get_error_msg();
+=======
+        LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return;
     }
     st = tablet->updates()->compaction(mem_tracker, t.input_rowset_ids);
     t.status = st.to_string();
     if (!st.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "manual compaction failed: " << st.get_error_msg() << " tablet:" << t.tablet_id;
+=======
+        LOG(WARNING) << "manual compaction failed: " << st.message() << " tablet:" << t.tablet_id;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return;
     }
 }
@@ -882,8 +1013,11 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
     }
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
+<<<<<<< HEAD
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::unique_ptr<MemTracker> mem_tracker =
             std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
     CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
@@ -925,8 +1059,11 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
     }
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
+<<<<<<< HEAD
     StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::unique_ptr<MemTracker> mem_tracker =
             std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
     BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
@@ -966,10 +1103,36 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     }
     TRACE("found best tablet $0", best_tablet->tablet_id());
 
+<<<<<<< HEAD
+=======
+    // The concurrency of migration and compaction will lead to inconsistency between the meta and
+    // primary index cache of the new tablet. So we should abort the compaction for the old tablet
+    // when executing migration.
+    std::shared_lock rlock(best_tablet->get_migration_lock(), std::try_to_lock);
+    if (!rlock.owns_lock()) {
+        return Status::InternalError(
+                fmt::format("Fail to get migration lock, tablet_id: {}", best_tablet->tablet_id()));
+    }
+    if (Tablet::check_migrate(best_tablet)) {
+        return Status::InternalError(
+                fmt::format("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id()));
+    }
+
+    auto tablet_id = best_tablet->tablet_id();
+    auto new_tablet = _tablet_manager->get_tablet(tablet_id);
+    if (new_tablet != nullptr && new_tablet->data_dir()->path_hash() != data_dir->path_hash()) {
+        return Status::InternalError(fmt::format("tablet has been migrated, tablet_id: {}", tablet_id));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status res;
     int64_t duration_ns = 0;
     {
         StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
+<<<<<<< HEAD
+=======
+        StarRocksMetrics::instance()->running_update_compaction_task_num.increment(1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         SCOPED_RAW_TIMER(&duration_ns);
 
         std::unique_ptr<MemTracker> mem_tracker =
@@ -977,7 +1140,12 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
         res = best_tablet->updates()->compaction(mem_tracker.get());
     }
     StarRocksMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
+<<<<<<< HEAD
     if (!res.ok()) {
+=======
+    StarRocksMetrics::instance()->running_update_compaction_task_num.increment(-1);
+    if (!res.ok() && !res.is_already_exist()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
         LOG(WARNING) << "failed to perform update compaction. res=" << res.to_string()
                      << ", tablet=" << best_tablet->full_name();
@@ -993,7 +1161,11 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     const int32_t trash_expire = config::trash_file_expire_time_sec;
     const double guard_space = config::storage_flood_stage_usage_percent / 100.0;
     std::vector<DataDirInfo> data_dir_infos;
+<<<<<<< HEAD
     RETURN_IF_ERROR(get_all_data_dir_info(&data_dir_infos, false));
+=======
+    get_all_data_dir_info(&data_dir_infos, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     time_t now = time(nullptr);
     tm local_tm_now;
@@ -1033,7 +1205,11 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     }
 
     // clear expire incremental rowset, move deleted tablet to trash
+<<<<<<< HEAD
     (void)_tablet_manager->start_trash_sweep();
+=======
+    RETURN_IF_ERROR(_tablet_manager->start_trash_sweep());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // clean rubbish transactions
     _clean_unused_txns();
@@ -1371,7 +1547,11 @@ void StorageEngine::increase_update_compaction_thread(const int num_threads_per_
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
     for (auto& tmp_store : _store_map) {
+<<<<<<< HEAD
         data_dirs.push_back(tmp_store.second);
+=======
+        data_dirs.push_back(tmp_store.second.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     const auto data_dir_num = static_cast<int32_t>(data_dirs.size());
     const int32_t cur_threads_per_disk = _update_compaction_threads.size() / data_dir_num;
@@ -1410,6 +1590,10 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
             _auto_increment_meta_map.insert({tableid, std::make_shared<AutoIncrementMeta>()});
         }
         meta = _auto_increment_meta_map[tableid];
+<<<<<<< HEAD
+=======
+        TEST_SYNC_POINT_CALLBACK("StorageEngine::get_next_increment_id_interval.1", &meta);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // lock for different tableid
@@ -1534,8 +1718,12 @@ void StorageEngine::clear_rowset_delta_column_group_cache(const Rowset& rowset) 
         std::vector<DeltaColumnGroupKey> dcg_keys;
         dcg_keys.reserve(rowset.num_segments());
         for (auto i = 0; i < rowset.num_segments(); i++) {
+<<<<<<< HEAD
             dcg_keys.emplace_back(
                     DeltaColumnGroupKey(rowset.rowset_meta()->tablet_id(), rowset.rowset_meta()->rowset_id(), i));
+=======
+            dcg_keys.emplace_back(rowset.rowset_meta()->tablet_id(), rowset.rowset_meta()->rowset_id(), i);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return dcg_keys;
     }());
@@ -1575,4 +1763,16 @@ void StorageEngine::decommission_disks(const std::vector<string>& decommission_d
     }
 }
 
+<<<<<<< HEAD
+=======
+void StorageEngine::add_schedule_apply_task(int64_t tablet_id, std::chrono::steady_clock::time_point time_point) {
+    LOG(INFO) << "add tablet:" << tablet_id << ", next apply time:";
+    {
+        std::unique_lock<std::mutex> wl(_schedule_apply_mutex);
+        _schedule_apply_tasks.emplace(time_point, tablet_id);
+    }
+    _apply_tablet_changed_cv.notify_one();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

@@ -35,6 +35,10 @@
 #include "service/brpc.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
+<<<<<<< HEAD
+=======
+#include "util/internal_service_recoverable_stub.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::pipeline {
 
@@ -118,7 +122,11 @@ private:
     PassThroughContext _pass_through_context;
 
     bool _is_first_chunk = true;
+<<<<<<< HEAD
     doris::PBackendService_Stub* _brpc_stub = nullptr;
+=======
+    std::shared_ptr<PInternalService_RecoverableStub> _brpc_stub = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // If pipeline level shuffle is enable, the size of the _chunks
     // equals with dop of dest pipeline
@@ -242,6 +250,10 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
                                                        _parent->_is_pipeline_level_shuffle ? driver_sequence : -1));
             _current_request_bytes += chunk_size;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
+<<<<<<< HEAD
+=======
+            COUNTER_SET(_parent->_pass_through_buffer_peak_mem_usage, _pass_through_context.total_bytes());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             if (_parent->_is_pipeline_level_shuffle) {
                 _chunk_request->add_driver_sequences(driver_sequence);
@@ -298,7 +310,11 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
     DeferOp op([&res, &fragment_ctx]() {
         if (!res.ok()) {
             LOG(WARNING) << fmt::format("fragment id {} close channel error: {}",
+<<<<<<< HEAD
                                         print_id(fragment_ctx->fragment_instance_id()), res.get_error_msg());
+=======
+                                        print_id(fragment_ctx->fragment_instance_id()), res.message());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     });
 
@@ -315,9 +331,13 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
 }
 
 Status ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* fragment_ctx) {
+<<<<<<< HEAD
     auto status = _close_internal(state, fragment_ctx);
     state->log_error(status.get_error_msg());
     return status;
+=======
+    return _close_internal(state, fragment_ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 ExchangeSinkOperator::ExchangeSinkOperator(
@@ -430,18 +450,34 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
     _channel_indices.resize(_channels.size());
     std::iota(_channel_indices.begin(), _channel_indices.end(), 0);
+<<<<<<< HEAD
     srand(reinterpret_cast<uint64_t>(this));
+=======
+    // Initialize a std::mt19937 random number generator with a seed from std::random_device.
+    // This is preferred over std::srand and std::rand as it provides better randomization
+    // and is thread-safe without locking overhead.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _sender_input_bytes_counter = ADD_COUNTER(_unique_metrics, "SenderInputBytes", TUnit::BYTES);
     _serialized_bytes_counter = ADD_COUNTER(_unique_metrics, "SerializedBytes", TUnit::BYTES);
     _compressed_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedBytes", TUnit::BYTES);
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _shuffle_chunk_append_counter = ADD_COUNTER(_unique_metrics, "ShuffleChunkAppendCounter", TUnit::UNIT);
     _shuffle_chunk_append_timer = ADD_TIMER(_unique_metrics, "ShuffleChunkAppendTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
+<<<<<<< HEAD
+=======
+    _pass_through_buffer_peak_mem_usage = _unique_metrics->AddHighWaterMarkCounter(
+            "PassThroughBufferPeakMemoryUsage", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     for (auto& [_, channel] : _instance_id2channel) {
         RETURN_IF_ERROR(channel->init(state));
@@ -634,7 +670,11 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
+<<<<<<< HEAD
             channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes);
+=======
+            RETURN_IF_ERROR(channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         _current_request_bytes = 0;
         _chunk_request.reset();

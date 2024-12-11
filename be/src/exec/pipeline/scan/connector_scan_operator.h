@@ -29,6 +29,25 @@ namespace pipeline {
 
 struct ConnectorScanOperatorIOTasksMemLimiter;
 
+<<<<<<< HEAD
+=======
+struct ConnectorScanOperatorMemShareArbitrator {
+    static constexpr double kChunkBufferMemRatio = 0.5;
+    int64_t query_mem_limit = 0;
+    int64_t scan_mem_limit = 0;
+    std::atomic<int64_t> total_chunk_source_mem_bytes = 0;
+
+    ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit, int connector_scan_node_number);
+
+    int64_t set_scan_mem_ratio(double mem_ratio) {
+        scan_mem_limit = std::max<int64_t>(1, query_mem_limit * mem_ratio);
+        return scan_mem_limit;
+    }
+
+    int64_t update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value);
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class ConnectorScanOperatorFactory : public ScanOperatorFactory {
 public:
     using ActiveInputKey = std::pair<int32_t, int32_t>;
@@ -49,8 +68,15 @@ public:
 
     TPartitionType::type partition_type() const override { return TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED; }
     const std::vector<ExprContext*>& partition_exprs() const override;
+<<<<<<< HEAD
     void set_estimated_mem_usage_per_chunk_source(int64_t mem_usage);
     void set_scan_mem_limit(int64_t mem_limit);
+=======
+    void set_chunk_source_mem_bytes(int64_t mem_bytes);
+    void set_scan_mem_limit(int64_t scan_mem_limit);
+    void set_mem_share_arb(ConnectorScanOperatorMemShareArbitrator* arb);
+    void set_data_source_mem_bytes(int64_t value);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     // TODO: refactor the OlapScanContext, move them into the context
@@ -58,7 +84,12 @@ private:
     ActiveInputSet _active_inputs;
 
 public:
+<<<<<<< HEAD
     ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter;
+=======
+    ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter = nullptr;
+    ConnectorScanOperatorMemShareArbitrator* _mem_share_arb = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 struct ConnectorScanOperatorAdaptiveProcessor;
@@ -78,6 +109,7 @@ public:
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
+<<<<<<< HEAD
     ChunkPtr get_chunk_from_buffer() override;
     size_t num_buffered_chunks() const override;
     size_t buffer_size() const override;
@@ -86,13 +118,32 @@ public:
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
+=======
+    BalancedChunkBuffer& get_chunk_buffer() const override {
+        auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+        return factory->get_chunk_buffer();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     int available_pickup_morsel_count() override;
     void begin_driver_process() override;
     void end_driver_process(PipelineDriver* driver) override;
     bool is_running_all_io_tasks() const override;
 
+<<<<<<< HEAD
 public:
+=======
+    Status append_morsels(std::vector<MorselPtr>&& morsels);
+    ConnectorScanOperatorAdaptiveProcessor* adaptive_processor() const { return _adaptive_processor; }
+    bool enable_adaptive_io_tasks() const { return _enable_adaptive_io_tasks; }
+
+    workgroup::ScanSchedEntityType sched_entity_type() const override {
+        return workgroup::ScanSchedEntityType::CONNECTOR;
+    }
+
+private:
+    int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;
 };
@@ -100,7 +151,12 @@ public:
 class ConnectorChunkSource : public ChunkSource {
 public:
     ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+<<<<<<< HEAD
                          ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+=======
+                         ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer,
+                         bool enable_adaptive_io_tasks);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ~ConnectorChunkSource() override;
 
@@ -110,9 +166,17 @@ public:
 
     bool reach_limit() override { return _limit != -1 && _reach_limit.load(); }
 
+<<<<<<< HEAD
 protected:
     virtual bool _reach_eof() const { return _limit != -1 && _rows_read >= _limit; }
     Status _open_data_source(RuntimeState* state);
+=======
+    uint64_t avg_row_mem_bytes() const;
+
+protected:
+    virtual bool _reach_eof() const { return _limit != -1 && _chunk_rows_read >= _limit; }
+    Status _open_data_source(RuntimeState* state, bool* mem_alloc_failed);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     connector::DataSourcePtr _data_source;
     [[maybe_unused]] ConnectorScanNode* _scan_node;
@@ -120,13 +184,20 @@ protected:
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
+<<<<<<< HEAD
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ConnectorScanOperatorIOTasksMemLimiter* _get_io_tasks_mem_limiter() const;
 
     const int64_t _limit; // -1: no limit
     const std::vector<ExprContext*>& _runtime_in_filters;
+<<<<<<< HEAD
     const RuntimeFilterProbeCollector* _runtime_bloom_filters;
+=======
+    RuntimeFilterProbeCollector* _runtime_bloom_filters;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // copied from scan node and merge predicates from runtime filter.
     std::vector<ExprContext*> _conjunct_ctxs;
@@ -136,7 +207,15 @@ private:
     ChunkPipelineAccumulator _ck_acc;
     bool _opened = false;
     bool _closed = false;
+<<<<<<< HEAD
     uint64_t _rows_read = 0;
+=======
+    uint64_t _chunk_rows_read = 0;
+    uint64_t _chunk_mem_bytes = 0;
+    int64_t _request_mem_tracker_bytes = 0;
+    int64_t _mem_alloc_failed_count = 0;
+    bool _enable_adaptive_io_tasks = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace pipeline

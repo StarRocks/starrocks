@@ -14,6 +14,10 @@
 
 #include "exprs/runtime_filter_bank.h"
 
+<<<<<<< HEAD
+=======
+#include <memory>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <thread>
 
 #include "column/column.h"
@@ -21,7 +25,13 @@
 #include "exprs/dictmapping_expr.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/literal.h"
+<<<<<<< HEAD
 #include "exprs/runtime_filter.h"
+=======
+#include "exprs/min_max_predicate.h"
+#include "exprs/runtime_filter.h"
+#include "exprs/runtime_filter_layout.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
@@ -153,6 +163,23 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, L
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const std::vector<ColumnPtr>& columns, LogicalType type,
+                                                      JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
+    for (const auto& column : columns) {
+        RETURN_IF_ERROR(fill_runtime_bloom_filter(column, type, filter, column_offset, eq_null));
+    }
+    return Status::OK();
+}
+
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const starrocks::pipeline::RuntimeBloomFilterBuildParam& param,
+                                                      LogicalType type, JoinRuntimeFilter* filter,
+                                                      size_t column_offset) {
+    return fill_runtime_bloom_filter(param.columns, type, filter, column_offset, param.eq_null);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool,
                                                                                       ExprContext* conjunct,
                                                                                       Chunk* chunk) {
@@ -207,12 +234,19 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _filter_id = desc.filter_id;
     _build_expr_order = desc.expr_order;
     _has_remote_targets = desc.has_remote_targets;
+<<<<<<< HEAD
     _join_mode = desc.build_join_mode;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     if (desc.__isset.runtime_filter_merge_nodes) {
         _merge_nodes = desc.runtime_filter_merge_nodes;
     }
     _has_consumer = false;
+<<<<<<< HEAD
+=======
+    _join_mode = desc.build_join_mode;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (desc.__isset.plan_node_id_to_target_expr && desc.plan_node_id_to_target_expr.size() != 0) {
         _has_consumer = true;
     }
@@ -228,7 +262,11 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (desc.__isset.broadcast_grf_destinations) {
         _broadcast_grf_destinations = desc.broadcast_grf_destinations;
     }
+<<<<<<< HEAD
 
+=======
+    WithLayoutMixin::init(desc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
     return Status::OK();
 }
@@ -242,6 +280,10 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _join_mode = desc.build_join_mode;
     _is_topn_filter = desc.__isset.filter_type && desc.filter_type == TRuntimeFilterBuildType::TOPN_FILTER;
     _skip_wait = _is_topn_filter;
+<<<<<<< HEAD
+=======
+    _is_group_colocate_rf = desc.__isset.build_from_group_execution && desc.build_from_group_execution;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     bool not_found = true;
     if (desc.__isset.plan_node_id_to_target_expr) {
@@ -252,9 +294,13 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         }
     }
 
+<<<<<<< HEAD
     if (desc.__isset.bucketseq_to_instance) {
         _bucketseq_to_partition = desc.bucketseq_to_instance;
     }
+=======
+    WithLayoutMixin::init(desc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     if (desc.__isset.plan_node_id_to_partition_by_exprs) {
         const auto& it = const_cast<TRuntimeFilterDescription&>(desc).plan_node_id_to_partition_by_exprs.find(node_id);
@@ -277,7 +323,11 @@ Status RuntimeFilterProbeDescriptor::init(int32_t filter_id, ExprContext* probe_
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
+=======
+Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, RuntimeProfile* p) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_probe_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_probe_expr_ctx->prepare(state));
     }
@@ -316,8 +366,13 @@ void RuntimeFilterProbeDescriptor::replace_probe_expr_ctx(RuntimeState* state, c
     _probe_expr_ctx->close(state);
     // create new probe expr and open it.
     _probe_expr_ctx = state->obj_pool()->add(new ExprContext(new_probe_expr_ctx->root()));
+<<<<<<< HEAD
     _probe_expr_ctx->prepare(state);
     _probe_expr_ctx->open(state);
+=======
+    WARN_IF_ERROR(_probe_expr_ctx->prepare(state), "prepare probe expr failed");
+    WARN_IF_ERROR(_probe_expr_ctx->open(state), "open probe expr failed");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 std::string RuntimeFilterProbeDescriptor::debug_string() const {
@@ -350,13 +405,21 @@ RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeColle
           _eval_context(that._eval_context),
           _plan_node_id(that._plan_node_id) {}
 
+<<<<<<< HEAD
 Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc,
                                             RuntimeProfile* profile) {
+=======
+Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, RuntimeProfile* profile) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _runtime_profile = profile;
     _runtime_state = state;
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
+<<<<<<< HEAD
         RETURN_IF_ERROR(rf_desc->prepare(state, row_desc, profile));
+=======
+        RETURN_IF_ERROR(rf_desc->prepare(state, profile));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     if (state != nullptr) {
         const TQueryOptions& options = state->query_options();
@@ -400,14 +463,21 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
 
     for (auto& kv : seletivity_map) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
+<<<<<<< HEAD
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+=======
+        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (filter == nullptr || filter->always_true()) {
             continue;
         }
         auto* ctx = rf_desc->probe_expr_ctx();
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         // for colocate grf
+<<<<<<< HEAD
         eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         compute_hash_values(chunk, column.get(), rf_desc, eval_context);
         filter->evaluate(column.get(), &eval_context.running_context);
 
@@ -422,6 +492,75 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
         }
     }
 }
+<<<<<<< HEAD
+=======
+
+void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk,
+                                                            RuntimeBloomFilterEvalContext& eval_context) {
+    auto& selection = eval_context.running_context.selection;
+    eval_context.running_context.use_merged_selection = false;
+    eval_context.running_context.compatibility =
+            _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
+
+    // since partial chunk is currently very lightweight (a bunch of const columns), use every runtime filter if possible
+    // without computing each rf's selectivity
+    for (auto kv : _descriptors) {
+        RuntimeFilterProbeDescriptor* rf_desc = kv.second;
+        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+        if (filter == nullptr || filter->always_true()) {
+            continue;
+        }
+
+        auto only_reference_existent_slots = [&](ExprContext* expr) {
+            std::vector<SlotId> slot_ids;
+            int n = expr->root()->get_slot_ids(&slot_ids);
+            DCHECK(slot_ids.size() == n);
+
+            // do not allow struct subfield
+            if (expr->root()->get_subfields(nullptr) > 0) {
+                return false;
+            }
+
+            for (auto slot_id : slot_ids) {
+                if (!partial_chunk->is_slot_exist(slot_id)) {
+                    return false;
+                }
+            }
+
+            return true;
+        };
+
+        auto* probe_expr = rf_desc->probe_expr_ctx();
+        auto* partition_by_exprs = rf_desc->partition_by_expr_contexts();
+
+        bool can_use_rf_on_partial_chunk = only_reference_existent_slots(probe_expr);
+        for (auto* part_by_expr : *partition_by_exprs) {
+            can_use_rf_on_partial_chunk &= only_reference_existent_slots(part_by_expr);
+        }
+
+        // skip runtime filter that references a non-existent column for the partial chunk
+        if (!can_use_rf_on_partial_chunk) {
+            continue;
+        }
+
+        ColumnPtr column = EVALUATE_NULL_IF_ERROR(probe_expr, probe_expr->root(), partial_chunk);
+        // for colocate grf
+        compute_hash_values(partial_chunk, column.get(), rf_desc, eval_context);
+        filter->evaluate(column.get(), &eval_context.running_context);
+
+        auto true_count = SIMD::count_nonzero(selection);
+        eval_context.run_filter_nums += 1;
+
+        if (true_count == 0) {
+            partial_chunk->set_num_rows(0);
+            return;
+        } else {
+            partial_chunk->filter(selection);
+        }
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void RuntimeFilterProbeCollector::init_counter() {
     _eval_context.join_runtime_filter_timer = ADD_TIMER(_runtime_profile, "JoinRuntimeFilterTime");
     _eval_context.join_runtime_filter_hash_timer = ADD_TIMER(_runtime_profile, "JoinRuntimeFilterHashTime");
@@ -457,19 +596,47 @@ void RuntimeFilterProbeCollector::evaluate(Chunk* chunk, RuntimeBloomFilterEvalC
     }
 }
 
+<<<<<<< HEAD
+=======
+void RuntimeFilterProbeCollector::evaluate_partial_chunk(Chunk* partial_chunk,
+                                                         RuntimeBloomFilterEvalContext& eval_context) {
+    if (_descriptors.empty()) return;
+    size_t before = partial_chunk->num_rows();
+    if (before == 0) return;
+
+    {
+        SCOPED_TIMER(eval_context.join_runtime_filter_timer);
+        eval_context.join_runtime_filter_input_counter->update(before);
+        eval_context.run_filter_nums = 0;
+        do_evaluate_partial_chunk(partial_chunk, eval_context);
+        size_t after = partial_chunk->num_rows();
+        eval_context.join_runtime_filter_output_counter->update(after);
+        eval_context.join_runtime_filter_eval_counter->update(eval_context.run_filter_nums);
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* column,
                                                       RuntimeFilterProbeDescriptor* rf_desc,
                                                       RuntimeBloomFilterEvalContext& eval_context) {
     // TODO: Hash values will be computed multi times for runtime filters with the same partition_by_exprs.
     SCOPED_TIMER(eval_context.join_runtime_filter_hash_timer);
+<<<<<<< HEAD
     const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+=======
+    const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DCHECK(filter);
     if (filter->num_hash_partitions() == 0) {
         return;
     }
 
     if (rf_desc->partition_by_expr_contexts()->empty()) {
+<<<<<<< HEAD
         filter->compute_hash({column}, &eval_context.running_context);
+=======
+        filter->compute_partition_index(rf_desc->layout(), {column}, &eval_context.running_context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     } else {
         // Used to hold generated columns
         std::vector<ColumnPtr> column_holders;
@@ -479,7 +646,11 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* colu
             partition_by_columns.push_back(partition_column.get());
             column_holders.emplace_back(std::move(partition_column));
         }
+<<<<<<< HEAD
         filter->compute_hash(partition_by_columns, &eval_context.running_context);
+=======
+        filter->compute_partition_index(rf_desc->layout(), partition_by_columns, &eval_context.running_context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -495,7 +666,11 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
     seletivity_map.clear();
     for (auto& kv : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
+<<<<<<< HEAD
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+=======
+        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (filter == nullptr || filter->always_true()) {
             continue;
         }
@@ -505,7 +680,10 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
         auto ctx = rf_desc->probe_expr_ctx();
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         // for colocate grf
+<<<<<<< HEAD
         eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         compute_hash_values(chunk, column.get(), rf_desc, eval_context);
         // true count is not accummulated, it is evaluated for each RF respectively
         filter->evaluate(column.get(), &eval_context.running_context);
@@ -576,10 +754,16 @@ void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNode
             ++iter;
             continue;
         }
+<<<<<<< HEAD
 
         if (desc->is_bound(tuple_ids) &&
             !(state->broadcast_join_right_offsprings().count(target_plan_node_id) &&
               state->non_broadcast_rf_ids().count(desc->filter_id())) &&
+=======
+        if (desc->is_bound(tuple_ids) &&
+            !(state->broadcast_join_right_offsprings().contains(target_plan_node_id) &&
+              state->non_broadcast_rf_ids().contains(desc->filter_id())) &&
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             !contains_dict_mapping_expr(desc)) {
             add_descriptor(desc);
             if (desc->is_local()) {
@@ -609,6 +793,10 @@ void RuntimeFilterProbeCollector::add_descriptor(RuntimeFilterProbeDescriptor* d
     _descriptors[desc->filter_id()] = desc;
 }
 
+<<<<<<< HEAD
+=======
+// only used in non-pipeline mode
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
     if (_descriptors.empty()) return;
 
@@ -630,7 +818,11 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
     while (wait_time >= 0 && !wait_list.empty()) {
         auto it = wait_list.begin();
         while (it != wait_list.end()) {
+<<<<<<< HEAD
             auto* rf = (*it)->runtime_filter();
+=======
+            auto* rf = (*it)->runtime_filter(-1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // find runtime filter in cache.
             if (rf == nullptr) {
                 JoinRuntimeFilterPtr t = _runtime_state->exec_env()->runtime_filter_cache()->get(
@@ -658,7 +850,11 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
         for (const auto& it : _descriptors) {
             auto* rf = it.second;
             int filter_id = rf->filter_id();
+<<<<<<< HEAD
             bool ready = (rf->runtime_filter() != nullptr);
+=======
+            bool ready = (rf->runtime_filter(-1) != nullptr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             VLOG_FILE << "RuntimeFilterCollector::wait start. filter_id = " << filter_id
                       << ", plan_node_id = " << _plan_node_id
                       << ", finst_id = " << _runtime_state->fragment_instance_id()
@@ -683,6 +879,7 @@ void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_p
     }
 }
 
+<<<<<<< HEAD
 // ========================================================
 template <LogicalType Type>
 class MinMaxPredicate : public Expr {
@@ -790,6 +987,12 @@ void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotI
                                                          const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
     *min_max_predicate = nullptr;
     if (filter == nullptr || filter->has_null()) return;
+=======
+void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
+                                                         const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
+    *min_max_predicate = nullptr;
+    if (filter == nullptr) return;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (slot_type == TYPE_CHAR || slot_type == TYPE_VARCHAR) return;
     auto res = type_dispatch_filter(slot_type, (Expr*)nullptr, MinMaxPredicateBuilder(pool, slot_id, filter));
     *min_max_predicate = res;

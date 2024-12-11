@@ -37,8 +37,13 @@
 namespace starrocks {
 
 class ExecEnv;
+<<<<<<< HEAD
 class StreamLoadContext;
 class Status;
+=======
+class Status;
+class StreamLoadContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class TTxnCommitAttachment;
 
 class StreamLoadExecutor {

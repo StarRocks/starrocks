@@ -88,7 +88,10 @@
         "delete",
         "drop",
         "insert",
+<<<<<<< HEAD
         "select",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         "alter",
         "export",
         "update"
@@ -141,7 +144,10 @@
       "label": "StarRocks View",
       "description": "StarRocks View",
       "accessTypeRestrictions": [
+<<<<<<< HEAD
         "select",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         "drop",
         "alter"
       ]
@@ -168,7 +174,10 @@
       "label": "StarRocks Materialized View",
       "description": "StarRocks Materialized View",
       "accessTypeRestrictions": [
+<<<<<<< HEAD
         "select",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         "refresh",
         "drop",
         "alter"

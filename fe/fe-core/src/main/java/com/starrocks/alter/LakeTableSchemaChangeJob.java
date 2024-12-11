@@ -24,6 +24,10 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -33,6 +37,11 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SchemaInfo;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -41,29 +50,55 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+=======
+import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.Status;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+=======
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.system.ComputeNode;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
+<<<<<<< HEAD
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
+=======
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
+import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,6 +109,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -90,6 +126,23 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // partition id -> (shadow index id -> shadow index))
     @SerializedName(value = "partitionIndexMap")
     private Table<Long, Long, MaterializedIndex> partitionIndexMap = HashBasedTable.create();
+=======
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
+import javax.validation.constraints.NotNull;
+
+public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
+    private static final Logger LOG = LogManager.getLogger(LakeTableSchemaChangeJob.class);
+
+    // physical partition id -> (shadow index id -> (shadow tablet id -> origin tablet id))
+    @SerializedName(value = "partitionIndexTabletMap")
+    private Table<Long, Long, Map<Long, Long>> physicalPartitionIndexTabletMap = HashBasedTable.create();
+    // physical partition id -> (shadow index id -> shadow index))
+    @SerializedName(value = "partitionIndexMap")
+    private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // shadow index id -> origin index id
     @SerializedName(value = "indexIdMap")
     private Map<Long, Long> indexIdMap = Maps.newHashMap();
@@ -107,7 +160,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @SerializedName(value = "hasBfChange")
     private boolean hasBfChange;
     @SerializedName(value = "bfColumns")
+<<<<<<< HEAD
     private Set<String> bfColumns = null;
+=======
+    private Set<ColumnId> bfColumns = null;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
@@ -117,9 +174,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @SerializedName(value = "indexes")
     private List<Index> indexes = null;
 
+<<<<<<< HEAD
     // The schema change job will wait all transactions before this txn id finished, then send the schema change tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "startTime")
     private long startTime;
 
@@ -129,10 +189,23 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     @SerializedName(value = "sortKeyIdxes")
     private List<Integer> sortKeyIdxes;
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "sortKeyUniqueIds")
+    private List<Integer> sortKeyUniqueIds;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
 
+<<<<<<< HEAD
+=======
+    // runtime variable for synchronization between cancel and runPendingJob
+    private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
+    private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
+    private AtomicBoolean isCancelling = new AtomicBoolean(false);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // for deserialization
     public LakeTableSchemaChangeJob() {
         super(JobType.SCHEMA_CHANGE);
@@ -142,7 +215,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
     }
 
+<<<<<<< HEAD
     void setBloomFilterInfo(boolean hasBfChange, Set<String> bfColumns, double bfFpp) {
+=======
+    void setBloomFilterInfo(boolean hasBfChange, Set<ColumnId> bfColumns, double bfFpp) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.hasBfChange = hasBfChange;
         this.bfColumns = bfColumns;
         this.bfFpp = bfFpp;
@@ -161,17 +238,33 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         this.sortKeyIdxes = sortKeyIdxes;
     }
 
+<<<<<<< HEAD
     void addTabletIdMap(long partitionId, long shadowIdxId, long shadowTabletId, long originTabletId) {
         Map<Long, Long> tabletMap = partitionIndexTabletMap.get(partitionId, shadowIdxId);
         if (tabletMap == null) {
             tabletMap = Maps.newHashMap();
             partitionIndexTabletMap.put(partitionId, shadowIdxId, tabletMap);
+=======
+    public void setSortKeyUniqueIds(List<Integer> sortKeyUniqueIds) {
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
+    }
+
+    void addTabletIdMap(long partitionId, long shadowIdxId, long shadowTabletId, long originTabletId) {
+        Map<Long, Long> tabletMap = physicalPartitionIndexTabletMap.get(partitionId, shadowIdxId);
+        if (tabletMap == null) {
+            tabletMap = Maps.newHashMap();
+            physicalPartitionIndexTabletMap.put(partitionId, shadowIdxId, tabletMap);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         tabletMap.put(shadowTabletId, originTabletId);
     }
 
     void addPartitionShadowIndex(long partitionId, long shadowIdxId, MaterializedIndex shadowIdx) {
+<<<<<<< HEAD
         partitionIndexMap.put(partitionId, shadowIdxId, shadowIdx);
+=======
+        physicalPartitionIndexMap.put(partitionId, shadowIdxId, shadowIdx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void addIndexSchema(long shadowIdxId, long originIdxId, @NotNull String shadowIndexName,
@@ -186,10 +279,17 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // REQUIRE: has acquired the exclusive lock of database
     void addShadowIndexToCatalog(@NotNull OlapTable table, long visibleTxnId) {
         Preconditions.checkState(visibleTxnId != -1);
+<<<<<<< HEAD
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
             Preconditions.checkState(partition != null);
             Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
+=======
+        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            Preconditions.checkState(partition != null);
+            Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                 shadowIndex.setVisibleTxnId(visibleTxnId);
                 Preconditions.checkState(shadowIndex.getState() == MaterializedIndex.IndexState.SHADOW,
@@ -202,7 +302,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             long orgIndexId = indexIdMap.get(shadowIdxId);
             table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId), 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
+<<<<<<< HEAD
                     table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes);
+=======
+                    table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes, sortKeyUniqueIds);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             MaterializedIndexMeta orgIndexMeta = table.getIndexMetaByIndexId(orgIndexId);
             Preconditions.checkNotNull(orgIndexMeta);
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(shadowIdxId);
@@ -219,6 +323,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     @VisibleForTesting
+<<<<<<< HEAD
     public static void sendAgentTask(AgentBatchTask batchTask) {
         AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
@@ -227,14 +332,33 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @VisibleForTesting
     public static void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
                                             long timeoutSeconds) throws AlterCancelException {
+=======
+    public static void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
+                                            long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
+                                            AtomicBoolean isCancelling) throws AlterCancelException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
         long timeout = 1000L * Math.min(timeoutSeconds, Config.max_create_table_timeout_second);
         boolean ok = false;
         try {
+<<<<<<< HEAD
             ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS) && countDownLatch.getStatus().ok();
         } catch (InterruptedException e) {
             LOG.warn("InterruptedException: ", e);
+=======
+            waitingCreatingReplica.set(true);
+            if (isCancelling.get()) {
+                AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
+                return;
+            }
+            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS) && countDownLatch.getStatus().ok();
+        } catch (InterruptedException e) {
+            LOG.warn("InterruptedException: ", e);
+            ok = false;
+        } finally {
+            waitingCreatingReplica.set(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         if (!ok) {
@@ -264,16 +388,48 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     @VisibleForTesting
     public static long getNextTransactionId() {
+<<<<<<< HEAD
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+=======
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @VisibleForTesting
     public static long peekNextTransactionId() {
+<<<<<<< HEAD
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
+=======
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
+    }
+
+    @VisibleForTesting
+    public void setIsCancelling(boolean isCancelling) {
+        this.isCancelling.set(isCancelling);
+    }
+
+    @VisibleForTesting
+    public boolean isCancelling() {
+        return this.isCancelling.get();
+    }
+
+    @VisibleForTesting
+    public void setWaitingCreatingReplica(boolean waitingCreatingReplica) {
+        this.waitingCreatingReplica.set(waitingCreatingReplica);
+    }
+
+    @VisibleForTesting
+    public boolean waitingCreatingReplica() {
+        return this.waitingCreatingReplica.get();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     protected void runPendingJob() throws AlterCancelException {
+<<<<<<< HEAD
+=======
+        boolean enableTabletCreationOptimization = Config.lake_enable_tablet_creation_optimization;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
@@ -281,6 +437,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+<<<<<<< HEAD
             numTablets =
                     partitionIndexMap.values().stream().map(MaterializedIndex::getTablets).mapToLong(List::size).sum();
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
@@ -291,6 +448,24 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 TStorageMedium storageMedium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
 
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
+=======
+            if (enableTabletCreationOptimization) {
+                numTablets = physicalPartitionIndexMap.size();
+            } else {
+                numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
+                        .mapToLong(List::size).sum();
+            }
+            countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
+            createReplicaLatch = countDownLatch;
+            long baseIndexId = table.getBaseIndexId();
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkState(physicalPartition != null);
+                TStorageMedium storageMedium = table.getPartitionInfo()
+                        .getDataProperty(physicalPartition.getParentId()).getStorageMedium();
+
+                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
@@ -299,6 +474,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     List<Column> shadowSchema = indexSchemaMap.get(shadowIdxId);
                     long originIndexId = indexIdMap.get(shadowIdxId);
                     KeysType originKeysType = table.getKeysTypeByIndexId(originIndexId);
+<<<<<<< HEAD
                     List<Column> originSchema = table.getSchemaByIndexId(originIndexId);
 
                     // copy for generate some const default value
@@ -348,10 +524,26 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     } else if (copiedSortKeyIdxes != null && !copiedSortKeyIdxes.isEmpty()) {
                         sortKeyIdxes = copiedSortKeyIdxes;
                     }
+=======
+                    TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                            .setId(shadowIdxId) // For newly create materialized index, schema id equals to index id
+                            .setKeysType(originKeysType)
+                            .setShortKeyColumnCount(shadowShortKeyColumnCount)
+                            .setSortKeyIndexes(originIndexId == baseIndexId ? sortKeyIdxes : null)
+                            .setSortKeyUniqueIds(originIndexId == baseIndexId ? sortKeyUniqueIds : null)
+                            .setIndexes(indexes)
+                            .setBloomFilterColumnNames(bfColumns)
+                            .setBloomFilterFpp(bfFpp)
+                            .setStorageType(TStorageType.COLUMN)
+                            .addColumns(shadowSchema)
+                            .setSchemaHash(0)
+                            .build().toTabletSchema();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                     boolean createSchemaFile = true;
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
+<<<<<<< HEAD
                         LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
                         Long backendId = Utils.chooseBackend(lakeTablet);
                         if (backendId == null) {
@@ -372,6 +564,43 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
                         batchTask.addTask(createReplicaTask);
+=======
+                        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) shadowTablet);
+                        if (computeNode == null) {
+                            //todo: fix the error message.
+                            throw new AlterCancelException("No alive backend");
+                        }
+                        countDownLatch.addMark(computeNode.getId(), shadowTabletId);
+
+                        CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                                .setNodeId(computeNode.getId())
+                                .setDbId(dbId)
+                                .setTableId(tableId)
+                                .setPartitionId(physicalPartitionId)
+                                .setIndexId(shadowIdxId)
+                                .setTabletId(shadowTabletId)
+                                .setVersion(Partition.PARTITION_INIT_VERSION)
+                                .setStorageMedium(storageMedium)
+                                .setLatch(countDownLatch)
+                                .setEnablePersistentIndex(table.enablePersistentIndex())
+                                .setPersistentIndexType(table.getPersistentIndexType())
+                                .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
+                                .setTabletType(TTabletType.TABLET_TYPE_LAKE)
+                                .setCompressionType(table.getCompressionType())
+                                .setCompressionLevel(table.getCompressionLevel())
+                                .setCreateSchemaFile(createSchemaFile)
+                                .setTabletSchema(tabletSchema)
+                                .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
+                                .build();
+                        // For each partition, the schema file is created only when the first Tablet is created
+                        createSchemaFile = false;
+                        batchTask.addTask(task);
+
+                        if (enableTabletCreationOptimization) {
+                            break;
+                        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     }
                 }
             }
@@ -379,7 +608,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             throw new AlterCancelException(e.getMessage());
         }
 
+<<<<<<< HEAD
         sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets);
+=======
+        sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets,
+                             waitingCreatingReplica, isCancelling);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // Add shadow indexes to table.
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
@@ -433,18 +667,28 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
+<<<<<<< HEAD
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 Partition partition = table.getPartition(partitionId);
+=======
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Preconditions.checkNotNull(partition, partitionId);
 
                 // the schema change task will transform the data before visible version(included).
                 long visibleVersion = partition.getVisibleVersion();
 
+<<<<<<< HEAD
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
+=======
+                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
+<<<<<<< HEAD
                         Long backendId = Utils.chooseBackend((LakeTablet) shadowTablet);
                         if (backendId == null) {
                             throw new AlterCancelException("No alive backend");
@@ -454,6 +698,19 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         AlterReplicaTask alterTask =
                                 AlterReplicaTask.alterLakeTablet(backendId, dbId, tableId, partitionId,
+=======
+                        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) shadowTablet);
+                        if (computeNode == null) {
+                            throw new AlterCancelException("No alive backend");
+                        }
+
+                        long shadowTabletId = shadowTablet.getId();
+                        long originTabletId =
+                                physicalPartitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
+                        AlterReplicaTask alterTask =
+                                AlterReplicaTask.alterLakeTablet(computeNode.getId(), dbId, tableId, partitionId,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                         shadowIdxId, shadowTabletId, originTabletId, visibleVersion, jobId,
                                         watershedTxnId);
                         getOrCreateSchemaChangeBatchTask().addTask(alterTask);
@@ -490,7 +747,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         if (!getOrCreateSchemaChangeBatchTask().isFinished()) {
             LOG.info("schema change tasks not finished. job: {}", jobId);
             List<AgentTask> tasks = getOrCreateSchemaChangeBatchTask().getUnfinishedTasks(2000);
+<<<<<<< HEAD
             AgentTask task = tasks.stream().filter(t -> t.getFailedTimes() >= 3).findAny().orElse(null);
+=======
+            AgentTask task = tasks.stream().filter(t -> (t.isFailed() || t.getFailedTimes() >= 3)).findAny().orElse(null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (task != null) {
                 throw new AlterCancelException(
                         "schema change task failed after try three times: " + task.getErrorMsg());
@@ -502,8 +763,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             commitVersionMap = new HashMap<>();
+<<<<<<< HEAD
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 Partition partition = table.getPartition(partitionId);
+=======
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Preconditions.checkNotNull(partition, partitionId);
                 partition.setMinRetainVersion(0);
                 long commitVersion = partition.getNextVersion();
@@ -571,7 +837,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         for (MaterializedIndex droppedIndex : droppedIndexes) {
             List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
             // TODO: what if unusedShards deletion is partially successful?
+<<<<<<< HEAD
             StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentStarOSAgent());
+=======
+            StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentState().getStarOSAgent());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // since we use same shard group to do schema change, must clear old shard before
@@ -583,7 +853,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 LOG.info("database or table been dropped before updating colocation info, schema change job {}", jobId);
             } else {
                 try {
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(table, true, null);
+=======
+                    GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(table, true, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 } catch (DdlException e) {
                     // log an error if update colocation info failed, schema change already succeeded
                     LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
@@ -601,8 +875,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     boolean readyToPublishVersion() throws AlterCancelException {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
+<<<<<<< HEAD
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 Partition partition = table.getPartition(partitionId);
+=======
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Preconditions.checkState(partition != null, partitionId);
                 long commitVersion = commitVersionMap.get(partitionId);
                 if (commitVersion != partition.getVisibleVersion() + 1) {
@@ -618,12 +897,25 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     boolean publishVersion() {
         try {
+<<<<<<< HEAD
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     Utils.publishVersion(shadowIndex.getTablets(), watershedTxnId, 1, commitVersion,
                             finishedTimeMs / 1000);
+=======
+            TxnInfoPB txnInfo = new TxnInfoPB();
+            txnInfo.txnId = watershedTxnId;
+            txnInfo.combinedTxnLog = false;
+            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+            txnInfo.commitTime = finishedTimeMs / 1000;
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                long commitVersion = commitVersionMap.get(partitionId);
+                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
+                for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
+                    Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
             return true;
@@ -638,12 +930,16 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             return Sets.newHashSet();
         }
         Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (Map.Entry<Long, List<Column>> entry : indexSchemaMap.entrySet()) {
             Long shadowIdxId = entry.getKey();
             long originIndexId = indexIdMap.get(shadowIdxId);
             List<Column> shadowSchema = entry.getValue();
             List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
+<<<<<<< HEAD
             if (shadowSchema.size() == originSchema.size()) {
                 // modify column
                 for (Column col : shadowSchema) {
@@ -661,6 +957,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             } else {
                 // add column should not affect old mv, just ignore.
             }
+=======
+            modifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(originSchema, shadowSchema));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return modifiedColumns;
     }
@@ -669,9 +968,16 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         if (modifiedColumns.isEmpty()) {
             return;
         }
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         for (MvId mvId : tbl.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), mvId.getId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
@@ -698,8 +1004,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // Update each Partition's nextVersion.
     // The caller must have acquired the database's exclusive lock.
     void updateNextVersion(@NotNull OlapTable table) {
+<<<<<<< HEAD
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
+=======
+        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             long commitVersion = commitVersionMap.get(partitionId);
             Preconditions.checkState(partition.getNextVersion() == commitVersion,
                     "partitionNextVersion=" + partition.getNextVersion() + " commitVersion=" + commitVersion);
@@ -707,6 +1018,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
     }
 
+<<<<<<< HEAD
     @NotNull
     OlapTable getTableOrThrow(@Nullable LockedDatabase db, long tableId) throws AlterCancelException {
         if (db == null) {
@@ -719,6 +1031,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         return table;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public void replay(AlterJobV2 replayedJob) {
         LakeTableSchemaChangeJob other = (LakeTableSchemaChangeJob) replayedJob;
@@ -737,8 +1051,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             this.errMsg = other.errMsg;
             this.timeoutMs = other.timeoutMs;
 
+<<<<<<< HEAD
             this.partitionIndexTabletMap = other.partitionIndexTabletMap;
             this.partitionIndexMap = other.partitionIndexMap;
+=======
+            this.physicalPartitionIndexTabletMap = other.physicalPartitionIndexTabletMap;
+            this.physicalPartitionIndexMap = other.physicalPartitionIndexMap;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             this.indexIdMap = other.indexIdMap;
             this.indexIdToName = other.indexIdToName;
             this.indexSchemaMap = other.indexSchemaMap;
@@ -779,15 +1098,26 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     void addTabletToTabletInvertedIndex(@NotNull OlapTable table) {
+<<<<<<< HEAD
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (Table.Cell<Long, Long, MaterializedIndex> cell : partitionIndexMap.cellSet()) {
             Long partitionId = cell.getRowKey();
+=======
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (Table.Cell<Long, Long, MaterializedIndex> cell : physicalPartitionIndexMap.cellSet()) {
+            Long partitionId = cell.getRowKey();
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Long shadowIndexId = cell.getColumnKey();
             MaterializedIndex shadowIndex = cell.getValue();
             assert partitionId != null;
             assert shadowIndexId != null;
             assert shadowIndex != null;
+<<<<<<< HEAD
             TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+=======
+            TStorageMedium medium = table.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, 0, medium, true);
             for (Tablet shadowTablet : shadowIndex.getTablets()) {
                 invertedIndex.addTablet(shadowTablet.getId(), shadowTabletMeta);
@@ -796,11 +1126,19 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     void removeShadowIndex(@NotNull OlapTable table) {
+<<<<<<< HEAD
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
             Preconditions.checkNotNull(partition, partitionId);
             partition.setMinRetainVersion(0);
             for (MaterializedIndex shadowIdx : partitionIndexMap.row(partitionId).values()) {
+=======
+        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            Preconditions.checkNotNull(partition, partitionId);
+            partition.setMinRetainVersion(0);
+            for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.row(partitionId).values()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 partition.deleteRollupIndex(shadowIdx.getId());
             }
         }
@@ -808,9 +1146,15 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             table.deleteIndexInfo(shadowIndexName);
         }
         // Delete tablet from TabletInvertedIndex
+<<<<<<< HEAD
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             for (MaterializedIndex shadowIdx : partitionIndexMap.row(partitionId).values()) {
+=======
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+            for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.row(partitionId).values()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 for (Tablet tablet : shadowIdx.getTablets()) {
                     invertedIndex.deleteTablet(tablet.getId());
                 }
@@ -822,16 +1166,28 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @NotNull
     List<MaterializedIndex> visualiseShadowIndex(@NotNull OlapTable table) {
         List<MaterializedIndex> droppedIndexes = new ArrayList<>();
+<<<<<<< HEAD
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
 
         for (Column column : table.getColumns()) {
             if (Type.VARCHAR.equals(column.getType())) {
                 IDictManager.getInstance().removeGlobalDict(table.getId(), column.getName());
+=======
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
+        for (Column column : table.getColumns()) {
+            if (Type.VARCHAR.equals(column.getType())) {
+                IDictManager.getInstance().removeGlobalDict(table.getId(), column.getColumnId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
         // replace the origin index with shadow index, set index state as NORMAL
+<<<<<<< HEAD
         for (Partition partition : table.getPartitions()) {
+=======
+        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Preconditions.checkState(commitVersionMap.containsKey(partition.getId()));
             long commitVersion = commitVersionMap.get(partition.getId());
 
@@ -843,13 +1199,21 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             partition.setVisibleVersion(commitVersion, finishedTimeMs);
             LOG.debug("update visible version of partition {} to {}. jobId={}", partition.getId(),
                     commitVersion, jobId);
+<<<<<<< HEAD
             TStorageMedium medium = table.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium();
+=======
+            TStorageMedium medium = table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // drop the origin index from partitions
             for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
                 long shadowIdxId = entry.getKey();
                 long originIdxId = entry.getValue();
                 // get index from globalStateMgr, not from 'partitionIdToRollupIndex'.
+<<<<<<< HEAD
                 // because if this alter job is recovered from edit log, index in 'partitionIndexMap'
+=======
+                // because if this alter job is recovered from edit log, index in 'physicalPartitionIndexMap'
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
                 // in globalStateMgr.
                 MaterializedIndex shadowIdx = partition.getIndex(shadowIdxId);
@@ -914,6 +1278,27 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public final boolean cancel(String errMsg) {
+        isCancelling.set(true);
+        try {
+            // If waitingCreatingReplica == false, we will assume that
+            // cancel thread will get the object lock very quickly.
+            if (waitingCreatingReplica.get()) {
+                Preconditions.checkState(createReplicaLatch != null);
+                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+            }
+            synchronized (this) {
+                return cancelImpl(errMsg);
+            }
+        } finally {
+            isCancelling.set(false);
+        }
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected boolean cancelImpl(String errMsg) {
         if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
             return false;
@@ -944,13 +1329,21 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
 
         writeEditLog(this);
+<<<<<<< HEAD
+=======
+        LOG.info("Lake schema change job canceled, jobId: {}, error: {}", jobId, errMsg);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         return true;
     }
 
     AgentBatchTask getOrCreateSchemaChangeBatchTask() {
+<<<<<<< HEAD
         if (schemaChangeBatchTask ==
                 null) { // This would happen after FE restarted and this object was deserialized from Json.
+=======
+        if (schemaChangeBatchTask == null) { // This would happen after FE restarted and this object was deserialized from Json.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             schemaChangeBatchTask = new AgentBatchTask();
         }
         return schemaChangeBatchTask;
@@ -982,6 +1375,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             info.add(errMsg);
             info.add(progress);
             info.add(timeoutMs / 1000);
+<<<<<<< HEAD
             infos.add(info);
         }
     }
@@ -989,6 +1383,17 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     private boolean tableExists() {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             return db != null && db.getTable(tableId) != null;
+=======
+
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+            if (warehouse == null) {
+                info.add("null");
+            } else {
+                info.add(warehouse.getName());
+            }
+
+            infos.add(info);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -997,6 +1402,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
         Text.writeString(out, json);
     }
+<<<<<<< HEAD
 
     @Nullable
     ReadLockedDatabase getReadLockedDatabase(long dbId) {
@@ -1076,4 +1482,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

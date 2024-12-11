@@ -22,12 +22,18 @@ import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import org.apache.commons.lang3.StringUtils;
 
+<<<<<<< HEAD
+=======
+import java.util.StringJoiner;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 /**
  * TODO: Support comments for struct fields. The Metastore does not properly store
  * comments of struct fields. We set comment to null to avoid compatibility issues.
  */
 public class StructField {
     @SerializedName(value = "name")
+<<<<<<< HEAD
     private final String name;
     @SerializedName(value = "type")
     private final Type type;
@@ -41,6 +47,42 @@ public class StructField {
         this.name = name;
         this.type = type;
         this.comment = comment;
+=======
+    private String name;
+    @SerializedName(value = "type")
+    private Type type;
+
+    // comment is not used now, it's always null.
+    @SerializedName(value = "comment")
+    private String comment;
+    private int position;  // in struct
+
+    @SerializedName(value = "fieldId")
+    private int fieldId = -1;
+
+    // fieldPhysicalName is used to store the physical name of the field in the storage layer.
+    // for example, the physical name of a struct field in a parquet file.
+    // used in delta lake column mapping name mode
+    @SerializedName(value = "fieldPhysicalName")
+    private String fieldPhysicalName = "";
+
+    public StructField() {}
+
+    public StructField(String name, int fieldId, Type type, String comment) {
+        this(name, fieldId, "", type, comment);
+    }
+
+    public StructField(String name, int fieldId, String fieldPhysicalName, Type type, String comment) {
+        this.name = name;
+        this.type = type;
+        this.comment = comment;
+        this.fieldId = fieldId;
+        this.fieldPhysicalName = fieldPhysicalName;
+    }
+
+    public StructField(String name, Type type, String comment) {
+        this(name, -1, type, comment);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public StructField(String name, Type type) {
@@ -63,6 +105,13 @@ public class StructField {
         return position;
     }
 
+<<<<<<< HEAD
+=======
+    public int getFieldId() {
+        return fieldId;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setPosition(int position) {
         this.position = position;
     }
@@ -80,6 +129,17 @@ public class StructField {
         return sb.toString();
     }
 
+<<<<<<< HEAD
+=======
+    public String toTypeString(int depth) {
+        String typeSql = (depth < Type.MAX_NESTING_DEPTH) ? type.toTypeString(depth) : "...";
+        StringBuilder sb = new StringBuilder();
+        sb.append(name).append(' ');
+        sb.append(typeSql);
+        return sb.toString();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Pretty prints this field with lpad number of leading spaces.
      * Calls prettyPrint(lpad) on this field's type.
@@ -107,13 +167,22 @@ public class StructField {
         TStructField field = new TStructField();
         field.setName(name);
         field.setComment(comment);
+<<<<<<< HEAD
+=======
+        field.setId(fieldId);
+        field.setPhysical_name(fieldPhysicalName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         node.struct_fields.add(field);
         type.toThrift(container);
     }
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hashCode(name.toLowerCase(), type);
+=======
+        return Objects.hashCode(name.toLowerCase(), type, fieldId, fieldPhysicalName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -123,12 +192,36 @@ public class StructField {
         }
         StructField otherStructField = (StructField) other;
         // Both are named struct field
+<<<<<<< HEAD
         return StringUtils.equalsIgnoreCase(name, otherStructField.name) && Objects.equal(type, otherStructField.type);
+=======
+        return StringUtils.equalsIgnoreCase(name, otherStructField.name) && Objects.equal(type, otherStructField.type) &&
+                    (fieldId == otherStructField.fieldId) && Objects.equal(fieldPhysicalName, otherStructField.fieldPhysicalName);
+    }
+
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", StructField.class.getSimpleName() + "[", "]")
+                .add("name='" + (Strings.isNullOrEmpty(name) ? "" : name) + "'")
+                .add("type=" + type)
+                .add("position=" + position)
+                .add("fieldId=" + fieldId)
+                .add("fieldPhysicalName='" + (Strings.isNullOrEmpty(fieldPhysicalName) ? "" : fieldPhysicalName) + "'")
+                .toString();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public StructField clone() {
+<<<<<<< HEAD
         return new StructField(name, type.clone(), comment);
+=======
+        return new StructField(name, fieldId, fieldPhysicalName, type.clone(), comment);
+    }
+
+    public int getMaxUniqueId() {
+        return Math.max(fieldId, type.getMaxUniqueId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 

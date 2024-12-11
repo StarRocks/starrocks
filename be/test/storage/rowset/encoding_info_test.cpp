@@ -46,8 +46,25 @@ namespace starrocks {
 
 class EncodingInfoTest : public testing::Test {
 public:
+<<<<<<< HEAD
     EncodingInfoTest() = default;
     ~EncodingInfoTest() override = default;
+=======
+    EncodingInfoTest() {
+        _number_types_supports_dict_encoding.emplace(TYPE_SMALLINT);
+        _number_types_supports_dict_encoding.emplace(TYPE_INT);
+        _number_types_supports_dict_encoding.emplace(TYPE_BIGINT);
+        _number_types_supports_dict_encoding.emplace(TYPE_LARGEINT);
+        _number_types_supports_dict_encoding.emplace(TYPE_FLOAT);
+        _number_types_supports_dict_encoding.emplace(TYPE_DOUBLE);
+        _number_types_supports_dict_encoding.emplace(TYPE_DATE);
+        _number_types_supports_dict_encoding.emplace(TYPE_DATETIME);
+        _number_types_supports_dict_encoding.emplace(TYPE_DECIMALV2);
+    }
+
+    ~EncodingInfoTest() override = default;
+    std::set<LogicalType> _number_types_supports_dict_encoding;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 TEST_F(EncodingInfoTest, normal) {
@@ -61,10 +78,66 @@ TEST_F(EncodingInfoTest, normal) {
 TEST_F(EncodingInfoTest, no_encoding) {
     auto type_info = get_type_info(TYPE_BIGINT);
     const EncodingInfo* encoding_info = nullptr;
+<<<<<<< HEAD
     auto status = EncodingInfo::get(TYPE_BIGINT, DICT_ENCODING, &encoding_info);
     ASSERT_FALSE(status.ok());
 }
 
+=======
+    auto status = EncodingInfo::get(TYPE_BIGINT, RLE, &encoding_info);
+    ASSERT_FALSE(status.ok());
+}
+
+TEST_F(EncodingInfoTest, number_types_supports_dict_encoding) {
+    for (auto logicType : _number_types_supports_dict_encoding) {
+        EXPECT_EQ(true, numeric_types_support_dict_encoding(logicType));
+        EXPECT_EQ(true, supports_dict_encoding(logicType));
+    }
+    EXPECT_EQ(false, numeric_types_support_dict_encoding(TYPE_CHAR));
+    EXPECT_EQ(false, numeric_types_support_dict_encoding(TYPE_VARCHAR));
+    EXPECT_EQ(true, supports_dict_encoding(TYPE_CHAR));
+    EXPECT_EQ(true, supports_dict_encoding(TYPE_VARCHAR));
+}
+
+TEST_F(EncodingInfoTest, enable_non_string_column_dict_encoding) {
+    EXPECT_EQ(false, enable_non_string_column_dict_encoding());
+    config::dictionary_encoding_ratio_for_non_string_column = 0.7;
+    EXPECT_EQ(true, enable_non_string_column_dict_encoding());
+    config::dictionary_encoding_ratio_for_non_string_column = 1;
+    EXPECT_EQ(true, enable_non_string_column_dict_encoding());
+    config::dictionary_encoding_ratio_for_non_string_column = 0;
+    EXPECT_EQ(false, enable_non_string_column_dict_encoding());
+}
+
+TEST_F(EncodingInfoTest, get_default_encoding_number_types) {
+    for (auto logicType : _number_types_supports_dict_encoding) {
+        EXPECT_EQ(BIT_SHUFFLE, EncodingInfo::get_default_encoding(logicType, false));
+        const EncodingInfo* encoding_info;
+        auto status = EncodingInfo::get(logicType, DEFAULT_ENCODING, &encoding_info);
+        ASSERT_TRUE(status.ok());
+        EXPECT_EQ(BIT_SHUFFLE, encoding_info->encoding());
+
+        status = EncodingInfo::get(logicType, DICT_ENCODING, &encoding_info);
+        ASSERT_TRUE(status.ok());
+        EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
+    }
+
+    config::dictionary_encoding_ratio_for_non_string_column = 0.7;
+    for (auto logicType : _number_types_supports_dict_encoding) {
+        EXPECT_EQ(DICT_ENCODING, EncodingInfo::get_default_encoding(logicType, false));
+        const EncodingInfo* encoding_info;
+        auto status = EncodingInfo::get(logicType, DEFAULT_ENCODING, &encoding_info);
+        ASSERT_TRUE(status.ok());
+        EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
+
+        status = EncodingInfo::get(logicType, DICT_ENCODING, &encoding_info);
+        ASSERT_TRUE(status.ok());
+        EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
+    }
+    config::dictionary_encoding_ratio_for_non_string_column = 0;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 TEST_F(EncodingInfoTest, default_encoding) {
     std::map<LogicalType, EncodingTypePB> default_expected = {
             {TYPE_TINYINT, BIT_SHUFFLE},  {TYPE_SMALLINT, BIT_SHUFFLE},  {TYPE_INT, BIT_SHUFFLE},

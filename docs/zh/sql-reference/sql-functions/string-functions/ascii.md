@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ascii
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回字符串第一个字符对应的 ASCII 码。
 

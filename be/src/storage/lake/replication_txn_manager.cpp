@@ -25,6 +25,10 @@
 #include "agent/task_signatures_manager.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
+<<<<<<< HEAD
+=======
+#include "fs/key_cache.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/split.h"
@@ -77,7 +81,11 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
 
     std::vector<Version> missed_versions;
     for (auto v = request.visible_version + 1; v <= request.src_visible_version; ++v) {
+<<<<<<< HEAD
         missed_versions.emplace_back(Version(v, v));
+=======
+        missed_versions.emplace_back(v, v);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     if (UNLIKELY(missed_versions.empty())) {
         LOG(WARNING) << "Remote snapshot tablet skipped, no missing version"
@@ -155,6 +163,13 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
     if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The replicate snapshot will stop");
     }
+<<<<<<< HEAD
+=======
+    if (!request.encryption_meta.empty()) {
+        RETURN_IF_ERROR_WITH_WARN(KeyCache::instance().refresh_keys(request.encryption_meta),
+                                  "refresh keys using encryption_meta in TReplicateSnapshotRequest failed");
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(request.tablet_id));
 
@@ -237,7 +252,11 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
                                                         const TSnapshotInfo& src_snapshot_info,
                                                         const TabletMetadataPtr& tablet_metadata) {
     auto txn_log = std::make_shared<TxnLog>();
+<<<<<<< HEAD
     std::unordered_map<std::string, std::string> filename_map;
+=======
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>> filename_map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const TabletSchemaPB* source_schema_pb = nullptr;
 
     if (!is_primary_key(*tablet_metadata)) { // None-pk table
@@ -251,8 +270,14 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
         auto status = tablet_meta.create_from_memory(header_file_content);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to parse remote snapshot header file: " << remote_header_file_name
+<<<<<<< HEAD
                          << ", content: " << header_file_content << ", " << status;
             return status;
+=======
+                         << ", content: " << header_file_content << ", status: " << status;
+            return status.clone_and_prepend("Failed to parse remote snapshot header file: " + remote_header_file_name +
+                                            ", content: " + header_file_content + ", status");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         const auto& rowset_metas =
@@ -277,6 +302,7 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
         auto status = snapshot_meta.parse_from_file(memory_file.get());
         if (!status.ok()) {
             LOG(WARNING) << "Failed to parse remote snapshot meta file: " << snapshot_meta_file_name
+<<<<<<< HEAD
                          << ", content: " << snapshot_meta_content << ", " << status;
             return status;
         }
@@ -285,6 +311,17 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
                (!src_snapshot_info.incremental_snapshot &&
                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
+=======
+                         << ", content: " << snapshot_meta_content << ", status: " << status;
+            return status.clone_and_prepend("Failed to parse remote snapshot meta file: " + snapshot_meta_file_name +
+                                            ", content: " + snapshot_meta_content + ", status");
+        }
+
+        DCHECK(((src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
+                (!src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 << ", incremental_snapshot: " << src_snapshot_info.incremental_snapshot
                 << ", snapshot_type: " << SnapshotTypePB_Name(snapshot_meta.snapshot_type());
 
@@ -306,6 +343,14 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             // Try to get source schema from tablet meta, only full snapshot has tablet meta
             txn_log->mutable_op_replication()->mutable_source_schema()->CopyFrom(snapshot_meta.tablet_meta().schema());
             source_schema_pb = &txn_log->op_replication().source_schema();
+<<<<<<< HEAD
+=======
+        } else if (!rowset_metas.empty() && rowset_metas.front().has_tablet_schema()) {
+            // Try to get source schema from rowset meta, rowset meta has schema if light schema change enabled in source cluster
+            txn_log->mutable_op_replication()->mutable_source_schema()->CopyFrom(
+                    TabletMeta::rowset_meta_pb_with_max_rowset_version(rowset_metas).tablet_schema());
+            source_schema_pb = &txn_log->op_replication().source_schema();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             // Get source schema from previous saved in tablet meta
             source_schema_pb = &tablet_metadata->source_schema();
@@ -341,8 +386,15 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             return nullptr;
         }
 
+<<<<<<< HEAD
         auto segment_location = _tablet_manager->segment_location(request.tablet_id, iter->second);
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+=======
+        auto segment_location = _tablet_manager->segment_location(request.tablet_id, iter->second.first);
+        WritableFileOptions opts{.sync_on_close = true,
+                                 .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                 .encryption_info = iter->second.second};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, segment_location));
 
         files_to_delete.push_back(std::move(segment_location));
@@ -385,9 +437,15 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
                                                   TxnLogPB::OpWrite* op_write,
                                                   std::unordered_map<std::string, std::string>* filename_map) {
+=======
+Status ReplicationTxnManager::convert_rowset_meta(
+        const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>* filename_map) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (rowset_meta.is_column_mode_partial_update()) {
         return Status::NotSupported("Column mode partial update is not supported in shared-data mode");
     }
@@ -411,7 +469,18 @@ Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta,
         std::string new_segment_filename = gen_segment_filename(transaction_id);
 
         rowset_metadata->add_segments(new_segment_filename);
+<<<<<<< HEAD
         auto pair = filename_map->emplace(std::move(old_segment_filename), std::move(new_segment_filename));
+=======
+        FileEncryptionInfo encryption_info;
+        if (config::enable_transparent_data_encryption) {
+            ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            rowset_metadata->add_segment_encryption_metas(pair.encryption_meta);
+            encryption_info = std::move(pair.info);
+        }
+        auto pair = filename_map->emplace(std::move(old_segment_filename),
+                                          std::pair(std::move(new_segment_filename), std::move(encryption_info)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!pair.second) {
             return Status::Corruption("Duplicated segment file: " + pair.first->first);
         }
@@ -429,7 +498,18 @@ Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta,
         std::string new_del_filename = gen_del_filename(transaction_id);
 
         op_write->add_dels(new_del_filename);
+<<<<<<< HEAD
         auto pair = filename_map->emplace(std::move(old_del_filename), std::move(new_del_filename));
+=======
+        FileEncryptionInfo encryption_info;
+        if (config::enable_transparent_data_encryption) {
+            ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            op_write->add_del_encryption_metas(pair.encryption_meta);
+            encryption_info = std::move(pair.info);
+        }
+        auto pair = filename_map->emplace(std::move(old_del_filename),
+                                          std::pair(std::move(new_del_filename), std::move(encryption_info)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!pair.second) {
             return Status::Corruption("Duplicated del file: " + pair.first->first);
         }
@@ -448,11 +528,19 @@ Status ReplicationTxnManager::convert_delete_predicate_pb(DeletePredicatePB* del
         if (condition.condition_op == "IS") {
             auto* is_null_predicate = delete_predicate->add_is_null_predicates();
             is_null_predicate->set_column_name(condition.column_name);
+<<<<<<< HEAD
             is_null_predicate->set_is_not_null(condition.condition_values[0].compare(0, 3, "NOT") == 0);
         } else if (condition.condition_op == "*=" || condition.condition_op == "!*=") {
             auto* in_predicate = delete_predicate->add_in_predicates();
             in_predicate->set_column_name(condition.column_name);
             in_predicate->set_is_not_in(condition.condition_op.front() == '!');
+=======
+            is_null_predicate->set_is_not_null(condition.condition_values[0].starts_with("NOT"));
+        } else if (condition.condition_op == "*=" || condition.condition_op == "!*=") {
+            auto* in_predicate = delete_predicate->add_in_predicates();
+            in_predicate->set_column_name(condition.column_name);
+            in_predicate->set_is_not_in(condition.condition_op.starts_with('!'));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (const auto& value : condition.condition_values) {
                 in_predicate->add_values()->assign(value);
             }

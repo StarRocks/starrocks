@@ -18,6 +18,7 @@
 #include <unordered_map>
 
 #include "common/config.h"
+<<<<<<< HEAD
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
 #include "exec/olap_scan_node.h"
@@ -29,38 +30,64 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/olap_table_sink_operator.h"
+=======
+#include "exec/capture_version_node.h"
+#include "exec/cross_join_node.h"
+#include "exec/exchange_node.h"
+#include "exec/exec_node.h"
+#include "exec/hash_join_node.h"
+#include "exec/multi_olap_table_sink.h"
+#include "exec/olap_scan_node.h"
+#include "exec/pipeline/adaptive/event.h"
+#include "exec/pipeline/fragment_context.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
+<<<<<<< HEAD
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/pipeline/sink/iceberg_table_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
+=======
+#include "gutil/casts.h"
+#include "gutil/map_util.h"
+#include "runtime/batch_write/batch_write_mgr.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
 #include "runtime/export_sink.h"
 #include "runtime/iceberg_table_sink.h"
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/result_sink.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
+<<<<<<< HEAD
 #include "util/pretty_printer.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -70,7 +97,11 @@ namespace starrocks::pipeline {
 using WorkGroupManager = workgroup::WorkGroupManager;
 using WorkGroup = workgroup::WorkGroup;
 using WorkGroupPtr = workgroup::WorkGroupPtr;
+<<<<<<< HEAD
 using PipelineGroupMap = std::unordered_map<SourceOperatorFactory*, Pipelines>;
+=======
+using PipelineGroupMap = std::unordered_map<SourceOperatorFactory*, std::vector<Pipeline*>>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 /// UnifiedExecPlanFragmentParams.
 const std::vector<TScanRangeParams> UnifiedExecPlanFragmentParams::_no_scan_ranges;
@@ -119,6 +150,12 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     }
 
     _query_ctx = exec_env->query_context_mgr()->get_or_register(query_id);
+<<<<<<< HEAD
+=======
+    if (_query_ctx == nullptr) {
+        return Status::Cancelled("Query has been cancelled");
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
@@ -153,6 +190,13 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     }
     _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, enable_query_trace));
 
+<<<<<<< HEAD
+=======
+    if (request.common().__isset.exec_stats_node_ids) {
+        _query_ctx->init_node_exec_stats(request.common().exec_stats_node_ids);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -168,6 +212,10 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
     _fragment_ctx->set_is_stream_pipeline(is_stream_pipeline);
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (request.common().__isset.adaptive_dop_param) {
         _fragment_ctx->set_enable_adaptive_dop(true);
         const auto& tadaptive_dop_param = request.common().adaptive_dop_param;
@@ -176,14 +224,22 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
         adaptive_dop_param.max_output_amplification_factor = tadaptive_dop_param.max_output_amplification_factor;
     }
 
+<<<<<<< HEAD
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(fragment_instance_id)
               << " is_stream_pipeline=" << is_stream_pipeline << " backend_num=" << request.backend_num();
+=======
+    if (request.common().__isset.pred_tree_params) {
+        const auto& tpred_tree_params = request.common().pred_tree_params;
+        _fragment_ctx->set_pred_tree_params({tpred_tree_params.enable_or, tpred_tree_params.enable_show_in_profile});
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     return Status::OK();
 }
 
 Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
+<<<<<<< HEAD
     WorkGroupPtr wg = nullptr;
     if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
         wg = WorkGroupManager::instance()->get_default_workgroup();
@@ -192,6 +248,16 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
     } else {
         wg = std::make_shared<WorkGroup>(request.common().workgroup);
         wg = WorkGroupManager::instance()->add_workgroup(wg);
+=======
+    WorkGroupPtr wg;
+    if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
+        wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
+    } else if (request.common().workgroup.id == WorkGroup::DEFAULT_MV_WG_ID) {
+        wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_mv_workgroup();
+    } else {
+        wg = std::make_shared<WorkGroup>(request.common().workgroup);
+        wg = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(wg);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     DCHECK(wg != nullptr);
 
@@ -217,7 +283,10 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     const auto& query_globals = request.common().query_globals;
     const auto& query_options = request.common().query_options;
     const auto& t_desc_tbl = request.common().desc_tbl;
+<<<<<<< HEAD
     const int32_t degree_of_parallelism = _calc_dop(exec_env, request);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto& wg = _wg;
 
     _fragment_ctx->set_runtime_state(
@@ -227,6 +296,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_query_ctx(_query_ctx);
 
+<<<<<<< HEAD
     auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : GlobalEnv::GetInstance()->query_pool_mem_tracker();
     auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
     auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
@@ -239,6 +309,30 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     }
     _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_ratio,
                                  wg.get());
+=======
+    // Only consider the `query_mem_limit` variable
+    // If query_mem_limit is <= 0, it would set to -1, which means no limit
+    auto* parent_mem_tracker = wg->mem_tracker();
+    int64_t option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
+    if (option_query_mem_limit <= 0) option_query_mem_limit = -1;
+    int64_t big_query_mem_limit = wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
+    std::optional<double> spill_mem_limit_ratio;
+
+    if (query_options.__isset.enable_spill && query_options.enable_spill) {
+        if (query_options.spill_options.__isset.spill_mem_limit_threshold) {
+            spill_mem_limit_ratio = query_options.spill_options.spill_mem_limit_threshold;
+        } else {
+            spill_mem_limit_ratio = query_options.spill_mem_limit_threshold;
+        }
+    }
+
+    int connector_scan_node_number = 1;
+    if (query_globals.__isset.connector_scan_node_number) {
+        connector_scan_node_number = query_globals.connector_scan_node_number;
+    }
+    _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_ratio,
+                                 wg.get(), runtime_state, connector_scan_node_number);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
@@ -264,6 +358,11 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         exec_env->runtime_filter_worker()->open_query(query_id, query_options, *runtime_filter_params, true);
     }
     _fragment_ctx->prepare_pass_through_chunk_buffer();
+<<<<<<< HEAD
+=======
+    _fragment_ctx->set_report_when_finish(request.unique().params.__isset.report_when_finish &&
+                                          request.unique().params.report_when_finish);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     auto* obj_pool = runtime_state->obj_pool();
     // Set up desc tbl
@@ -284,15 +383,34 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
                 DescriptorTbl::create(runtime_state, obj_pool, t_desc_tbl, &desc_tbl, runtime_state->chunk_size()));
     }
     runtime_state->set_desc_tbl(desc_tbl);
+<<<<<<< HEAD
 
     return Status::OK();
 }
 
 int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+=======
+    if (query_options.__isset.enable_spill && query_options.enable_spill) {
+        RETURN_IF_ERROR(_query_ctx->init_spill_manager(query_options));
+    }
+    _fragment_ctx->init_jit_profile();
+    return Status::OK();
+}
+
+uint32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int32_t degree_of_parallelism = request.pipeline_dop();
     return exec_env->calc_pipeline_dop(degree_of_parallelism);
 }
 
+<<<<<<< HEAD
+=======
+uint32_t FragmentExecutor::_calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+    int32_t degree_of_parallelism = request.pipeline_sink_dop();
+    return exec_env->calc_pipeline_sink_dop(degree_of_parallelism);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 int FragmentExecutor::_calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const {
     const auto& query_options = request.common().query_options;
 
@@ -355,16 +473,82 @@ static std::unordered_set<int32_t> collect_broadcast_join_right_offsprings(
     return offsprings;
 }
 
+<<<<<<< HEAD
+=======
+// there will be partition values used by this batch of scan ranges and maybe following scan ranges
+// so before process this batch of scan ranges, we have to put partition values into the table associated with.
+static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
+                                               const std::vector<TScanRangeParams>& scan_ranges) {
+    auto* obj_pool = runtime_state->obj_pool();
+    const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
+    TTableId cache_table_id = -1;
+    TableDescriptor* table = nullptr;
+
+    for (const auto& scan_range_params : scan_ranges) {
+        const TScanRange& scan_range = scan_range_params.scan_range;
+        if (!scan_range.__isset.hdfs_scan_range) continue;
+        const THdfsScanRange& hdfs_scan_range = scan_range.hdfs_scan_range;
+        if (!hdfs_scan_range.__isset.partition_value) continue;
+        DCHECK(hdfs_scan_range.__isset.table_id);
+        DCHECK(hdfs_scan_range.__isset.partition_id);
+        TTableId table_id = hdfs_scan_range.table_id;
+        if (table_id != cache_table_id) {
+            table = desc_tbl.get_table_descriptor(table_id);
+            cache_table_id = table_id;
+        }
+        if (table == nullptr) continue;
+        // only HiveTableDescriptor(includes hive,iceberg,hudi,deltalake etc) supports this feature.
+        HiveTableDescriptor* hive_table = down_cast<HiveTableDescriptor*>(table);
+        RETURN_IF_ERROR(hive_table->add_partition_value(runtime_state, obj_pool, hdfs_scan_range.partition_id,
+                                                        hdfs_scan_range.partition_value));
+    }
+    return Status::OK();
+}
+
+static Status add_per_driver_scan_ranges_partition_values(RuntimeState* runtime_state,
+                                                          const PerDriverScanRangesMap& map) {
+    for (const auto& [_, scan_ranges] : map) {
+        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+    }
+    return Status::OK();
+}
+
+static bool has_more_per_driver_seq_scan_ranges(const PerDriverScanRangesMap& map) {
+    bool has_more = false;
+    for (const auto& [_, scan_ranges] : map) {
+        has_more |= ScanMorsel::has_more_scan_ranges(scan_ranges);
+        if (has_more) return has_more;
+    }
+    return has_more;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     auto* runtime_state = _fragment_ctx->runtime_state();
     auto* obj_pool = runtime_state->obj_pool();
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     const auto& params = request.common().params;
     const auto& fragment = request.common().fragment;
+<<<<<<< HEAD
     const auto dop = _calc_dop(exec_env, request);
     const auto& query_options = request.common().query_options;
     const int chunk_size = runtime_state->chunk_size();
 
+=======
+    const auto pipeline_dop = _calc_dop(exec_env, request);
+    const int32_t group_execution_scan_dop = request.group_execution_scan_dop();
+    const auto& query_options = request.common().query_options;
+    const int chunk_size = runtime_state->chunk_size();
+
+    // check group execution params
+    if (request.common().fragment.__isset.group_execution_param &&
+        request.common().fragment.group_execution_param.enable_group_execution) {
+        _fragment_ctx->set_enable_group_execution(true);
+        _colocate_exec_groups = ExecutionGroupBuilder::create_colocate_exec_groups(
+                request.common().fragment.group_execution_param, pipeline_dop);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool enable_shared_scan = request.common().__isset.enable_shared_scan && request.common().enable_shared_scan;
     bool enable_tablet_internal_parallel =
             query_options.__isset.enable_tablet_internal_parallel && query_options.enable_tablet_internal_parallel;
@@ -412,6 +596,13 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         cache_param.force_populate = tcache_param.force_populate;
         cache_param.entry_max_bytes = tcache_param.entry_max_bytes;
         cache_param.entry_max_rows = tcache_param.entry_max_rows;
+<<<<<<< HEAD
+=======
+        if (tcache_param.__isset.is_lake) {
+            cache_param.is_lake = tcache_param.is_lake;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (auto& [slot, remapped_slot] : tcache_param.slot_remapping) {
             cache_param.slot_remapping[slot] = remapped_slot;
             cache_param.reverse_slot_remapping[remapped_slot] = slot;
@@ -471,10 +662,24 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             enable_shared_scan = false;
         }
 
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(auto morsel_queue_factory,
                          scan_node->convert_scan_range_to_morsel_queue_factory(
                                  scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), dop,
                                  enable_tablet_internal_parallel, tablet_internal_parallel_mode));
+=======
+        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+        RETURN_IF_ERROR(add_per_driver_scan_ranges_partition_values(runtime_state, scan_ranges_per_driver_seq));
+        bool has_more_morsel = ScanMorsel::has_more_scan_ranges(scan_ranges) ||
+                               has_more_per_driver_seq_scan_ranges(scan_ranges_per_driver_seq);
+
+        ASSIGN_OR_RETURN(auto morsel_queue_factory,
+                         scan_node->convert_scan_range_to_morsel_queue_factory(
+                                 scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), group_execution_scan_dop,
+                                 _is_in_colocate_exec_group(scan_node->id()), enable_tablet_internal_parallel,
+                                 tablet_internal_parallel_mode, enable_shared_scan));
+        morsel_queue_factory->set_has_more(has_more_morsel);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         scan_node->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
     }
@@ -490,7 +695,11 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             // Some chunk sources scan `chunk_size` rows at a time, so normalize `limit` to be rounded up to `chunk_size`.
             logical_scan_limit += scan_node->limit();
             int64_t normalized_limit = (scan_node->limit() + chunk_size - 1) / chunk_size * chunk_size;
+<<<<<<< HEAD
             physical_scan_limit += normalized_limit * dop * scan_node->io_tasks_per_scan_operator();
+=======
+            physical_scan_limit += normalized_limit * pipeline_dop * scan_node->io_tasks_per_scan_operator();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             // Not sure how many rows will be scan.
             logical_scan_limit = -1;
@@ -498,6 +707,18 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         }
     }
 
+<<<<<<< HEAD
+=======
+    std::vector<ExecNode*> capture_version_nodes;
+    plan->collect_nodes(TPlanNodeType::CAPTURE_VERSION_NODE, &capture_version_nodes);
+    for (auto* node : capture_version_nodes) {
+        const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(node->id());
+        ASSIGN_OR_RETURN(auto morsel_queue_factory,
+                         down_cast<CaptureVersionNode*>(node)->scan_range_to_morsel_queue_factory(scan_ranges));
+        morsel_queue_factories.emplace(node->id(), std::move(morsel_queue_factory));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
         if (logical_scan_limit >= 0 && logical_scan_limit <= _wg->big_query_scan_rows_limit()) {
             _query_ctx->set_scan_limit(std::max(_wg->big_query_scan_rows_limit(), physical_scan_limit));
@@ -533,6 +754,24 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
         return Status::OK();
     }
     std::vector<StreamLoadContext*> stream_load_contexts;
+<<<<<<< HEAD
+=======
+
+    bool success = false;
+    DeferOp defer_op([&] {
+        if (!success) {
+            for (auto& ctx : stream_load_contexts) {
+                ctx->body_sink->cancel(Status::Cancelled("Failed to prepare stream load pipe"));
+                if (ctx->enable_batch_write) {
+                    exec_env->batch_write_mgr()->unregister_stream_load_pipe(ctx);
+                } else {
+                    exec_env->stream_context_mgr()->remove_channel_context(ctx);
+                }
+            }
+        }
+    });
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (; iter != scan_range_map.end(); iter++) {
         for (; iter2 != iter->second.end(); iter2++) {
             for (const auto& scan_range : iter2->second) {
@@ -544,6 +783,7 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                 TFileFormatType::type format = broker_scan_range.ranges[0].format_type;
                 TUniqueId load_id = broker_scan_range.ranges[0].load_id;
                 long txn_id = broker_scan_range.params.txn_id;
+<<<<<<< HEAD
                 StreamLoadContext* ctx = nullptr;
                 RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
                         exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
@@ -553,14 +793,40 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                     }
                 });
                 RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+=======
+                bool is_batch_write =
+                        broker_scan_range.__isset.enable_batch_write && broker_scan_range.enable_batch_write;
+                StreamLoadContext* ctx = nullptr;
+                if (is_batch_write) {
+                    ASSIGN_OR_RETURN(ctx, BatchWriteMgr::create_and_register_pipe(
+                                                  exec_env, exec_env->batch_write_mgr(), db_name, table_name,
+                                                  broker_scan_range.batch_write_parameters, label, txn_id, load_id,
+                                                  broker_scan_range.batch_write_interval_ms));
+                } else {
+                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
+                            exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
+                    DeferOp op([&] {
+                        if (ctx->unref()) {
+                            delete ctx;
+                        }
+                    });
+                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 stream_load_contexts.push_back(ctx);
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    success = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _fragment_ctx->set_stream_load_contexts(stream_load_contexts);
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status create_lazy_instantiate_drivers_pipeline(RuntimeState* state, PipelineBuilderContext* ctx,
                                                 QueryContext* query_ctx, FragmentContext* fragment_ctx,
                                                 PipelineGroupMap&& unready_pipeline_groups, Drivers& drivers) {
@@ -588,18 +854,54 @@ Status create_lazy_instantiate_drivers_pipeline(RuntimeState* state, PipelineBui
     pipe->instantiate_drivers(state);
 
     return Status::OK();
+=======
+bool FragmentExecutor::_is_in_colocate_exec_group(PlanNodeId plan_node_id) {
+    for (auto& [group_id, group] : _colocate_exec_groups) {
+        if (group->contains(plan_node_id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void create_adaptive_group_initialize_events(RuntimeState* state, WorkGroup* wg,
+                                                    PipelineGroupMap&& unready_pipeline_groups) {
+    if (unready_pipeline_groups.empty()) {
+        return;
+    }
+
+    auto* driver_executor = wg->executors()->driver_executor();
+    for (auto& [leader_source_op, pipelines] : unready_pipeline_groups) {
+        EventPtr group_initialize_event =
+                Event::create_collect_stats_source_initialize_event(driver_executor, std::move(pipelines));
+
+        if (auto blocking_event = leader_source_op->adaptive_blocking_event(); blocking_event != nullptr) {
+            group_initialize_event->add_dependency(blocking_event.get());
+        }
+        for (const auto* dependency_pipeline : leader_source_op->group_dependent_pipelines()) {
+            group_initialize_event->add_dependency(dependency_pipeline->pipeline_event());
+        }
+
+        leader_source_op->set_group_initialize_event(std::move(group_initialize_event));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto is_stream_pipeline = request.is_stream_pipeline();
     ExecNode* plan = _fragment_ctx->plan();
 
     Drivers drivers;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
     auto* runtime_state = _fragment_ctx->runtime_state();
+<<<<<<< HEAD
     const auto& pipelines = _fragment_ctx->pipelines();
 
     // Build pipelines
@@ -607,17 +909,33 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     PipelineBuilder builder(context);
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
 
+=======
+    size_t sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
+    // Build pipelines
+    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop, is_stream_pipeline);
+    context.init_colocate_groups(std::move(_colocate_exec_groups));
+    PipelineBuilder builder(context);
+    auto exec_ops = builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Set up sink if required
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {
         const auto& tsink = request.output_sink();
         if (tsink.type == TDataSinkType::RESULT_SINK || tsink.type == TDataSinkType::OLAP_TABLE_SINK ||
+<<<<<<< HEAD
             tsink.type == TDataSinkType::MEMORY_SCRATCH_SINK || tsink.type == TDataSinkType::ICEBERG_TABLE_SINK ||
             tsink.type == TDataSinkType::EXPORT_SINK) {
+=======
+            tsink.type == TDataSinkType::MULTI_OLAP_TABLE_SINK || tsink.type == TDataSinkType::MEMORY_SCRATCH_SINK ||
+            tsink.type == TDataSinkType::ICEBERG_TABLE_SINK || tsink.type == TDataSinkType::HIVE_TABLE_SINK ||
+            tsink.type == TDataSinkType::EXPORT_SINK || tsink.type == TDataSinkType::BLACKHOLE_TABLE_SINK ||
+            tsink.type == TDataSinkType::DICTIONARY_CACHE_SINK) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             _query_ctx->set_final_sink();
         }
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,
                                                    request.sender_id(), plan->row_desc(), &datasink));
+<<<<<<< HEAD
         RETURN_IF_ERROR(_decompose_data_sink_to_operator(runtime_state, &context, request, datasink, tsink,
                                                          fragment.output_exprs));
     }
@@ -650,6 +968,41 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     if (!unready_pipeline_groups.empty()) {
         RETURN_IF_ERROR(create_lazy_instantiate_drivers_pipeline(
                 runtime_state, &context, _query_ctx, _fragment_ctx.get(), std::move(unready_pipeline_groups), drivers));
+=======
+        RETURN_IF_ERROR(datasink->decompose_data_sink_to_pipeline(&context, runtime_state, std::move(exec_ops), request,
+                                                                  tsink, fragment.output_exprs));
+    }
+    _fragment_ctx->set_data_sink(std::move(datasink));
+    auto group_with_pipelines = builder.build();
+    _fragment_ctx->set_pipelines(std::move(group_with_pipelines.first), std::move(group_with_pipelines.second));
+
+    RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
+
+    // Set morsel_queue_factory to pipeline.
+    _fragment_ctx->iterate_pipeline([&morsel_queue_factories](Pipeline* pipeline) {
+        if (pipeline->source_operator_factory()->with_morsels()) {
+            auto source_id = pipeline->source_operator_factory()->plan_node_id();
+            DCHECK(morsel_queue_factories.count(source_id));
+            auto& morsel_queue_factory = morsel_queue_factories[source_id];
+            pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
+        }
+    });
+
+    // collect unready pipeline groups and instantiate ready drivers
+    PipelineGroupMap unready_pipeline_groups;
+    _fragment_ctx->iterate_pipeline([&unready_pipeline_groups, runtime_state](Pipeline* pipeline) {
+        auto* source_op = pipeline->source_operator_factory();
+        if (!source_op->is_adaptive_group_initial_active()) {
+            auto* group_leader_source_op = source_op->group_leader();
+            unready_pipeline_groups[group_leader_source_op].emplace_back(pipeline);
+            return;
+        }
+        pipeline->instantiate_drivers(runtime_state);
+    });
+
+    if (!unready_pipeline_groups.empty()) {
+        create_adaptive_group_initialize_events(runtime_state, _wg.get(), std::move(unready_pipeline_groups));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // Acquire driver token to avoid overload
@@ -667,6 +1020,13 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
         RETURN_IF_ERROR(runtime_state->init_query_global_dict(fragment.query_global_dicts));
     }
 
+<<<<<<< HEAD
+=======
+    if (fragment.__isset.query_global_dicts && fragment.__isset.query_global_dict_exprs) {
+        RETURN_IF_ERROR(runtime_state->init_query_global_dict_exprs(fragment.query_global_dict_exprs));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (fragment.__isset.load_global_dicts) {
         RETURN_IF_ERROR(runtime_state->init_load_global_dict(fragment.load_global_dicts));
     }
@@ -697,7 +1057,11 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
             auto* profile = fragment_ctx->runtime_state()->runtime_profile();
 
+<<<<<<< HEAD
             auto* prepare_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
+=======
+            auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentInstancePrepareTime", 10_ms);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             COUNTER_SET(prepare_timer, profiler.prepare_time);
 
             auto* prepare_query_ctx_timer =
@@ -712,16 +1076,38 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                     ADD_CHILD_TIMER_THESHOLD(profile, "prepare-runtime-state", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_runtime_state_timer, profiler.prepare_runtime_state_time);
 
+<<<<<<< HEAD
             auto* prepare_pipeline_driver_timer =
                     ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_runtime_state_time);
+=======
+            auto* prepare_pipeline_driver_timer = ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-factory",
+                                                                           "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_pipeline_driver_time);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             auto* process_mem_counter = ADD_COUNTER(profile, "InitialProcessMem", TUnit::BYTES);
             COUNTER_SET(process_mem_counter, profiler.process_mem_bytes);
             auto* num_process_drivers_counter = ADD_COUNTER(profile, "InitialProcessDriverCount", TUnit::UNIT);
             COUNTER_SET(num_process_drivers_counter, static_cast<int64_t>(profiler.num_process_drivers));
+<<<<<<< HEAD
         } else {
             _fail_cleanup(prepare_success);
+=======
+
+            VLOG_QUERY << "Prepare fragment succeed: query_id=" << print_id(request.common().params.query_id)
+                       << " fragment_instance_id=" << print_id(request.fragment_instance_id())
+                       << " is_stream_pipeline=" << request.is_stream_pipeline()
+                       << " backend_num=" << request.backend_num()
+                       << " fragment plan=" << fragment_ctx->plan()->debug_string();
+        } else {
+            _fail_cleanup(prepare_success);
+            LOG(WARNING) << "Prepare fragment failed: " << print_id(request.common().params.query_id)
+                         << " fragment_instance_id=" << print_id(request.fragment_instance_id())
+                         << " is_stream_pipeline=" << request.is_stream_pipeline()
+                         << " backend_num=" << request.backend_num();
+            VLOG_QUERY << "Prepare fragment failed fragment=" << request.common().fragment;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     });
 
@@ -744,8 +1130,13 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
 
+<<<<<<< HEAD
         RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
         RETURN_IF_ERROR(_prepare_global_dict(request));
+=======
+        RETURN_IF_ERROR(_prepare_global_dict(request));
+        RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     {
         SCOPED_RAW_TIMER(&profiler.prepare_pipeline_driver_time);
@@ -772,6 +1163,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
         }
     });
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(_fragment_ctx->iterate_drivers(
             [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); }));
     prepare_success = true;
@@ -782,6 +1174,24 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
         executor->submit(driver.get());
         return Status::OK();
     });
+=======
+    auto* profile = _fragment_ctx->runtime_state()->runtime_profile();
+    auto* prepare_instance_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
+    auto* prepare_driver_timer =
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
+
+    {
+        SCOPED_TIMER(prepare_instance_timer);
+        SCOPED_TIMER(prepare_driver_timer);
+        _fragment_ctx->acquire_runtime_filters();
+        RETURN_IF_ERROR(_fragment_ctx->prepare_active_drivers());
+    }
+    prepare_success = true;
+
+    DCHECK(_fragment_ctx->enable_resource_group());
+    auto* executor = _wg->executors()->driver_executor();
+    RETURN_IF_ERROR(_fragment_ctx->submit_active_drivers(executor));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     return Status::OK();
 }
@@ -799,6 +1209,7 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     }
 }
 
+<<<<<<< HEAD
 std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(PipelineBuilderContext* context,
                                                                             const TDataStreamSink& stream_sink,
                                                                             const DataStreamSender* sender,
@@ -1025,11 +1436,70 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             context->maybe_interpolate_local_key_partition_exchange_for_sink(
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, iceberg_table_sink_op,
                     partition_expr_ctxs, source_operator_dop, desired_iceberg_sink_dop);
+=======
+Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+    DCHECK(!request.__isset.fragment);
+    DCHECK(request.__isset.params);
+    const TPlanFragmentExecParams& params = request.params;
+    const TUniqueId& query_id = params.query_id;
+    const TUniqueId& instance_id = params.fragment_instance_id;
+
+    QueryContextPtr query_ctx = exec_env->query_context_mgr()->get(query_id);
+    if (query_ctx == nullptr) return Status::OK();
+    FragmentContextPtr fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
+    if (fragment_ctx == nullptr) return Status::OK();
+    RuntimeState* runtime_state = fragment_ctx->runtime_state();
+
+    for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
+        if (scan_ranges.size() == 0) continue;
+        auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
+        if (iter == fragment_ctx->morsel_queue_factories().end()) {
+            continue;
+        }
+        MorselQueueFactory* morsel_queue_factory = iter->second.get();
+        if (morsel_queue_factory == nullptr) {
+            continue;
+        }
+
+        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+        pipeline::Morsels morsels;
+        bool has_more_morsel = false;
+        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
+        RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
+        morsel_queue_factory->set_has_more(has_more_morsel);
+    }
+
+    if (params.__isset.node_to_per_driver_seq_scan_ranges) {
+        UnifiedExecPlanFragmentParams uf_request{request, request};
+        for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
+            auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
+            if (iter == fragment_ctx->morsel_queue_factories().end()) {
+                continue;
+            }
+            MorselQueueFactory* morsel_queue_factory = iter->second.get();
+            if (morsel_queue_factory == nullptr) {
+                continue;
+            }
+
+            bool has_more_morsel = has_more_per_driver_seq_scan_ranges(per_driver_scan_ranges);
+            for (const auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
+                if (scan_ranges.size() == 0) continue;
+                RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+                pipeline::Morsels morsels;
+                [[maybe_unused]] bool local_has_more;
+                pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &local_has_more);
+                RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(morsels)));
+            }
+            morsel_queue_factory->set_has_more(has_more_morsel);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     return Status::OK();
 }
+<<<<<<< HEAD
 DIAGNOSTIC_POP
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 } // namespace starrocks::pipeline

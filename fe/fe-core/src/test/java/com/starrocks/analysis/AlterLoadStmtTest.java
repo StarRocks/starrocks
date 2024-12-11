@@ -16,15 +16,21 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
+<<<<<<< HEAD
 import mockit.Expectations;
 import mockit.Mocked;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -35,6 +41,7 @@ public class AlterLoadStmtTest {
 
     private Analyzer analyzer;
 
+<<<<<<< HEAD
     @Mocked
     private Auth auth;
 
@@ -57,6 +64,11 @@ public class AlterLoadStmtTest {
                 result = true;
             }
         };
+=======
+    @Before
+    public void setUp() {
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test

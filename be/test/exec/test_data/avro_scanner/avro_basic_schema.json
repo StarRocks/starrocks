@@ -3,6 +3,10 @@
     "name": "basic",
     "fields" : [
         {"name": "booleantype", "type" : "boolean"},
+<<<<<<< HEAD
+=======
+        {"name": "inttype", "type": "int"},
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         {"name": "longtype", "type": "long"},
         {"name": "doubletype", "type": "double"},
         {"name": "stringtype", "type": "string"},

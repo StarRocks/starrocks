@@ -30,12 +30,22 @@ class TabletWriter;
 
 class HorizontalCompactionTask : public CompactionTask {
 public:
+<<<<<<< HEAD
     explicit HorizontalCompactionTask(int64_t txn_id, int64_t version, std::shared_ptr<Tablet> tablet,
                                       std::vector<std::shared_ptr<Rowset>> input_rowsets)
             : CompactionTask(txn_id, version, std::move(tablet), std::move(input_rowsets)) {}
     ~HorizontalCompactionTask() override = default;
 
     Status execute(Progress* progress, CancelFunc cancel_func) override;
+=======
+    explicit HorizontalCompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+                                      CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema)
+            : CompactionTask(std::move(tablet), std::move(input_rowsets), context, std::move(tablet_schema)) {}
+
+    ~HorizontalCompactionTask() override = default;
+
+    Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     StatusOr<int32_t> calculate_chunk_size();

@@ -54,6 +54,11 @@ public abstract class MetricVisitor {
 
     public abstract void visitHistogram(String name, Histogram histogram);
 
+<<<<<<< HEAD
+=======
+    public abstract void visitHistogram(HistogramMetric histogram);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public abstract void getNodeInfo();
 
     public abstract String build();

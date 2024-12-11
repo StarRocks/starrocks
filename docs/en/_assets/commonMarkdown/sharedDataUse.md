@@ -5,12 +5,16 @@ For more information on how to create a storage volume for other object storages
 
 After you create a default storage volume, you can then create a database and a cloud-native table using this storage volume.
 
+<<<<<<< HEAD
 Currently, shared-data StarRocks clusters support the following table types:
 
 - Duplicate Key table
 - Aggregate table
 - Unique Key table
 - Primary Key table (Currently, the primary key persistent index is not supported.)
+=======
+Shared-data StarRocks clusters support all [StarRocks table types](../../table_design/table_types/table_types.md).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 The following example creates a database `cloud_db` and a table `detail_demo` based on Duplicate Key table type, enables the local disk cache, sets the hot data validity duration to one month, and disables asynchronous data ingestion into object storage:
 
@@ -57,7 +61,11 @@ Whether to enable the local disk cache.
 
 #### datacache.partition_duration
 
+<<<<<<< HEAD
 The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
+=======
+The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity starting from the current time. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 > **NOTE**
 >
@@ -84,8 +92,19 @@ The `Type` of a table in shared-data StarRocks cluster is `CLOUD_NATIVE`. In the
 
 ### Load data into a shared-data StarRocks cluster
 
+<<<<<<< HEAD
 Shared-data StarRocks clusters support all loading methods provided by StarRocks. See [Overview of data loading](../../loading/Loading_intro.md) for more information.
+=======
+Shared-data StarRocks clusters support all loading methods provided by StarRocks. See [Loading options](../../loading/Loading_intro.md) for more information.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ### Query in a shared-data StarRocks cluster
 
 Tables in a shared-data StarRocks cluster support all types of queries provided by StarRocks. See StarRocks [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) for more information.
+<<<<<<< HEAD
+=======
+
+> **NOTE**
+>
+> Shared-data StarRocks clusters do not support [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

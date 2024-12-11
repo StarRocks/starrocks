@@ -27,4 +27,12 @@ public class DropObserverClause extends FrontendClause {
     public DropObserverClause(String hostPort, NodePosition pos) {
         super(hostPort, FrontendNodeType.OBSERVER, pos);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropObserverClause(this, context);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

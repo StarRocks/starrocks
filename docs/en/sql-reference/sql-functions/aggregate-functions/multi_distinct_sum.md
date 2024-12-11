@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # multi_distinct_sum
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the sum of distinct values in `expr`, equivalent to sum(distinct expr).
 

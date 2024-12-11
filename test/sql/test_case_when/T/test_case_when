@@ -14,7 +14,10 @@ PARTITION p20220103 VALUES [("2022-01-03"), ("2022-01-05")))
 DISTRIBUTED BY HASH(`region`, `order_date`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -541,4 +544,8 @@ select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 else 3 en
 select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 end in (2, 3, null)) is null order by 1,2,3,4,5;
 select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 end in (2, 3, null)) is not null order by 1,2,3,4,5;
 select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 else 3 end in (2, 3, null)) is null order by 1,2,3,4,5;
+<<<<<<< HEAD
 select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 else 3 end in (2, 3, null)) is not null order by 1,2,3,4,5;
+=======
+select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 else 3 end in (2, 3, null)) is not null order by 1,2,3,4,5;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

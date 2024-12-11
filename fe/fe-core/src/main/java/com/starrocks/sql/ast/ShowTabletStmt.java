@@ -23,7 +23,10 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -32,7 +35,10 @@ import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -61,6 +67,11 @@ public class ShowTabletStmt extends ShowStmt {
 
     private boolean isShowSingleTablet;
 
+<<<<<<< HEAD
+=======
+    private Table table;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ShowTabletStmt(TableName dbTableName, long tabletId, NodePosition pos) {
         this(dbTableName, tabletId, null, null, null, null, pos);
     }
@@ -194,6 +205,13 @@ public class ShowTabletStmt extends ShowStmt {
         return limitElement;
     }
 
+<<<<<<< HEAD
+=======
+    public void setTable(Table table) {
+        this.table = table;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowTabletStatement(this, context);
@@ -204,6 +222,7 @@ public class ShowTabletStmt extends ShowStmt {
             return SINGLE_TABLET_TITLE_NAMES;
         }
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             return ImmutableList.of();
@@ -223,6 +242,15 @@ public class ShowTabletStmt extends ShowStmt {
             }
         } finally {
             db.readUnlock();
+=======
+        if (table == null || !table.isNativeTableOrMaterializedView()) {
+            return ImmutableList.of();
+        }
+        if (table.isCloudNativeTableOrMaterializedView()) {
+            return LakeTabletsProcDir.TITLE_NAMES;
+        } else {
+            return LocalTabletsProcDir.TITLE_NAMES;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 

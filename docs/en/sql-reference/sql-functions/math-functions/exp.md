@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # exp,dexp
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the value of e raised to the power of `x`. This function is called natural logarithms function.
 

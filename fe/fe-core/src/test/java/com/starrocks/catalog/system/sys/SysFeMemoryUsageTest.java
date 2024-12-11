@@ -24,7 +24,10 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeMemoryReq;
+<<<<<<< HEAD
 import com.starrocks.thrift.TFeMemoryRes;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Expectations;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TException;
@@ -57,7 +60,11 @@ public class SysFeMemoryUsageTest {
         MemoryStat memoryStat = new MemoryStat();
         memoryUsage.put("test", ImmutableMap.of("test", memoryStat));
 
+<<<<<<< HEAD
         TFeMemoryRes res = SysFeMemoryUsage.listFeMemoryUsage(req);
+=======
+        var res = SysFeMemoryUsage.listFeMemoryUsage(req);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertTrue(StringUtils.isNotEmpty(res.toString()));
     }
 

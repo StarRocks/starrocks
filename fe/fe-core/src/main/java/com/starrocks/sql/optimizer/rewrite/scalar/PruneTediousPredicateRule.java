@@ -70,6 +70,11 @@ public class PruneTediousPredicateRule extends OnlyOnceScalarOperatorRewriteRule
                     && (call.getChild(2).equals(ConstantOperator.NULL) ||
                     call.getChild(2).equals(ConstantOperator.FALSE))) {
                 return Optional.of(call.getChild(0));
+<<<<<<< HEAD
+=======
+            } else if (call.getFnName().equals(FunctionSet.COALESCE)) {
+                return Optional.of(SimplifiedPredicateRule.simplifiedCoalesce(call, true));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 return Optional.empty();
             }

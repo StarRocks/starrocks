@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # least
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回多个输入参数中的最小值。
 

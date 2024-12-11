@@ -20,7 +20,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.KafkaUtil;
 import mockit.Injectable;
 import mockit.Mock;
@@ -47,7 +51,12 @@ public class KafkaTaskInfoTest {
             @Mock
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
+<<<<<<< HEAD
                                                        List<Integer> partitions) throws UserException {
+=======
+                                                       List<Integer> partitions,
+                                                       long warehouseId) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);
@@ -128,7 +137,12 @@ public class KafkaTaskInfoTest {
             @Mock
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
+<<<<<<< HEAD
                                                        List<Integer> partitions) throws UserException {
+=======
+                                                       List<Integer> partitions,
+                                                       long warehouseId) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);

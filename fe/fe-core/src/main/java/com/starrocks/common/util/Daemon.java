@@ -17,7 +17,10 @@
 
 package com.starrocks.common.util;
 
+<<<<<<< HEAD
 import com.starrocks.meta.MetaContext;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,8 +35,11 @@ public class Daemon extends Thread {
     private final AtomicBoolean isStopped = new AtomicBoolean(false);
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
+<<<<<<< HEAD
     private MetaContext metaContext = null;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     {
         setDaemon(true);
     }
@@ -65,6 +71,7 @@ public class Daemon extends Thread {
     public synchronized void start() {
         if (isRunning.compareAndSet(false, true)) {
             isStopped.set(false);
+<<<<<<< HEAD
             super.start();
         }
     }
@@ -73,6 +80,14 @@ public class Daemon extends Thread {
         this.metaContext = metaContext;
     }
 
+=======
+            if (getState() == State.NEW) {
+                super.start();
+            }
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setStop() {
         isStopped.set(true);
     }
@@ -98,10 +113,13 @@ public class Daemon extends Thread {
 
     @Override
     public void run() {
+<<<<<<< HEAD
         if (metaContext != null) {
             metaContext.setThreadLocalInfo();
         }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         while (!isStopped.get()) {
             try {
                 runOneCycle();
@@ -116,9 +134,12 @@ public class Daemon extends Thread {
             }
         }
 
+<<<<<<< HEAD
         if (metaContext != null) {
             MetaContext.remove();
         }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG.error("daemon thread exits. name=" + this.getName());
         if (!isRunning.compareAndSet(true, false)) {
             LOG.warn("set daemon thread {} to stop failed", getName());

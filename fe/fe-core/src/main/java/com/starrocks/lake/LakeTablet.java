@@ -17,6 +17,7 @@ package com.starrocks.lake;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.Replica;
@@ -26,6 +27,14 @@ import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.Warehouse;
+=======
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -35,7 +44,10 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+<<<<<<< HEAD
 import javax.validation.constraints.NotNull;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 
@@ -95,10 +107,19 @@ public class LakeTablet extends Tablet {
         return rowCount;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public long getFuzzyRowCount() {
+        return rowCount;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setRowCount(long rowCount) {
         this.rowCount = rowCount;
     }
 
+<<<<<<< HEAD
     public long getPrimaryComputeNodeId() throws UserException {
         Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
@@ -112,15 +133,29 @@ public class LakeTablet extends Tablet {
 
     @Override
     public Set<Long> getBackendIds() {
+=======
+    @Override
+    public Set<Long> getBackendIds() {
+        return getBackendIds(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+    }
+
+    public Set<Long> getBackendIds(long warehouseId) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (GlobalStateMgr.isCheckpointThread()) {
             // NOTE: defensive code: don't touch any backend RPC if in checkpoint thread
             return Collections.emptySet();
         }
         try {
+<<<<<<< HEAD
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             return GlobalStateMgr.getCurrentStarOSAgent().getBackendIdsByShard(getShardId(), workerGroupId);
         } catch (UserException e) {
+=======
+            return GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
+        } catch (Exception e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
             return Sets.newHashSet();
         }
@@ -129,7 +164,12 @@ public class LakeTablet extends Tablet {
     @Override
     public List<Replica> getAllReplicas() {
         List<Replica> replicas = Lists.newArrayList();
+<<<<<<< HEAD
         getQueryableReplicas(replicas, null, 0, -1, 0);
+=======
+        getQueryableReplicas(replicas, null, 0, -1, 0,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return replicas;
     }
 
@@ -137,7 +177,20 @@ public class LakeTablet extends Tablet {
     @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
+<<<<<<< HEAD
         for (long backendId : getBackendIds()) {
+=======
+        getQueryableReplicas(allQuerableReplicas, localReplicas, visibleVersion, localBeId,
+                schemaHash, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+    }
+
+    @Override
+    public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
+                                     long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
+        Set<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
+        for (long backendId : computeNodeIds) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Replica replica = new Replica(getId(), backendId, visibleVersion, schemaHash, getDataSize(true),
                     getRowCount(visibleVersion), NORMAL, -1, visibleVersion);
             allQuerableReplicas.add(replica);
@@ -175,6 +228,7 @@ public class LakeTablet extends Tablet {
         LakeTablet tablet = (LakeTablet) obj;
         return (id == tablet.id && dataSize == tablet.dataSize && rowCount == tablet.rowCount);
     }
+<<<<<<< HEAD
 
     @NotNull
     public ShardInfo getShardInfo() throws StarClientException {
@@ -185,4 +239,6 @@ public class LakeTablet extends Tablet {
         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
         return GlobalStateMgr.getCurrentStarOSAgent().getShardInfo(getShardId(), workerGroupId);
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

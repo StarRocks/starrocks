@@ -22,7 +22,11 @@ package com.starrocks.common;
  * Use SemanticException instead
  */
 @Deprecated
+<<<<<<< HEAD
 public class AnalysisException extends UserException {
+=======
+public class AnalysisException extends StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public AnalysisException(String msg, Throwable cause) {
         super(msg, cause);
     }

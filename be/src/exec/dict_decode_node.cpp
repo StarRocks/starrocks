@@ -36,18 +36,44 @@ Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
     _init_counter();
 
+<<<<<<< HEAD
+=======
+    std::vector<SlotId> slots;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (const auto& [slot_id, texpr] : tnode.decode_node.string_functions) {
         ExprContext* context;
         RETURN_IF_ERROR(Expr::create_expr_tree(_pool, texpr, &context, state));
         _string_functions[slot_id] = std::make_pair(context, DictOptimizeContext{});
         _expr_ctxs.push_back(context);
+<<<<<<< HEAD
     }
 
+=======
+        slots.emplace_back(slot_id);
+    }
+
+    DictOptimizeParser::set_output_slot_id(&_expr_ctxs, slots);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (const auto& [encode_id, decode_id] : tnode.decode_node.dict_id_to_string_ids) {
         _encode_column_cids.emplace_back(encode_id);
         _decode_column_cids.emplace_back(decode_id);
     }
 
+<<<<<<< HEAD
+=======
+    auto& tuple_id = this->_tuple_ids[0];
+    for (const auto& dict_id : _decode_column_cids) {
+        auto idx = this->row_desc().get_tuple_idx(tuple_id);
+        auto& tuple = this->row_desc().tuple_descriptors()[idx];
+        for (const auto& slot : tuple->slots()) {
+            if (slot->id() == dict_id) {
+                _decode_column_types.emplace_back(&slot->type());
+                break;
+            }
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -70,20 +96,32 @@ Status DictDecodeNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(_children[0]->open(state));
 
     const auto& global_dict = state->get_query_global_dict_map();
+<<<<<<< HEAD
     _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
+=======
+    auto* dict_optimize_parser = state->mutable_dict_optimize_parser();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     for (auto& [slot_id, v] : _string_functions) {
         auto dict_iter = global_dict.find(slot_id);
         auto dict_not_contains_cid = dict_iter == global_dict.end();
         if (dict_not_contains_cid) {
             auto& [expr_ctx, dict_ctx] = v;
+<<<<<<< HEAD
             _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
+=======
+            dict_optimize_parser->check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!dict_ctx.could_apply_dict_optimize) {
                 return Status::InternalError(fmt::format(
                         "Not found dict for function-called cid:{} it may cause by unsupported function", slot_id));
             }
 
+<<<<<<< HEAD
             RETURN_IF_ERROR(_dict_optimize_parser.eval_expression(expr_ctx, &dict_ctx, slot_id));
+=======
+            RETURN_IF_ERROR(dict_optimize_parser->eval_expression(expr_ctx, &dict_ctx, slot_id));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             auto dict_iter = global_dict.find(slot_id);
             DCHECK(dict_iter != global_dict.end());
             if (dict_iter == global_dict.end()) {
@@ -100,6 +138,16 @@ Status DictDecodeNode::open(RuntimeState* state) {
         auto dict_not_contains_cid = dict_iter == global_dict.end();
 
         if (dict_not_contains_cid) {
+<<<<<<< HEAD
+=======
+            if (dict_optimize_parser->eval_dict_expr(need_encode_cid).ok()) {
+                dict_iter = global_dict.find(need_encode_cid);
+                dict_not_contains_cid = dict_iter == global_dict.end();
+            }
+        }
+
+        if (dict_not_contains_cid) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
         }
         // TODO : avoid copy dict
@@ -131,7 +179,11 @@ Status DictDecodeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         desc.type = TYPE_VARCHAR;
 
         decode_columns[i] = ColumnHelper::create_column(desc, encode_column->is_nullable());
+<<<<<<< HEAD
         RETURN_IF_ERROR(_decoders[i]->decode(encode_column.get(), decode_columns[i].get()));
+=======
+        RETURN_IF_ERROR(_decoders[i]->decode_string(encode_column.get(), decode_columns[i].get()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     ChunkPtr nchunk = std::make_shared<Chunk>();
@@ -156,7 +208,10 @@ void DictDecodeNode::close(RuntimeState* state) {
     }
     ExecNode::close(state);
     Expr::close(_expr_ctxs, state);
+<<<<<<< HEAD
     _dict_optimize_parser.close(state);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
@@ -164,7 +219,11 @@ pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBu
     OpFactories operators = _children[0]->decompose_to_pipeline(context);
     operators.emplace_back(std::make_shared<DictDecodeOperatorFactory>(
             context->next_operator_id(), id(), std::move(_encode_column_cids), std::move(_decode_column_cids),
+<<<<<<< HEAD
             std::move(_expr_ctxs), std::move(_string_functions)));
+=======
+            std::move(_decode_column_types), std::move(_expr_ctxs), std::move(_string_functions)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.

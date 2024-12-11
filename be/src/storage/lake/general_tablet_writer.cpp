@@ -19,6 +19,7 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "fs/fs_util.h"
+<<<<<<< HEAD
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/vacuum.h"
@@ -29,6 +30,23 @@ namespace starrocks::lake {
 HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
                                                              int64_t txn_id)
         : TabletWriter(tablet, std::move(schema), txn_id) {}
+=======
+#include "fs/key_cache.h"
+#include "runtime/current_thread.h"
+#include "serde/column_array_serde.h"
+#include "storage/lake/filenames.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/vacuum.h"
+#include "storage/rowset/segment_writer.h"
+#include "util/threadpool.h"
+
+namespace starrocks::lake {
+
+HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                                             std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                                             bool is_compaction, ThreadPool* flush_pool)
+        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 HorizontalGeneralTabletWriter::~HorizontalGeneralTabletWriter() = default;
 
@@ -38,10 +56,17 @@ Status HorizontalGeneralTabletWriter::open() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data) {
     if (_seg_writer == nullptr || _seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
         _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/) {
         RETURN_IF_ERROR(flush_segment_writer());
+=======
+Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data, SegmentPB* segment) {
+    if (_seg_writer == nullptr || _seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
+        _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/) {
+        RETURN_IF_ERROR(flush_segment_writer(segment));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         RETURN_IF_ERROR(reset_segment_writer());
     }
     RETURN_IF_ERROR(_seg_writer->append_chunk(data));
@@ -49,12 +74,21 @@ Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status HorizontalGeneralTabletWriter::flush() {
     return flush_segment_writer();
 }
 
 Status HorizontalGeneralTabletWriter::finish() {
     RETURN_IF_ERROR(flush_segment_writer());
+=======
+Status HorizontalGeneralTabletWriter::flush(SegmentPB* segment) {
+    return flush_segment_writer(segment);
+}
+
+Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
+    RETURN_IF_ERROR(flush_segment_writer(segment));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _finished = true;
     return Status::OK();
 }
@@ -64,7 +98,17 @@ void HorizontalGeneralTabletWriter::close() {
         std::vector<std::string> full_paths_to_delete;
         full_paths_to_delete.reserve(_files.size());
         for (const auto& f : _files) {
+<<<<<<< HEAD
             full_paths_to_delete.emplace_back(_tablet.segment_location(f.path));
+=======
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->segment_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->segment_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         delete_files_async(std::move(full_paths_to_delete));
     }
@@ -74,15 +118,37 @@ void HorizontalGeneralTabletWriter::close() {
 Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     DCHECK(_schema != nullptr);
     auto name = gen_segment_filename(_txn_id);
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);
+=======
+    SegmentWriterOptions opts;
+    opts.is_compaction = _is_compaction;
+    WritableFileOptions wopts;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        opts.encryption_meta = std::move(pair.encryption_meta);
+    }
+    std::unique_ptr<WritableFile> of;
+    if (_location_provider && _fs) {
+        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, _location_provider->segment_location(_tablet_id, name)));
+    } else {
+        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+    }
+    auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status HorizontalGeneralTabletWriter::flush_segment_writer() {
+=======
+Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_seg_writer != nullptr) {
         uint64_t segment_size = 0;
         uint64_t index_size = 0;
@@ -90,22 +156,58 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer() {
         RETURN_IF_ERROR(_seg_writer->finalize(&segment_size, &index_size, &footer_position));
         const std::string& segment_path = _seg_writer->segment_path();
         std::string segment_name = std::string(basename(segment_path));
+<<<<<<< HEAD
         _files.emplace_back(FileInfo{segment_name, segment_size});
         _data_size += segment_size;
+=======
+        _files.emplace_back(FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()});
+        _data_size += segment_size;
+        if (segment) {
+            segment->set_data_size(segment_size);
+            segment->set_index_size(index_size);
+            segment->set_path(segment_path);
+            segment->set_encryption_meta(_seg_writer->encryption_meta());
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _seg_writer.reset();
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 VerticalGeneralTabletWriter::VerticalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
                                                          int64_t txn_id, uint32_t max_rows_per_segment)
         : TabletWriter(tablet, std::move(schema), txn_id), _max_rows_per_segment(max_rows_per_segment) {}
 
 VerticalGeneralTabletWriter::~VerticalGeneralTabletWriter() = default;
+=======
+VerticalGeneralTabletWriter::VerticalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                                         std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                                         uint32_t max_rows_per_segment, bool is_compaction,
+                                                         ThreadPool* flush_pool)
+        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
+          _max_rows_per_segment(max_rows_per_segment) {}
+
+VerticalGeneralTabletWriter::~VerticalGeneralTabletWriter() {
+    auto st = wait_futures_finish();
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to finalize segment, tablet_id: " << _tablet_id << ", txn_id: " << _txn_id
+                     << ", status:" << st;
+    }
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 // To developers: Do NOT perform any I/O in this method, because this method may be invoked
 // in a bthread.
 Status VerticalGeneralTabletWriter::open() {
+<<<<<<< HEAD
+=======
+    if (_flush_pool != nullptr) {
+        // Use CONCURRENT mode to ensure segments can finalize in parallel
+        _segment_writer_finalize_token =
+                std::make_unique<ConcurrencyLimitedThreadPoolToken>(_flush_pool, _flush_pool->max_threads() * 2);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -122,7 +224,11 @@ Status VerticalGeneralTabletWriter::write_columns(const Chunk& data, const std::
     } else if (is_key) {
         // key columns
         if (_segment_writers[_current_writer_index]->num_rows_written() + chunk_num_rows >= _max_rows_per_segment) {
+<<<<<<< HEAD
             RETURN_IF_ERROR(flush_columns(&_segment_writers[_current_writer_index]));
+=======
+            RETURN_IF_ERROR(flush_columns(_segment_writers[_current_writer_index]));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             auto segment_writer = create_segment_writer(column_indexes, is_key);
             if (!segment_writer.ok()) return segment_writer.status();
             _segment_writers.emplace_back(std::move(segment_writer).value());
@@ -148,7 +254,11 @@ Status VerticalGeneralTabletWriter::write_columns(const Chunk& data, const std::
             size_t offset = 0;
             while (num_left_rows > 0) {
                 if (segment_num_rows == num_rows_written) {
+<<<<<<< HEAD
                     RETURN_IF_ERROR(flush_columns(&_segment_writers[_current_writer_index]));
+=======
+                    RETURN_IF_ERROR(flush_columns(_segment_writers[_current_writer_index]));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     ++_current_writer_index;
                     RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key));
                     num_rows_written = _segment_writers[_current_writer_index]->num_rows_written();
@@ -177,7 +287,11 @@ Status VerticalGeneralTabletWriter::write_columns(const Chunk& data, const std::
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status VerticalGeneralTabletWriter::flush() {
+=======
+Status VerticalGeneralTabletWriter::flush(SegmentPB* segment) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -187,23 +301,46 @@ Status VerticalGeneralTabletWriter::flush_columns() {
     }
 
     DCHECK(_segment_writers[_current_writer_index]);
+<<<<<<< HEAD
     RETURN_IF_ERROR(flush_columns(&_segment_writers[_current_writer_index]));
     _current_writer_index = 0;
     return Status::OK();
 }
 
 Status VerticalGeneralTabletWriter::finish() {
+=======
+    RETURN_IF_ERROR(flush_columns(_segment_writers[_current_writer_index]));
+    _current_writer_index = 0;
+
+    if (_segment_writer_finalize_token != nullptr) {
+        return wait_futures_finish();
+    }
+    return Status::OK();
+}
+
+Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
         RETURN_IF_ERROR(segment_writer->finalize_footer(&segment_size, &footer_position));
         const std::string& segment_path = segment_writer->segment_path();
         std::string segment_name = std::string(basename(segment_path));
+<<<<<<< HEAD
         _files.emplace_back(FileInfo{segment_name, segment_size});
+=======
+        _files.emplace_back(FileInfo{segment_name, segment_size, segment_writer->encryption_meta()});
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _data_size += segment_size;
         segment_writer.reset();
     }
     _segment_writers.clear();
+<<<<<<< HEAD
+=======
+    if (_segment_writer_finalize_token != nullptr) {
+        _segment_writer_finalize_token.reset();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _finished = true;
     return Status::OK();
 }
@@ -213,13 +350,24 @@ void VerticalGeneralTabletWriter::close() {
         std::vector<std::string> full_paths_to_delete;
         full_paths_to_delete.reserve(_files.size());
         for (const auto& f : _files) {
+<<<<<<< HEAD
             full_paths_to_delete.emplace_back(_tablet.segment_location(f.path));
+=======
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->segment_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->segment_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         delete_files_async(std::move(full_paths_to_delete));
     }
     _files.clear();
 }
 
+<<<<<<< HEAD
 StatusOr<std::unique_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     DCHECK(_schema != nullptr);
@@ -227,14 +375,99 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);
+=======
+StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(
+        const std::vector<uint32_t>& column_indexes, bool is_key) {
+    DCHECK(_schema != nullptr);
+    auto name = gen_segment_filename(_txn_id);
+    SegmentWriterOptions opts;
+    opts.is_compaction = _is_compaction;
+    WritableFileOptions wopts;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        opts.encryption_meta = std::move(pair.encryption_meta);
+    }
+    std::unique_ptr<WritableFile> of;
+    if (_location_provider && _fs) {
+        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, _location_provider->segment_location(_tablet_id, name)));
+    } else {
+        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+    }
+    auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(w->init(column_indexes, is_key));
     return w;
 }
 
+<<<<<<< HEAD
 Status VerticalGeneralTabletWriter::flush_columns(std::unique_ptr<SegmentWriter>* segment_writer) {
     uint64_t index_size = 0;
     RETURN_IF_ERROR((*segment_writer)->finalize_columns(&index_size));
     return Status::OK();
 }
 
+=======
+Status VerticalGeneralTabletWriter::flush_columns(const std::shared_ptr<SegmentWriter>& segment_writer) {
+    if (_segment_writer_finalize_token != nullptr) {
+        auto status = check_futures();
+        if (!status.ok()) {
+            return status;
+        }
+        auto mem_tracker = tls_thread_status.mem_tracker();
+        auto task = std::make_shared<std::packaged_task<Status()>>([segment_writer, mem_tracker]() {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+            uint64_t index_size = 0;
+            return segment_writer->finalize_columns(&index_size);
+        });
+        auto packaged_func = [task]() { (*task)(); };
+        auto timeout_deadline =
+                std::chrono::system_clock::now() + std::chrono::milliseconds(kDefaultTimeoutForAsyncWriteSegment);
+        auto st = _segment_writer_finalize_token->submit_func(std::move(packaged_func), timeout_deadline);
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit segment writer finalizing task to thread pool, " << st;
+            return st;
+        }
+        _futures.push_back(task->get_future());
+    } else {
+        uint64_t index_size = 0;
+        RETURN_IF_ERROR(segment_writer->finalize_columns(&index_size));
+    }
+    return Status::OK();
+}
+
+template <typename R>
+bool is_ready(std::future<R> const& f) {
+    return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+}
+
+Status VerticalGeneralTabletWriter::check_futures() {
+    for (auto it = _futures.begin(); it != _futures.end();) {
+        if (is_ready(*it)) {
+            auto st = it->get();
+            if (!st.ok()) {
+                LOG(WARNING) << "Segment flushing task resulted in error: " << st;
+                return st;
+            }
+            it = _futures.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return Status::OK();
+}
+
+Status VerticalGeneralTabletWriter::wait_futures_finish() {
+    Status ret = Status::OK();
+    for (auto& future : _futures) {
+        if (auto st = future.get(); !st.ok()) {
+            VLOG(3) << "Fail to finalize segment, " << st;
+            ret.update(st);
+        }
+    }
+    _futures.clear();
+    return ret;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::lake

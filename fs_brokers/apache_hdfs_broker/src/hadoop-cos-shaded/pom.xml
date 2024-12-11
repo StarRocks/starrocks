@@ -43,7 +43,11 @@ under the License.
         <dependency>
             <groupId>com.qcloud.cos</groupId>
             <artifactId>hadoop-cos</artifactId>
+<<<<<<< HEAD
             <version>3.3.0-8.3.7</version>
+=======
+            <version>3.3.3-8.3.10</version>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud/cos_api-bundle -->

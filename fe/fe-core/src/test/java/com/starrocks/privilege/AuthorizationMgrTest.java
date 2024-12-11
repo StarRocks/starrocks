@@ -16,6 +16,7 @@
 package com.starrocks.privilege;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
@@ -34,6 +35,25 @@ import com.starrocks.persist.UserPrivilegeCollectionInfoDeprecated;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+=======
+import com.google.gson.stream.JsonReader;
+import com.starrocks.analysis.TableName;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.RolePrivilegeCollectionInfo;
+import com.starrocks.persist.UserPrivilegeCollectionInfo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
@@ -42,6 +62,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -50,6 +71,18 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
+=======
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RevokePrivilegeStmt;
+import com.starrocks.sql.ast.RevokeRoleStmt;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -57,15 +90,23 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 import mockit.Expectations;
 import mockit.Mocked;
+=======
+import mockit.Mock;
+import mockit.MockUp;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -76,9 +117,15 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+=======
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class AuthorizationMgrTest {
     private ConnectContext ctx;
@@ -106,6 +153,12 @@ public class AuthorizationMgrTest {
         metadataMgr.init();
         globalStateMgr.setMetadataMgr(metadataMgr);
 
+<<<<<<< HEAD
+=======
+        globalStateMgr.setAuthenticationMgr(new AuthenticationMgr());
+        globalStateMgr.setAuthorizationMgr(new AuthorizationMgr(globalStateMgr, new DefaultAuthorizationProvider()));
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
@@ -115,10 +168,16 @@ public class AuthorizationMgrTest {
     }
 
     private static void createMaterializedView(String sql, ConnectContext connectContext) throws Exception {
+<<<<<<< HEAD
         Config.enable_experimental_mv = true;
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+=======
+        CreateMaterializedViewStatement createMaterializedViewStatement =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @After
@@ -266,6 +325,7 @@ public class AuthorizationMgrTest {
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME));
     }
 
+<<<<<<< HEAD
     void saveRBACPrivilege(GlobalStateMgr globalStateMgr, DataOutputStream dataOutputStream) throws IOException {
         AuthenticationMgr authenticationMgr = globalStateMgr.getAuthenticationMgr();
         AuthorizationMgr authorizationMgr = globalStateMgr.getAuthorizationMgr();
@@ -274,14 +334,31 @@ public class AuthorizationMgrTest {
     }
 
     void loadRBACPrivilege(GlobalStateMgr globalStateMgr, DataInputStream dataInputStream)
+=======
+    void saveRBACPrivilege(GlobalStateMgr globalStateMgr, ImageWriter imageWriter) throws IOException {
+        AuthenticationMgr authenticationMgr = globalStateMgr.getAuthenticationMgr();
+        AuthorizationMgr authorizationMgr = globalStateMgr.getAuthorizationMgr();
+        authenticationMgr.saveV2(imageWriter);
+        authorizationMgr.saveV2(imageWriter);
+    }
+
+    void loadRBACPrivilege(GlobalStateMgr globalStateMgr, JsonReader jsonReader)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throws IOException, SRMetaBlockEOFException, SRMetaBlockException, PrivilegeException {
         AuthenticationMgr authenticationMgr = globalStateMgr.getAuthenticationMgr();
         AuthorizationMgr authorizationMgr = globalStateMgr.getAuthorizationMgr();
 
+<<<<<<< HEAD
         SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(dataInputStream);
         authenticationMgr.loadV2(srMetaBlockReader);
         srMetaBlockReader.close();
         srMetaBlockReader = new SRMetaBlockReader(dataInputStream);
+=======
+        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReaderV2(jsonReader);
+        authenticationMgr.loadV2(srMetaBlockReader);
+        srMetaBlockReader.close();
+        srMetaBlockReader = new SRMetaBlockReaderV2(jsonReader);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         authorizationMgr.loadV2(srMetaBlockReader);
         srMetaBlockReader.close();
 
@@ -299,12 +376,19 @@ public class AuthorizationMgrTest {
     public void testPersist() throws Exception {
         GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
 
+<<<<<<< HEAD
         AuthenticationMgr authenticationMgr = masterGlobalStateMgr.getAuthenticationMgr();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         AuthorizationMgr authorizationMgr = masterGlobalStateMgr.getAuthorizationMgr();
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataOutputStream());
+=======
+        saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getImageWriter());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         String sql = "grant select on db.tbl1 to test_user";
@@ -316,13 +400,18 @@ public class AuthorizationMgrTest {
                 PrivilegeType.SELECT);
 
         UtFrameUtils.PseudoImage grantImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         saveRBACPrivilege(masterGlobalStateMgr, grantImage.getDataOutputStream());
+=======
+        saveRBACPrivilege(masterGlobalStateMgr, grantImage.getImageWriter());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         sql = "revoke select on db.tbl1 from test_user";
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationMgr.revoke(revokeStmt);
         setCurrentUserAndRoles(ctx, testUser);
+<<<<<<< HEAD
         ;
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
@@ -331,6 +420,15 @@ public class AuthorizationMgrTest {
 
         // start to replay
         loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataInputStream());
+=======
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        UtFrameUtils.PseudoImage revokeImage = new UtFrameUtils.PseudoImage();
+        saveRBACPrivilege(masterGlobalStateMgr, revokeImage.getImageWriter());
+
+        // start to replay
+        loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         AuthorizationMgr followerManager = masterGlobalStateMgr.getAuthorizationMgr();
 
         UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo)
@@ -348,18 +446,123 @@ public class AuthorizationMgrTest {
                 ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         // check image
+<<<<<<< HEAD
         loadRBACPrivilege(masterGlobalStateMgr, grantImage.getDataInputStream());
+=======
+        loadRBACPrivilege(masterGlobalStateMgr, grantImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         authorizationMgr.invalidateUserInCache(ctx.getCurrentUserIdentity());
         Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
                 PrivilegeType.SELECT);
 
+<<<<<<< HEAD
         loadRBACPrivilege(masterGlobalStateMgr, revokeImage.getDataInputStream());
+=======
+        loadRBACPrivilege(masterGlobalStateMgr, revokeImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         authorizationMgr.invalidateUserInCache(ctx.getCurrentUserIdentity());
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(ctx.getCurrentUserIdentity(),
                 ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testBuiltinRolePersist() throws Exception {
+        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        AuthorizationMgr authorizationMgr = masterGlobalStateMgr.getAuthorizationMgr();
+        String sql = "create role r1";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+
+        sql = "grant r1 to test_user";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getImageWriter());
+
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        sql = "grant root to role r1";
+        GrantRoleStmt grantStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationMgr.grantRole(grantStmt);
+
+        setCurrentUserAndRoles(ctx, testUser);
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
+                PrivilegeType.SELECT);
+
+        sql = "revoke root from role r1";
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        RevokeRoleStmt revokeStmt = (RevokeRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationMgr.revokeRole(revokeStmt);
+
+        setCurrentUserAndRoles(ctx, testUser);
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+
+        // start to replay
+        loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getJsonReader());
+        AuthorizationMgr followerManager = masterGlobalStateMgr.getAuthorizationMgr();
+
+        RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2);
+        followerManager.replayUpdateRolePrivilegeCollection(info);
+        authorizationMgr.invalidateRolesInCacheRoleUnlocked(PrivilegeBuiltinConstants.ROOT_ROLE_ID);
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
+                PrivilegeType.SELECT);
+
+        info = (RolePrivilegeCollectionInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2);
+        followerManager.replayUpdateRolePrivilegeCollection(info);
+        authorizationMgr.invalidateRolesInCacheRoleUnlocked(PrivilegeBuiltinConstants.ROOT_ROLE_ID);
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+
+        sql = "drop role r1";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+    }
+
+    @Test
+    public void testWontSavePrivCollForBuiltInRole() throws Exception {
+        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        AuthorizationMgr authorizationMgr = masterGlobalStateMgr.getAuthorizationMgr();
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        authorizationMgr.saveV2(emptyImage.getImageWriter());
+
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(emptyImage.getJsonReader());
+        // read the whole first
+        reader.readJson(AuthorizationMgr.class);
+        // read the number of user
+        int numUser = reader.readInt();
+        // there should be only 2 users: root and test_user
+        Assert.assertEquals(2, numUser);
+
+        // read users and ignore them
+        for (int i = 0; i != numUser; ++i) {
+            // 2 json for each user(kv)
+            reader.readJson(UserIdentity.class);
+            reader.readJson(UserPrivilegeCollectionV2.class);
+        }
+
+        // read the number of roles
+        int numRole = reader.readInt();
+        for (int i = 0; i != numRole; ++i) {
+            // 2 json for each role(kv)
+            Long roleId = reader.readLong();
+            RolePrivilegeCollectionV2 collection = reader.readJson(RolePrivilegeCollectionV2.class);
+            if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                // built-in role's priv collection should not be saved
+                Assert.assertTrue(collection.typeToPrivilegeEntryList.isEmpty());
+            }
+        }
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testRole() throws Exception {
         String sql = "create role test_role";
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
@@ -407,7 +610,11 @@ public class AuthorizationMgrTest {
 
     // used in testPersistRole
     private void assertTableSelectOnTest(AuthorizationMgr manager, boolean canSelectTbl0, boolean canSelectTbl1)
+<<<<<<< HEAD
             throws PrivilegeException {
+=======
+            throws PrivilegeException, AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setCurrentUserAndRoles(ctx, testUser);
         ;
         if (canSelectTbl0) {
@@ -435,8 +642,13 @@ public class AuthorizationMgrTest {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
 
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataOutputStream());
         saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataOutputStream());
+=======
+        saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getImageWriter());
+        saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getImageWriter());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertFalse(masterManager.checkRoleExists("test_persist_role0"));
         Assert.assertFalse(masterManager.checkRoleExists("test_persist_role1"));
 
@@ -448,7 +660,11 @@ public class AuthorizationMgrTest {
             Assert.assertTrue(masterManager.checkRoleExists("test_persist_role" + i));
         }
         UtFrameUtils.PseudoImage createRoleImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         saveRBACPrivilege(masterGlobalStateMgr, createRoleImage.getDataOutputStream());
+=======
+        saveRBACPrivilege(masterGlobalStateMgr, createRoleImage.getImageWriter());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // 2. grant select on db.tbl<i> to role
         for (int i = 0; i != 2; ++i) {
@@ -456,7 +672,11 @@ public class AuthorizationMgrTest {
                     "grant select on db.tbl" + i + " to role test_persist_role" + i, ctx), ctx);
         }
         UtFrameUtils.PseudoImage grantPrivsToRoleImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         saveRBACPrivilege(masterGlobalStateMgr, grantPrivsToRoleImage.getDataOutputStream());
+=======
+        saveRBACPrivilege(masterGlobalStateMgr, grantPrivsToRoleImage.getImageWriter());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertTableSelectOnTest(masterManager, false, false);
 
         // 3. grant test_persist_role0 to test_user
@@ -464,28 +684,44 @@ public class AuthorizationMgrTest {
                 "grant test_persist_role0 to test_user", ctx), ctx);
         assertTableSelectOnTest(masterManager, true, false);
         UtFrameUtils.PseudoImage grantRoleToUserImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         saveRBACPrivilege(masterGlobalStateMgr, grantRoleToUserImage.getDataOutputStream());
+=======
+        saveRBACPrivilege(masterGlobalStateMgr, grantRoleToUserImage.getImageWriter());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // 4. grant test_persist_role1 to role test_persist_role0
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant test_persist_role1 to role test_persist_role0", ctx), ctx);
         assertTableSelectOnTest(masterManager, true, true);
         UtFrameUtils.PseudoImage grantRoleToRoleImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         saveRBACPrivilege(masterGlobalStateMgr, grantRoleToRoleImage.getDataOutputStream());
+=======
+        saveRBACPrivilege(masterGlobalStateMgr, grantRoleToRoleImage.getImageWriter());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // 5. revoke test_persist_role1 from role test_persist_role0
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke test_persist_role1 from role test_persist_role0", ctx), ctx);
         assertTableSelectOnTest(masterManager, true, false);
         UtFrameUtils.PseudoImage revokeRoleFromRoleImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         saveRBACPrivilege(masterGlobalStateMgr, revokeRoleFromRoleImage.getDataOutputStream());
+=======
+        saveRBACPrivilege(masterGlobalStateMgr, revokeRoleFromRoleImage.getImageWriter());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // 6. revoke test_persist_role0 from test_user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke test_persist_role0 from test_user", ctx), ctx);
         assertTableSelectOnTest(masterManager, false, false);
         UtFrameUtils.PseudoImage revokeRoleFromUserImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         saveRBACPrivilege(masterGlobalStateMgr, revokeRoleFromUserImage.getDataOutputStream());
+=======
+        saveRBACPrivilege(masterGlobalStateMgr, revokeRoleFromUserImage.getImageWriter());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // 7. drop 2 roles
         for (int i = 0; i != 2; ++i) {
@@ -494,13 +730,22 @@ public class AuthorizationMgrTest {
             Assert.assertFalse(masterManager.checkRoleExists("test_persist_role" + i));
         }
         UtFrameUtils.PseudoImage dropRoleImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         saveRBACPrivilege(masterGlobalStateMgr, dropRoleImage.getDataOutputStream());
+=======
+        saveRBACPrivilege(masterGlobalStateMgr, dropRoleImage.getImageWriter());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         //
         // start to replay
         //
+<<<<<<< HEAD
         loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataInputStream());
         loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataInputStream());
+=======
+        loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getJsonReader());
+        loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         AuthorizationMgr followerManager = masterGlobalStateMgr.getAuthorizationMgr();
         Assert.assertFalse(followerManager.checkRoleExists("test_persist_role0"));
         Assert.assertFalse(followerManager.checkRoleExists("test_persist_role1"));
@@ -565,39 +810,67 @@ public class AuthorizationMgrTest {
         // check image
         //
         // 1. check image after create role
+<<<<<<< HEAD
         loadRBACPrivilege(masterGlobalStateMgr, createRoleImage.getDataInputStream());
+=======
+        loadRBACPrivilege(masterGlobalStateMgr, createRoleImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         AuthorizationMgr imageManager = masterGlobalStateMgr.getAuthorizationMgr();
 
         Assert.assertTrue(imageManager.checkRoleExists("test_persist_role0"));
         Assert.assertTrue(imageManager.checkRoleExists("test_persist_role1"));
 
         // 2. check image after grant select on db.tbl<i> to role
+<<<<<<< HEAD
         loadRBACPrivilege(masterGlobalStateMgr, grantPrivsToRoleImage.getDataInputStream());
+=======
+        loadRBACPrivilege(masterGlobalStateMgr, grantPrivsToRoleImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertTableSelectOnTest(imageManager, false, false);
 
         // 3. check image after grant test_persist_role0 to test_user
         loadRBACPrivilege(masterGlobalStateMgr,
+<<<<<<< HEAD
                 grantRoleToUserImage.getDataInputStream());
+=======
+                grantRoleToUserImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertTableSelectOnTest(imageManager, true, false);
 
         // 4. check image after grant test_persist_role1 to role test_persist_role0
         loadRBACPrivilege(masterGlobalStateMgr,
+<<<<<<< HEAD
                 grantRoleToRoleImage.getDataInputStream());
+=======
+                grantRoleToRoleImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertTableSelectOnTest(imageManager, true, true);
 
         // 5. check image after revoke test_persist_role1 from role test_persist_role0
         loadRBACPrivilege(masterGlobalStateMgr,
+<<<<<<< HEAD
                 revokeRoleFromRoleImage.getDataInputStream());
+=======
+                revokeRoleFromRoleImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertTableSelectOnTest(imageManager, true, false);
 
         // 6. check image after revoke test_persist_role0 from test_user
         loadRBACPrivilege(masterGlobalStateMgr,
+<<<<<<< HEAD
                 revokeRoleFromUserImage.getDataInputStream());
+=======
+                revokeRoleFromUserImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertTableSelectOnTest(imageManager, false, false);
 
         // 7. check image after drop 2 roles
         loadRBACPrivilege(masterGlobalStateMgr,
+<<<<<<< HEAD
                 dropRoleImage.getDataInputStream());
+=======
+                dropRoleImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         imageManager = masterGlobalStateMgr.getAuthorizationMgr();
         Assert.assertFalse(imageManager.checkRoleExists("test_persist_role0"));
         Assert.assertFalse(imageManager.checkRoleExists("test_persist_role1"));
@@ -638,7 +911,11 @@ public class AuthorizationMgrTest {
         }
 
         // on all databases
+<<<<<<< HEAD
         Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkDbAction(
+=======
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -648,7 +925,11 @@ public class AuthorizationMgrTest {
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
+<<<<<<< HEAD
         new NativeAccessControl().checkDbAction(
+=======
+        new NativeAccessController().checkDbAction(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME, PrivilegeType.CREATE_TABLE);
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -658,7 +939,11 @@ public class AuthorizationMgrTest {
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
+<<<<<<< HEAD
         Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkDbAction(
+=======
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         // on all users
@@ -737,25 +1022,39 @@ public class AuthorizationMgrTest {
         // show tables in db:
         // root can see two tables + 1 views
         ShowTableStmt showTableStmt = new ShowTableStmt("db", false, null);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, showTableStmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(showTableStmt, ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Set<String> allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
         Assert.assertEquals(new HashSet<>(Arrays.asList("tbl0", "tbl1", "tbl2", "tbl3", "mv1", "view1")), allTables);
 
         // user with table priv can only see tbl1
         setCurrentUserAndRoles(ctx, userWithTablePriv);
+<<<<<<< HEAD
         executor = new ShowExecutor(ctx, showTableStmt);
         resultSet = executor.execute();
         allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
         Assert.assertEquals(new HashSet<>(Lists.newArrayList("tbl1")), allTables);
+=======
+        resultSet = ShowExecutor.execute(showTableStmt, ctx);
+        allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
+        Assert.assertEquals(new HashSet<>(List.of("tbl1")), allTables);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // show databases
         ShowDbStmt showDbStmt = new ShowDbStmt(null);
 
         // root can see db && db1
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+<<<<<<< HEAD
         executor = new ShowExecutor(ctx, showDbStmt);
         resultSet = executor.execute();
+=======
+        resultSet = ShowExecutor.execute(showDbStmt, ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Set<String> set = new HashSet<>();
         while (resultSet.next()) {
             set.add(resultSet.getString(0));
@@ -765,8 +1064,12 @@ public class AuthorizationMgrTest {
 
         // user with table priv can only see db
         setCurrentUserAndRoles(ctx, userWithTablePriv);
+<<<<<<< HEAD
         executor = new ShowExecutor(ctx, showDbStmt);
         resultSet = executor.execute();
+=======
+        resultSet = ShowExecutor.execute(showDbStmt, ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         set.clear();
         while (resultSet.next()) {
             set.add(resultSet.getString(0));
@@ -776,8 +1079,12 @@ public class AuthorizationMgrTest {
 
         // user with table priv can only see db
         setCurrentUserAndRoles(ctx, userWithDbPriv);
+<<<<<<< HEAD
         executor = new ShowExecutor(ctx, showDbStmt);
         resultSet = executor.execute();
+=======
+        resultSet = ShowExecutor.execute(showDbStmt, ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         set.clear();
         while (resultSet.next()) {
             set.add(resultSet.getString(0));
@@ -786,6 +1093,7 @@ public class AuthorizationMgrTest {
         Assert.assertFalse(set.contains("db1"));
     }
 
+<<<<<<< HEAD
     private void assertDbActionsOnTest(boolean canCreateTable, boolean canDrop, UserIdentity testUser) {
         setCurrentUserAndRoles(ctx, testUser);
         ;
@@ -794,14 +1102,31 @@ public class AuthorizationMgrTest {
                     ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, "db", PrivilegeType.CREATE_TABLE);
         } else {
             Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkDbAction(
+=======
+    private void assertDbActionsOnTest(boolean canCreateTable, boolean canDrop, UserIdentity testUser)
+            throws AccessDeniedException {
+        setCurrentUserAndRoles(ctx, testUser);
+        if (canCreateTable) {
+            new NativeAccessController().checkDbAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, "db", PrivilegeType.CREATE_TABLE);
+        } else {
+            Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, "db", PrivilegeType.CREATE_TABLE));
         }
 
         if (canDrop) {
+<<<<<<< HEAD
             new NativeAccessControl().checkDbAction(
                     ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, "db", PrivilegeType.DROP);
         } else {
             Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkDbAction(
+=======
+            new NativeAccessController().checkDbAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, "db", PrivilegeType.DROP);
+        } else {
+            Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, "db", PrivilegeType.DROP));
         }
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -941,17 +1266,33 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to role role2", ctx), ctx);
 
+<<<<<<< HEAD
+=======
+        Set<String> allPredecessorRoleNames =
+                manager.getAllPredecessorRoleNames(manager.getRoleIdByNameNoLock("role1"));
+        System.out.println(allPredecessorRoleNames);
+        Assert.assertTrue(allPredecessorRoleNames.contains("role0"));
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // role inheritance depth
         Assert.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[2]));
         Assert.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
         Assert.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
         // role predecessor
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(roleIds[0]));
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
                 manager.getAllPredecessorsUnlocked(roleIds[1]));
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2])),
                 manager.getAllPredecessorsUnlocked(roleIds[2]));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(roleIds[0]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
+                manager.getAllPredecessorRoleIdsUnlocked(roleIds[1]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2])),
+                manager.getAllPredecessorRoleIdsUnlocked(roleIds[2]));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // role descendants
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2])),
                 manager.getAllDescendantsUnlocked(roleIds[0]));
@@ -975,6 +1316,7 @@ public class AuthorizationMgrTest {
         Assert.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[3]));
         // role predecessor
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(roleIds[0]));
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorsUnlocked(roleIds[1]));
@@ -982,6 +1324,15 @@ public class AuthorizationMgrTest {
                 manager.getAllPredecessorsUnlocked(roleIds[2]));
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[3])),
                 manager.getAllPredecessorsUnlocked(roleIds[3]));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(roleIds[0]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
+                manager.getAllPredecessorRoleIdsUnlocked(roleIds[1]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3])),
+                manager.getAllPredecessorRoleIdsUnlocked(roleIds[2]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[3])),
+                manager.getAllPredecessorRoleIdsUnlocked(roleIds[3]));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // role descendants
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3])),
                 manager.getAllDescendantsUnlocked(roleIds[0]));
@@ -1021,11 +1372,19 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to user_test_role_inheritance", ctx), ctx);
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(collection));
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role0 to user_test_role_inheritance", ctx), ctx);
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorsUnlocked(collection));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(collection));
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant role0 to user_test_role_inheritance", ctx), ctx);
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
+                manager.getAllPredecessorRoleIdsUnlocked(collection));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // exception:
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1034,14 +1393,22 @@ public class AuthorizationMgrTest {
             Assert.assertTrue(e.getMessage().contains("'user_test_role_inheritance'@'%' has total 5 predecessor roles > 3"));
         }
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(collection));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(collection));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // normal grant
         Config.privilege_max_total_roles_per_user = oldValue;
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role4 to user_test_role_inheritance", ctx), ctx);
         Assert.assertEquals(new HashSet<>(Arrays.asList(
                         roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(collection));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(collection));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 
         // grant role with circle: bad case
@@ -1054,8 +1421,13 @@ public class AuthorizationMgrTest {
         //     \      |
         //      \-> role3
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(roleIds[4]));
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), manager.getAllPredecessorsUnlocked(roleIds[0]));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(roleIds[4]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), manager.getAllPredecessorRoleIdsUnlocked(roleIds[0]));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                     "grant role4 to role role0", ctx), ctx);
@@ -1064,8 +1436,13 @@ public class AuthorizationMgrTest {
             Assert.assertTrue(e.getMessage().contains("is already a predecessor role of role4"));
         }
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(roleIds[4]));
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), manager.getAllPredecessorsUnlocked(roleIds[0]));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(roleIds[4]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), manager.getAllPredecessorRoleIdsUnlocked(roleIds[0]));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void assertTableSelectOnTest(UserIdentity userIdentity, boolean... canSelectOnTbls) throws Exception {
@@ -1078,7 +1455,11 @@ public class AuthorizationMgrTest {
                         "tbl" + i, PrivilegeType.SELECT);
             } else {
                 int finalI = i;
+<<<<<<< HEAD
                 Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl()
+=======
+                Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         .checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME,
                                 "tbl" + finalI), PrivilegeType.SELECT));
             }
@@ -1092,11 +1473,19 @@ public class AuthorizationMgrTest {
         ctx.setCurrentUserIdentity(userIdentity);
         for (int i = 0; i != 4; ++i) {
             if (args[i]) {
+<<<<<<< HEAD
                 new NativeAccessControl().checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                         new TableName(DB_NAME, "tbl" + i), PrivilegeType.SELECT);
             } else {
                 int finalI = i;
                 Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl()
+=======
+                new NativeAccessController().checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                        new TableName(DB_NAME, "tbl" + i), PrivilegeType.SELECT);
+            } else {
+                int finalI = i;
+                Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         .checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME,
                                 "tbl" + finalI), PrivilegeType.SELECT));
             }
@@ -1134,14 +1523,22 @@ public class AuthorizationMgrTest {
                 "grant test_drop_role_3 to user_test_drop_role_inheritance", ctx), ctx);
 
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(collection));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(collection));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertTableSelectOnTest(user, true, true, false, true);
 
         // role0 -> role1[user] -> role2
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_3;", ctx), ctx);
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(collection));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(collection));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
         Assert.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
         assertTableSelectOnTest(user, true, true, false, false);
@@ -1150,7 +1547,11 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_2;", ctx), ctx);
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(collection));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(collection));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
         Assert.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
         assertTableSelectOnTest(user, true, true, false, false);
@@ -1159,7 +1560,11 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_0;", ctx), ctx);
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(collection));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(collection));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
         assertTableSelectOnTest(user, false, true, false, false);
 
@@ -1175,7 +1580,11 @@ public class AuthorizationMgrTest {
                 manager.roleIdToPrivilegeCollection.get(roleIds[1]).getSubRoleIds().size());
 
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1])),
+<<<<<<< HEAD
                 manager.getAllPredecessorsUnlocked(collection));
+=======
+                manager.getAllPredecessorRoleIdsUnlocked(collection));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertTableSelectOnTest(user, false, true, false, false);
     }
 
@@ -1229,14 +1638,22 @@ public class AuthorizationMgrTest {
         try {
             SetRoleExecutor.execute(stmt, ctx);
             Assert.fail();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.assertTrue(e.getMessage().contains("Cannot find role bad_role"));
         }
         try {
             SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                     "set role 'test_set_role_1', 'test_set_role_3'", ctx), ctx);
             Assert.fail();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.assertTrue(e.getMessage().contains("Role test_set_role_3 is not granted"));
         }
 
@@ -1244,7 +1661,11 @@ public class AuthorizationMgrTest {
             SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                     "set role all except 'test_set_role_1', 'test_set_role_3'", ctx), ctx);
             Assert.fail();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.assertTrue(e.getMessage().contains("Role test_set_role_3 is not granted"));
         }
 
@@ -1298,6 +1719,7 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT root TO user_test_builtin_role"), ctx), ctx);
         setCurrentUserAndRoles(ctx, user);
+<<<<<<< HEAD
         new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT);
         new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE);
         new NativeAccessControl().checkDbAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME,
@@ -1305,6 +1727,16 @@ public class AuthorizationMgrTest {
         Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
                 PrivilegeType.DROP);
         new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+=======
+        new NativeAccessController().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                PrivilegeType.GRANT);
+        new NativeAccessController().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE);
+        new NativeAccessController().checkDbAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME,
+                PrivilegeType.DROP);
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
+                PrivilegeType.DROP);
+        new NativeAccessController().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 new TableName(DB_NAME, "view1"), PrivilegeType.DROP);
 
         Authorizer.checkUserAction(ctx.getCurrentUserIdentity(),
@@ -1317,6 +1749,7 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT db_admin TO user_test_builtin_role"), ctx), ctx);
         setCurrentUserAndRoles(ctx, user);
+<<<<<<< HEAD
         Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkSystemAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT));
         Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkSystemAction(
@@ -1326,6 +1759,17 @@ public class AuthorizationMgrTest {
         Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                 DB_NAME, TABLE_NAME_1, PrivilegeType.DROP);
         new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+=======
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE));
+        new NativeAccessController().checkDbAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                null, DB_NAME, PrivilegeType.DROP);
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                DB_NAME, TABLE_NAME_1, PrivilegeType.DROP);
+        new NativeAccessController().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 new TableName(DB_NAME, "view1"), PrivilegeType.DROP);
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1335,6 +1779,7 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT cluster_admin TO user_test_builtin_role"), ctx), ctx);
         setCurrentUserAndRoles(ctx, user);
+<<<<<<< HEAD
         Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkSystemAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT));
         new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE);
@@ -1343,6 +1788,16 @@ public class AuthorizationMgrTest {
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
         Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkViewAction(
+=======
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT));
+        new NativeAccessController().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE);
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME, PrivilegeType.DROP));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkViewAction(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME, "view1"), PrivilegeType.DROP));
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1352,6 +1807,7 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT user_admin TO user_test_builtin_role"), ctx), ctx);
         setCurrentUserAndRoles(ctx, user);
+<<<<<<< HEAD
         new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT);
         Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkSystemAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE));
@@ -1360,6 +1816,17 @@ public class AuthorizationMgrTest {
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
         Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkViewAction(
+=======
+        new NativeAccessController().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                PrivilegeType.GRANT);
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME, PrivilegeType.DROP));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkViewAction(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME, "view1"), PrivilegeType.DROP));
         Authorizer.checkUserAction(ctx.getCurrentUserIdentity(),
                 ctx.getCurrentRoleIds(), UserIdentity.ROOT, PrivilegeType.IMPERSONATE);
@@ -1368,6 +1835,7 @@ public class AuthorizationMgrTest {
                 String.format("REVOKE user_admin FROM user_test_builtin_role"), ctx), ctx);
 
         // user root
+<<<<<<< HEAD
         new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT);
         new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE);
         new NativeAccessControl().checkDbAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
@@ -1375,6 +1843,16 @@ public class AuthorizationMgrTest {
         Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                 DB_NAME, TABLE_NAME_1, PrivilegeType.DROP);
         new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+=======
+        new NativeAccessController().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                PrivilegeType.GRANT);
+        new NativeAccessController().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE);
+        new NativeAccessController().checkDbAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                null, DB_NAME, PrivilegeType.DROP);
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                DB_NAME, TABLE_NAME_1, PrivilegeType.DROP);
+        new NativeAccessController().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 new TableName(DB_NAME, "view1"), PrivilegeType.DROP);
         Authorizer.checkAnyActionOnOrInDb(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME);
@@ -1455,18 +1933,31 @@ public class AuthorizationMgrTest {
                 "grant alter on all resources to resource_user with grant option", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("resource_user", "%");
         setCurrentUserAndRoles(ctx, user);
+<<<<<<< HEAD
         new NativeAccessControl().checkResourceAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "hive0",
                 PrivilegeType.DROP);
         new NativeAccessControl().checkResourceAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "hive0",
                 PrivilegeType.USAGE);
         new NativeAccessControl().checkResourceAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "hive0",
+=======
+        new NativeAccessController().checkResourceAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "hive0",
+                PrivilegeType.DROP);
+        new NativeAccessController().checkResourceAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "hive0",
+                PrivilegeType.USAGE);
+        new NativeAccessController().checkResourceAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "hive0",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 PrivilegeType.ALTER);
     }
 
     @Test
     public void testGrantOnCatalog() throws Exception {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+<<<<<<< HEAD
                 "create external catalog test_catalog properties (\"type\"=\"iceberg\")", ctx), ctx);
+=======
+                "create external catalog test_catalog properties (" +
+                        "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user test_catalog_user", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1479,6 +1970,7 @@ public class AuthorizationMgrTest {
                 "grant alter on all catalogs to test_catalog_user with grant option", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("test_catalog_user", "%");
         setCurrentUserAndRoles(ctx, user);
+<<<<<<< HEAD
         new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "test_catalog",
                 PrivilegeType.DROP);
         new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
@@ -1487,6 +1979,16 @@ public class AuthorizationMgrTest {
         new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "test_catalog",
                 PrivilegeType.USAGE);
         new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "test_catalog",
+=======
+        new NativeAccessController().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "test_catalog",
+                PrivilegeType.DROP);
+        new NativeAccessController().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                PrivilegeType.CREATE_DATABASE);
+        new NativeAccessController().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "test_catalog",
+                PrivilegeType.USAGE);
+        new NativeAccessController().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "test_catalog",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 PrivilegeType.ALTER);
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1495,7 +1997,11 @@ public class AuthorizationMgrTest {
                 "grant create database on catalog " + InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME +
                         " to test_catalog_user2 with grant option", ctx), ctx);
         setCurrentUserAndRoles(ctx, UserIdentity.createAnalyzedUserIdentWithIp("test_catalog_user2", "%"));
+<<<<<<< HEAD
         new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+=======
+        new NativeAccessController().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                 PrivilegeType.CREATE_DATABASE);
     }
@@ -1512,11 +2018,19 @@ public class AuthorizationMgrTest {
                 "grant alter on all views in database db to view_user with grant option", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("view_user", "%");
         setCurrentUserAndRoles(ctx, user);
+<<<<<<< HEAD
         new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                 new TableName("db", "view1"), PrivilegeType.DROP);
         new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                 new TableName("db", "view1"), PrivilegeType.SELECT);
         new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+=======
+        new NativeAccessController().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName("db", "view1"), PrivilegeType.DROP);
+        new NativeAccessController().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName("db", "view1"), PrivilegeType.SELECT);
+        new NativeAccessController().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 new TableName("db", "view1"), PrivilegeType.ALTER);
     }
 
@@ -1528,11 +2042,19 @@ public class AuthorizationMgrTest {
                 "grant select on materialized view db3.mv1 to mv_user", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("mv_user", "%");
         setCurrentUserAndRoles(ctx, user);
+<<<<<<< HEAD
         new NativeAccessControl().checkMaterializedViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                 new TableName("db3", "mv1"), PrivilegeType.SELECT);
         new NativeAccessControl().checkAnyActionOnMaterializedView(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                 new TableName("db3", "mv1"));
         new NativeAccessControl().checkAnyActionOnAnyMaterializedView(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+=======
+        new NativeAccessController().checkMaterializedViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName("db3", "mv1"), PrivilegeType.SELECT);
+        new NativeAccessController().checkAnyActionOnMaterializedView(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName("db3", "mv1"));
+        new NativeAccessController().checkAnyActionOnAnyMaterializedView(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "db3");
     }
 
@@ -1559,6 +2081,21 @@ public class AuthorizationMgrTest {
 
     @Test
     public void testPartialRevoke() throws Exception {
+<<<<<<< HEAD
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new TableName("db", "tbl1")).get();
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new TableName("db", "tbl1")).get();
+            }
+        };
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String sql = "grant select on table db.tbl0 to test_user";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
 
@@ -1592,12 +2129,22 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
 
         setCurrentUserAndRoles(ctx, new UserIdentity("u1", "%"));
+<<<<<<< HEAD
         new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.OPERATE);
+=======
+        new NativeAccessController().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                PrivilegeType.OPERATE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         sql = "grant OPERATE ON SYSTEM TO USER u2";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
         setCurrentUserAndRoles(ctx, new UserIdentity("u2", "%"));
+<<<<<<< HEAD
         new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.OPERATE);
+=======
+        new NativeAccessController().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                PrivilegeType.OPERATE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -1614,7 +2161,11 @@ public class AuthorizationMgrTest {
                 .createStorageVolume("test", "S3", locations, storageParams, Optional.empty(), "");
         manager.grantStorageVolumeUsageToPublicRole(storageVolumeId);
         setCurrentUserAndRoles(ctx, new UserIdentity("u1", "%"));
+<<<<<<< HEAD
         new NativeAccessControl().checkStorageVolumeAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+=======
+        new NativeAccessController().checkStorageVolumeAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "test", PrivilegeType.USAGE);
     }
 
@@ -1632,16 +2183,24 @@ public class AuthorizationMgrTest {
         }
 
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         masterGlobalStateMgr.getAuthorizationMgr().saveV2(emptyImage.getDataOutputStream());
 
         AuthorizationMgr authorizationMgr = new AuthorizationMgr();
         SRMetaBlockReader reader = new SRMetaBlockReader(emptyImage.getDataInputStream());
+=======
+        masterGlobalStateMgr.getAuthorizationMgr().saveV2(emptyImage.getImageWriter());
+
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr();
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(emptyImage.getJsonReader());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         authorizationMgr.loadV2(reader);
 
         Assert.assertNotNull(authorizationMgr.getRolePrivilegeCollection("test_persist_role0"));
     }
 
     @Test
+<<<<<<< HEAD
     public void testUpgradePrivilege(@Mocked HiveMetastore hiveMetastore) throws Exception {
         ConnectContext connectCtx = new ConnectContext();
         String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", " +
@@ -1739,6 +2298,8 @@ public class AuthorizationMgrTest {
     }
 
     @Test
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testSysTypeError() throws Exception {
         GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
         AuthorizationMgr masterManager = masterGlobalStateMgr.getAuthorizationMgr();
@@ -1753,6 +2314,7 @@ public class AuthorizationMgrTest {
         masterManager.grant(grantStmt);
 
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataOutputStream());
         loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataInputStream());
 
@@ -1790,5 +2352,70 @@ public class AuthorizationMgrTest {
         Assert.assertEquals(roleIds, userPrivilegeCollectionInfo.getPrivilegeCollection().getDefaultRoleIds());
         Assert.assertTrue(userPrivilegeCollectionInfo.getPrivilegeCollection()
                 .check(ObjectType.SYSTEM, PrivilegeType.OPERATE, null));
+=======
+        saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getImageWriter());
+        loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getJsonReader());
+
+        sql = "show grants for user_for_system";
+        ShowGrantsStmt showStreamLoadStmt = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ShowResultSet resultSet = ShowExecutor.execute(showStreamLoadStmt, ctx);
+    }
+
+    @Test
+    public void testDataDesc() throws Exception {
+        DataDescription desc = new DataDescription("tbl1", null, Lists.newArrayList("abc.txt"),
+                Lists.newArrayList("col1", "col1"), null, null, null, false, null);
+        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
+
+        try {
+            desc.analyze("db");
+            Assert.fail();
+        } catch (ErrorReportException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied"));
+        }
+
+        String sql = "grant insert on table db.tbl1 to test_user";
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        desc = new DataDescription("tbl1", null, "tbl2", false, null, null, null);
+        try {
+            desc.analyze("db");
+            Assert.fail();
+        } catch (ErrorReportException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied"));
+        }
+    }
+
+    @Test
+    public void testShowGrants() throws Exception {
+        String sql = "create role r_show_grants";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
+        ShowGrantsStmt showGrantsStmt = new ShowGrantsStmt("r_show_grants");
+
+        try {
+            Authorizer.check(showGrantsStmt, ctx);
+            Assert.fail();
+        } catch (ErrorReportException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied"));
+        }
+    }
+
+    @Test(expected = AccessDeniedException.class)
+    public void testSystemPrivExec() throws AccessDeniedException {
+        new MockUp<AuthorizationMgr>() {
+            @Mock
+            protected PrivilegeCollectionV2 mergePrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
+                    throws PrivilegeException {
+                throw new PrivilegeException("");
+            }
+        };
+
+        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
+        setCurrentUserAndRoles(ctx, testUser);
+        Authorizer.checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

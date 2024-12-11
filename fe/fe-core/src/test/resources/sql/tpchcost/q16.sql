@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     p_brand,
@@ -29,6 +30,8 @@ order by
     p_brand,
     p_type,
     p_size ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:10: P_BRAND | 11: P_TYPE | 12: P_SIZE | 26: count
@@ -105,7 +108,10 @@ rollup: partsupp
 tabletRatio=10/10
 cardinality=80000000
 avgRowSize=16.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -127,7 +133,10 @@ rollup: supplier
 tabletRatio=1/1
 cardinality=250000
 avgRowSize=105.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -146,6 +155,9 @@ rollup: part
 tabletRatio=10/10
 cardinality=2304000
 avgRowSize=47.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [end]
 

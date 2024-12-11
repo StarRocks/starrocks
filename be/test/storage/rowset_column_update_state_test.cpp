@@ -64,7 +64,11 @@ public:
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
+<<<<<<< HEAD
         writer_context.tablet_schema = &tablet->tablet_schema();
+=======
+        writer_context.tablet_schema = tablet->tablet_schema();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -133,16 +137,27 @@ public:
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
 
+<<<<<<< HEAD
         writer_context.partial_update_tablet_schema = partial_schema;
         writer_context.referenced_column_ids = column_indexes;
         writer_context.tablet_schema = partial_schema.get();
+=======
+        writer_context.tablet_schema = partial_schema;
+        writer_context.referenced_column_ids = column_indexes;
+        writer_context.full_tablet_schema = tablet->tablet_schema();
+        writer_context.is_partial_update = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
         writer_context.partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+<<<<<<< HEAD
         auto schema = ChunkHelper::convert_schema(*partial_schema.get());
+=======
+        auto schema = ChunkHelper::convert_schema(partial_schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
@@ -210,6 +225,27 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
     return read_until_eof(iter);
 }
 
+<<<<<<< HEAD
+=======
+static uint32_t calc_update_row_cnt(const ColumnPartialUpdateState& state) {
+    uint32_t total = 0;
+    for (const auto& each : state.rss_rowid_to_update_rowid) {
+        total += each.second.size();
+    }
+    return total;
+}
+
+static uint32_t find_upt_row_id(const ColumnPartialUpdateState& state, uint64_t src_rss_id) {
+    std::map<uint64_t, uint32_t> m;
+    for (const auto& each_rss : state.rss_rowid_to_update_rowid) {
+        for (const auto& each : each_rss.second) {
+            m[(uint64_t)each_rss.first << 32 | (uint64_t)each.first] = each.second;
+        }
+    }
+    return m[src_rss_id];
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 TEST_F(RowsetColumnUpdateStateTest, prepare_partial_update_states) {
     const int N = 100;
     _tablet = create_tablet(rand(), rand());
@@ -247,10 +283,17 @@ TEST_F(RowsetColumnUpdateStateTest, prepare_partial_update_states) {
         const std::vector<ColumnPartialUpdateState>& parital_update_states = state.parital_update_states();
         ASSERT_EQ(parital_update_states.size(), 1);
         ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
+<<<<<<< HEAD
         ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.size(), N);
         for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
             uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
             ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.find(src_rss_rowid)->second, upt_id);
+=======
+        ASSERT_EQ(calc_update_row_cnt(parital_update_states[0]), N);
+        for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
+            uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
+            ASSERT_EQ(find_upt_row_id(parital_update_states[0], src_rss_rowid), upt_id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     {
@@ -268,7 +311,11 @@ TEST_F(RowsetColumnUpdateStateTest, prepare_partial_update_states) {
         const std::vector<ColumnPartialUpdateState>& parital_update_states = state.parital_update_states();
         ASSERT_EQ(parital_update_states.size(), 1);
         ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
+<<<<<<< HEAD
         ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.size(), 0);
+=======
+        ASSERT_EQ(calc_update_row_cnt(parital_update_states[0]), 0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -311,10 +358,17 @@ TEST_F(RowsetColumnUpdateStateTest, partial_update_states_batch_get_index) {
         const std::vector<ColumnPartialUpdateState>& parital_update_states = state.parital_update_states();
         ASSERT_EQ(parital_update_states.size(), seg_cnt);
         ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
+<<<<<<< HEAD
         ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.size(), N);
         for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
             uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
             ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.find(src_rss_rowid)->second, upt_id);
+=======
+        ASSERT_EQ(calc_update_row_cnt(parital_update_states[0]), N);
+        for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
+            uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
+            ASSERT_EQ(find_upt_row_id(parital_update_states[0], src_rss_rowid), upt_id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         // check upserts
         std::vector<BatchPKsPtr> upserts = state.upserts();

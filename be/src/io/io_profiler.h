@@ -68,11 +68,19 @@ public:
     static IOStat get_context_io();
     static void clear_context();
 
+<<<<<<< HEAD
     static bool is_empty();
 
     static void take_tls_io_snapshot(IOStat* snapshot);
     static IOStat calculate_scoped_tls_io(const IOStat& snapshot);
 
+=======
+    static void take_tls_io_snapshot(IOStat* snapshot);
+    static IOStat calculate_scoped_tls_io(const IOStat& snapshot);
+
+    static bool is_empty();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     class Scope {
     public:
         Scope() = delete;

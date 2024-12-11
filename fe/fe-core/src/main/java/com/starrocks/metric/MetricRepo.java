@@ -45,16 +45,27 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
+=======
+import com.starrocks.catalog.OlapTable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.ProfileManager;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.NetUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.EtlJobType;
@@ -64,25 +75,38 @@ import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.memory.MemoryUsageTracker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.monitor.jvm.JvmStatCollector;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
+<<<<<<< HEAD
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryDetailQueue;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+<<<<<<< HEAD
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
+=======
+import com.starrocks.transaction.DatabaseTransactionMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -116,9 +140,43 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TIMEOUT;
 
+<<<<<<< HEAD
     public static LongCounterMetric COUNTER_QUERY_ANALYSIS_ERR;
     public static LongCounterMetric COUNTER_QUERY_INTERNAL_ERR;
 
+=======
+    public static LongCounterMetric COUNTER_QUERY_QUEUE_SLOT_PENDING;
+    public static LongCounterMetric COUNTER_QUERY_QUEUE_SLOT_RUNNING;
+
+    public static LongCounterMetric COUNTER_QUERY_ANALYSIS_ERR;
+    public static LongCounterMetric COUNTER_QUERY_INTERNAL_ERR;
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING =
+            new MetricWithLabelGroup<>("category",
+                    () -> new LongCounterMetric("query_queue_v2_category_pending_slots", MetricUnit.REQUESTS,
+                            "the number of current pending slots for each category"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_RUNNING =
+            new MetricWithLabelGroup<>("category",
+                    () -> new LongCounterMetric("query_queue_v2_category_running_slots", MetricUnit.REQUESTS,
+                            "the number of current running slots for each category"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_ALLOCATED_TOTAL =
+            new MetricWithLabelGroup<>("category",
+                    () -> new LongCounterMetric("query_queue_v2_category_total_allocated_slots", MetricUnit.REQUESTS,
+                            "the accumulated value of allocated slots for each category"));
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Integer>> GAUGE_QUERY_QUEUE_CATEGORY_WEIGHT =
+            new MetricWithLabelGroup<>("category",
+                    () -> new GaugeMetricImpl<>("query_queue_v2_category_weight", MetricUnit.REQUESTS,
+                            "the weight of each category"));
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Integer>> GAUGE_QUERY_QUEUE_CATEGORY_SLOT_MIN_SLOTS =
+            new MetricWithLabelGroup<>("category",
+                    () -> new GaugeMetricImpl<>("query_queue_v2_category_min_slots", MetricUnit.REQUESTS,
+                            "the min slots of each category"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_STATE =
+            new MetricWithLabelGroup<>("category",
+                    () -> new LongCounterMetric("query_queue_v2_category_state", MetricUnit.REQUESTS,
+                            "the current state of each category"));
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
     public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
 
@@ -137,17 +195,33 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_PAUSED;
+<<<<<<< HEAD
+=======
+    public static LongCounterMetric COUNTER_SHORTCIRCUIT_QUERY;
+    public static LongCounterMetric COUNTER_SHORTCIRCUIT_RPC;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_BATCH;
     public static Histogram HISTO_JOURNAL_WRITE_BYTES;
+<<<<<<< HEAD
+=======
+    public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
     public static GaugeMetricImpl<Double> GAUGE_REQUEST_PER_SECOND;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_ERR_RATE;
+<<<<<<< HEAD
+=======
+    public static GaugeMetricImpl<Double> GAUGE_QUERY_INTERNAL_ERR_RATE;
+    public static GaugeMetricImpl<Double> GAUGE_QUERY_ANALYSIS_ERR_RATE;
+    public static GaugeMetricImpl<Double> GAUGE_QUERY_TIMEOUT_RATE;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // these query latency is different from HISTO_QUERY_LATENCY, for these only summarize the latest queries, but HISTO_QUERY_LATENCY summarizes all queries.
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_MEAN;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_MEDIAN;
@@ -159,8 +233,18 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
+<<<<<<< HEAD
     public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
 
+=======
+    public static GaugeMetricImpl<Long> GAUGE_ENCRYPTION_KEY_NUM;
+
+    public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
+
+    public static List<GaugeMetricImpl<Long>> GAUGE_MEMORY_USAGE_STATS;
+    public static List<GaugeMetricImpl<Long>> GAUGE_OBJECT_COUNT_STATS;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
 
@@ -174,12 +258,23 @@ public final class MetricRepo {
         }
 
         GAUGE_ROUTINE_LOAD_LAGS = new ArrayList<>();
+<<<<<<< HEAD
+=======
+        GAUGE_MEMORY_USAGE_STATS = new ArrayList<>();
+        GAUGE_OBJECT_COUNT_STATS = new ArrayList<>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // 1. gauge
         // load jobs
         LoadMgr loadManger = GlobalStateMgr.getCurrentState().getLoadMgr();
         for (EtlJobType jobType : EtlJobType.values()) {
+<<<<<<< HEAD
             if (jobType == EtlJobType.MINI || jobType == EtlJobType.UNKNOWN) {
+=======
+            // Only broker/spark/insert loads are stored into LoadManager,
+            // so these 3 types of jobs are displayed, others are always 0.
+            if (!(jobType == EtlJobType.BROKER || jobType == EtlJobType.SPARK || jobType == EtlJobType.INSERT)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 continue;
             }
 
@@ -298,6 +393,24 @@ public final class MetricRepo {
         GAUGE_QUERY_ERR_RATE.setValue(0.0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_ERR_RATE);
 
+<<<<<<< HEAD
+=======
+        GAUGE_QUERY_INTERNAL_ERR_RATE =
+                new GaugeMetricImpl<>("query_internal_err_rate", MetricUnit.NOUNIT, "query internal error rate");
+        GAUGE_QUERY_INTERNAL_ERR_RATE.setValue(0.0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_INTERNAL_ERR_RATE);
+
+        GAUGE_QUERY_ANALYSIS_ERR_RATE =
+                new GaugeMetricImpl<>("query_analysis_err_rate", MetricUnit.NOUNIT, "query analysis error rate");
+        GAUGE_QUERY_ANALYSIS_ERR_RATE.setValue(0.0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_ANALYSIS_ERR_RATE);
+
+        GAUGE_QUERY_TIMEOUT_RATE =
+                new GaugeMetricImpl<>("query_timeout_rate", MetricUnit.NOUNIT, "query timeout rate");
+        GAUGE_QUERY_TIMEOUT_RATE.setValue(0.0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_TIMEOUT_RATE);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         GAUGE_MAX_TABLET_COMPACTION_SCORE = new GaugeMetricImpl<>("max_tablet_compaction_score",
                 MetricUnit.NOUNIT, "max tablet compaction score of all backends");
         GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(0L);
@@ -308,6 +421,14 @@ public final class MetricRepo {
         GAUGE_STACKED_JOURNAL_NUM.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_STACKED_JOURNAL_NUM);
 
+<<<<<<< HEAD
+=======
+        GAUGE_ENCRYPTION_KEY_NUM = new GaugeMetricImpl<>(
+                "encryption_key_num", MetricUnit.NOUNIT, "number of encryption keys in key manager");
+        GAUGE_ENCRYPTION_KEY_NUM.setValue(0L);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_ENCRYPTION_KEY_NUM);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         GAUGE_QUERY_LATENCY_MEAN =
                 new GaugeMetricImpl<>("query_latency", MetricUnit.MILLISECONDS, "mean of query latency");
         GAUGE_QUERY_LATENCY_MEAN.addLabel(new MetricLabel("type", "mean"));
@@ -371,6 +492,17 @@ public final class MetricRepo {
         COUNTER_QUERY_QUEUE_PENDING = new LongCounterMetric("query_queue_pending", MetricUnit.REQUESTS,
                 "total pending query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_PENDING);
+<<<<<<< HEAD
+=======
+
+        COUNTER_QUERY_QUEUE_SLOT_PENDING = new LongCounterMetric("query_queue_slot_pending", MetricUnit.REQUESTS,
+                "total pending query slot");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_SLOT_PENDING);
+        COUNTER_QUERY_QUEUE_SLOT_RUNNING = new LongCounterMetric("query_queue_slot_running", MetricUnit.REQUESTS,
+                "total running query slot");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_SLOT_RUNNING);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         COUNTER_QUERY_QUEUE_TOTAL = new LongCounterMetric("query_queue_total", MetricUnit.REQUESTS,
                 "total history queued query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_TOTAL);
@@ -399,9 +531,21 @@ public final class MetricRepo {
                 "counter of image succeeded in pushing to other frontends");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_PUSH);
 
+<<<<<<< HEAD
         COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS,
                                                            "total analysis error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ANALYSIS_ERR);
+=======
+        COUNTER_SHORTCIRCUIT_QUERY = new LongCounterMetric("shortcircuit_query", MetricUnit.REQUESTS, "total shortcircuit query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_QUERY);
+        COUNTER_SHORTCIRCUIT_RPC = new LongCounterMetric("shortcircuit_rpc", MetricUnit.REQUESTS, "total shortcircuit rpc");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_RPC);
+
+        COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS,
+                                                           "total analysis error query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ANALYSIS_ERR);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS, 
                                                            "total internal error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_INTERNAL_ERR);
@@ -434,8 +578,13 @@ public final class MetricRepo {
                 "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
         List<Database> dbs = Lists.newArrayList();
+<<<<<<< HEAD
         if (GlobalStateMgr.getCurrentState().getIdToDb() != null) {
             for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+=======
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb() != null) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 dbs.add(entry.getValue());
             }
 
@@ -443,10 +592,15 @@ public final class MetricRepo {
                 AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
                 if (jobI instanceof BackupJob && !((BackupJob) jobI).isDone()) {
                     COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
+<<<<<<< HEAD
                     WarehouseMetricMgr.increaseUnfinishedBackupJobs(((BackupJob) jobI).getCurrentWarehouse(), 1L);
                 } else if (jobI instanceof RestoreJob && !((RestoreJob) jobI).isDone()) {
                     COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
                     WarehouseMetricMgr.increaseUnfinishedRestoreJobs(((RestoreJob) jobI).getCurrentWarehouse(), 1L);
+=======
+                } else if (jobI instanceof RestoreJob && !((RestoreJob) jobI).isDone()) {
+                    COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
 
             }
@@ -462,12 +616,19 @@ public final class MetricRepo {
                 METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "batch"));
         HISTO_JOURNAL_WRITE_BYTES =
                 METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "bytes"));
+<<<<<<< HEAD
+=======
+        HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // init system metrics
         initSystemMetrics();
 
+<<<<<<< HEAD
         initMemoryMetrics();
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         updateMetrics();
         hasInit = true;
 
@@ -522,6 +683,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(tpcOutSegs);
     }
 
+<<<<<<< HEAD
     public static void initMemoryMetrics() {
         GaugeMetric<Long> tabletCnt = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
                 "The count of tablets") {
@@ -747,6 +909,8 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(agentTaskCount);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // to generate the metrics related to tablets of each backend
     // this metric is reentrant, so that we can add or remove metric along with the backend add or remove
     // at runtime.
@@ -755,8 +919,13 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.removeMetrics(TABLET_NUM);
         STARROCKS_METRIC_REGISTER.removeMetrics(TABLET_MAX_COMPACTION_SCORE);
 
+<<<<<<< HEAD
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         for (Long beId : infoService.getBackendIds(false)) {
             Backend be = infoService.getBackend(beId);
@@ -775,7 +944,12 @@ public final class MetricRepo {
                     return invertedIndex.getTabletNumByBackendId(beId);
                 }
             };
+<<<<<<< HEAD
             tabletNum.addLabel(new MetricLabel("backend", be.getHost() + ":" + be.getHeartbeatPort()));
+=======
+            tabletNum.addLabel(new MetricLabel("backend",
+                    NetUtils.getHostPortInAccessibleFormat(be.getHost(), be.getHeartbeatPort())));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             STARROCKS_METRIC_REGISTER.addMetric(tabletNum);
 
             // max compaction score of tablets on each backend
@@ -790,23 +964,75 @@ public final class MetricRepo {
                     return be.getTabletMaxCompactionScore();
                 }
             };
+<<<<<<< HEAD
             tabletMaxCompactionScore.addLabel(new MetricLabel("backend", be.getHost() + ":" + be.getHeartbeatPort()));
+=======
+            tabletMaxCompactionScore.addLabel(new MetricLabel("backend",
+                    NetUtils.getHostPortInAccessibleFormat(be.getHost(), be.getHeartbeatPort())));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             STARROCKS_METRIC_REGISTER.addMetric(tabletMaxCompactionScore);
 
         } // end for backends
     }
 
+<<<<<<< HEAD
+=======
+    public static void updateMemoryUsageMetrics() {
+        if (GAUGE_MEMORY_USAGE_STATS.size() ==
+                MemoryUsageTracker.MEMORY_USAGE.values().stream().mapToInt(Map::size).sum()) {
+            return;
+        }
+
+        List<GaugeMetricImpl<Long>> memoryUsageGauges = new ArrayList<>();
+        List<GaugeMetricImpl<Long>> objectCountGauges = new ArrayList<>();
+        MemoryUsageTracker.MEMORY_USAGE.forEach((moduleName, module) -> {
+            if (module != null) {
+                module.forEach((className, memoryState) -> {
+                    GaugeMetricImpl<Long> metricBytes =
+                            new GaugeMetricImpl<>("memory_usage", MetricUnit.BYTES,
+                                    "The bytes of module");
+                    metricBytes.addLabel(new MetricLabel("module", moduleName));
+                    metricBytes.addLabel(new MetricLabel("className", className));
+                    metricBytes.setValue(memoryState.getCurrentConsumption());
+                    memoryUsageGauges.add(metricBytes);
+
+                    Map<String, Long> counterMap = memoryState.getCounterMap();
+                    counterMap.forEach((name, value) -> {
+                        GaugeMetricImpl<Long> metricCount =
+                                new GaugeMetricImpl<>("object_count", MetricUnit.NOUNIT,
+                                        "The count of object");
+                        metricCount.addLabel(new MetricLabel("module", moduleName));
+                        metricCount.addLabel(new MetricLabel("className", className));
+                        metricCount.addLabel(new MetricLabel("objectName", name));
+                        metricCount.setValue(value);
+                        objectCountGauges.add(metricCount);
+                    });
+                });
+
+            }
+        });
+
+        GAUGE_MEMORY_USAGE_STATS = memoryUsageGauges;
+        GAUGE_OBJECT_COUNT_STATS = objectCountGauges;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static void updateRoutineLoadProcessMetrics() {
         List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadMgr().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
                         RoutineLoadJob.JobState.PAUSED,
                         RoutineLoadJob.JobState.RUNNING));
 
+<<<<<<< HEAD
         List<RoutineLoadJob> kafkaJobs = jobs.stream()
+=======
+        List<RoutineLoadJob> allKafkaJobs = jobs.stream()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .filter(job -> (job instanceof KafkaRoutineLoadJob)
                         && ((KafkaProgress) job.getProgress()).hasPartition())
                 .collect(Collectors.toList());
 
+<<<<<<< HEAD
         if (kafkaJobs.size() <= 0) {
             return;
         }
@@ -871,6 +1097,84 @@ public final class MetricRepo {
         }
 
         GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
+=======
+        if (allKafkaJobs.size() <= 0) {
+            return;
+        }
+
+        Map<Long, List<RoutineLoadJob>> kafkaJobsMp = allKafkaJobs.stream().collect(
+                Collectors.groupingBy(RoutineLoadJob::getWarehouseId)
+        );
+
+        // get all partitions offset in a batch api
+        for (Map.Entry<Long, List<RoutineLoadJob>> entry : kafkaJobsMp.entrySet()) {
+            long warehouseId = entry.getKey();
+            List<RoutineLoadJob> kafkaJobs = entry.getValue();
+
+            List<PKafkaOffsetProxyRequest> requests = new ArrayList<>();
+
+            for (RoutineLoadJob job : kafkaJobs) {
+                KafkaRoutineLoadJob kJob = (KafkaRoutineLoadJob) job;
+                try {
+                    kJob.convertCustomProperties(false);
+                } catch (DdlException e) {
+                    LOG.warn("convert custom properties failed", e);
+                    return;
+                }
+                PKafkaOffsetProxyRequest offsetProxyRequest = new PKafkaOffsetProxyRequest();
+                offsetProxyRequest.kafkaInfo = KafkaUtil.genPKafkaLoadInfo(kJob.getBrokerList(), kJob.getTopic(),
+                        ImmutableMap.copyOf(kJob.getConvertedCustomProperties()), warehouseId);
+                offsetProxyRequest.partitionIds = new ArrayList<>(
+                        ((KafkaProgress) kJob.getProgress()).getPartitionIdToOffset().keySet());
+                requests.add(offsetProxyRequest);
+            }
+
+            List<PKafkaOffsetProxyResult> offsetProxyResults;
+            try {
+                offsetProxyResults = KafkaUtil.getBatchOffsets(requests);
+            } catch (StarRocksException e) {
+                LOG.warn("get batch offsets failed", e);
+                return;
+            }
+
+            List<GaugeMetricImpl<Long>> routineLoadLags = new ArrayList<>();
+
+            for (int i = 0; i < kafkaJobs.size(); i++) {
+                KafkaRoutineLoadJob kJob = (KafkaRoutineLoadJob) kafkaJobs.get(i);
+                ImmutableMap<Integer, Long> partitionIdToProgress =
+                        ((KafkaProgress) kJob.getProgress()).getPartitionIdToOffset();
+
+                // offset of partitionIds[i] is beginningOffsets[i] and latestOffsets[i]
+                List<Integer> partitionIds = offsetProxyResults.get(i).partitionIds;
+                List<Long> beginningOffsets = offsetProxyResults.get(i).beginningOffsets;
+                List<Long> latestOffsets = offsetProxyResults.get(i).latestOffsets;
+
+                long maxLag = Long.MIN_VALUE;
+                for (int j = 0; j < partitionIds.size(); j++) {
+                    int partitionId = partitionIds.get(j);
+                    if (!partitionIdToProgress.containsKey(partitionId)) {
+                        continue;
+                    }
+                    long progress = partitionIdToProgress.get(partitionId);
+                    if (progress == KafkaProgress.OFFSET_BEGINNING_VAL) {
+                        progress = beginningOffsets.get(j);
+                    }
+
+                    maxLag = Math.max(latestOffsets.get(j) - progress, maxLag);
+                }
+                if (maxLag >= Config.min_routine_load_lag_for_metrics) {
+                    GaugeMetricImpl<Long> metric =
+                            new GaugeMetricImpl<>("routine_load_max_lag_of_partition", MetricUnit.NOUNIT,
+                                    "routine load kafka lag");
+                    metric.addLabel(new MetricLabel("job_name", kJob.getName()));
+                    metric.setValue(maxLag);
+                    routineLoadLags.add(metric);
+                }
+            }
+
+            GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static synchronized String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
@@ -916,9 +1220,20 @@ public final class MetricRepo {
             collectRoutineLoadProcessMetrics(visitor);
         }
 
+<<<<<<< HEAD
         // collect http metrics
         HttpMetricRegistry.getInstance().visit(visitor);
 
+=======
+        if (Config.memory_tracker_enable) {
+            collectMemoryUsageMetrics(visitor);
+        }
+
+        // collect http metrics
+        HttpMetricRegistry.getInstance().visit(visitor);
+
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         //collect connections for per user
         collectUserConnMetrics(visitor);
 
@@ -941,17 +1256,46 @@ public final class MetricRepo {
     // collect table-level metrics
     private static void collectTableMetrics(MetricVisitor visitor, boolean minifyTableMetrics) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         List<String> dbNames = globalStateMgr.getDbNames();
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
+        for (String dbName : dbNames) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (null == db) {
                 continue;
             }
 
             // NOTE: avoid holding database lock here, since we only read all tables, and immutable fields of table
+<<<<<<< HEAD
             for (Table table : db.getTables()) {
                 long tableId = table.getId();
                 String tableName = table.getName();
+=======
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                long tableId = table.getId();
+                String tableName = table.getName();
+
+                if (table.isNativeTableOrMaterializedView()) {
+                    // table size metrics
+                    GaugeMetric<Long> tableSizeBytesTotal = new GaugeMetric<Long>("table_size_bytes",
+                            MetricUnit.BYTES, "total size of table in bytes") {
+                        @Override
+                        public Long getValue() {
+                            OlapTable olapTable = (OlapTable) table;
+                            return olapTable.getDataSize();
+                        }
+                    };
+                    tableSizeBytesTotal.addLabel(new MetricLabel("db_name", dbName))
+                            .addLabel(new MetricLabel("tbl_name", tableName))
+                            .addLabel(new MetricLabel("tbl_id", String.valueOf(tableId)));
+                    visitor.visit(tableSizeBytesTotal);
+                }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
                 for (Metric m : entity.getMetrics()) {
                     if (minifyTableMetrics && (null == m.getValue() ||
@@ -969,12 +1313,20 @@ public final class MetricRepo {
 
     private static void collectDatabaseMetrics(MetricVisitor visitor) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         List<String> dbNames = globalStateMgr.getDbNames();
+=======
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         GaugeMetricImpl<Integer> databaseNum = new GaugeMetricImpl<>(
                 "database_num", MetricUnit.OPERATIONS, "count of database");
         int dbNum = 0;
         for (String dbName : dbNames) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (null == db) {
                 continue;
             }
@@ -984,6 +1336,19 @@ public final class MetricRepo {
             tableNum.setValue(db.getTableNumber());
             tableNum.addLabel(new MetricLabel("db_name", dbName));
             visitor.visit(tableNum);
+<<<<<<< HEAD
+=======
+
+            GaugeMetric<Long> dbSizeBytesTotal = new GaugeMetric<Long>("db_size_bytes",
+                    MetricUnit.BYTES, "total size of db in bytes") {
+                @Override
+                public Long getValue() {
+                    return db.getUsedDataQuotaWithLock();
+                }
+            };
+            dbSizeBytesTotal.addLabel(new MetricLabel("db_name", dbName));
+            visitor.visit(dbSizeBytesTotal);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         databaseNum.setValue(dbNum);
         visitor.visit(databaseNum);
@@ -995,6 +1360,18 @@ public final class MetricRepo {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static void collectMemoryUsageMetrics(MetricVisitor visitor) {
+        for (GaugeMetricImpl<Long> metric : GAUGE_MEMORY_USAGE_STATS) {
+            visitor.visit(metric);
+        }
+        for (GaugeMetricImpl<Long> metric : GAUGE_OBJECT_COUNT_STATS) {
+            visitor.visit(metric);
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // collect connections of per user
     private static void collectUserConnMetrics(MetricVisitor visitor) {
 
@@ -1020,7 +1397,11 @@ public final class MetricRepo {
                 continue;
             }
             GaugeMetricImpl<Integer> txnNum = new GaugeMetricImpl<>("txn_running", MetricUnit.NOUNIT,
+<<<<<<< HEAD
                         "number of running transactions");
+=======
+                     "number of running transactions");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             txnNum.addLabel(new MetricLabel("db", db.getFullName()));
             txnNum.setValue(mgr.getRunningTxnNums());
             visitor.visit(txnNum);

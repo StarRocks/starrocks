@@ -28,6 +28,10 @@ struct BeThreadInfo {
     int64_t tid{0};
     bool idle{false};
     int64_t finished_tasks{0};
+<<<<<<< HEAD
+=======
+    int64_t num_bound_cpu_cores{0};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class SchemaBeThreadsScanner : public SchemaScanner {

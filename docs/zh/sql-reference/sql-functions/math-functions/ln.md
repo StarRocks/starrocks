@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ln, dlog1, log
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回参数 `x` 的自然对数，以 e 为底数。
 

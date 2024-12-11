@@ -18,7 +18,10 @@ partition by (`LINE`)
 DISTRIBUTED BY HASH(`LINE`, `EVENTTIME`, `_SORTING`, `ACTIVITY_EN`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "replicated_storage" = "true",
 "compression" = "LZ4");
 

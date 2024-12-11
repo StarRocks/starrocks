@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # host_name
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Obtains the hostname of the node on which the computation is performed.
 

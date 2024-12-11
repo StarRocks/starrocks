@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     cntrycode,
@@ -36,6 +37,8 @@ group by
     cntrycode
 order by
     cntrycode ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:32: substring | 33: count | 34: sum
@@ -118,7 +121,10 @@ rollup: customer
 tabletRatio=10/10
 cardinality=7500000
 avgRowSize=31.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -161,7 +167,10 @@ rollup: customer
 tabletRatio=10/10
 cardinality=6818187
 avgRowSize=23.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 6
 OUTPUT EXPRS:
@@ -179,6 +188,9 @@ rollup: orders
 tabletRatio=10/10
 cardinality=150000000
 avgRowSize=8.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [end]
 

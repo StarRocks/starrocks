@@ -17,7 +17,11 @@ package com.starrocks.scheduler.mv;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.rpc.BackendServiceClient;
@@ -93,7 +97,11 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         TransactionState.TxnCoordinator txnCoordinator = TransactionState.TxnCoordinator.fromThisFE();
         TransactionState.LoadJobSourceType loadSource = TransactionState.LoadJobSourceType.MV_REFRESH;
         try {
+<<<<<<< HEAD
             long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+=======
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT);
             epoch.setTxnId(txnId);
 
@@ -129,12 +137,20 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     private void commitEpoch(MVEpoch epoch) {
         LOG.info("commitEpoch: {}", epoch);
         long dbId = mvMaintenanceJob.getView().getDbId();
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         try {
             epoch.onCommitting();
 
+<<<<<<< HEAD
             boolean published = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(database,
+=======
+            boolean published = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitAndPublishTransaction(database,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     epoch.getTxnId(), epoch.getCommitInfos(), epoch.getFailedInfos(), TXN_VISIBLE_TIMEOUT_MILLIS);
             Preconditions.checkState(published, "must be published");
 
@@ -146,7 +162,11 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             GlobalStateMgr.getCurrentState().getEditLog().logMVEpochChange(epoch);
 
             epoch.onCommitted(binlogState);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             epoch.onFailed();
             // TODO(murphy) handle error
             LOG.warn("Failed to commit transaction for epoch {}", epoch);
@@ -163,7 +183,11 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason,
                     epoch.getCommitInfos(), epoch.getFailedInfos(), null);
             epoch.onFailed();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG.warn("Abort transaction failed: {}", txnId);
         }
     }

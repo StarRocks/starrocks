@@ -36,7 +36,10 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.Projection;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
@@ -171,6 +174,7 @@ public class CostModel {
                         anyMatch(ColumnStatistic::isUnknown) && mvStatistics.getColumnStatistics().values().stream().
                         noneMatch(ColumnStatistic::isUnknown)) {
                     return adjustCostForMV(context);
+<<<<<<< HEAD
                 } else {
                     ColumnRefSet usedColumns = statistics.getUsedColumns();
                     Projection projection = node.getProjection();
@@ -184,6 +188,8 @@ public class CostModel {
                     }
                     // use the used columns to calculate the cost of mv
                     return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
@@ -336,7 +342,11 @@ public class CostModel {
                     // 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
                     boolean ignoreNetworkCost = sessionVariable.isEnableLocalShuffleAgg()
                             && sessionVariable.isEnablePipelineEngine()
+<<<<<<< HEAD
                             && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+=======
+                            && GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     double networkCost = ignoreNetworkCost ? 0 : Math.max(outputSize, 1);
 
                     result = CostEstimate.of(outputSize * factor, 0, networkCost * factor);
@@ -345,6 +355,12 @@ public class CostModel {
                     result = CostEstimate.of(outputSize, 0,
                             Math.max(statistics.getOutputSize(outputColumns), 1));
                     break;
+<<<<<<< HEAD
+=======
+                case ROUND_ROBIN:
+                    result = CostEstimate.of(outputSize * factor, 0, outputSize * factor);
+                    break;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 default:
                     throw new StarRocksPlannerException(
                             "not support " + distributionSpec.getType() + "distribution type",
@@ -529,6 +545,9 @@ public class CostModel {
             return Optional.empty();
         }
     }
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

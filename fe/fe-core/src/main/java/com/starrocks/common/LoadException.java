@@ -20,7 +20,11 @@ package com.starrocks.common;
 /**
  * Exception for load
  */
+<<<<<<< HEAD
 public class LoadException extends UserException {
+=======
+public class LoadException extends StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private static final long serialVersionUID = 1L;
 

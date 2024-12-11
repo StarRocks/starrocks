@@ -44,12 +44,23 @@ public class HiveTableFactory extends ExternalTableFactory {
         tableBuilder
                 .setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
+<<<<<<< HEAD
                 .setHiveDbName(catalogTable.getDbName())
                 .setHiveTableName(catalogTable.getTableName())
                 .setPartitionColumnNames(catalogTable.getPartitionColumnNames())
                 .setDataColumnNames(catalogTable.getDataColumnNames())
                 .setTableLocation(catalogTable.getTableLocation())
                 .setCreateTime(catalogTable.getCreateTime());
+=======
+                .setHiveDbName(catalogTable.getCatalogDBName())
+                .setHiveTableName(catalogTable.getCatalogTableName())
+                .setPartitionColumnNames(catalogTable.getPartitionColumnNames())
+                .setDataColumnNames(catalogTable.getDataColumnNames())
+                .setTableLocation(catalogTable.getTableLocation())
+                .setStorageFormat(catalogTable.getStorageFormat())
+                .setCreateTime(catalogTable.getCreateTime())
+                .setProperties(catalogTable.getProperties());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

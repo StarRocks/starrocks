@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ltrim
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 从字符串的左侧（开始部分）移除连续出现的空格或指定字符。从 2.5.0 版本开始，支持从字符串中移除指定的字符。
 

@@ -36,6 +36,10 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TTabletCommitInfo;
 
@@ -43,6 +47,10 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import javax.validation.constraints.NotNull;
 
 public class TabletCommitInfo implements Writable {
@@ -51,18 +59,33 @@ public class TabletCommitInfo implements Writable {
     private long backendId;
 
     // For low cardinality string column with global dict
+<<<<<<< HEAD
     private List<String> invalidDictCacheColumns = Lists.newArrayList();
     private List<String> validDictCacheColumns = Lists.newArrayList();
     private List<Long> validDictCollectedVersions = Lists.newArrayList();
 
+=======
+    private List<ColumnId> invalidDictCacheColumns = Lists.newArrayList();
+    private List<ColumnId> validDictCacheColumns = Lists.newArrayList();
+    private List<Long> validDictCollectedVersions = Lists.newArrayList();
+
+    public TabletCommitInfo() {
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public TabletCommitInfo(long tabletId, long backendId) {
         super();
         this.tabletId = tabletId;
         this.backendId = backendId;
     }
 
+<<<<<<< HEAD
     public TabletCommitInfo(long tabletId, long backendId, List<String> invalidDictCacheColumns,
                             List<String> validDictCacheColumns, List<Long> validDictCollectedVersions) {
+=======
+    public TabletCommitInfo(long tabletId, long backendId, List<ColumnId> invalidDictCacheColumns,
+                            List<ColumnId> validDictCacheColumns, List<Long> validDictCollectedVersions) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.tabletId = tabletId;
         this.backendId = backendId;
         this.invalidDictCacheColumns = invalidDictCacheColumns;
@@ -78,11 +101,19 @@ public class TabletCommitInfo implements Writable {
         return backendId;
     }
 
+<<<<<<< HEAD
     public List<String> getInvalidDictCacheColumns() {
         return invalidDictCacheColumns;
     }
 
     public List<String> getValidDictCacheColumns() {
+=======
+    public List<ColumnId> getInvalidDictCacheColumns() {
+        return invalidDictCacheColumns;
+    }
+
+    public List<ColumnId> getValidDictCacheColumns() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return validDictCacheColumns;
     }
 
@@ -90,6 +121,17 @@ public class TabletCommitInfo implements Writable {
         return validDictCollectedVersions;
     }
 
+<<<<<<< HEAD
+=======
+    public void setTabletId(long tabletId) {
+        this.tabletId = tabletId;
+    }
+
+    public void setBackendId(long backendId) {
+        this.backendId = backendId;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @NotNull
     public static List<TabletCommitInfo> fromThrift(List<TTabletCommitInfo> tTabletCommitInfos) {
         List<TabletCommitInfo> commitInfos = Lists.newArrayList();
@@ -100,8 +142,19 @@ public class TabletCommitInfo implements Writable {
             if (tTabletCommitInfo.isSetInvalid_dict_cache_columns()) {
                 commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(),
                         tTabletCommitInfo.getBackendId(),
+<<<<<<< HEAD
                         tTabletCommitInfo.getInvalid_dict_cache_columns(),
                         tTabletCommitInfo.getValid_dict_cache_columns(),
+=======
+                        tTabletCommitInfo.getInvalid_dict_cache_columns()
+                                .stream()
+                                .map(ColumnId::create)
+                                .collect(Collectors.toList()),
+                        tTabletCommitInfo.getValid_dict_cache_columns()
+                                .stream()
+                                .map(ColumnId::create)
+                                .collect(Collectors.toList()),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         tTabletCommitInfo.getValid_dict_collected_versions()
                 ));
             } else {

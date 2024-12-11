@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # days_diff
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算开始时间和结束时间相差几天 （`expr1` - `expr2`），结果精确到天。此函数与 [datediff](./datediff.md) 的区别是：
 

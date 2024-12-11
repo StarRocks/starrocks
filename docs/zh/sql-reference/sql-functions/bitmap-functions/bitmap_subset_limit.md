@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_subset_limit
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 根据指定的起始值，从 BITMAP 中截取指定个数的元素。返回的元素是 Bitmap 的子集。
 

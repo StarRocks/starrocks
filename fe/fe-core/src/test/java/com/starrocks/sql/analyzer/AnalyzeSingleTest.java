@@ -19,7 +19,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.InsertStmt;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -94,6 +97,14 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1 as location from t0");
 
         analyzeSuccess("select v1 as rank from t0");
+<<<<<<< HEAD
+=======
+
+        analyzeSuccess("select v1 as running from t0");
+        analyzeSuccess("select v1 as queries from t0");
+        analyzeSuccess("show running queries");
+        analyzeSuccess("show running queries limit 10");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -574,9 +585,17 @@ public class AnalyzeSingleTest {
     public void testSetVar() {
         StatementBase statementBase = analyzeSuccess("SELECT /*+ SET_VAR(time_zone='Asia/Shanghai') */ " +
                 "current_timestamp() AS time");
+<<<<<<< HEAD
         Assert.assertEquals("Asia/Shanghai", statementBase.getAllQueryScopeHints().get(0).getValue().get("time_zone"));
 
         statementBase = analyzeSuccess("select /*+ SET_VAR(broadcast_row_limit=1) */ * from t0");
+=======
+        SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+        Assert.assertEquals("Asia/Shanghai", statementBase.getAllQueryScopeHints().get(0).getValue().get("time_zone"));
+
+        statementBase = analyzeSuccess("select /*+ SET_VAR(broadcast_row_limit=1) */ * from t0");
+        selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals("1", statementBase.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
         SubmitTaskStmt stmt = (SubmitTaskStmt) analyzeSuccess("submit /*+ SET_VAR(broadcast_row_limit=1) */ task as " +
@@ -588,10 +607,13 @@ public class AnalyzeSingleTest {
                 "INTO TABLE `t0`) WITH BROKER hdfs_broker PROPERTIES (\"strict_mode\"=\"true\")");
         Assert.assertEquals("1", loadStmt.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
+<<<<<<< HEAD
         InsertStmt insertStmt = (InsertStmt) analyzeSuccess("insert /*+ SET_VAR(broadcast_row_limit=1) */ " +
                 "into t1 values (1, 2, 3)");
         Assert.assertEquals("1", insertStmt.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -760,9 +782,17 @@ public class AnalyzeSingleTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testRemoveComments() {
         analyzeSuccess("select /*+ SET */ v1 from t0");
         analyzeSuccess("select /*+   abc*/ v1 from t0");
+=======
+    public void testRemoveCommentsOrIllegalHint() {
+        analyzeSuccess("select /*+ SET */ v1 from t0");
+        analyzeSuccess("select /*+ SET */ v1 from t0");
+        analyzeSuccess("select /*+   abc*/ v1 from t0");
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         analyzeSuccess("select v1 /*+*/ from t0");
         analyzeSuccess("select v1 /*+\n*/ from t0");
         analyzeSuccess("select v1 /*+   \n\n*/ from t0");

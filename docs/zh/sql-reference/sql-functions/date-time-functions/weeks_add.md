@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # weeks_add
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回原始的日期加上指定周数后的日期。
 

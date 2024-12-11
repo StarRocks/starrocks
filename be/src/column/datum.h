@@ -18,6 +18,10 @@
 #include <type_traits>
 #include <variant>
 
+<<<<<<< HEAD
+=======
+#include "common/overloaded.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/decimalv2_value.h"
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
@@ -48,6 +52,7 @@ using DatumKey = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t
 using DatumMap = std::map<DatumKey, Datum>;
 using DatumStruct = std::vector<Datum>;
 
+<<<<<<< HEAD
 template <class... Ts>
 struct overloaded : Ts... {
     using Ts::operator()...;
@@ -55,6 +60,8 @@ struct overloaded : Ts... {
 template <class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class Datum {
 public:
     Datum() = default;
@@ -193,6 +200,13 @@ public:
         return std::visit([&](const auto& arg) { return is_equal(arg); }, key);
     }
 
+<<<<<<< HEAD
+=======
+    [[nodiscard]] bool operator==(const Datum& other) const { return _value == other._value; }
+
+    [[nodiscard]] bool operator!=(const Datum& other) const { return !(*this == other); }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     using Variant =
             std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.catalog;
 
@@ -24,6 +25,19 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
+=======
+package com.starrocks.catalog;
+
+import com.google.common.collect.Maps;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -40,7 +54,11 @@ public class HiveResourceTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
+=======
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String name = "hive0";
         String type = "hive";
         String metastoreURIs = "thrift://127.0.0.1:9380";
@@ -48,7 +66,20 @@ public class HiveResourceTest {
         properties.put("type", type);
         properties.put("hive.metastore.uris", metastoreURIs);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
+<<<<<<< HEAD
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+=======
+        // drop repo
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
+
+        Analyzer.analyze(stmt, connectContext);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         HiveResource resource = (HiveResource) Resource.fromStmt(stmt);
         Assert.assertEquals("hive0", resource.getName());
         Assert.assertEquals(type, resource.getType().name().toLowerCase());

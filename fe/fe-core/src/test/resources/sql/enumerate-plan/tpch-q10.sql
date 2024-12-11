@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_custkey,
@@ -30,6 +31,8 @@ group by
     c_comment
 order by
     revenue desc limit 20;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [planCount]
 3
 [plan-1]

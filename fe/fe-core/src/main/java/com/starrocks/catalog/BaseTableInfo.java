@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
+<<<<<<< HEAD
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -31,6 +32,18 @@ import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 public class BaseTableInfo {
     private static final Logger LOG = LogManager.getLogger(BaseTableInfo.class);
 
+=======
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.server.CatalogMgr;
+
+/**
+ * BaseTableInfo is used for MaterializedView persisted as a base table's meta info which can be an olap
+ * table or an external table.
+ */
+public class BaseTableInfo {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "catalogName")
     private final String catalogName;
 
@@ -49,6 +62,7 @@ public class BaseTableInfo {
     @SerializedName(value = "tableName")
     private String tableName;
 
+<<<<<<< HEAD
     public BaseTableInfo(long dbId, String dbName, long tableId, String tableName) {
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.dbId = dbId;
@@ -61,6 +75,21 @@ public class BaseTableInfo {
         this(dbId, null, tableId, null);
     }
 
+=======
+    // used for olap table
+    public BaseTableInfo(long dbId, String dbName, String tableName, long tableId) {
+        this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        this.dbId = dbId;
+        this.tableId = tableId;
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(dbName),
+                String.format("BaseTableInfo's dbName %s should not null", dbName));
+        this.dbName = dbName;
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(tableName),
+                String.format("BaseTableInfo's tableName %s should not null", tableName));
+        this.tableName = tableName;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // used for external table
     public BaseTableInfo(String catalogName, String dbName, String tableName, String tableIdentifier) {
         this.catalogName = catalogName;
@@ -69,6 +98,7 @@ public class BaseTableInfo {
         this.tableIdentifier = tableIdentifier;
     }
 
+<<<<<<< HEAD
     public static BaseTableInfo fromTableName(TableName name, Table table) {
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(name.getCatalog(), name.getDb());
         if (isInternalCatalog(name.getCatalog())) {
@@ -80,6 +110,10 @@ public class BaseTableInfo {
 
     public String getTableInfoStr() {
         if (isInternalCatalog(catalogName)) {
+=======
+    public String getTableInfoStr() {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return Joiner.on(".").join(dbId, tableId);
         } else {
             return Joiner.on(".").join(catalogName, dbName, tableName);
@@ -87,18 +121,30 @@ public class BaseTableInfo {
     }
 
     public String getDbInfoStr() {
+<<<<<<< HEAD
         if (isInternalCatalog(catalogName)) {
+=======
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return String.valueOf(dbId);
         } else {
             return Joiner.on(".").join(catalogName, dbName);
         }
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isInternalCatalog() {
+        return CatalogMgr.isInternalCatalog(catalogName);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getCatalogName() {
         return this.catalogName;
     }
 
     public String getDbName() {
+<<<<<<< HEAD
         return this.dbName != null ? this.dbName : getDb().getFullName();
     }
 
@@ -109,6 +155,13 @@ public class BaseTableInfo {
             Table table = getTable();
             return table == null ? null : table.getName();
         }
+=======
+        return this.dbName;
+    }
+
+    public String getTableName() {
+        return this.tableName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public String getTableIdentifier() {
@@ -124,6 +177,7 @@ public class BaseTableInfo {
     }
 
     /**
+<<<<<<< HEAD
      * A checked version of getTable, which enforce checking existence of table
      *
      * @return the table if exists
@@ -182,11 +236,31 @@ public class BaseTableInfo {
             return GlobalStateMgr.getCurrentState().getDb(dbId);
         } else {
             return GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+=======
+     * Called when a table is renamed.
+     * @param newTable the new table with the new table name
+     */
+    public void onTableRename(Table newTable, String oldTableName) {
+        if (newTable == null) {
+            return;
+        }
+
+        // only changes the table name if the old table name is the same as the current table name
+        if (this.tableName != null && this.tableName.equals(oldTableName)) {
+            if (newTable instanceof OlapTable) {
+                this.tableId = newTable.getId();
+            }
+            this.tableName = newTable.getName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     public String toString() {
+<<<<<<< HEAD
         if (isInternalCatalog(catalogName)) {
+=======
+        if (isInternalCatalog()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return Joiner.on(".").join(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbId, tableId);
         } else {
             return Joiner.on(".").join(catalogName, dbName, tableIdentifier);
@@ -221,4 +295,8 @@ public class BaseTableInfo {
     public int hashCode() {
         return Objects.hashCode(catalogName, dbId, tableId, dbName, tableIdentifier, tableName);
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

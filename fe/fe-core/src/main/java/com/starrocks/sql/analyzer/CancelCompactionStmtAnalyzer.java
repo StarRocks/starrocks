@@ -31,7 +31,11 @@ public class CancelCompactionStmtAnalyzer {
         new CancelCompactionStmtAnalyzerVisitor().analyze(statement, context);
     }
 
+<<<<<<< HEAD
     static class CancelCompactionStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class CancelCompactionStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         public void analyze(CancelCompactionStmt statement, ConnectContext context) {
             visit(statement, context);

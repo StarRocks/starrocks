@@ -25,11 +25,30 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 
 public class CompoundPredicateOperator extends PredicateOperator {
     private final CompoundType type;
 
+<<<<<<< HEAD
+=======
+    // These two filed are used in NormalizePredicateRule to eliminate common CompoundPredicate
+    // For Expr tree like below, the CompoundTreeLeafNodeNumber is 5, and compoundTreeUniqueLeave's size is 4.
+    //           AND
+    //        /        \
+    //      AND         AND
+    //     /   \       /  \
+    // subT1   a+1  And  subT5
+    //             /   \
+    //          subT3  a+1
+    private int compoundTreeLeafNodeNumber;
+    private Set<ScalarOperator> compoundTreeUniqueLeaves;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public CompoundPredicateOperator(CompoundType compoundType, ScalarOperator... arguments) {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
@@ -46,6 +65,25 @@ public class CompoundPredicateOperator extends PredicateOperator {
         return type;
     }
 
+<<<<<<< HEAD
+=======
+    public Set<ScalarOperator> getCompoundTreeUniqueLeaves() {
+        return compoundTreeUniqueLeaves;
+    }
+
+    public void setCompoundTreeUniqueLeaves(Set<ScalarOperator> compoundTreeUniqueLeaves) {
+        this.compoundTreeUniqueLeaves = compoundTreeUniqueLeaves;
+    }
+
+    public int getCompoundTreeLeafNodeNumber() {
+        return compoundTreeLeafNodeNumber;
+    }
+
+    public void setCompoundTreeLeafNodeNumber(int compoundTreeLeafNodeNumber) {
+        this.compoundTreeLeafNodeNumber = compoundTreeLeafNodeNumber;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
         return visitor.visitCompoundPredicate(this, context);

@@ -18,12 +18,26 @@
 #include <functional>
 #include <ostream>
 
+<<<<<<< HEAD
 #include "common/status.h"
 #include "runtime/mem_tracker.h"
+=======
+#include "column/column_access_path.h"
+#include "common/status.h"
+#include "compaction_task_context.h"
+#include "runtime/mem_tracker.h"
+#include "storage/lake/versioned_tablet.h"
+
+namespace starrocks {
+class TxnLogPB;
+class TxnLogPB_OpCompaction;
+} // namespace starrocks
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::lake {
 
 class Rowset;
+<<<<<<< HEAD
 class Tablet;
 
 class CompactionTask {
@@ -57,6 +71,38 @@ protected:
     std::shared_ptr<Tablet> _tablet = nullptr;
     std::vector<std::shared_ptr<Rowset>> _input_rowsets;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+=======
+class TabletWriter;
+
+class CompactionTask {
+public:
+    // CancelFunc is a function that used to tell the compaction task whether the task
+    // should be cancelled.
+    using CancelFunc = std::function<Status()>;
+
+    explicit CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+                            CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema);
+    virtual ~CompactionTask() = default;
+
+    virtual Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) = 0;
+
+    Status execute_index_major_compaction(TxnLogPB* txn_log);
+
+    inline static const CancelFunc kNoCancelFn = []() { return Status::OK(); };
+    inline static const CancelFunc kCancelledFn = []() { return Status::Aborted(""); };
+
+    Status fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer);
+
+protected:
+    int64_t _txn_id;
+    VersionedTablet _tablet;
+    std::vector<std::shared_ptr<Rowset>> _input_rowsets;
+    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    CompactionTaskContext* _context;
+    std::shared_ptr<const TabletSchema> _tablet_schema;
+    // for flat json used
+    std::vector<std::unique_ptr<ColumnAccessPath>> _column_access_paths;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks::lake

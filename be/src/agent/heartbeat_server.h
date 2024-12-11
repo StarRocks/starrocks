@@ -79,6 +79,12 @@ private:
 
     StatusOr<CmpResult> compare_master_info(const TMasterInfo& master_info);
 
+<<<<<<< HEAD
+=======
+    // New function to print TMasterInfo object as a string
+    std::string print_master_info(const TMasterInfo& master_info) const;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     StorageEngine* _olap_engine;
 }; // class HeartBeatServer
 

@@ -26,12 +26,23 @@
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
+<<<<<<< HEAD
+=======
+#include "storage/predicate_tree/predicate_tree.hpp"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "types/date_value.hpp"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+// ------------------------------------------------------------------------------------
+// Util methods.
+// ------------------------------------------------------------------------------------
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 static bool ignore_cast(const SlotDescriptor& slot, const Expr& expr) {
     if (slot.type().is_date_type() && expr.type().is_date_type()) {
         return true;
@@ -39,11 +50,23 @@ static bool ignore_cast(const SlotDescriptor& slot, const Expr& expr) {
     return slot.type().is_string_type() && expr.type().is_string_type();
 }
 
+<<<<<<< HEAD
 static Expr* get_root_expr(ExprContext* ctx) {
     if (dynamic_cast<DictMappingExpr*>(ctx->root())) {
         return ctx->root()->get_child(1);
     }
     return ctx->root();
+=======
+static Expr* get_root_expr(Expr* root) {
+    if (dynamic_cast<DictMappingExpr*>(root)) {
+        return root->get_child(1);
+    }
+    return root;
+}
+
+static Expr* get_root_expr(ExprContext* ctx) {
+    return get_root_expr(ctx->root());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 template <typename ValueType>
@@ -55,7 +78,11 @@ static bool check_decimal_overflow(int precision, const ValueType& value) {
     }
 }
 
+<<<<<<< HEAD
 template <typename ValueType>
+=======
+template <bool Negative, typename ValueType>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot, const Expr* expr, ExprContext* ctx,
                                 ValueType* value, SQLFilterOp* op, Status* status) {
     if (expr->get_num_children() != 2) {
@@ -117,9 +144,15 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
     }
 
     if (expr->op() == TExprOpcode::EQ || expr->op() == TExprOpcode::NE) {
+<<<<<<< HEAD
         *op = to_olap_filter_type(expr->op(), false);
     } else {
         *op = to_olap_filter_type(expr->op(), reverse_op);
+=======
+        *op = to_olap_filter_type<Negative>(expr->op(), false);
+    } else {
+        *op = to_olap_filter_type<Negative>(expr->op(), reverse_op);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     if constexpr (std::is_same_v<ValueType, DateValue>) {
@@ -170,6 +203,7 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
     return true;
 }
 
+<<<<<<< HEAD
 template <LogicalType SlotType, typename RangeValueType>
 void OlapScanConjunctsManager::normalize_in_or_equal_predicate(const SlotDescriptor& slot,
                                                                ColumnValueRange<RangeValueType>* range) {
@@ -187,6 +221,201 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate(const SlotDescrip
             const Expr* l = root_expr->get_child(0);
 
             if ((!l->is_slotref()) || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
+=======
+static std::vector<BoxedExprContext> build_expr_context_containers(const std::vector<ExprContext*>& expr_contexts) {
+    std::vector<BoxedExprContext> containers;
+    for (auto* expr_ctx : expr_contexts) {
+        containers.emplace_back(expr_ctx);
+    }
+    return containers;
+}
+
+static std::vector<BoxedExpr> build_raw_expr_containers(const std::vector<Expr*>& exprs) {
+    std::vector<BoxedExpr> containers;
+    for (auto* expr : exprs) {
+        containers.emplace_back(expr);
+    }
+    return containers;
+}
+
+template <bool Negative>
+static TExprOpcode::type maybe_invert_in_and_equal_op(const TExprOpcode::type op) {
+    if constexpr (!Negative) {
+        return op;
+    } else {
+        switch (op) {
+        case TExprOpcode::FILTER_IN:
+            return TExprOpcode::FILTER_NOT_IN;
+        case TExprOpcode::FILTER_NOT_IN:
+            return TExprOpcode::FILTER_IN;
+        case TExprOpcode::EQ:
+            return TExprOpcode::NE;
+        case TExprOpcode::NE:
+            return TExprOpcode::EQ;
+
+        default:
+            return op;
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------------
+// ChunkPredicateBuilder
+// ------------------------------------------------------------------------------------
+
+BoxedExpr::BoxedExpr(Expr* root_expr) : root_expr(root_expr) {}
+Expr* BoxedExpr::root() const {
+    return get_root_expr(root_expr);
+}
+StatusOr<ExprContext*> BoxedExpr::expr_context(ObjectPool* obj_pool, RuntimeState* state) const {
+    if (new_expr_ctx == nullptr) {
+        // Copy expr to prevent two ExprContexts from owning the same Expr, which will cause the same Expr to be
+        // closed twice.
+        // - The ExprContext in the `original _opts.conjunct_ctxs_ptr` will own an Expr and all its children.
+        // - The newly created ExprContext here will also own this Expr.
+        auto* new_expr = Expr::copy(obj_pool, root_expr);
+        new_expr_ctx = obj_pool->add(new ExprContext(new_expr));
+        RETURN_IF_ERROR(new_expr_ctx->prepare(state));
+        RETURN_IF_ERROR(new_expr_ctx->open(state));
+    }
+    return new_expr_ctx;
+}
+
+BoxedExprContext::BoxedExprContext(ExprContext* expr_ctx) : expr_ctx(expr_ctx) {}
+Expr* BoxedExprContext::root() const {
+    return get_root_expr(expr_ctx);
+}
+StatusOr<ExprContext*> BoxedExprContext::expr_context(ObjectPool* obj_pool, RuntimeState* state) const {
+    return expr_ctx;
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+ChunkPredicateBuilder<E, Type>::ChunkPredicateBuilder(const ScanConjunctsManagerOptions& opts, std::vector<E> exprs,
+                                                      bool is_root_builder)
+        : _opts(opts), _exprs(std::move(exprs)), _is_root_builder(is_root_builder), _normalized_exprs(_exprs.size()) {}
+
+template <BoxedExprType E, CompoundNodeType Type>
+StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
+    RETURN_IF_ERROR(normalize_expressions());
+    RETURN_IF_ERROR(build_olap_filters());
+
+    // Only the root builder builds scan keys.
+    if (_is_root_builder && _opts.is_olap_scan) {
+        RETURN_IF_ERROR(build_scan_keys(_opts.scan_keys_unlimited, _opts.max_scan_key_num));
+    }
+
+    if (_opts.enable_column_expr_predicate) {
+        VLOG_FILE << "OlapScanConjunctsManager: enable_column_expr_predicate = true. push down column expr predicates";
+        RETURN_IF_ERROR(build_column_expr_predicates());
+    }
+
+    ASSIGN_OR_RETURN(auto normalized, _normalize_compound_predicates());
+    if (_is_root_builder) {
+        return normalized;
+    }
+    // Non-root builder return true only when all the child predicates are normalized.
+    return normalized && !SIMD::contain_zero(_normalized_exprs);
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+StatusOr<bool> ChunkPredicateBuilder<E, Type>::_normalize_compound_predicates() {
+    const size_t num_preds = _exprs.size();
+    for (size_t i = 0; i < num_preds; i++) {
+        if (_normalized_exprs[i]) {
+            continue;
+        }
+
+        ASSIGN_OR_RETURN(const bool normalized, _normalize_compound_predicate(_exprs[i].root()));
+        if (!normalized && !_is_root_builder) {
+            return false;
+        }
+        _normalized_exprs[i] = normalized;
+    }
+
+    return true;
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+StatusOr<bool> ChunkPredicateBuilder<E, Type>::_normalize_compound_predicate(const Expr* root_expr) {
+    auto process = [&]<CompoundNodeType ChildType>() -> StatusOr<bool> {
+        ChunkPredicateBuilder<BoxedExpr, ChildType> child_builder(
+                _opts, build_raw_expr_containers(root_expr->children()), false);
+        ASSIGN_OR_RETURN(const bool normalized, child_builder.parse_conjuncts());
+        if (normalized) {
+            _child_builders.emplace_back(std::move(child_builder));
+        }
+        return normalized;
+    };
+
+    if (TExprOpcode::COMPOUND_OR == root_expr->op()) {
+        if (!_opts.pred_tree_params.enable_or) {
+            return false;
+        }
+        return process.template operator()<CompoundNodeType::OR>();
+    }
+
+    if (TExprOpcode::COMPOUND_AND == root_expr->op()) {
+        return process.template operator()<CompoundNodeType::AND>();
+    }
+
+    return false;
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+StatusOr<PredicateCompoundNode<Type>> ChunkPredicateBuilder<E, Type>::get_predicate_tree_root(
+        PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner) {
+    auto compound_node = PredicateCompoundNode<Type>{};
+
+    const size_t start_i = col_preds_owner.size();
+    RETURN_IF_ERROR(_get_column_predicates(parser, col_preds_owner));
+    for (size_t i = start_i; i < col_preds_owner.size(); i++) {
+        compound_node.add_child(PredicateColumnNode{col_preds_owner[i].get()});
+    }
+
+    for (auto& child_builder : _child_builders) {
+        RETURN_IF_ERROR(std::visit(
+                [&](auto& c) {
+                    ASSIGN_OR_RETURN(auto child_node, c.get_predicate_tree_root(parser, col_preds_owner));
+                    compound_node.add_child(std::move(child_node));
+                    return Status::OK();
+                },
+                child_builder));
+    }
+
+    return compound_node;
+}
+
+template <bool Negative>
+static bool is_not_in(const auto* pred) {
+    if constexpr (Negative) {
+        return !pred->is_not_in();
+    } else {
+        return pred->is_not_in();
+    }
+};
+
+// clang-format off
+template <BoxedExprType E, CompoundNodeType Type>
+template <LogicalType SlotType, typename RangeValueType, bool Negative>
+requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize_in_or_equal_predicate(
+        const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
+    // clang-format on
+
+    Status status;
+
+    for (size_t i = 0; i < _exprs.size(); i++) {
+        if (_normalized_exprs[i]) {
+            continue;
+        }
+
+        const Expr* root_expr = _exprs[i].root();
+
+        // 1. Normalize in conjuncts like 'where col in (v1, v2, v3)'
+        if (TExprOpcode::FILTER_IN == maybe_invert_in_and_equal_op<Negative>(root_expr->op())) {
+            const Expr* l = root_expr->get_child(0);
+
+            if (!l->is_slotref() || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 continue;
             }
             std::vector<SlotId> slot_ids;
@@ -197,7 +426,11 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate(const SlotDescrip
                     continue;
                 }
 
+<<<<<<< HEAD
                 if (pred->is_not_in() || pred->null_in_set() ||
+=======
+                if (is_not_in<Negative>(pred) || pred->null_in_set() ||
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                     continue;
                 }
@@ -207,13 +440,18 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate(const SlotDescrip
                     values.insert(value);
                 }
                 if (range->add_fixed_values(FILTER_IN, values).ok()) {
+<<<<<<< HEAD
                     normalized_conjuncts[i] = true;
+=======
+                    _normalized_exprs[i] = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         }
 
         // 2. Normalize eq conjuncts like 'where col = value'
         if (TExprNodeType::BINARY_PRED == root_expr->node_type() &&
+<<<<<<< HEAD
             FILTER_IN == to_olap_filter_type(root_expr->op(), false)) {
             using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
             SQLFilterOp op;
@@ -243,6 +481,42 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate<starrocks::TYPE_D
 
         // 1. Normalize in conjuncts like 'where col in (v1, v2, v3)'
         if (TExprOpcode::FILTER_IN == root_expr->op()) {
+=======
+            FILTER_IN == to_olap_filter_type<Negative>(root_expr->op(), false)) {
+            using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
+            SQLFilterOp op;
+            ValueType value;
+            ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
+            bool ok =
+                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+            if (ok && range->add_fixed_values(FILTER_IN, std::set<RangeValueType>{value}).ok()) {
+                _normalized_exprs[i] = true;
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
+// clang-format off
+// explicit specialization for DATE.
+template <BoxedExprType E, CompoundNodeType Type>
+template <LogicalType SlotType, typename RangeValueType, bool Negative>
+requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_in_or_equal_predicate(
+        const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
+    // clang-format on
+    Status status;
+
+    for (size_t i = 0; i < _exprs.size(); i++) {
+        if (_normalized_exprs[i]) {
+            continue;
+        }
+
+        const Expr* root_expr = _exprs[i].root();
+
+        // 1. Normalize in conjuncts like 'where col in (v1, v2, v3)'
+        if (TExprOpcode::FILTER_IN == maybe_invert_in_and_equal_op<Negative>(root_expr->op())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             const Expr* l = root_expr->get_child(0);
             // TODO(zhuming): DATE column may be casted to double.
             if (l->type().type != starrocks::TYPE_DATE && l->type().type != starrocks::TYPE_DATETIME) {
@@ -269,7 +543,11 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate<starrocks::TYPE_D
                         continue;
                     }
 
+<<<<<<< HEAD
                     if (pred->is_not_in() || pred->null_in_set() ||
+=======
+                    if (is_not_in<Negative>(pred) || pred->null_in_set() ||
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                         continue;
                     }
@@ -282,7 +560,12 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate<starrocks::TYPE_D
                     }
                 } else if (pred_type == starrocks::TYPE_DATE) {
                     const auto* pred = down_cast<const VectorizedInConstPredicate<starrocks::TYPE_DATE>*>(root_expr);
+<<<<<<< HEAD
                     if (pred->is_not_in() || pred->null_in_set() ||
+=======
+
+                    if (is_not_in<Negative>(pred) || pred->null_in_set() ||
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                         continue;
                     }
@@ -295,13 +578,18 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate<starrocks::TYPE_D
                     continue;
                 }
                 if (range->add_fixed_values(FILTER_IN, values).ok()) {
+<<<<<<< HEAD
                     normalized_conjuncts[i] = true;
+=======
+                    _normalized_exprs[i] = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         }
 
         // 2. Normalize eq conjuncts like 'where col = value'
         if (TExprNodeType::BINARY_PRED == root_expr->node_type() &&
+<<<<<<< HEAD
             FILTER_IN == to_olap_filter_type(root_expr->op(), false)) {
             SQLFilterOp op;
             DateValue value{0};
@@ -326,6 +614,37 @@ void OlapScanConjunctsManager::normalize_binary_predicate(const SlotDescriptor& 
         }
 
         Expr* root_expr = get_root_expr(conjunct_ctxs[i]);
+=======
+            FILTER_IN == to_olap_filter_type<Negative>(root_expr->op(), false)) {
+            SQLFilterOp op;
+            DateValue value{0};
+            ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
+            bool ok =
+                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+            if (ok && range->add_fixed_values(FILTER_IN, std::set<DateValue>{value}).ok()) {
+                _normalized_exprs[i] = true;
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+template <LogicalType SlotType, typename RangeValueType, bool Negative>
+Status ChunkPredicateBuilder<E, Type>::normalize_binary_predicate(const SlotDescriptor& slot,
+                                                                  ColumnValueRange<RangeValueType>* range) {
+    Status status;
+    DCHECK((SlotType == slot.type().type) || (SlotType == TYPE_VARCHAR && slot.type().type == TYPE_CHAR));
+
+    for (size_t i = 0; i < _exprs.size(); i++) {
+        if (_normalized_exprs[i]) {
+            continue;
+        }
+
+        const Expr* root_expr = _exprs[i].root();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (TExprNodeType::BINARY_PRED != root_expr->node_type()) {
             continue;
         }
@@ -334,6 +653,7 @@ void OlapScanConjunctsManager::normalize_binary_predicate(const SlotDescriptor& 
 
         SQLFilterOp op;
         ValueType value;
+<<<<<<< HEAD
         bool ok = get_predicate_value(obj_pool, slot, root_expr, conjunct_ctxs[i], &value, &op, &status);
         if (ok && range->add_range(op, static_cast<RangeValueType>(value)).ok()) {
             normalized_conjuncts[i] = true;
@@ -354,6 +674,34 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
         }
 
         const Expr* root_expr = get_root_expr(conjunct_ctxs[i]);
+=======
+        ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
+        bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+        if (ok && range->add_range(op, static_cast<RangeValueType>(value)).ok()) {
+            _normalized_exprs[i] = true;
+        }
+    }
+
+    return Status::OK();
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+template <LogicalType SlotType, typename RangeValueType, bool Negative>
+Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotDescriptor& slot,
+                                                                     ColumnValueRange<RangeValueType>* range) {
+    // TODO(lzh): OR preidcate with runtime filters is not supported yet.
+    if constexpr (Negative) {
+        return Status::OK();
+    }
+
+    // in runtime filter
+    for (size_t i = 0; i < _exprs.size(); i++) {
+        if (_normalized_exprs[i]) {
+            continue;
+        }
+
+        const Expr* root_expr = _exprs[i].root();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (TExprOpcode::FILTER_IN == root_expr->op()) {
             const Expr* l = root_expr->get_child(0);
             if (!l->is_slotref() || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
@@ -368,7 +716,11 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
                 }
 
                 // Ensure we don't compute this conjuncts again in olap scanner
+<<<<<<< HEAD
                 normalized_conjuncts[i] = true;
+=======
+                _normalized_exprs[i] = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                 if (pred->is_not_in() || pred->null_in_set() ||
                     pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
@@ -379,15 +731,25 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
                 for (const auto& value : pred->hash_set()) {
                     values.insert(value);
                 }
+<<<<<<< HEAD
                 range->add_fixed_values(FILTER_IN, values);
+=======
+                (void)range->add_fixed_values(FILTER_IN, values);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
 
     // bloom runtime filter
+<<<<<<< HEAD
     for (const auto& it : runtime_filters->descriptors()) {
         const RuntimeFilterProbeDescriptor* desc = it.second;
         const JoinRuntimeFilter* rf = desc->runtime_filter();
+=======
+    for (const auto& it : _opts.runtime_filters->descriptors()) {
+        const RuntimeFilterProbeDescriptor* desc = it.second;
+        const JoinRuntimeFilter* rf = desc->runtime_filter(_opts.driver_sequence);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         using RangeType = ColumnValueRange<RangeValueType>;
         using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
         SlotId slot_id;
@@ -397,7 +759,11 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
 
         // runtime filter existed and does not have null.
         if (rf == nullptr) {
+<<<<<<< HEAD
             rt_ranger_params.add_unarrived_rf(desc, &slot);
+=======
+            rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             continue;
         }
 
@@ -413,7 +779,11 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
         // If a scanner has finished building a runtime filter,
         // the rest of the runtime filters will be normalized here
 
+<<<<<<< HEAD
         auto& global_dicts = runtime_state->get_query_global_dict_map();
+=======
+        auto& global_dicts = _opts.runtime_state->get_query_global_dict_map();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if constexpr (SlotType == TYPE_VARCHAR) {
             if (auto iter = global_dicts.find(slot_id); iter != global_dicts.end()) {
                 detail::RuntimeColumnPredicateBuilder::build_minmax_range<
@@ -430,6 +800,7 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
                                                                                                          nullptr);
         }
     }
+<<<<<<< HEAD
 }
 
 template <LogicalType SlotType, typename RangeValueType>
@@ -453,11 +824,47 @@ void OlapScanConjunctsManager::normalize_not_in_or_not_equal_predicate(const Slo
             bool ok = get_predicate_value(obj_pool, slot, root_expr, conjunct_ctxs[i], &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_NOT_IN, std::set<RangeValueType>{value}).ok()) {
                 normalized_conjuncts[i] = true;
+=======
+
+    return Status::OK();
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+template <LogicalType SlotType, typename RangeValueType, bool Negative>
+Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
+        const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
+    Status status;
+    DCHECK((SlotType == slot.type().type) || (SlotType == TYPE_VARCHAR && slot.type().type == TYPE_CHAR));
+
+    using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
+    // handle not equal.
+    for (size_t i = 0; i < _exprs.size(); i++) {
+        if (_normalized_exprs[i]) {
+            continue;
+        }
+        const Expr* root_expr = _exprs[i].root();
+
+        // handle not equal
+        if (root_expr->node_type() == TExprNodeType::BINARY_PRED &&
+            maybe_invert_in_and_equal_op<Negative>(root_expr->op()) == TExprOpcode::NE) {
+            SQLFilterOp op;
+            ValueType value;
+            ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
+            bool ok =
+                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+            if (ok && range->add_fixed_values(FILTER_NOT_IN, std::set<RangeValueType>{value}).ok()) {
+                _normalized_exprs[i] = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
         // handle not in
+<<<<<<< HEAD
         if (root_expr->node_type() == TExprNodeType::IN_PRED && root_expr->op() == TExprOpcode::FILTER_NOT_IN) {
+=======
+        if (root_expr->node_type() == TExprNodeType::IN_PRED &&
+            maybe_invert_in_and_equal_op<Negative>(root_expr->op()) == TExprOpcode::FILTER_NOT_IN) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             const Expr* l = root_expr->get_child(0);
             if (!l->is_slotref() || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
                 continue;
@@ -466,10 +873,19 @@ void OlapScanConjunctsManager::normalize_not_in_or_not_equal_predicate(const Slo
 
             if (1 == l->get_slot_ids(&slot_ids) && slot_ids[0] == slot.id()) {
                 const auto* pred = down_cast<const VectorizedInConstPredicate<SlotType>*>(root_expr);
+<<<<<<< HEAD
                 // RTF won't generate not in predicate
                 DCHECK(!pred->is_join_runtime_filter());
 
                 if (!pred->is_not_in() || pred->null_in_set() ||
+=======
+
+                if (pred->is_join_runtime_filter()) {
+                    continue;
+                }
+
+                if (!is_not_in<Negative>(pred) || pred->null_in_set() ||
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                     continue;
                 }
@@ -479,11 +895,16 @@ void OlapScanConjunctsManager::normalize_not_in_or_not_equal_predicate(const Slo
                     values.insert(value);
                 }
                 if (range->add_fixed_values(FILTER_NOT_IN, values).ok()) {
+<<<<<<< HEAD
                     normalized_conjuncts[i] = true;
+=======
+                    _normalized_exprs[i] = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         }
     }
+<<<<<<< HEAD
 }
 
 void OlapScanConjunctsManager::normalize_is_null_predicate(const SlotDescriptor& slot) {
@@ -494,6 +915,19 @@ void OlapScanConjunctsManager::normalize_is_null_predicate(const SlotDescriptor&
             continue;
         }
         Expr* root_expr = get_root_expr(conjunct_ctxs[i]);
+=======
+
+    return Status::OK();
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+Status ChunkPredicateBuilder<E, Type>::normalize_is_null_predicate(const SlotDescriptor& slot) {
+    for (size_t i = 0; i < _exprs.size(); i++) {
+        if (_normalized_exprs[i]) {
+            continue;
+        }
+        const Expr* root_expr = _exprs[i].root();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (TExprNodeType::FUNCTION_CALL == root_expr->node_type()) {
             std::string is_null_str;
             if (root_expr->is_null_scalar_function(is_null_str)) {
@@ -510,6 +944,7 @@ void OlapScanConjunctsManager::normalize_is_null_predicate(const SlotDescriptor&
                 is_null.condition_op = "is";
                 is_null.condition_values.push_back(is_null_str);
                 is_null_vector.push_back(is_null);
+<<<<<<< HEAD
                 normalized_conjuncts[i] = true;
             }
         }
@@ -534,6 +969,40 @@ struct ColumnRangeBuilder {
         if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
                       lt_is_binary<ltype>) {
             return nullptr;
+=======
+                _normalized_exprs[i] = true;
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+template <LogicalType SlotType, typename RangeValueType>
+Status ChunkPredicateBuilder<E, Type>::normalize_predicate(const SlotDescriptor& slot,
+                                                           ColumnValueRange<RangeValueType>* range) {
+    constexpr bool Negative = Type == CompoundNodeType::OR;
+    RETURN_IF_ERROR((normalize_in_or_equal_predicate<SlotType, RangeValueType, Negative>(slot, range)));
+    RETURN_IF_ERROR((normalize_binary_predicate<SlotType, RangeValueType, Negative>(slot, range)));
+    // Execute normalize_not_in_or_not_equal_predicate after normalize_binary_predicate,
+    // because the range generated by not in predicates cannot be merged with the range generated by binary predicates.
+    RETURN_IF_ERROR((normalize_not_in_or_not_equal_predicate<SlotType, RangeValueType, Negative>(slot, range)));
+    RETURN_IF_ERROR(normalize_is_null_predicate(slot));
+    // Must handle join runtime filter last
+    RETURN_IF_ERROR((normalize_join_runtime_filter<SlotType, RangeValueType, Negative>(slot, range)));
+
+    return Status::OK();
+}
+
+struct ColumnRangeBuilder {
+    template <LogicalType ltype, typename E, CompoundNodeType Type>
+    Status operator()(ChunkPredicateBuilder<E, Type>* parent, const SlotDescriptor* slot,
+                      std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
+                      lt_is_binary<ltype>) {
+            return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             // Treat tinyint and boolean as int
             constexpr LogicalType limit_type = ltype == TYPE_TINYINT || ltype == TYPE_BOOLEAN ? TYPE_INT : ltype;
@@ -555,12 +1024,18 @@ struct ColumnRangeBuilder {
                 range.set_precision(slot->type().precision);
                 range.set_scale(slot->type().scale);
             }
+<<<<<<< HEAD
             cm->normalize_predicate<mapping_type, value_type>(*slot, &range);
             return nullptr;
+=======
+
+            return parent->template normalize_predicate<mapping_type, value_type>(*slot, &range);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 };
 
+<<<<<<< HEAD
 Status OlapScanConjunctsManager::normalize_conjuncts() {
     // Note: _normalized_conjuncts size must be equal to _conjunct_ctxs size,
     // but HashJoinNode will push down predicate to OlapScanNode's _conjunct_ctxs,
@@ -574,10 +1049,25 @@ Status OlapScanConjunctsManager::normalize_conjuncts() {
     for (auto& slot : tuple_desc->decoded_slots()) {
         type_dispatch_predicate<std::nullptr_t>(slot->type().type, false, ColumnRangeBuilder(), this, slot,
                                                 &column_value_ranges);
+=======
+template <BoxedExprType E, CompoundNodeType Type>
+Status ChunkPredicateBuilder<E, Type>::normalize_expressions() {
+    // Note: _normalized_exprs size must be equal to _conjunct_ctxs size,
+    // but HashJoinNode will push down predicate to OlapScanNode's _conjunct_ctxs,
+    // So _conjunct_ctxs will change after OlapScanNode prepare,
+    // So we couldn't resize _normalized_exprs when OlapScanNode init or prepare
+
+    // TODO(zhuming): if any of the normalized column range is empty, we can know that
+    // no row will be selected anymore and can return EOF directly.
+    for (auto& slot : _opts.tuple_desc->decoded_slots()) {
+        RETURN_IF_ERROR(type_dispatch_predicate<Status>(slot->type().type, false, ColumnRangeBuilder(), this, slot,
+                                                        &column_value_ranges));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status OlapScanConjunctsManager::build_olap_filters() {
     olap_filters.clear();
 
@@ -587,6 +1077,28 @@ Status OlapScanConjunctsManager::build_olap_filters() {
         bool empty_range = std::visit([](auto&& range) { return range.is_empty_value_range(); }, iter.second);
         if (empty_range) {
             return Status::EndOfFile("EOF, Filter by always false condition");
+=======
+template <BoxedExprType E, CompoundNodeType Type>
+Status ChunkPredicateBuilder<E, Type>::build_olap_filters() {
+    constexpr bool Negative = Type == CompoundNodeType::OR;
+    olap_filters.clear();
+
+    // False alert from clang-tidy-14
+    // NOLINTNEXTLINE(performance-for-range-copy)
+    for (auto iter : column_value_ranges) {
+        std::vector<TCondition> filters;
+        std::visit([&](auto&& range) { range.template to_olap_filter<Negative>(filters); }, iter.second);
+        const bool empty_range = std::visit([](auto&& range) { return range.is_empty_value_range(); }, iter.second);
+        if (empty_range) {
+            if constexpr (!Negative) {
+                return Status::EndOfFile("EOF, Filter by always false condition");
+            } else {
+                auto not_null_filter =
+                        std::visit([&](auto&& range) { return range.to_olap_not_null_filter(); }, iter.second);
+                filters.clear();
+                filters.emplace_back(std::move(not_null_filter));
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         for (auto& filter : filters) {
@@ -627,10 +1139,18 @@ private:
     int32_t _max_scan_key_num;
 };
 
+<<<<<<< HEAD
 Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_scan_key_num) {
     int conditional_key_columns = 0;
     scan_keys.set_is_convertible(unlimited);
     const std::vector<std::string>& ref_key_column_names = *key_column_names;
+=======
+template <BoxedExprType E, CompoundNodeType Type>
+Status ChunkPredicateBuilder<E, Type>::build_scan_keys(bool unlimited, int32_t max_scan_key_num) {
+    int conditional_key_columns = 0;
+    scan_keys.set_is_convertible(unlimited);
+    const std::vector<std::string>& ref_key_column_names = *_opts.key_column_names;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     for (const auto& key_column_name : ref_key_column_names) {
         if (column_value_ranges.count(key_column_name) == 0) {
@@ -649,17 +1169,28 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
                                                        std::vector<std::unique_ptr<ColumnPredicate>>* preds) {
+=======
+template <BoxedExprType E, CompoundNodeType Type>
+Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* parser,
+                                                              ColumnPredicatePtrs& col_preds_owner) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (auto& f : olap_filters) {
         std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
         RETURN_IF(!p, Status::RuntimeError("invalid filter"));
         p->set_index_filter_only(f.is_index_filter_only);
+<<<<<<< HEAD
         preds->emplace_back(std::move(p));
+=======
+        col_preds_owner.emplace_back(std::move(p));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     for (auto& f : is_null_vector) {
         std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
         RETURN_IF(!p, Status::RuntimeError("invalid filter"));
+<<<<<<< HEAD
         preds->emplace_back(std::move(p));
     }
 
@@ -670,6 +1201,16 @@ Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
         const SlotDescriptor* slot_desc = slots[slot_index];
         for (ExprContext* ctx : expr_ctxs) {
             ASSIGN_OR_RETURN(auto tmp, parser->parse_expr_ctx(*slot_desc, runtime_state, ctx));
+=======
+        col_preds_owner.emplace_back(std::move(p));
+    }
+
+    const auto& slots = _opts.tuple_desc->decoded_slots();
+    for (auto& [slot_index, expr_ctxs] : slot_index_to_expr_ctxs) {
+        const SlotDescriptor* slot_desc = slots[slot_index];
+        for (ExprContext* ctx : expr_ctxs) {
+            ASSIGN_OR_RETURN(auto tmp, parser->parse_expr_ctx(*slot_desc, _opts.runtime_state, ctx));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             std::unique_ptr<ColumnPredicate> p(std::move(tmp));
             if (p == nullptr) {
                 std::stringstream ss;
@@ -680,6 +1221,7 @@ Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
                 LOG(WARNING) << ss.str();
                 return Status::RuntimeError("invalid filter");
             } else {
+<<<<<<< HEAD
                 preds->emplace_back(std::move(p));
             }
         }
@@ -707,6 +1249,18 @@ Status OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprCont
 }
 
 Status OlapScanConjunctsManager::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {
+=======
+                col_preds_owner.emplace_back(std::move(p));
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+Status ChunkPredicateBuilder<E, Type>::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(scan_keys.get_key_range(key_ranges));
     if (key_ranges->empty()) {
         key_ranges->emplace_back(std::make_unique<OlapScanRange>());
@@ -714,6 +1268,7 @@ Status OlapScanConjunctsManager::get_key_ranges(std::vector<std::unique_ptr<Olap
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void OlapScanConjunctsManager::get_not_push_down_conjuncts(std::vector<ExprContext*>* predicates) {
     DCHECK_EQ(conjunct_ctxs_ptr->size(), normalized_conjuncts.size());
     for (size_t i = 0; i < normalized_conjuncts.size(); i++) {
@@ -726,12 +1281,24 @@ void OlapScanConjunctsManager::get_not_push_down_conjuncts(std::vector<ExprConte
 void OlapScanConjunctsManager::build_column_expr_predicates() {
     std::map<SlotId, int> slot_id_to_index;
     const auto& slots = tuple_desc->decoded_slots();
+=======
+template <BoxedExprType E, CompoundNodeType Type>
+bool ChunkPredicateBuilder<E, Type>::is_pred_normalized(size_t index) const {
+    return index < _normalized_exprs.size() && _normalized_exprs[index];
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+Status ChunkPredicateBuilder<E, Type>::build_column_expr_predicates() {
+    std::map<SlotId, int> slot_id_to_index;
+    const auto& slots = _opts.tuple_desc->decoded_slots();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (int i = 0; i < slots.size(); i++) {
         const SlotDescriptor* slot_desc = slots[i];
         SlotId slot_id = slot_desc->id();
         slot_id_to_index.insert(std::make_pair(slot_id, i));
     }
 
+<<<<<<< HEAD
     const auto& conjunct_ctxs = (*conjunct_ctxs_ptr);
     for (size_t i = 0; i < conjunct_ctxs.size(); i++) {
         if (normalized_conjuncts[i]) continue;
@@ -739,6 +1306,14 @@ void OlapScanConjunctsManager::build_column_expr_predicates() {
         ExprContext* ctx = conjunct_ctxs[i];
         std::vector<SlotId> slot_ids;
         ctx->root()->get_slot_ids(&slot_ids);
+=======
+    for (size_t i = 0; i < _exprs.size(); i++) {
+        if (_normalized_exprs[i]) continue;
+
+        const Expr* root_expr = _exprs[i].root();
+        std::vector<SlotId> slot_ids;
+        root_expr->get_slot_ids(&slot_ids);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (slot_ids.size() != 1) continue;
         int index = -1;
         {
@@ -759,6 +1334,7 @@ void OlapScanConjunctsManager::build_column_expr_predicates() {
             slot_index_to_expr_ctxs.insert(make_pair(index, std::vector<ExprContext*>{}));
             iter = slot_index_to_expr_ctxs.find(index);
         }
+<<<<<<< HEAD
         iter->second.emplace_back(ctx);
         normalized_conjuncts[i] = true;
     }
@@ -772,8 +1348,71 @@ Status OlapScanConjunctsManager::parse_conjuncts(bool scan_keys_unlimited, int32
     if (enable_column_expr_predicate) {
         VLOG_FILE << "OlapScanConjunctsManager: enable_column_expr_predicate = true. push down column expr predicates";
         build_column_expr_predicates();
+=======
+        ASSIGN_OR_RETURN(auto* expr_ctx, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
+        iter->second.emplace_back(expr_ctx);
+        _normalized_exprs[i] = true;
+    }
+
+    return Status::OK();
+}
+
+// ------------------------------------------------------------------------------------
+// OlapScanConjunctsManager
+// ------------------------------------------------------------------------------------
+
+ScanConjunctsManager::ScanConjunctsManager(ScanConjunctsManagerOptions&& opts)
+        : _opts(opts), _root_builder(_opts, build_expr_context_containers(*_opts.conjunct_ctxs_ptr), true) {}
+
+Status ScanConjunctsManager::parse_conjuncts() {
+    return _root_builder.parse_conjuncts().status();
+}
+
+Status ScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status) {
+    *status = Status::OK();
+    for (const auto& ctx : conjunct_ctxs) {
+        // if conjunct is constant, compute direct and set eos = true
+        if (ctx->root()->is_constant()) {
+            ASSIGN_OR_RETURN(ColumnPtr value, ctx->root()->evaluate_const(ctx));
+
+            if (value == nullptr || value->only_null() || value->is_null(0)) {
+                *status = Status::EndOfFile("conjuncts evaluated to null");
+                break;
+            } else if (value->is_constant() && !ColumnHelper::get_const_value<TYPE_BOOLEAN>(value)) {
+                *status = Status::EndOfFile("conjuncts evaluated to false");
+                break;
+            }
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<PredicateTree> ScanConjunctsManager::get_predicate_tree(PredicateParser* parser,
+                                                                 ColumnPredicatePtrs& col_preds_owner) {
+    ASSIGN_OR_RETURN(auto pred_root, _root_builder.get_predicate_tree_root(parser, col_preds_owner));
+    return PredicateTree::create(std::move(pred_root));
+}
+
+Status ScanConjunctsManager::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {
+    return _root_builder.get_key_ranges(key_ranges);
+}
+
+void ScanConjunctsManager::get_not_push_down_conjuncts(std::vector<ExprContext*>* predicates) {
+    // DCHECK_EQ(_opts.conjunct_ctxs_ptr->size(), _normalized_exprs.size());
+    const size_t num_preds = _opts.conjunct_ctxs_ptr->size();
+    for (size_t i = 0; i < num_preds; i++) {
+        if (!_root_builder.is_pred_normalized(i)) {
+            predicates->push_back(_opts.conjunct_ctxs_ptr->at(i));
+        }
+    }
+}
+
+const UnarrivedRuntimeFilterList& ScanConjunctsManager::unarrived_runtime_filters() {
+    return _root_builder.unarrived_runtime_filters();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

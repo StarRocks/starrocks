@@ -36,7 +36,11 @@ public:
 
 struct IntersectSliceFlagEqual {
     bool operator()(const IntersectSliceFlag& x, const IntersectSliceFlag& y) const {
+<<<<<<< HEAD
         return memequal(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
+=======
+        return memequal_padded(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 };
 
@@ -52,7 +56,11 @@ template <typename HashSet>
 class IntersectHashSet {
 public:
     using Iterator = typename HashSet::iterator;
+<<<<<<< HEAD
     using KeyVector = typename std::vector<Slice>;
+=======
+    using KeyVector = Buffer<Slice>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     IntersectHashSet() = default;
 

@@ -88,7 +88,11 @@ void DateValue::from_mysql_date(uint64_t date) {
 uint24_t DateValue::to_mysql_date() const {
     int y, m, d;
     to_date(&y, &m, &d);
+<<<<<<< HEAD
     return uint24_t((uint32_t)(y << 9) | (m << 5) | (d));
+=======
+    return {(uint32_t)(y << 9) | (m << 5) | (d)};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 bool DateValue::from_string(const char* date_str, size_t len) {

@@ -49,6 +49,10 @@ public:
 
     OutputAmplificationType intra_pipeline_amplification_type() const override;
     size_t output_amplification_factor() const override;
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     std::atomic<bool> _is_finished = false;

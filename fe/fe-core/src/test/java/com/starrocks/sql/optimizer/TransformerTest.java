@@ -132,6 +132,14 @@ public class TransformerTest {
         runUnitTest("subquery");
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testPivot() {
+        runUnitTest("pivot");
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static void analyzeAndBuildOperator(String originStmt, String operatorString, String except,
                                                ErrorCollector collector) {
         try {

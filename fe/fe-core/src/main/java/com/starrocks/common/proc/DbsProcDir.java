@@ -43,6 +43,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
@@ -81,9 +86,15 @@ public class DbsProcDir implements ProcDirInterface {
 
         Database db;
         try {
+<<<<<<< HEAD
             db = globalStateMgr.getDb(Long.parseLong(dbIdOrName));
         } catch (NumberFormatException e) {
             db = globalStateMgr.getDb(dbIdOrName);
+=======
+            db = globalStateMgr.getLocalMetastore().getDb(Long.parseLong(dbIdOrName));
+        } catch (NumberFormatException e) {
+            db = globalStateMgr.getLocalMetastore().getDb(dbIdOrName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         if (db == null) {
@@ -99,7 +110,11 @@ public class DbsProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
+<<<<<<< HEAD
         List<String> dbNames = globalStateMgr.getDbNames();
+=======
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (dbNames == null || dbNames.isEmpty()) {
             // empty
             return result;
@@ -108,14 +123,25 @@ public class DbsProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> dbInfos = new ArrayList<List<Comparable>>();
         for (String dbName : dbNames) {
+<<<<<<< HEAD
             Database db = globalStateMgr.getDb(dbName);
+=======
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 continue;
             }
             List<Comparable> dbInfo = new ArrayList<Comparable>();
+<<<<<<< HEAD
             db.readLock();
             try {
                 int tableNum = db.getTables().size();
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                int tableNum = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).size();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 dbInfo.add(db.getId());
                 dbInfo.add(dbName);
                 dbInfo.add(tableNum);
@@ -132,7 +158,11 @@ public class DbsProcDir implements ProcDirInterface {
                 dbInfo.add(replicaQuota);
 
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             dbInfos.add(dbInfo);
         }

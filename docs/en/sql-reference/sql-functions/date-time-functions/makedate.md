@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # makedate
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Creates and returns a date based on the given year and day of year values.
 

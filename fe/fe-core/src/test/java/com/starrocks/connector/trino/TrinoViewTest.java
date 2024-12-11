@@ -88,7 +88,11 @@ public class TrinoViewTest {
         Assert.assertEquals(hiveView.getFullSchema().get(2).getName(), "salary");
         Assert.assertEquals(hiveView.getFullSchema().get(2).getType(), ScalarType.DOUBLE);
         Assert.assertEquals(hiveView.getFullSchema().get(3).getName(), "new_col");
+<<<<<<< HEAD
         Assert.assertEquals(hiveView.getFullSchema().get(3).getType(), ScalarType.STRING);
+=======
+        Assert.assertEquals(hiveView.getFullSchema().get(3).getType(), ScalarType.createDefaultCatalogString());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -139,11 +143,20 @@ public class TrinoViewTest {
         Assert.assertEquals(hiveView.getFullSchema().get(14).getName(), "array_col");
         Assert.assertEquals(hiveView.getFullSchema().get(14).getType(), ScalarType.ARRAY_INT);
         Assert.assertEquals(hiveView.getFullSchema().get(15).getName(), "map_col");
+<<<<<<< HEAD
         Assert.assertEquals(hiveView.getFullSchema().get(15).getType(), new MapType(ScalarType.STRING, ScalarType.INT));
         Assert.assertEquals(hiveView.getFullSchema().get(16).getName(), "struct_col");
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(new StructField("field1", ScalarType.INT));
         structFields.add(new StructField("field2", ScalarType.STRING));
+=======
+        Assert.assertEquals(hiveView.getFullSchema().get(15).getType(),
+                new MapType(ScalarType.createDefaultCatalogString(), ScalarType.INT));
+        Assert.assertEquals(hiveView.getFullSchema().get(16).getName(), "struct_col");
+        ArrayList<StructField> structFields = new ArrayList<>();
+        structFields.add(new StructField("field1", ScalarType.INT));
+        structFields.add(new StructField("field2", ScalarType.createDefaultCatalogString()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(hiveView.getFullSchema().get(16).getType(), new StructType(structFields));
     }
 
@@ -179,6 +192,7 @@ public class TrinoViewTest {
         Assert.assertEquals(columnList.get(6).getType(), ScalarType.createDecimalV3NarrowestType(10, 2));
         Assert.assertEquals(columnList.get(7).getType(), ScalarType.createVarcharType(20));
         Assert.assertEquals(columnList.get(8).getType(), ScalarType.createCharType(10));
+<<<<<<< HEAD
         Assert.assertEquals(columnList.get(9).getType(), ScalarType.STRING);
         Assert.assertEquals(columnList.get(10).getType(), ScalarType.BOOLEAN);
         Assert.assertEquals(columnList.get(11).getType(), ScalarType.DATETIME);
@@ -187,6 +201,17 @@ public class TrinoViewTest {
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(new StructField("field1", ScalarType.INT));
         structFields.add(new StructField("field2", ScalarType.STRING));
+=======
+        Assert.assertEquals(columnList.get(9).getType(), ScalarType.createDefaultCatalogString());
+        Assert.assertEquals(columnList.get(10).getType(), ScalarType.BOOLEAN);
+        Assert.assertEquals(columnList.get(11).getType(), ScalarType.DATETIME);
+        Assert.assertEquals(columnList.get(12).getType(), ScalarType.ARRAY_INT);
+        Assert.assertEquals(columnList.get(13).getType(),
+                new MapType(ScalarType.createDefaultCatalogString(), ScalarType.INT));
+        ArrayList<StructField> structFields = new ArrayList<>();
+        structFields.add(new StructField("field1", ScalarType.INT));
+        structFields.add(new StructField("field2", ScalarType.createDefaultCatalogString()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(columnList.get(14).getType(), new StructType(structFields));
     }
 }

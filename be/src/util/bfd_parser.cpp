@@ -116,7 +116,11 @@ BfdParser* BfdParser::create() {
     }
 
     char prog_name[1024];
+<<<<<<< HEAD
     if (fscanf(file, "%s ", prog_name) != 1) {
+=======
+    if (fscanf(file, "%1023s ", prog_name) != 1) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         strcpy(prog_name, "read cmdline failed");
     }
     fclose(file);

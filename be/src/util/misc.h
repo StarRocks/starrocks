@@ -14,11 +14,19 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <cstdint>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <functional>
 
 namespace starrocks {
 
 // take a sleep with small intervals until time out by `sleep_secs` or the `stop_condition()` is true
+<<<<<<< HEAD
 void nap_sleep(int32_t sleep_secs, std::function<bool()> stop_condition);
+=======
+void nap_sleep(int32_t sleep_secs, const std::function<bool()>& stop_condition);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 } // namespace starrocks

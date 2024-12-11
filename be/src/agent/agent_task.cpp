@@ -14,11 +14,20 @@
 
 #include "agent/agent_task.h"
 
+<<<<<<< HEAD
+=======
+#include <fmt/format.h>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
 #include "boost/lexical_cast.hpp"
 #include "common/status.h"
+<<<<<<< HEAD
+=======
+#include "gutil/strings/join.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/snapshot_loader.h"
@@ -26,16 +35,28 @@
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
+<<<<<<< HEAD
+=======
+#include "storage/metadata_util.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/replication_txn_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_manager.h"
 #include "storage/task/engine_alter_tablet_task.h"
 #include "storage/task/engine_checksum_task.h"
 #include "storage/task/engine_clone_task.h"
+<<<<<<< HEAD
+=======
+#include "storage/task/engine_compaction_control_task.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/task/engine_manual_compaction_task.h"
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
+<<<<<<< HEAD
+=======
+#include "testutil/sync_point.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -80,7 +101,11 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
             strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req.job_id, agent_task_req.base_tablet_id);
     if (status == STARROCKS_SUCCESS) {
         g_report_version.fetch_add(1, std::memory_order_relaxed);
+<<<<<<< HEAD
         LOG(INFO) << alter_msg_head << "alter finished. signature: " << signature;
+=======
+        VLOG(1) << alter_msg_head << "alter finished. signature: " << signature;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // Return result to fe
@@ -114,7 +139,11 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         swap(finish_tablet_infos, finish_task_request->finish_tablet_infos);
         finish_task_request->__isset.finish_tablet_infos = true;
         LOG(INFO) << alter_msg_head << "alter success. signature: " << signature;
+<<<<<<< HEAD
         error_msgs.push_back("alter success");
+=======
+        error_msgs.emplace_back("alter success");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         task_status.__set_status_code(TStatusCode::OK);
     } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
         LOG(WARNING) << alter_msg_head << "alter table request task type invalid. "
@@ -125,7 +154,11 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         LOG(WARNING) << alter_msg_head << "alter failed. signature: " << signature;
         error_msgs.emplace_back("alter failed");
         error_msgs.emplace_back("status: " + print_agent_status(status));
+<<<<<<< HEAD
         error_msgs.emplace_back(sc_status.get_error_msg());
+=======
+        error_msgs.emplace_back(sc_status.message());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
 
@@ -201,7 +234,11 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
         if (!st.ok()) {
             LOG(WARNING) << "drop table failed! signature: " << agent_task_req->signature;
             error_msgs.emplace_back("drop table failed!");
+<<<<<<< HEAD
             error_msgs.emplace_back("drop tablet " + st.get_error_msg());
+=======
+            error_msgs.emplace_back(fmt::format("drop tablet {}", st.message()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             status_code = TStatusCode::RUNTIME_ERROR;
         }
         // if tablet is dropped by fe, then the related txn should also be removed
@@ -221,10 +258,33 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
 
     auto tablet_type = create_tablet_req.tablet_type;
     Status create_status;
+<<<<<<< HEAD
     if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
         create_status = exec_env->lake_tablet_manager()->create_tablet(create_tablet_req);
     } else {
         create_status = StorageEngine::instance()->create_tablet(create_tablet_req);
+=======
+
+    if (create_tablet_req.__isset.timeout_ms && create_tablet_req.timeout_ms > 0) {
+        if (agent_task_req->isset.recv_time) {
+            int64_t current_time = time(nullptr);
+            TEST_SYNC_POINT_CALLBACK("AgentTask::run_create_tablet_task::time", &current_time);
+            int64_t elapsed_seconds = std::difftime(current_time, agent_task_req->recv_time);
+            if (elapsed_seconds * 1000 > create_tablet_req.timeout_ms) {
+                create_status =
+                        Status::TimedOut(fmt::format("the task waits too long in the queue. "
+                                                     "timeout: {} ms, elapsed: {} ms",
+                                                     create_tablet_req.timeout_ms, elapsed_seconds * 1000));
+            }
+        }
+    }
+    if (create_status.ok()) {
+        if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+            create_status = exec_env->lake_tablet_manager()->create_tablet(create_tablet_req);
+        } else {
+            create_status = StorageEngine::instance()->create_tablet(create_tablet_req);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     if (!create_status.ok()) {
         LOG(WARNING) << "create table failed. status: " << create_status.to_string()
@@ -233,7 +293,11 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
         if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
             error_msgs.emplace_back(create_status.to_string(false));
         } else {
+<<<<<<< HEAD
             error_msgs.emplace_back("create tablet " + create_status.get_error_msg());
+=======
+            error_msgs.emplace_back(fmt::format("create tablet failed. {}", create_status.message()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     } else if (create_tablet_req.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
         g_report_version.fetch_add(1, std::memory_order_relaxed);
@@ -267,6 +331,7 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
     int64_t signatrue = agent_task_req->signature;
     std::string alter_msg_head = strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req->task_req.job_id,
                                                      agent_task_req->task_req.base_tablet_id);
+<<<<<<< HEAD
     LOG(INFO) << alter_msg_head << "get alter table task, signature: " << agent_task_req->signature;
     bool is_task_timeout = false;
     if (agent_task_req->isset.recv_time) {
@@ -277,6 +342,20 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
         }
     }
     if (!is_task_timeout) {
+=======
+    VLOG(1) << alter_msg_head << "get alter table task, signature: " << agent_task_req->signature;
+    bool is_task_req_expired = false;
+    if (agent_task_req->isset.recv_time) {
+        int64_t time_elapsed = time(nullptr) - agent_task_req->recv_time;
+        if (time_elapsed > config::report_task_interval_seconds * 20) {
+            // task have been in queue for a long time, this task may already be cancelled by FE
+            // so just ignore this task, cause if it's not cancelled, FE will resend a new one
+            LOG(INFO) << alter_msg_head << " ignore expired task request " << time_elapsed << "s since enqueue";
+            is_task_req_expired = true;
+        }
+    }
+    if (!is_task_req_expired) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TFinishTaskRequest finish_task_request;
         TTaskType::type task_type = agent_task_req->task_type;
         if (task_type == TTaskType::ALTER) {
@@ -351,7 +430,11 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "local tablet migration failed. status: " << res
                              << ", signature: " << agent_task_req->signature;
+<<<<<<< HEAD
                 error_msgs.emplace_back("local tablet migration failed. error message: " + res.get_error_msg());
+=======
+                error_msgs.emplace_back(fmt::format("local tablet migration failed. error message: {}", res.message()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 LOG(INFO) << "local tablet migration succeeded. status: " << res
                           << ", signature: " << agent_task_req->signature;
@@ -428,14 +511,22 @@ void run_storage_medium_migrate_task(const std::shared_ptr<StorageMediumMigrateT
         if (src_storage_medium == storage_medium) {
             // status code is ok
             LOG(INFO) << "tablet is already on specified storage medium. "
+<<<<<<< HEAD
                       << "storage_medium=" << storage_medium;
+=======
+                      << "storage_medium=" << storage_medium << ", signature:" << agent_task_req->signature;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             break;
         }
 
         uint32_t count = StorageEngine::instance()->available_storage_medium_type_count();
         if (count <= 1) {
             LOG(INFO) << "available storage medium type count is less than 1, "
+<<<<<<< HEAD
                       << "no need to migrate. count=" << count;
+=======
+                      << "no need to migrate. count=" << count << ", signature:" << agent_task_req->signature;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             status_code = TStatusCode::RUNTIME_ERROR;
             break;
         }
@@ -443,7 +534,12 @@ void run_storage_medium_migrate_task(const std::shared_ptr<StorageMediumMigrateT
         // get a random store of specified storage medium
         auto stores = StorageEngine::instance()->get_stores_for_create_tablet(storage_medium);
         if (stores.empty()) {
+<<<<<<< HEAD
             LOG(WARNING) << "fail to get path for migration. storage_medium=" << storage_medium;
+=======
+            LOG(WARNING) << "get available store for migratio failed. storage_medium=" << storage_medium
+                         << ", signature:" << agent_task_req->signature;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             status_code = TStatusCode::RUNTIME_ERROR;
             break;
         }
@@ -500,8 +596,13 @@ void run_check_consistency_task(const std::shared_ptr<CheckConsistencyTaskReques
             LOG(WARNING) << "check consistency failed. status: " << res << ", signature: " << agent_task_req->signature;
             status_code = TStatusCode::RUNTIME_ERROR;
         } else {
+<<<<<<< HEAD
             LOG(INFO) << "check consistency success. status:" << res << ", signature:" << agent_task_req->signature
                       << ", checksum:" << checksum;
+=======
+            VLOG(1) << "check consistency success. status:" << res << ", signature:" << agent_task_req->signature
+                    << ", checksum:" << checksum;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -529,7 +630,11 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     for (auto tablet_id : compaction_req.tablet_ids) {
         EngineManualCompactionTask engine_task(GlobalEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
                                                compaction_req.is_base_compaction);
+<<<<<<< HEAD
         StorageEngine::instance()->execute_task(&engine_task);
+=======
+        (void)StorageEngine::instance()->execute_task(&engine_task);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     task_status.__set_status_code(status_code);
@@ -545,10 +650,119 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
+<<<<<<< HEAD
 void run_upload_task(const std::shared_ptr<UploadAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TUploadReq& upload_request = agent_task_req->task_req;
 
     LOG(INFO) << "Got upload task signature=" << agent_task_req->signature << " job id=" << upload_request.job_id;
+=======
+void run_compaction_control_task(const std::shared_ptr<CompactionControlTaskRequest>& agent_task_req,
+                                 ExecEnv* exec_env) {
+    const TCompactionControlReq& compaction_req = agent_task_req->task_req;
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+    TStatus task_status;
+
+    EngineCompactionControlTask engine_task(compaction_req.table_to_disable_deadline);
+    (void)StorageEngine::instance()->execute_task(&engine_task);
+
+    task_status.__set_status_code(status_code);
+    task_status.__set_error_msgs(error_msgs);
+
+    TFinishTaskRequest finish_task_request;
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_task_type(agent_task_req->task_type);
+    finish_task_request.__set_signature(agent_task_req->signature);
+    finish_task_request.__set_task_status(task_status);
+
+    finish_task(finish_task_request);
+    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+}
+
+void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    const TUpdateSchemaReq& update_schema_req = agent_task_req->task_req;
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+    TStatus task_status;
+
+    int64_t schema_id = update_schema_req.schema_id;
+    int64_t schema_version = update_schema_req.schema_version;
+    TOlapTableColumnParam tcolumn_param = update_schema_req.column_param;
+
+    POlapTableColumnParam pcolumn_param;
+    pcolumn_param.set_short_key_column_count(tcolumn_param.short_key_column_count);
+    for (auto uid : tcolumn_param.sort_key_uid) {
+        pcolumn_param.add_sort_key_uid(uid);
+    }
+    Status st;
+    for (auto& tcolumn : tcolumn_param.columns) {
+        uint32_t col_unique_id = tcolumn.col_unique_id;
+        ColumnPB* column = pcolumn_param.add_columns_desc();
+        st = t_column_to_pb_column(col_unique_id, tcolumn, column);
+        if (!st.ok()) {
+            break;
+        }
+    }
+
+    TFinishTaskRequest finish_task_request;
+    auto& error_tablet_ids = finish_task_request.error_tablet_ids;
+    if (!st.ok()) {
+        status_code = TStatusCode::RUNTIME_ERROR;
+        std::string msg = strings::Substitute("update schema fail because convert column fail: $0", st.to_string());
+        LOG(WARNING) << msg;
+        error_msgs.emplace_back(msg);
+        for (auto tablet_id : update_schema_req.tablet_ids) {
+            error_tablet_ids.push_back(tablet_id);
+        }
+    } else {
+        for (auto tablet_id : update_schema_req.tablet_ids) {
+            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+            if (tablet == nullptr) {
+                continue;
+            }
+            auto ori_tablet_schema = tablet->tablet_schema();
+            if (schema_version <= ori_tablet_schema->schema_version()) {
+                continue;
+            }
+            auto ret = TabletSchema::create(*ori_tablet_schema, schema_id, schema_version, pcolumn_param);
+            if (!ret.ok()) {
+                status_code = TStatusCode::RUNTIME_ERROR;
+                std::string msg =
+                        strings::Substitute("update schema fail because build tablet schema fail: $0", st.to_string());
+                LOG(WARNING) << msg;
+                error_msgs.emplace_back(msg);
+                error_tablet_ids.push_back(tablet_id);
+                continue;
+            }
+            tablet->update_max_version_schema(ret.value());
+            VLOG(2) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
+                    << " to " << schema_version;
+        }
+    }
+
+    task_status.__set_status_code(status_code);
+    task_status.__set_error_msgs(error_msgs);
+
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_task_type(agent_task_req->task_type);
+    finish_task_request.__set_signature(agent_task_req->signature);
+    finish_task_request.__set_task_status(task_status);
+    if (!error_tablet_ids.empty()) {
+        finish_task_request.__isset.error_tablet_ids = true;
+    }
+
+    finish_task(finish_task_request);
+    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    LOG_IF(INFO, error_tablet_ids.size() > 0)
+            << "Update schema task signature=" << agent_task_req->signature << " error_tablets["
+            << error_tablet_ids.size() << "):" << JoinInts(error_tablet_ids, ",");
+}
+
+void run_upload_task(const std::shared_ptr<UploadAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    const TUploadReq& upload_request = agent_task_req->task_req;
+
+    VLOG(1) << "Got upload task signature=" << agent_task_req->signature << " job id=" << upload_request.job_id;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::map<int64_t, std::vector<std::string>> tablet_files;
     SnapshotLoader loader(exec_env, upload_request.job_id, agent_task_req->signature);
@@ -558,8 +772,13 @@ void run_upload_task(const std::shared_ptr<UploadAgentTaskRequest>& agent_task_r
     std::vector<std::string> error_msgs;
     if (!status.ok()) {
         status_code = TStatusCode::RUNTIME_ERROR;
+<<<<<<< HEAD
         LOG(WARNING) << "Fail to upload job id=" << upload_request.job_id << " msg=" << status.get_error_msg();
         error_msgs.push_back(status.get_error_msg());
+=======
+        LOG(WARNING) << "Fail to upload job id=" << upload_request.job_id << " msg=" << status.message();
+        error_msgs.emplace_back(status.message());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     TStatus task_status;
@@ -576,12 +795,21 @@ void run_upload_task(const std::shared_ptr<UploadAgentTaskRequest>& agent_task_r
     finish_task(finish_task_request);
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 
+<<<<<<< HEAD
     LOG(INFO) << "Uploaded task signature=" << agent_task_req->signature << " job id=" << upload_request.job_id;
+=======
+    LOG(INFO) << "Finished uploaded task signature=" << agent_task_req->signature
+              << " job id=" << upload_request.job_id;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void run_download_task(const std::shared_ptr<DownloadAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TDownloadReq& download_request = agent_task_req->task_req;
+<<<<<<< HEAD
     LOG(INFO) << "Got download task signature=" << agent_task_req->signature << " job id=" << download_request.job_id;
+=======
+    VLOG(1) << "Got download task signature=" << agent_task_req->signature << " job id=" << download_request.job_id;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
@@ -594,8 +822,13 @@ void run_download_task(const std::shared_ptr<DownloadAgentTaskRequest>& agent_ta
 
     if (!status.ok()) {
         status_code = TStatusCode::RUNTIME_ERROR;
+<<<<<<< HEAD
         LOG(WARNING) << "Fail to download job id=" << download_request.job_id << " msg=" << status.get_error_msg();
         error_msgs.push_back(status.get_error_msg());
+=======
+        LOG(WARNING) << "Fail to download job id=" << download_request.job_id << " msg=" << status.message();
+        error_msgs.emplace_back(status.message());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     task_status.__set_status_code(status_code);
@@ -611,12 +844,21 @@ void run_download_task(const std::shared_ptr<DownloadAgentTaskRequest>& agent_ta
     finish_task(finish_task_request);
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 
+<<<<<<< HEAD
     LOG(INFO) << "Downloaded task signature=" << agent_task_req->signature << " job id=" << download_request.job_id;
+=======
+    LOG(INFO) << "Finished downloaded task signature=" << agent_task_req->signature
+              << " job id=" << download_request.job_id;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void run_make_snapshot_task(const std::shared_ptr<SnapshotAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TSnapshotRequest& snapshot_request = agent_task_req->task_req;
+<<<<<<< HEAD
     LOG(INFO) << "Got snapshot task signature=" << agent_task_req->signature;
+=======
+    VLOG(1) << "Got snapshot task signature=" << agent_task_req->signature;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
@@ -646,8 +888,13 @@ void run_make_snapshot_task(const std::shared_ptr<SnapshotAgentTaskRequest>& age
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "Fail to make snapshot tablet_id" << snapshot_request.tablet_id
                              << " schema_hash=" << snapshot_request.schema_hash
+<<<<<<< HEAD
                              << " version=" << snapshot_request.version << ", list file failed, " << st.get_error_msg();
                 error_msgs.push_back("make_snapshot failed. list file failed: " + st.get_error_msg());
+=======
+                             << " version=" << snapshot_request.version << ", list file failed, " << st.message();
+                error_msgs.push_back(fmt::format("make_snapshot failed. list file failed: {}", st.message()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
@@ -670,7 +917,11 @@ void run_make_snapshot_task(const std::shared_ptr<SnapshotAgentTaskRequest>& age
 void run_release_snapshot_task(const std::shared_ptr<ReleaseSnapshotAgentTaskRequest>& agent_task_req,
                                ExecEnv* exec_env) {
     const TReleaseSnapshotRequest& release_snapshot_request = agent_task_req->task_req;
+<<<<<<< HEAD
     LOG(INFO) << "Got release snapshot task signature=" << agent_task_req->signature;
+=======
+    VLOG(1) << "Got release snapshot task signature=" << agent_task_req->signature;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
@@ -709,8 +960,13 @@ AgentStatus move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::st
     }
 
     if (!status.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "Fail to move job id=" << job_id << ", " << status.get_error_msg();
         error_msgs->push_back(status.get_error_msg());
+=======
+        LOG(WARNING) << "Fail to move job id=" << job_id << ", " << status.message();
+        error_msgs->emplace_back(status.message());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return STARROCKS_INTERNAL_ERROR;
     }
 
@@ -719,7 +975,11 @@ AgentStatus move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::st
 
 void run_move_dir_task(const std::shared_ptr<MoveDirAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TMoveDirReq& move_dir_req = agent_task_req->task_req;
+<<<<<<< HEAD
     LOG(INFO) << "Got move dir task signature=" << agent_task_req->signature << " job id=" << move_dir_req.job_id;
+=======
+    VLOG(1) << "Got move dir task signature=" << agent_task_req->signature << " job id=" << move_dir_req.job_id;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
@@ -746,8 +1006,14 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                                ExecEnv* exec_env) {
     const TUpdateTabletMetaInfoReq& update_tablet_meta_req = agent_task_req->task_req;
 
+<<<<<<< HEAD
     LOG(INFO) << "get update tablet meta task, signature:" << agent_task_req->signature;
 
+=======
+    VLOG(1) << "get update tablet meta task, signature:" << agent_task_req->signature;
+
+    auto update_manager = StorageEngine::instance()->update_manager();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
 
@@ -758,7 +1024,11 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
         auto res = handler.process_update_tablet_meta(update_tablet_meta_req);
         if (!res.ok()) {
             // TODO explict the error message and errorCode
+<<<<<<< HEAD
             error_msgs.emplace_back(res.get_error_msg());
+=======
+            error_msgs.emplace_back(res.message());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             status_code = TStatusCode::RUNTIME_ERROR;
         }
         unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
@@ -791,6 +1061,11 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 break;
             case TTabletMetaType::REPLICATED_STORAGE:
                 break;
+<<<<<<< HEAD
+=======
+            case TTabletMetaType::BUCKET_SIZE:
+                break;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             case TTabletMetaType::DISABLE_BINLOG:
                 break;
             case TTabletMetaType::BINLOG_CONFIG:
@@ -798,7 +1073,11 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 {
                     auto curr_binlog_config = tablet->tablet_meta()->get_binlog_config();
                     if (curr_binlog_config != nullptr) {
+<<<<<<< HEAD
                         LOG(INFO) << "current binlog config:" << curr_binlog_config->to_string();
+=======
+                        VLOG(1) << "current binlog config:" << curr_binlog_config->to_string();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     }
                 }
 
@@ -813,8 +1092,30 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
                 // because the primary index is available in cache
                 // But it will be remove from index cache after apply is finished
+<<<<<<< HEAD
                 auto manager = StorageEngine::instance()->update_manager();
                 manager->index_cache().try_remove_by_key(tablet->tablet_id());
+=======
+                update_manager->index_cache().try_remove_by_key(tablet->tablet_id());
+                break;
+            case TTabletMetaType::PRIMARY_INDEX_CACHE_EXPIRE_SEC: {
+                LOG(INFO) << "update tablet:" << tablet->tablet_id()
+                          << " primary_index_cache_expire_sec:" << tablet_meta_info.primary_index_cache_expire_sec;
+                tablet->tablet_meta()->set_primary_index_cache_expire_sec(
+                        tablet_meta_info.primary_index_cache_expire_sec);
+                // update index's expire right now, if pk index is alive
+                auto index_entry = update_manager->index_cache().get(tablet->tablet_id());
+                if (index_entry != nullptr) {
+                    index_entry->update_expire_time(MonotonicMillis() +
+                                                    update_manager->get_index_cache_expire_ms(*tablet));
+                    update_manager->index_cache().release(index_entry);
+                }
+            } break;
+            case TTabletMetaType::STORAGE_TYPE:
+                LOG(INFO) << "change storage_type not supported";
+                break;
+            default:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             }
         }
@@ -835,7 +1136,11 @@ AgentStatus drop_auto_increment_map(TTableId table_id) {
 void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMapAgentTaskRequest>& agent_task_req,
                                       ExecEnv* exec_env) {
     const TDropAutoIncrementMapReq& drop_auto_increment_map_req = agent_task_req->task_req;
+<<<<<<< HEAD
     LOG(INFO) << "drop auto increment map task tableid=" << drop_auto_increment_map_req.table_id;
+=======
+    VLOG(1) << "drop auto increment map task tableid=" << drop_auto_increment_map_req.table_id;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;

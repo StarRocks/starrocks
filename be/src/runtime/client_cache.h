@@ -176,6 +176,12 @@ public:
         }
     }
 
+<<<<<<< HEAD
+=======
+    // Test only
+    ClientConnection() : _client(nullptr) {}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ClientConnection(const ClientConnection&) = delete;
     void operator=(const ClientConnection&) = delete;
 

@@ -18,6 +18,10 @@
 
 #include "formats/csv/output_stream.h"
 #include "fs/fs.h"
+<<<<<<< HEAD
+=======
+#include "io/async_flush_output_stream.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::csv {
 
@@ -40,4 +44,29 @@ private:
     std::unique_ptr<WritableFile> _file;
 };
 
+<<<<<<< HEAD
+=======
+class AsyncOutputStreamFile final : public OutputStream {
+public:
+    AsyncOutputStreamFile(io::AsyncFlushOutputStream* stream, size_t buff_size)
+            : OutputStream(buff_size), _stream(stream) {}
+
+    Status finalize() override {
+        RETURN_IF_ERROR(OutputStream::finalize());
+        return _stream->close();
+    }
+
+    std::size_t size() override { return _stream->tell(); }
+
+protected:
+    Status _sync(const char* data, size_t size) override {
+        auto p = reinterpret_cast<const uint8_t*>(data);
+        return _stream->write(p, size);
+    }
+
+private:
+    io::AsyncFlushOutputStream* _stream;
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::csv

@@ -76,12 +76,20 @@ public class GetStreamLoadState extends RestBaseAction {
         // FIXME(cmy)
         // checkReadPriv(authInfo.fullUserName, fullDbName);
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             throw new DdlException("unknown database, database=" + dbName);
         }
 
+<<<<<<< HEAD
         String status = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelStatus(db.getId(), label).toString();
+=======
+        String status = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(db.getId(), label).toString();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         sendResult(request, response, new Result(status));
     }

@@ -43,15 +43,21 @@ import com.starrocks.common.Pair;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.parser.NodePosition;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 public class RoutineLoadDataSourceProperties implements ParseNode {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(RoutineLoadDataSourceProperties.class);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private static final ImmutableSet<String> CONFIGURABLE_KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY)

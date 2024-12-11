@@ -34,8 +34,15 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class RoleEdges {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.ROLE_EDGES_ID, "role_edges", Table.TableType.SCHEMA,
+=======
+    private static final String NAME = "role_edges";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.ROLE_EDGES_ID, NAME, Table.TableType.SCHEMA,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 builder()
                         .column("FROM_ROLE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TO_ROLE", ScalarType.createVarchar(NAME_CHAR_LEN))

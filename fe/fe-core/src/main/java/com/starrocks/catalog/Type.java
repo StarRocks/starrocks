@@ -39,10 +39,19 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.sql.common.TypeManager;
+=======
+import com.starrocks.catalog.combinator.AggStateDesc;
+import com.starrocks.common.Pair;
+import com.starrocks.mysql.MysqlColType;
+import com.starrocks.proto.PScalarType;
+import com.starrocks.proto.PTypeDesc;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
@@ -65,6 +74,35 @@ public abstract class Type implements Cloneable {
     // used for nested type such as map and struct
     protected Boolean[] selectedFields;
 
+<<<<<<< HEAD
+=======
+    // Why add AggStateDesc into Type class?
+    // 1. AggStateDesc is only used for combinator agg functions, and it's not persisted in Type but rather in Column.
+    // 2. Combinator agg functions cannot deduce input's original type, we need this to record the original type in aggStateDesc.
+    // eg:
+    //  CREATE TABLE test_agg_state_table (
+    //        k1  date,
+    //        v0 multi_distinct_sum(double),
+    //        v1 multi_distinct_sum(float),
+    //        v2 multi_distinct_sum(boolean),
+    //        v3 multi_distinct_sum(tinyint(4)),
+    //        v4 multi_distinct_sum(smallint(6)),
+    //        v5 multi_distinct_sum(int(11)),
+    //        v6 multi_distinct_sum(bigint(20)),
+    //        v7 multi_distinct_sum(largeint(40)),
+    //        v8 multi_distinct_sum(decimal(10, 2)),
+    //        v9 multi_distinct_sum(decimal(10, 2)),
+    //        v10 multi_distinct_sum(decimal(10, 2)))
+    //    DISTRIBUTED BY HASH(k1)
+    //    PROPERTIES (  "replication_num" = "1");
+    // In this case, all column types of v0...v10 are `varbinary`, only use `varbinary` type we cannot deduce the final agg type.
+    // eg: select multi_distinct_sum_merge(v0), multi_distinct_sum_merge(v5) from test_agg_state_table
+    // Even v0/v5's types are varbinary, but multi_distinct_sum_merge(v0) returns double,
+    // multi_distinct_sum_merge(v5) returns bigint.
+    // So we need to record the original column's agg state desc in type to be used in FunctionAnalyzer.
+    protected AggStateDesc aggStateDesc = null;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final int CHARSET_BINARY = 63;
     public static final int CHARSET_UTF8 = 33;
 
@@ -118,7 +156,11 @@ public abstract class Type implements Cloneable {
             ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
 
     public static final ScalarType VARCHAR = ScalarType.createVarcharType(-1);
+<<<<<<< HEAD
     public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+    public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final ScalarType DEFAULT_STRING = ScalarType.createDefaultString();
     public static final ScalarType HLL = ScalarType.createHllType();
     public static final ScalarType CHAR = ScalarType.createCharType(-1);
@@ -567,6 +609,15 @@ public abstract class Type implements Cloneable {
      */
     protected abstract String toSql(int depth);
 
+<<<<<<< HEAD
+=======
+    public final String toTypeString() {
+        return toTypeString(0);
+    }
+
+    protected abstract String toTypeString(int depth);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Same as toSql() but adds newlines and spaces for better readability of nested types.
      */
@@ -799,6 +850,15 @@ public abstract class Type implements Cloneable {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canDistinct();
         }
+<<<<<<< HEAD
+=======
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().allMatch(sf -> sf.getType().canDistinct());
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().canDistinct() && ((MapType) this).getValueType().canDistinct();
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
                 !isMapType();
     }
@@ -893,10 +953,13 @@ public abstract class Type implements Cloneable {
         return isFixedPointType() || isDecimalV2() || isDecimalV3();
     }
 
+<<<<<<< HEAD
     public boolean isNativeType() {
         return isFixedPointType() || isFloatingPointType() || isBoolean();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isDateType() {
         return isScalarType(PrimitiveType.DATE) || isScalarType(PrimitiveType.DATETIME);
     }
@@ -986,6 +1049,7 @@ public abstract class Type implements Cloneable {
         return PrimitiveType.INVALID_TYPE;
     }
 
+<<<<<<< HEAD
     /**
      * Returns the size in bytes of the fixed-length portion that a slot of this type
      * occupies in a tuple.
@@ -1000,6 +1064,8 @@ public abstract class Type implements Cloneable {
         throw new IllegalStateException("getSlotSize() not implemented for type " + toSql());
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Return type data size, used for compute optimizer column statistics
     public int getTypeSize() {
         // TODO(ywb): compute the collection type size later.
@@ -1125,8 +1191,18 @@ public abstract class Type implements Cloneable {
             return true;
         } else if (from.isStringType() && to.isArrayType()) {
             return true;
+<<<<<<< HEAD
         } else if (from.isJsonType() && to.isArrayScalar()) {
             // now we only support cast json to one dimensional array
+=======
+        } else if (from.isJsonType() && to.isArrayType()) {
+            ArrayType array = (ArrayType) to;
+            if (array.getItemType().isScalarType() || array.getItemType().isStructType()) {
+                return true;
+            }
+            return false;
+        } else if (from.isJsonType() && to.isStructType()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return true;
         } else if (from.isBoolean() && to.isComplexType()) {
             // for mock nest type with NULL value, the cast must return NULL
@@ -1137,6 +1213,7 @@ public abstract class Type implements Cloneable {
         }
     }
 
+<<<<<<< HEAD
     public boolean isArrayScalar() {
         if (!isArrayType()) {
             return false;
@@ -1145,6 +1222,8 @@ public abstract class Type implements Cloneable {
         return array.getItemType().isScalarType();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Return type t such that values from both t1 and t2 can be assigned to t without an
      * explicit cast. If strict, does not consider conversions that would result in loss
@@ -1307,6 +1386,55 @@ public abstract class Type implements Cloneable {
         return new Pair<Type, Integer>(type, tmpNodeIdx);
     }
 
+<<<<<<< HEAD
+=======
+    public static Type fromProtobuf(PTypeDesc pTypeDesc) {
+        return fromProtobuf(pTypeDesc, 0).first;
+    }
+
+    private static Pair<Type, Integer> fromProtobuf(PTypeDesc pTypeDesc, int nodeIndex) {
+        Preconditions.checkState(pTypeDesc.types.size() > nodeIndex);
+        TTypeNodeType tTypeNodeType = TTypeNodeType.findByValue(pTypeDesc.types.get(nodeIndex).type);
+        switch (tTypeNodeType) {
+            case SCALAR: {
+                PScalarType scalarType = pTypeDesc.types.get(nodeIndex).scalarType;
+                return new Pair<>(ScalarType.createType(scalarType), 1);
+            }
+            case ARRAY: {
+                Preconditions.checkState(pTypeDesc.types.size() > nodeIndex + 1);
+                Pair<Type, Integer> res = fromProtobuf(pTypeDesc, nodeIndex + 1);
+                return new Pair<>(new ArrayType(res.first), 1 + res.second);
+            }
+            case MAP: {
+                Preconditions.checkState(pTypeDesc.types.size() > nodeIndex + 2);
+                Pair<Type, Integer> keyRes = fromProtobuf(pTypeDesc, nodeIndex + 1);
+                int keyStep = keyRes.second;
+
+                Pair<Type, Integer> valueRes = fromProtobuf(pTypeDesc, nodeIndex + 1 + keyStep);
+                int valueStep = valueRes.second;
+                return new Pair<>(new MapType(keyRes.first, valueRes.first), 1 + keyStep + valueStep);
+            }
+            case STRUCT: {
+                Preconditions.checkState(pTypeDesc.types.size() >=
+                        nodeIndex + 1 + pTypeDesc.types.get(nodeIndex).structFields.size());
+                ArrayList<StructField> fields = new ArrayList<>();
+
+                int totalStep = 0;
+                for (int i = 0; i < pTypeDesc.types.get(nodeIndex).structFields.size(); ++i) {
+                    String fieldName = pTypeDesc.types.get(nodeIndex).structFields.get(i).name;
+                    Pair<Type, Integer> res = fromProtobuf(pTypeDesc, nodeIndex + 1 + totalStep);
+                    fields.add(new StructField(fieldName, res.first));
+                    totalStep += res.second;
+                }
+                return new Pair<>(new StructType(fields), 1 + totalStep);
+            }
+        }
+        // NEVER REACH.
+        Preconditions.checkState(false);
+        return null;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Utility function to get the primitive type of a thrift type that is known
      * to be scalar.
@@ -1449,6 +1577,7 @@ public abstract class Type implements Cloneable {
         }
     }
 
+<<<<<<< HEAD
     public static Type getCmpType(Type t1, Type t2) {
         if (t1.getPrimitiveType() == PrimitiveType.NULL_TYPE) {
             return t2;
@@ -1498,6 +1627,8 @@ public abstract class Type implements Cloneable {
         return Type.DOUBLE;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static Type getCommonScalarType(ScalarType t1, ScalarType t2) {
         return ScalarType.getAssignmentCompatibleType(t1, t2, true);
     }
@@ -1563,7 +1694,11 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+<<<<<<< HEAD
                 return this.getResultType();
+=======
+                return this;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             default:
                 return Type.INVALID;
 
@@ -1708,21 +1843,37 @@ public abstract class Type implements Cloneable {
     @Override
     public Type clone() {
         try {
+<<<<<<< HEAD
             return (Type) super.clone();
+=======
+            Type cloned = (Type) super.clone();
+            if (aggStateDesc != null) {
+                cloned.setAggStateDesc(aggStateDesc.clone());
+            }
+            return cloned;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } catch (CloneNotSupportedException ex) {
             throw new Error("Something impossible just happened", ex);
         }
     }
 
     // getInnermostType() is only used for array
+<<<<<<< HEAD
     public static Type getInnermostType(Type type) throws AnalysisException {
+=======
+    public static Type getInnermostType(Type type) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (type.isScalarType() || type.isStructType() || type.isMapType()) {
             return type;
         }
         if (type.isArrayType()) {
             return getInnermostType(((ArrayType) type).getItemType());
         }
+<<<<<<< HEAD
         throw new AnalysisException("Cannot get innermost type of '" + type + "'");
+=======
+        throw new SemanticException("Cannot get innermost type of '" + type + "'");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public String canonicalName() {
@@ -1738,4 +1889,24 @@ public abstract class Type implements Cloneable {
     public String toMysqlColumnTypeString() {
         return "unknown";
     }
+<<<<<<< HEAD
+=======
+
+    // This function is called by Column::getMaxUniqueId()
+    // If type is a scalar type, it does not have field Id because scalar type does not have sub fields
+    // If type is struct type, it will return the max field id(default value of field id is -1)
+    // If type is array type, it will return the max field id of item type
+    // if type is map type, it will return the max unique id between key type and value type
+    public int getMaxUniqueId() {
+        return -1;
+    }
+
+    public void setAggStateDesc(AggStateDesc aggStateDesc) {
+        this.aggStateDesc = aggStateDesc;
+    }
+
+    public AggStateDesc getAggStateDesc() {
+        return aggStateDesc;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

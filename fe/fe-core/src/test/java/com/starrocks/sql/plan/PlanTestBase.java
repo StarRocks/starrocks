@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -31,6 +32,17 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Mock;
 import mockit.MockUp;
+=======
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.FeConstants;
+import com.starrocks.planner.TpchSQL;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.utframe.StarRocksAssert;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -39,9 +51,18 @@ import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
+<<<<<<< HEAD
 import java.util.List;
 
 public class PlanTestBase extends PlanTestNoneDBBase {
+=======
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+public class PlanTestBase extends PlanTestNoneDBBase {
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static final Logger LOG = LogManager.getLogger(PlanTestBase.class);
 
     // use a unique dir so that it won't be conflict with other unit test which
@@ -76,6 +97,20 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
+=======
+        starRocksAssert.withTable("CREATE TABLE `part_t1` (\n" +
+                "  `v4` bigint NULL COMMENT \"\",\n" +
+                "  `v5` bigint NULL COMMENT \"\",\n" +
+                "  `v6` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY list(v4) ( partition p1 values in ('1'), partition p2 values in ('2')) \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.withTable("CREATE TABLE `t2` (\n" +
                 "  `v7` bigint NULL COMMENT \"\",\n" +
                 "  `v8` bigint NULL COMMENT \"\",\n" +
@@ -137,6 +172,29 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
+=======
+        starRocksAssert.withTable("CREATE TABLE `t7` (\n" +
+                "  `k1` string NULL COMMENT \"\",\n" +
+                "  `k2` string NULL COMMENT \"\",\n" +
+                "  `k3` string NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t8` (\n" +
+                "  `k1` string NULL COMMENT \"\",\n" +
+                "  `k2` string NULL COMMENT \"\",\n" +
+                "  `k3` string NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.withTable("CREATE TABLE `colocate_t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +
@@ -289,6 +347,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         starRocksAssert.withTable("CREATE TABLE region ( R_REGIONKEY  INTEGER NOT NULL,\n" +
                 "                            R_NAME       CHAR(25) NOT NULL,\n" +
                 "                            R_COMMENT    VARCHAR(152),\n" +
@@ -430,6 +489,16 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+=======
+        starRocksAssert.withTable(TpchSQL.REGION);
+        starRocksAssert.withTable(TpchSQL.SUPPLIER);
+        starRocksAssert.withTable(TpchSQL.PARTSUPP);
+        starRocksAssert.withTable(TpchSQL.ORDERS);
+        starRocksAssert.withTable(TpchSQL.CUSTOMER);
+        starRocksAssert.withTable(TpchSQL.NATION);
+        starRocksAssert.withTable(TpchSQL.PART);
+        starRocksAssert.withTable(TpchSQL.LINEITEM);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         starRocksAssert.withTable("CREATE TABLE `lineorder_flat_for_mv` (\n" +
                 "  `LO_ORDERDATE` date NOT NULL COMMENT \"\",\n" +
@@ -827,7 +896,11 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                         "\"password\"=\"test_passwd\",\n" +
                         "\"driver_url\"=\"test_driver_url\",\n" +
                         "\"driver_class\"=\"test.driver.class\",\n" +
+<<<<<<< HEAD
                         "\"jdbc_uri\"=\"jdbc:mysql://127.0.0.1:3306\"\n" +
+=======
+                        "\"jdbc_uri\"=\"jdbc:mariadb://127.0.0.1:3306\"\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         ");")
                 .withTable("create external table test.jdbc_test\n" +
                         "(a int, b varchar(20), c float)\n" +
@@ -1028,6 +1101,22 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
+=======
+        starRocksAssert.withTable("CREATE TABLE `tprimary_bool` (\n" +
+                "  `pk1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `pk2` BOOLEAN NOT NULL COMMENT \"\",\n" +
+                "  `v3` string NOT NULL COMMENT \"\",\n" +
+                "  `v4` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(pk1, pk2)\n" +
+                "DISTRIBUTED BY HASH(pk1, pk2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.withTable("CREATE TABLE `tjson` (\n" +
                 "  `v_int`  bigint NULL COMMENT \"\",\n" +
                 "  `v_json` json NULL COMMENT \"\" \n" +
@@ -1039,20 +1128,63 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
         GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
+=======
+        starRocksAssert.withTable("CREATE TABLE `test_agg_group_single_unique_key` (\n" +
+                "  `id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `big_value` bigint(20) NULL COMMENT \"\",\n" +
+                "  `double_value` double NULL COMMENT \"\",\n" +
+                "  `decimal_value` decimal(10, 5) NULL COMMENT \"\",\n" +
+                "  `varchar_value` varchar(255) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `test_agg_group_multi_unique_key` (\n" +
+                "  `id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `big_value` bigint(20) NULL COMMENT \"\",\n" +
+                "  `double_value` double NULL COMMENT \"\",\n" +
+                "  `decimal_value` decimal(10, 5) NULL COMMENT \"\",\n" +
+                "  `varchar_value` varchar(255) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`id`, `big_value`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+<<<<<<< HEAD
+=======
+        connectContext.getSessionVariable().setEnableShortCircuit(true);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @AfterClass
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+<<<<<<< HEAD
     }
 
     private static void setPartitionVersion(Partition partition, long version) {
@@ -1086,12 +1218,19 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 }
             }
         };
+=======
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
         String currentDb = starRocksAssert.getCtx().getDatabase();
         if (StringUtils.isNotEmpty(currentDb)) {
+<<<<<<< HEAD
             Database testDb = GlobalStateMgr.getCurrentState().getDb(currentDb);
+=======
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (MaterializedView mv : ListUtils.emptyIfNull(testDb.getMaterializedViews())) {
                 if (startTime > 0 && mv.getCreateTime() > startTime) {
                     starRocksAssert.dropMaterializedView(mv.getName());
@@ -1104,4 +1243,18 @@ public class PlanTestBase extends PlanTestNoneDBBase {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    public static List<TScanRangeParams> collectAllScanRangeParams(DefaultCoordinator coordinator) {
+        List<TScanRangeParams> scanRangeParams = new ArrayList<>();
+        for (FragmentInstance instance : coordinator.getExecutionDAG().getInstances()) {
+            for (List<TScanRangeParams> x : instance.getNode2ScanRanges().values()) {
+                scanRangeParams.addAll(x);
+            }
+        }
+        // remove empty scan range introduced in incremental scan ranges feature.
+        return scanRangeParams.stream().filter(x -> !(x.isSetEmpty() && x.isEmpty())).collect(Collectors.toList());
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

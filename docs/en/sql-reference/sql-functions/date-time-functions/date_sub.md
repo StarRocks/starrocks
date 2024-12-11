@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_sub,subdate
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Subtracts the specified time interval from a date.
 

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_name,
@@ -38,6 +39,8 @@ group by
 order by
     numwait desc,
     s_name limit 100;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [planCount]
 2
 [plan-1]

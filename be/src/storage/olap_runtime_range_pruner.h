@@ -20,6 +20,10 @@
 
 #include "common/status.h"
 #include "runtime/global_dict/types_fwd_decl.h"
+<<<<<<< HEAD
+=======
+#include "storage/range.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 class SlotDescriptor;
@@ -27,23 +31,42 @@ class SlotDescriptor;
 class RuntimeFilterProbeDescriptor;
 class PredicateParser;
 class ColumnPredicate;
+<<<<<<< HEAD
 class SparseRange;
+=======
+class RuntimeBloomFilterEvalContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 struct UnarrivedRuntimeFilterList {
     std::vector<const RuntimeFilterProbeDescriptor*> unarrived_runtime_filters;
     std::vector<const SlotDescriptor*> slot_descs;
+<<<<<<< HEAD
     void add_unarrived_rf(const RuntimeFilterProbeDescriptor* desc, const SlotDescriptor* slot_desc) {
         unarrived_runtime_filters.push_back(desc);
         slot_descs.push_back(slot_desc);
+=======
+    int32_t driver_sequence = -1;
+    void add_unarrived_rf(const RuntimeFilterProbeDescriptor* desc, const SlotDescriptor* slot_desc,
+                          int32_t driver_sequence_) {
+        unarrived_runtime_filters.push_back(desc);
+        slot_descs.push_back(slot_desc);
+        driver_sequence = driver_sequence_;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 };
 
 class OlapRuntimeScanRangePruner {
 public:
+<<<<<<< HEAD
     using PredicatesPtrs = std::vector<std::unique_ptr<ColumnPredicate>>;
     using PredicatesRawPtrs = std::vector<const ColumnPredicate*>;
     using RuntimeFilterArrivedCallBack = std::function<Status(int, const PredicatesRawPtrs&)>;
     static constexpr auto rf_update_threhold = 4096 * 10;
+=======
+    using PredicatesRawPtrs = std::vector<const ColumnPredicate*>;
+    using RuntimeFilterArrivedCallBack = std::function<Status(int, const PredicatesRawPtrs&)>;
+    static constexpr auto rf_update_threshold = 4096 * 10;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     OlapRuntimeScanRangePruner() = default;
     OlapRuntimeScanRangePruner(PredicateParser* parser, const UnarrivedRuntimeFilterList& params) {
@@ -51,8 +74,11 @@ public:
         _init(params);
     }
 
+<<<<<<< HEAD
     void set_predicate_parser(PredicateParser* parser) { _parser = parser; }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status update_range_if_arrived(const ColumnIdToGlobalDictMap* global_dictmaps,
                                    RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
         if (_arrived_runtime_filters_masks.empty()) return Status::OK();
@@ -62,15 +88,25 @@ public:
 private:
     std::vector<const RuntimeFilterProbeDescriptor*> _unarrived_runtime_filters;
     std::vector<const SlotDescriptor*> _slot_descs;
+<<<<<<< HEAD
+=======
+    int32_t _driver_sequence = -1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::vector<bool> _arrived_runtime_filters_masks;
     std::vector<size_t> _rf_versions;
     PredicateParser* _parser = nullptr;
     size_t _raw_read_rows = 0;
 
+<<<<<<< HEAD
     // get predicate
     StatusOr<PredicatesPtrs> _get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx);
 
     PredicatesRawPtrs _as_raw_predicates(const std::vector<std::unique_ptr<ColumnPredicate>>& predicates);
+=======
+    // get predicates
+    StatusOr<PredicatesRawPtrs> _get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx,
+                                                ObjectPool* pool);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Status _update(const ColumnIdToGlobalDictMap* global_dictmaps, RuntimeFilterArrivedCallBack&& updater,
                    size_t raw_read_rows);

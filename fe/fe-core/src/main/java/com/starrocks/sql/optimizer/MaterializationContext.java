@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -21,6 +22,21 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
+=======
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -30,8 +46,15 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
+=======
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.commons.collections4.SetUtils;
 
 import java.util.Collections;
@@ -41,10 +64,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+<<<<<<< HEAD
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.isNeedCompensatePartitionPredicate;
+=======
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.TableProperty.QueryRewriteConsistencyMode.CHECKED;
+import static com.starrocks.sql.common.TimeUnitUtils.DATE_TRUNC_SUPPORTED_TIME_MAP;
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class MaterializationContext {
     private final MaterializedView mv;
@@ -61,6 +93,7 @@ public class MaterializationContext {
 
     private Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
 
+<<<<<<< HEAD
     // Updated partition names of the materialized view
     private final Set<String> mvPartitionNamesToRefresh;
 
@@ -71,6 +104,13 @@ public class MaterializationContext {
 
     private final Set<ColumnRefOperator> originQueryColumns;
 
+=======
+    // Updated partition names of the ref base table which will be used in compensating partition predicates
+    private final MvUpdateInfo mvUpdateInfo;
+
+    private final List<Table> baseTables;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // tables both in query and mv
     private final List<Table> intersectingTables;
 
@@ -80,6 +120,12 @@ public class MaterializationContext {
 
     private final ScalarOperator mvPartialPartitionPredicate;
 
+<<<<<<< HEAD
+=======
+    // The output column refs of the MV which is ordered by user's select list.
+    private final List<ColumnRefOperator> mvOutputColumnRefs;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // THe used count for MV used as the rewrite result in a query.
     // NOTE: mvUsedCount is a not exact value because MV may be rewritten multi times
     // in Optimizer Transformation phase but not be really used.
@@ -91,7 +137,12 @@ public class MaterializationContext {
     // during one query, so it's safe to cache it and be used for each optimizer rule.
     // But it is different for each materialized view, compensate partition predicate from the plan's
     // `selectedPartitionIds`, and check `isNeedCompensatePartitionPredicate` to get more information.
+<<<<<<< HEAD
     private Optional<Boolean> isCompensatePartitionPredicateOpt = Optional.empty();
+=======
+    private MVCompensation mvCompensation = null;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Cache partition compensates predicates for each ScanNode and isCompensate pair.
     private Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
 
@@ -100,17 +151,26 @@ public class MaterializationContext {
                                   OptExpression mvExpression,
                                   ColumnRefFactory queryColumnRefFactory,
                                   ColumnRefFactory mvColumnRefFactory,
+<<<<<<< HEAD
                                   Set<String> mvPartitionNamesToRefresh,
                                   List<Table> baseTables,
                                   Set<ColumnRefOperator> originQueryColumns,
                                   List<Table> intersectingTables,
                                   ScalarOperator mvPartialPartitionPredicate,
                                   Set<String> refTableUpdatePartitionNames) {
+=======
+                                  List<Table> baseTables,
+                                  List<Table> intersectingTables,
+                                  ScalarOperator mvPartialPartitionPredicate,
+                                  MvUpdateInfo mvUpdateInfo,
+                                  List<ColumnRefOperator> mvOutputColumnRefs) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.optimizerContext = optimizerContext;
         this.mv = mv;
         this.mvExpression = mvExpression;
         this.queryRefFactory = queryColumnRefFactory;
         this.mvColumnRefFactory = mvColumnRefFactory;
+<<<<<<< HEAD
         this.mvPartitionNamesToRefresh = mvPartitionNamesToRefresh;
         this.baseTables = baseTables;
         this.originQueryColumns = originQueryColumns;
@@ -118,6 +178,14 @@ public class MaterializationContext {
         this.matchedGroups = Lists.newArrayList();
         this.mvPartialPartitionPredicate = mvPartialPartitionPredicate;
         this.refTableUpdatePartitionNames = refTableUpdatePartitionNames;
+=======
+        this.baseTables = baseTables;
+        this.intersectingTables = intersectingTables;
+        this.matchedGroups = Lists.newArrayList();
+        this.mvPartialPartitionPredicate = mvPartialPartitionPredicate;
+        this.mvUpdateInfo = mvUpdateInfo;
+        this.mvOutputColumnRefs = mvOutputColumnRefs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.scanOpToPartitionCompensatePredicates = Maps.newHashMap();
     }
 
@@ -157,10 +225,13 @@ public class MaterializationContext {
         this.outputMapping = outputMapping;
     }
 
+<<<<<<< HEAD
     public Set<String> getMvPartitionNamesToRefresh() {
         return mvPartitionNamesToRefresh;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<Table> getBaseTables() {
         return baseTables;
     }
@@ -169,8 +240,13 @@ public class MaterializationContext {
         return baseTables != null && baseTables.size() > 1;
     }
 
+<<<<<<< HEAD
     public Set<ColumnRefOperator> getOriginQueryColumns() {
         return originQueryColumns;
+=======
+    public boolean isSingleTable() {
+        return baseTables != null && baseTables.size() == 1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public List<Table> getIntersectingTables() {
@@ -193,10 +269,25 @@ public class MaterializationContext {
         return mvUsedCount;
     }
 
+<<<<<<< HEAD
+=======
+    // whether this mv has been used multi times
+    public boolean isMvDuplicateUsed() {
+        return mvUsedCount > 0;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void updateMVUsedCount() {
         this.mvUsedCount += 1;
     }
 
+<<<<<<< HEAD
+=======
+    public MvUpdateInfo getMvUpdateInfo() {
+        return mvUpdateInfo;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private boolean checkOperatorCompatible(OperatorType query) {
         // Prune based on query operator
         if (query == OperatorType.LOGICAL_AGGR) {
@@ -205,6 +296,13 @@ public class MaterializationContext {
         return MvUtils.isLogicalSPJ(mvExpression);
     }
 
+<<<<<<< HEAD
+=======
+    public List<ColumnRefOperator> getMvOutputColumnRefs() {
+        return mvOutputColumnRefs;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Try to prune this MV during MV rewrite
      *
@@ -217,6 +315,15 @@ public class MaterializationContext {
         final List<Table> mvTables = getBaseTables();
         final OperatorType queryOp = queryExpression.getOp().getOpType();
 
+<<<<<<< HEAD
+=======
+        // if a query has been applied this mv, return false directly.
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
+        if (scanOperators.stream().anyMatch(op -> op.isOpAppliedMV(mv.getId()))) {
+            return false;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!checkOperatorCompatible(queryOp)) {
             return false;
         }
@@ -345,6 +452,46 @@ public class MaterializationContext {
         }
 
         /**
+<<<<<<< HEAD
+=======
+         * If mv is partitioned by time, prefer the one with the larger time granularity.
+         * eg: mv partitioned by date_trunc('day', ts) is preferred over mv partitioned by date_trunc('hour', ts)
+         */
+        private int orderingTimeGranularity(MaterializationContext materializationContext) {
+            if (materializationContext.getMvExpression().getOp().getOpType() == OperatorType.LOGICAL_AGGR) {
+                MaterializedView mv = materializationContext.getMv();
+                PartitionInfo partitionInfo = mv.getPartitionInfo();
+                if (!partitionInfo.isRangePartition()) {
+                    return LOWEST_ORDERING;
+                }
+                Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+                if (mvPartitionExprOpt.isEmpty()) {
+                    return LOWEST_ORDERING;
+                }
+                Expr mvPartitionExpr = mvPartitionExprOpt.get();
+                if (mvPartitionExpr == null || !(mvPartitionExpr instanceof FunctionCallExpr)) {
+                    return LOWEST_ORDERING;
+                }
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) mvPartitionExpr;
+                if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+                    return LOWEST_ORDERING;
+                }
+                StringLiteral timeUnit = (StringLiteral) mvPartitionExpr.getChild(0);
+                if (timeUnit == null) {
+                    return LOWEST_ORDERING;
+                }
+                Integer priority = DATE_TRUNC_SUPPORTED_TIME_MAP.get(timeUnit.getStringValue());
+                if (priority == null) {
+                    return LOWEST_ORDERING;
+                }
+                return -priority;
+            } else {
+                return LOWEST_ORDERING;
+            }
+        }
+
+        /**
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
          * Prefer exact-intersecting than partial-intersecting
          */
         private static int orderingIntersectTables(MaterializationContext mvContext) {
@@ -355,7 +502,13 @@ public class MaterializationContext {
          * Prefer small table to large table
          */
         private static long orderingRowCount(MaterializationContext mvContext) {
+<<<<<<< HEAD
             return mvContext.getMv().getRowCount();
+=======
+            // prefer max partition row count to mv's total row count,
+            // eg: a mv is with less partitions and smaller total row count but maxPartitionRowCount is larger.
+            return mvContext.getMv().getMaxPartitionRowCount();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         @Override
@@ -364,10 +517,37 @@ public class MaterializationContext {
             OperatorType o2Type = o2.getMvExpression().getOp().getOpType();
 
             if (o1Type == o2Type && (o1Type == OperatorType.LOGICAL_AGGR)) {
+<<<<<<< HEAD
                 return Comparator
                         .comparing(this::orderingAggregation)
                         .thenComparing(RewriteOrdering::orderingRowCount)
                         .thenComparing(MaterializationContext::getMVUsedCount)
+=======
+                // -- rows: 100 mv1:
+                // select sum(v1) from t1 group by a, b, c, f;
+                // -- rows: 10000 mv2:
+                // select sum(v1) from t1 group by a, b, d;
+                // query: select sum(v1) from t1 where b = 'a' group by a;
+
+                // When many mvs satisfy query, prefer mv with fewer rows, like mv1.
+                // But `RewriteOrdering` is only used for sorting when there are too many candidate mvs
+                // and candidate mv list need to be trimmed to a limited size.
+                // So `mv1` in above example is just a candidate, it doesn't mean mv1 is the final chosen mv.
+                // Actually `BestMvSelector` is the final place to judge which mv is used after rewrite rule.
+                boolean mvHasDifferentRows = orderingRowCount(o1) != 0 && orderingRowCount(o2) != 0
+                        && orderingRowCount(o1) != orderingRowCount(o2);
+                return Comparator
+                        .comparing((Function<MaterializationContext, Long>) mv -> {
+                            int r = orderingAggregation(mv);
+                            if (r > 0 && mvHasDifferentRows) {
+                                return orderingRowCount(mv);
+                            }
+                            return (long) r;
+                        })
+                        .thenComparing(RewriteOrdering::orderingRowCount)
+                        .thenComparing(MaterializationContext::getMVUsedCount)
+                        .thenComparing(this::orderingTimeGranularity)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         .compare(o1, o2);
             } else if (o1Type == o2Type && o1Type == OperatorType.LOGICAL_JOIN) {
                 return Comparator.comparing(RewriteOrdering::orderingIntersectTables)
@@ -384,10 +564,13 @@ public class MaterializationContext {
         }
     }
 
+<<<<<<< HEAD
     public Set<String> getRefTableUpdatePartitionNames() {
         return this.refTableUpdatePartitionNames;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * What's the meaning of partition compensate in mv rewriting?
      * <p>
@@ -422,6 +605,7 @@ public class MaterializationContext {
      *  means MV's partitions can cover all needed partitions from Query.
      * </p>
      */
+<<<<<<< HEAD
     public boolean getOrInitCompensatePartitionPredicate(OptExpression queryExpression) {
         if (!isCompensatePartitionPredicateOpt.isPresent()) {
             SessionVariable sessionVariable = optimizerContext.getSessionVariable();
@@ -434,6 +618,39 @@ public class MaterializationContext {
 
     public boolean isCompensatePartitionPredicate() {
         return isCompensatePartitionPredicateOpt.orElse(true);
+=======
+    public MVCompensation getOrInitMVCompensation(OptExpression queryExpression) {
+        if (mvCompensation == null) {
+            // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.
+            this.mvCompensation = MvPartitionCompensator.getMvCompensation(queryExpression, this);
+            logMVRewrite(mv.getName(), "MV compensation: {}", mvCompensation);
+        }
+        return this.mvCompensation;
+    }
+
+    public MVCompensation getMvCompensation() {
+        Preconditions.checkArgument(mvCompensation != null,
+                "MV compensation should be initialized before used");
+        return mvCompensation;
+    }
+
+    /**
+     * Check the mv context can be used for rewrite:
+     * - if mv compensation's state is no rewrite, return false
+     * - if mv compensation's state is unkwown & check mode is checked, return false
+     * - otherwise return true.
+     */
+    public boolean isNoRewrite() {
+        Preconditions.checkArgument(mvCompensation != null,
+                "MV compensation should be initialized before used");
+        if (mvCompensation.getState().isNoRewrite()) {
+            return true;
+        }
+        if (mvUpdateInfo.getQueryRewriteConsistencyMode() == CHECKED && mvCompensation.getState().isUnknown()) {
+            return true;
+        }
+        return false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> getScanOpToPartitionCompensatePredicates() {

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_cont
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算精确百分位数。该函数使用连续分布模型，如果未找到与百分位完全匹配的值，则返回临近两个值的线性插值。
 

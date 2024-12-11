@@ -25,6 +25,7 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
     ssize_t end = filename.size() - 1;
     while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
@@ -38,6 +39,13 @@ public:
     // |file| must outlive HdfsScannerCSVReader
     HdfsScannerCSVReader(RandomAccessFile* file, const std::string& row_delimiter, const std::string& column_separator,
                          size_t file_length)
+=======
+class HdfsScannerCSVReader : public CSVReader {
+public:
+    // |file| must outlive HdfsScannerCSVReader
+    HdfsScannerCSVReader(RandomAccessFile* file, const std::string& row_delimiter, bool need_probe_line_delimiter,
+                         const std::string& column_separator, size_t file_length)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             : CSVReader(CSVParseOptions(row_delimiter, column_separator)) {
         _file = file;
         _offset = 0;
@@ -45,19 +53,31 @@ public:
         _file_length = file_length;
         _row_delimiter_length = row_delimiter.size();
         _column_delimiter_length = column_separator.size();
+<<<<<<< HEAD
+=======
+        _need_probe_line_delimiter = need_probe_line_delimiter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     Status reset(size_t offset, size_t remain_length);
 
     Status next_record(Record* record);
 
+<<<<<<< HEAD
     size_t get_offset();
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 protected:
     Status _fill_buffer() override;
 
     void _trim_row_delimeter(Record* record);
 
+<<<<<<< HEAD
+=======
+    char* _find_line_delimiter(starrocks::CSVBuffer& buffer, size_t pos) override;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     RandomAccessFile* _file;
     size_t _offset = 0;
@@ -65,12 +85,19 @@ private:
     size_t _file_length = 0;
     bool _should_stop_scan = false;
     bool _should_stop_next = false;
+<<<<<<< HEAD
 };
 
 size_t HdfsScannerCSVReader::get_offset() {
     return _offset;
 }
 
+=======
+    // Hive TextFile's line delimiter maybe \n, \r or \r\n, we need to probe it
+    bool _need_probe_line_delimiter = false;
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
     RETURN_IF_ERROR(_file->seek(offset));
     _offset = offset;
@@ -150,6 +177,7 @@ void HdfsScannerCSVReader::_trim_row_delimeter(Record* record) {
     }
 }
 
+<<<<<<< HEAD
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     TTextFileDesc text_file_desc = _scanner_params.scan_ranges[0]->text_file_desc;
 
@@ -165,10 +193,76 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     _field_delimiter = text_file_desc.field_delim;
     // we should cast string to char now since csv reader only support record delimiter by char.
     _record_delimiter = text_file_desc.line_delim.front();
+=======
+char* HdfsScannerCSVReader::_find_line_delimiter(starrocks::CSVBuffer& buffer, size_t pos) {
+    // If we can get explicit line.delim from hms, we don't need to probe it
+    if (LIKELY(!_need_probe_line_delimiter)) {
+        return buffer.find(_parse_options.row_delimiter, pos);
+    } else {
+        // If we didn't get explicit line.delim from hms, we need to probe it.
+        // We will probe '\n' first, most of TextFile's line.delim is '\n'
+        // Then we will try to probe '\r'
+        // TODO(Smith)
+        // We didn't support to treat '\r\n' as line.delim,
+        // because our code does not support line separator's length larger than one char.
+        char* p = buffer.find(LINE_DELIM_LF, pos);
+        if (p != nullptr) {
+            _need_probe_line_delimiter = false;
+            _parse_options.row_delimiter = LINE_DELIM_LF;
+            return p;
+        }
+        p = buffer.find(LINE_DELIM_CR, pos);
+        if (p != nullptr) {
+            _need_probe_line_delimiter = false;
+            _parse_options.row_delimiter = LINE_DELIM_CR;
+            return p;
+        }
+        return nullptr;
+    }
+}
+
+Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+    const TTextFileDesc& text_file_desc = _scanner_params.scan_range->text_file_desc;
+    RETURN_IF_ERROR(_setup_delimiter(text_file_desc));
+    RETURN_IF_ERROR(_setup_compression_type(text_file_desc));
+
+    if (text_file_desc.__isset.skip_header_line_count) {
+        _skip_header_line_count = text_file_desc.skip_header_line_count;
+    }
+    return Status::OK();
+}
+
+Status HdfsTextScanner::_setup_delimiter(const TTextFileDesc& text_file_desc) {
+    // _field_delimiter and _line_delimiter should use std::string,
+    // because the CSVReader is using std::string type as delimiter.
+    if (text_file_desc.__isset.field_delim) {
+        if (text_file_desc.field_delim.empty()) {
+            // Just a piece of defense code
+            return Status::Corruption("Hive TextFile's field delim is empty");
+        }
+        _field_delimiter = text_file_desc.field_delim;
+    } else {
+        _field_delimiter = DEFAULT_FIELD_DELIM;
+    }
+
+    // we should cast string to char now since csv reader only support record delimiter by char.
+    if (text_file_desc.__isset.line_delim) {
+        if (text_file_desc.line_delim.empty()) {
+            // Just a piece of defense code
+            return Status::Corruption("Hive TextFile's line delim is empty");
+        }
+        _line_delimiter = text_file_desc.line_delim.front();
+    } else {
+        _line_delimiter = DEFAULT_LINE_DELIM;
+        // We didn't get explicit line delimiter from hms, so we need to probe it by ourselves
+        _need_probe_line_delimiter = true;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // In Hive, users can specify collection delimiter and mapkey delimiter as string type,
     // but in fact, only the first character of the delimiter will take effect.
     // So here, we only use the first character of collection_delim and mapkey_delim.
+<<<<<<< HEAD
     _collection_delimiter = text_file_desc.collection_delim.front();
     _mapkey_delimiter = text_file_desc.mapkey_delim.front();
 
@@ -179,10 +273,55 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
         _compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
     }
 
+=======
+    if (text_file_desc.__isset.collection_delim) {
+        if (text_file_desc.collection_delim.empty()) {
+            // Just a piece of defense code
+            return Status::Corruption("Hive TextFile's collection delim is empty");
+        }
+        _collection_delimiter = text_file_desc.collection_delim.front();
+    } else {
+        _collection_delimiter = DEFAULT_COLLECTION_DELIM.front();
+    }
+
+    if (text_file_desc.__isset.mapkey_delim) {
+        if (text_file_desc.mapkey_delim.empty()) {
+            // Just a piece of defense code
+            return Status::Corruption("Hive TextFile's mapkey delim is empty");
+        }
+        _mapkey_delimiter = text_file_desc.mapkey_delim.front();
+    } else {
+        _mapkey_delimiter = DEFAULT_MAPKEY_DELIM.front();
+    }
+    return Status::OK();
+}
+
+Status HdfsTextScanner::_setup_compression_type(const TTextFileDesc& text_file_desc) {
+    // by default it's unknown compression. we will synthesise informaiton from FE and BE(file extension)
+    // parse compression type from FE first.
+    CompressionTypePB compression_type;
+    if (text_file_desc.__isset.compression_type) {
+        compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
+    } else {
+        // if FE does not specify compress type, we choose it by looking at filename.
+        compression_type = get_compression_type_from_path(_scanner_params.path);
+    }
+    if (compression_type != UNKNOWN_COMPRESSION) {
+        _compression_type = compression_type;
+    } else {
+        _compression_type = NO_COMPRESSION;
+    }
+
+    // If it's compressed file, we only handle scan range whose offset == 0.
+    if (_compression_type != NO_COMPRESSION && _scanner_params.scan_range->offset != 0) {
+        _no_data = true;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
+<<<<<<< HEAD
     const std::string& path = _scanner_params.path;
     // if FE does not specify compress type, we choose it by looking at filename.
     if (_compression_type == CompressionTypePB::UNKNOWN_COMPRESSION) {
@@ -201,6 +340,39 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
         // We don't care about _invalid_field_as_null here, if get converter failed,
         // we use DefaultValueConverter instead.
         auto converter = csv::get_hive_converter(slot->type(), true);
+=======
+    if (_no_data) {
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(open_random_access_file());
+
+    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
+    // create csv reader eat lines may throw EOF, we need to handle it
+    Status st = _create_csv_reader();
+    if (st.is_end_of_file()) {
+        _no_data = true;
+        return Status::OK();
+    } else if (!st.ok()) {
+        return st;
+    }
+
+    // update materialized columns.
+    {
+        std::unordered_set<std::string> names;
+        for (const auto& column : _scanner_ctx.materialized_columns) {
+            if (column.name() == "___count___") continue;
+            names.insert(column.name());
+        }
+        RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
+    }
+
+    RETURN_IF_ERROR(_build_hive_column_name_2_index());
+    for (const auto& column : _scanner_ctx.materialized_columns) {
+        // We don't care about _invalid_field_as_null here, if get converter failed,
+        // we use DefaultValueConverter instead.
+        auto converter = csv::get_hive_converter(column.slot_type(), true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         DCHECK(converter != nullptr);
         _converters.emplace_back(std::move(converter));
     }
@@ -212,6 +384,12 @@ void HdfsTextScanner::do_update_counter(HdfsScanProfile* profile) {
 }
 
 void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
+<<<<<<< HEAD
+=======
+    if (_no_data) {
+        return;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _reader.reset();
 }
 
@@ -220,7 +398,11 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
         return Status::EndOfFile("");
     }
     CHECK(chunk != nullptr);
+<<<<<<< HEAD
     RETURN_IF_ERROR(parse_csv(runtime_state->chunk_size(), chunk));
+=======
+    RETURN_IF_ERROR(_parse_csv(runtime_state->chunk_size(), chunk));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ChunkPtr ck = *chunk;
     // do stats before we filter rows which does not match.
@@ -236,6 +418,7 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     if (_shared_buffered_input_stream != nullptr) {
         // we need to release previous shared buffers to save memory
@@ -243,16 +426,27 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         _shared_buffered_input_stream->release_to_offset(reader_offset);
     }
 
+=======
+Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DCHECK_EQ(0, chunk->get()->num_rows());
 
     int num_columns = chunk->get()->num_columns();
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
         _column_raw_ptrs[i] = chunk->get()->get_column_by_index(i).get();
+<<<<<<< HEAD
+=======
+        _column_raw_ptrs[i]->reserve(chunk_size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     csv::Converter::Options options;
     // Use to custom Hive array format
+<<<<<<< HEAD
+=======
+    options.is_hive = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     options.array_format_type = csv::ArrayFormatType::kHive;
     options.array_hive_collection_delimiter = _collection_delimiter;
     options.array_hive_mapkey_delimiter = _mapkey_delimiter;
@@ -266,6 +460,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         CSVReader::Record record{};
         Status status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
         if (status.is_end_of_file()) {
+<<<<<<< HEAD
             if (_current_range_index == _scanner_params.scan_ranges.size() - 1) {
                 break;
             }
@@ -278,6 +473,11 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         } else if (!status.ok()) {
             LOG(WARNING) << strings::Substitute("Parse csv file $0 failed: $1", _file->filename(),
                                                 status.get_error_msg());
+=======
+            break;
+        } else if (!status.ok()) {
+            LOG(WARNING) << strings::Substitute("Parse csv file $0 failed: $1", _file->filename(), status.message());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return status;
         }
 
@@ -293,6 +493,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         fields.resize(0);
         _reader->split_record(record, &fields);
 
+<<<<<<< HEAD
         size_t num_materialize_columns = _scanner_params.materialize_slots.size();
 
         // Fill materialize columns first, then fill partition column
@@ -301,15 +502,32 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             DCHECK(slot != nullptr);
 
             size_t chunk_index = _scanner_params.materialize_index_in_chunk[j];
+=======
+        size_t num_materialize_columns = _scanner_ctx.materialized_columns.size();
+
+        // Fill materialize columns first, then fill partition column
+        for (int j = 0; j < num_materialize_columns; j++) {
+            const auto& column_info = _scanner_ctx.materialized_columns[j];
+
+            size_t chunk_index = column_info.idx_in_chunk;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             size_t csv_index = _materialize_slots_index_2_csv_column_index[j];
             Column* column = _column_raw_ptrs[chunk_index];
             if (csv_index < fields.size()) {
                 const Slice& field = fields[csv_index];
+<<<<<<< HEAD
                 options.type_desc = &(_scanner_params.materialize_slots[j]->type());
                 if (!_converters[j]->read_string(column, field, options)) {
                     return Status::InternalError(
                             strings::Substitute("CSV converter encountered an error for field: $0, column name is: $1",
                                                 field.to_string(), slot->col_name()));
+=======
+                options.type_desc = &(column_info.slot_type());
+                if (!_converters[j]->read_string(column, field, options)) {
+                    return Status::InternalError(
+                            strings::Substitute("CSV converter encountered an error for field: $0, column name is: $1",
+                                                field.to_string(), column_info.name()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             } else {
                 // The size of hive_column_names may be larger than fields when new columns are added.
@@ -320,6 +538,10 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
     }
 
+<<<<<<< HEAD
+=======
+    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
 
     // Check chunk's row number for each column
@@ -328,6 +550,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     return rows_read > 0 ? Status::OK() : Status::EndOfFile("");
 }
 
+<<<<<<< HEAD
 Status HdfsTextScanner::_create_or_reinit_reader() {
     if (_compression_type != NO_COMPRESSION) {
         // Since we can not parse compressed file in pieces, we only handle scan range whose offset == 0.
@@ -378,12 +601,53 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
             // Always skip first record of scan range with non-zero offset.
             // Notice that the first record will read by previous scan range.
             CSVReader::Record dummy;
+=======
+Status HdfsTextScanner::_create_csv_reader() {
+    const THdfsScanRange* scan_range = _scanner_ctx.scan_range;
+
+    if (_compression_type != NO_COMPRESSION) {
+        // we don't know real stream size in adavance, so we set a very large stream size
+        auto file_size = static_cast<size_t>(-1);
+        _reader = std::make_shared<HdfsScannerCSVReader>(_file.get(), _line_delimiter, _need_probe_line_delimiter,
+                                                         _field_delimiter, file_size);
+    } else {
+        // no compressed file, splittable.
+        _reader = std::make_shared<HdfsScannerCSVReader>(_file.get(), _line_delimiter, _need_probe_line_delimiter,
+                                                         _field_delimiter, scan_range->file_length);
+    }
+    auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
+
+    // (TODO) only support uncompressed file to skip utf-8 bom, because compressed input stream didn't support seek() function
+    if (_compression_type == NO_COMPRESSION) {
+        // if reading start of file, try to skipping UTF-8 BOM
+        ASSIGN_OR_RETURN(const bool has_utf8_bom, _has_utf8_bom());
+        if (has_utf8_bom) {
+            RETURN_IF_ERROR(reader->reset(scan_range->offset + 3, scan_range->length - 3));
+        } else {
+            // reset offset
+            RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
+        }
+    }
+
+    if (scan_range->offset != 0) {
+        // Always skip first record of scan range with non-zero offset.
+        // Notice that the first record will read by previous scan range.
+        CSVReader::Record dummy;
+        RETURN_IF_ERROR(reader->next_record(&dummy));
+    }
+
+    // skip header line count only in offset = 0
+    if (scan_range->offset == 0 && _skip_header_line_count > 0) {
+        CSVReader::Record dummy;
+        for (int32_t i = 0; i < _skip_header_line_count; i++) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             RETURN_IF_ERROR(reader->next_record(&dummy));
         }
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status HdfsTextScanner::_setup_io_ranges() const {
     if (_shared_buffered_input_stream != nullptr) {
         std::vector<io::SharedBufferedInputStream::IORange> ranges{};
@@ -396,37 +660,75 @@ Status HdfsTextScanner::_setup_io_ranges() const {
         RETURN_IF_ERROR(_shared_buffered_input_stream->set_io_ranges(ranges));
     }
     return Status::OK();
+=======
+StatusOr<bool> HdfsTextScanner::_has_utf8_bom() const {
+    // if reading start of file, skipping UTF-8 BOM
+    if (_scanner_ctx.scan_range->offset == 0) {
+        auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
+        CSVReader::Record first_line;
+        RETURN_IF_ERROR(reader->next_record(&first_line));
+        if (first_line.size >= 3 && static_cast<unsigned char>(first_line.data[0]) == 0xEF &&
+            static_cast<unsigned char>(first_line.data[1]) == 0xBB &&
+            static_cast<unsigned char>(first_line.data[2]) == 0xBF) {
+            return true;
+        }
+    }
+    return false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status HdfsTextScanner::_build_hive_column_name_2_index() {
     // For some table like file table, there is no hive_column_names at all.
     // So we use slot order defined in table schema.
+<<<<<<< HEAD
     if (_scanner_params.hive_column_names->empty()) {
         _materialize_slots_index_2_csv_column_index.resize(_scanner_params.materialize_slots.size());
         for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
+=======
+    if (_scanner_ctx.hive_column_names->empty()) {
+        _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx.materialized_columns.size());
+        for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             _materialize_slots_index_2_csv_column_index[i] = i;
         }
         return Status::OK();
     }
 
+<<<<<<< HEAD
     const bool case_sensitive = _scanner_params.case_sensitive;
+=======
+    const bool case_sensitive = _scanner_ctx.case_sensitive;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // The map's value is the position of column name in hive's table(Not in StarRocks' table)
     std::unordered_map<std::string, size_t> formatted_hive_column_name_2_index;
 
+<<<<<<< HEAD
     for (size_t i = 0; i < _scanner_params.hive_column_names->size(); i++) {
         const std::string formatted_column_name =
                 case_sensitive ? (*_scanner_params.hive_column_names)[i]
                                : boost::algorithm::to_lower_copy((*_scanner_params.hive_column_names)[i]);
+=======
+    for (size_t i = 0; i < _scanner_ctx.hive_column_names->size(); i++) {
+        const std::string& name = (*_scanner_ctx.hive_column_names)[i];
+        const std::string formatted_column_name = _scanner_ctx.formatted_name(name);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         formatted_hive_column_name_2_index.emplace(formatted_column_name, i);
     }
 
     // Assign csv column index
+<<<<<<< HEAD
     _materialize_slots_index_2_csv_column_index.resize(_scanner_params.materialize_slots.size());
     for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         const auto& slot = _scanner_params.materialize_slots[i];
         const std::string& formatted_slot_name =
                 case_sensitive ? slot->col_name() : boost::algorithm::to_lower_copy(slot->col_name());
+=======
+    _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx.materialized_columns.size());
+    for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
+        const auto& column = _scanner_ctx.materialized_columns[i];
+        const std::string formatted_slot_name = column.formatted_name(case_sensitive);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto& it = formatted_hive_column_name_2_index.find(formatted_slot_name);
         if (it == formatted_hive_column_name_2_index.end()) {
             return Status::InternalError("Can not get index of column name: " + formatted_slot_name);
@@ -436,4 +738,18 @@ Status HdfsTextScanner::_build_hive_column_name_2_index() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+int64_t HdfsTextScanner::estimated_mem_usage() const {
+    int64_t value = HdfsScanner::estimated_mem_usage();
+    if (value != 0) return value;
+    // for compressed text file, if _no_data=true, means _reader is nullptr
+    if (_no_data) {
+        return 0;
+    }
+    DCHECK(_reader != nullptr);
+    return _reader->buff_capacity() * 3 / 2;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

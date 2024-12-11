@@ -38,7 +38,10 @@ import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.elasticsearch.EsMajorVersion;
 import com.starrocks.connector.elasticsearch.EsMetaStateTracker;
 import com.starrocks.connector.elasticsearch.EsRestClient;
@@ -51,8 +54,11 @@ import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -377,6 +383,7 @@ public class EsTable extends Table implements GsonPostProcessable {
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         super.write(out);
         out.writeInt(tableContext.size());
@@ -446,6 +453,8 @@ public class EsTable extends Table implements GsonPostProcessable {
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
 

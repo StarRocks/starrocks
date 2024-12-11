@@ -43,6 +43,7 @@ namespace starrocks {
 
 __thread Trace* Trace::threadlocal_trace_;
 
+<<<<<<< HEAD
 Trace::Trace()
 
 {
@@ -52,6 +53,8 @@ Trace::Trace()
     // arena_->SetMaxBufferSize(4096);
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // Struct which precedes each entry in the trace.
 struct TraceEntry {
     MicrosecondsInt64 timestamp_micros;

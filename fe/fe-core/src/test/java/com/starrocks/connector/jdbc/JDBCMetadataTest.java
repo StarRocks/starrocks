@@ -23,7 +23,10 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.jmockit.Deencapsulation;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -50,9 +53,12 @@ public class JDBCMetadataTest {
     @Mocked
     Connection connection;
 
+<<<<<<< HEAD
     @Mocked
     JDBCTableIdCache jdbcTableIdCache;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private Map<String, String> properties;
     private MockResultSet dbResult;
     private MockResultSet tableResult;
@@ -84,8 +90,13 @@ public class JDBCMetadataTest {
         columnResult.addColumn("IS_NULLABLE",
                 Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"));
         properties = new HashMap<>();
+<<<<<<< HEAD
         properties.put(DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+=======
+        properties.put(DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+        properties.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         properties.put(JDBCResource.USER, "root");
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
@@ -115,6 +126,7 @@ public class JDBCMetadataTest {
                 result = columnResult;
                 minTimes = 0;
 
+<<<<<<< HEAD
                 JDBCTableName jdbcTablekey = JDBCTableName.of("catalog", "test", "tbl1");
 
                 Deencapsulation.invoke(jdbcTableIdCache, "containsTableId", jdbcTablekey);
@@ -125,6 +137,8 @@ public class JDBCMetadataTest {
                 result = 100000;
                 minTimes = 0;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
     }
@@ -250,7 +264,13 @@ public class JDBCMetadataTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Table table1 = jdbcMetadata.getTable("test", "tbl1");
+<<<<<<< HEAD
             Assert.assertTrue(table1.getId() == 100000);
+=======
+            columnResult.beforeFirst();
+            Table table2 = jdbcMetadata.getTable("test", "tbl1");
+            Assert.assertTrue(table1.getId() == table2.getId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
@@ -258,10 +278,27 @@ public class JDBCMetadataTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateHikariDataSource() {
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+=======
+    public void testGetJdbcUrl() {
+        properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        Assert.assertEquals("jdbc:mariadb://127.0.0.1:3306", jdbcMetadata.getJdbcUrl());
+        properties.put(JDBCResource.URI, "jdbc:mysql://abc.mysql.com:3306");
+        jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        Assert.assertEquals("jdbc:mariadb://abc.mysql.com:3306", jdbcMetadata.getJdbcUrl());
+    }
+
+    @Test
+    public void testCreateHikariDataSource() {
+        properties = new HashMap<>();
+        properties.put(DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+        properties.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         properties.put(JDBCResource.USER, "root");
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");

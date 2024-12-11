@@ -23,6 +23,11 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -34,6 +39,10 @@ import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Optional;
 
 public class PushDownPredicateProjectRule extends TransformationRule {
@@ -67,12 +76,43 @@ public class PushDownPredicateProjectRule extends TransformationRule {
         return !assertColumn.isPresent();
     }
 
+<<<<<<< HEAD
+=======
+    private boolean hasLambda(ScalarOperator op) {
+        if (op == null) {
+            return false;
+        }
+        if (op instanceof LambdaFunctionOperator) {
+            return true;
+        }
+        for (var c : op.getChildren()) {
+            if (hasLambda(c)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
         OptExpression child = input.getInputs().get(0);
 
         LogicalProjectOperator project = (LogicalProjectOperator) (child.getOp());
+<<<<<<< HEAD
+=======
+
+        if (!context.getSessionVariable().getEnableLambdaPushDown()) {
+            Map<ColumnRefOperator, ScalarOperator> m = project.getColumnRefMap();
+            for (var entry : m.entrySet()) {
+                if (hasLambda(entry.getValue())) {
+                    return Lists.newArrayList();
+                }
+            }
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(project.getColumnRefMap());
         ScalarOperator newPredicate = rewriter.rewrite(filter.getPredicate());
 
@@ -87,5 +127,8 @@ public class PushDownPredicateProjectRule extends TransformationRule {
         OptExpression newProject = OptExpression.create(project, newFilter);
         return Lists.newArrayList(newProject);
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

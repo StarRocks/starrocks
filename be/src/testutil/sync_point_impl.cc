@@ -22,10 +22,18 @@
 
 #include "testutil/sync_point_impl.h"
 
+<<<<<<< HEAD
 #include <signal.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+=======
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <csignal>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #if defined(BE_TEST)
 namespace starrocks {
 KillPoint* KillPoint::GetInstance() {

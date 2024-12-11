@@ -26,6 +26,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.RunMode;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Arrays;
@@ -39,6 +43,7 @@ import java.util.List;
  */
 public class ShowRoutineLoadTaskStmt extends ShowStmt {
     private static final List<String> SUPPORT_COLUMN = Arrays.asList("jobname");
+<<<<<<< HEAD
     private static final ImmutableList<String> TITLE_NAMES =
             new ImmutableList.Builder<String>()
                     .add("TaskId")
@@ -53,6 +58,28 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
                     .add("DataSourceProperties")
                     .add("Message")
                     .build();
+=======
+    private static final ImmutableList<String> TITLE_NAMES;
+
+    static {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                .add("TaskId")
+                .add("TxnId")
+                .add("TxnStatus")
+                .add("JobId")
+                .add("CreateTime")
+                .add("LastScheduledTime")
+                .add("ExecuteStartTime")
+                .add("Timeout")
+                .add("BeId")
+                .add("DataSourceProperties")
+                .add("Message");
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            builder.add("Warehouse");
+        }
+        TITLE_NAMES = builder.build();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private final Expr jobNameExpr;
 

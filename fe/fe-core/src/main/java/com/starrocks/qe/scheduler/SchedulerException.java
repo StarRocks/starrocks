@@ -14,9 +14,15 @@
 
 package com.starrocks.qe.scheduler;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public class SchedulerException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+
+public class SchedulerException extends StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public SchedulerException(String msg) {
         super(msg);
     }

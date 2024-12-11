@@ -14,9 +14,15 @@
 
 package com.starrocks.connector.iceberg;
 
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfigurationConstants;
 import org.junit.Assert;
 import org.junit.Before;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
+import org.junit.Assert;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Test;
 import software.amazon.awssdk.regions.Region;
 
@@ -25,12 +31,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class IcebergAwsClientFactoryTest {
+<<<<<<< HEAD
     @Before
     public void setup() {
         System.setProperty("software.amazon.awssdk.http.service.impl",
                 "software.amazon.awssdk.http.urlconnection.UrlConnectionSdkHttpService");
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testAKSK() {
         Map<String, String> properties = new HashMap<>();

@@ -57,7 +57,11 @@ public:
     ColumnBuilder(DataColumnPtr column, NullColumnPtr null_column, bool has_null)
             : _column(std::move(column)), _null_column(std::move(null_column)), _has_null(has_null) {}
     //do nothing ctor, members are initialized by its offsprings.
+<<<<<<< HEAD
     explicit ColumnBuilder<Type>(void*) {}
+=======
+    explicit ColumnBuilder(void*) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     void append(const DatumType& value) {
         _null_column->append(DATUM_NOT_NULL);

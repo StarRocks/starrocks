@@ -10,6 +10,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>java-utils</artifactId>
+<<<<<<< HEAD
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
@@ -40,6 +41,18 @@
                     <target>${java.version}</target>
                 </configuration>
             </plugin>
+=======
+    <version>${java-utils.version}</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <java-extensions.home>${basedir}/../</java-extensions.home>
+    </properties>
+
+    <build>
+        <finalName>starrocks-java-utils</finalName>
+        <plugins>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             <!-- copy all dependency libs to target lib dir -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -59,6 +72,7 @@
                     </execution>
                 </executions>
             </plugin>
+<<<<<<< HEAD
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
@@ -80,6 +94,8 @@
                     </execution>
                 </executions>
             </plugin>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         </plugins>
     </build>
 </project>

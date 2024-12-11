@@ -22,9 +22,19 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class TableConstraintsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.TABLE_CONSTRAINTS_ID,
                 "table_constraints",
+=======
+    private static final String NAME = "table_constraints";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.TABLE_CONSTRAINTS_ID,
+                NAME,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("CONSTRAINT_CATALOG", ScalarType.createVarchar(512))

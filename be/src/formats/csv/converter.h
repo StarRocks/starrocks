@@ -59,6 +59,10 @@ public:
         // TODO: user configurable.
         bool bool_alpha = true;
 
+<<<<<<< HEAD
+=======
+        bool is_hive = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // Here used to control array parse format.
         // Considering Hive array format is different from traditional array format,
         // so here we provide some variables to customize array format, and you can

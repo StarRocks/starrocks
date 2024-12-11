@@ -967,22 +967,38 @@ public:
     }
 
     type_of_iterator& operator++() { // ++i, must returned inc. value
+<<<<<<< HEAD
         if (i.has_value == true) roaring_advance_uint32_iterator(&i);
         while (!i.has_value) {
             map_iter++;
             if (map_iter == map_end) return *this;
             roaring_init_iterator(&map_iter->second.roaring, &i);
+=======
+        if (i.has_value == true) roaring_uint32_iterator_advance(&i);
+        while (!i.has_value) {
+            map_iter++;
+            if (map_iter == map_end) return *this;
+            roaring_iterator_init(&map_iter->second.roaring, &i);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return *this;
     }
 
     type_of_iterator operator++(int) { // i++, must return orig. value
         Roaring64MapSetBitForwardIterator orig(*this);
+<<<<<<< HEAD
         roaring_advance_uint32_iterator(&i);
         while (!i.has_value) {
             map_iter++;
             if (map_iter == map_end) return orig;
             roaring_init_iterator(&map_iter->second.roaring, &i);
+=======
+        roaring_uint32_iterator_advance(&i);
+        while (!i.has_value) {
+            map_iter++;
+            if (map_iter == map_end) return orig;
+            roaring_iterator_init(&map_iter->second.roaring, &i);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return orig;
     }
@@ -1005,11 +1021,19 @@ public:
             map_iter = parent.roarings.cend();
         } else {
             map_iter = parent.roarings.cbegin();
+<<<<<<< HEAD
             roaring_init_iterator(&map_iter->second.roaring, &i);
             while (!i.has_value) {
                 map_iter++;
                 if (map_iter == map_end) return;
                 roaring_init_iterator(&map_iter->second.roaring, &i);
+=======
+            roaring_iterator_init(&map_iter->second.roaring, &i);
+            while (!i.has_value) {
+                map_iter++;
+                if (map_iter == map_end) return;
+                roaring_iterator_init(&map_iter->second.roaring, &i);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }

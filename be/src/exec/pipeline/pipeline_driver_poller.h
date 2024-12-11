@@ -31,6 +31,7 @@ using PipelineDriverPollerPtr = std::unique_ptr<PipelineDriverPoller>;
 
 class PipelineDriverPoller {
 public:
+<<<<<<< HEAD
     explicit PipelineDriverPoller(DriverQueue* driver_queue)
             : _driver_queue(driver_queue),
               _polling_thread(nullptr),
@@ -63,10 +64,54 @@ private:
     void run_internal();
     PipelineDriverPoller(const PipelineDriverPoller&) = delete;
     PipelineDriverPoller& operator=(const PipelineDriverPoller&) = delete;
+=======
+    explicit PipelineDriverPoller(std::string name, DriverQueue* driver_queue, CpuUtil::CpuIds cpuids)
+            : _name(std::move(name)),
+              _cpud_ids(std::move(cpuids)),
+              _driver_queue(driver_queue),
+              _polling_thread(nullptr),
+              _is_polling_thread_initialized(false),
+              _is_shutdown(false),
+              _num_drivers(0) {}
+
+    ~PipelineDriverPoller() { shutdown(); }
+
+    DISALLOW_COPY(PipelineDriverPoller);
+
+    using DriverList = std::list<DriverRawPtr>;
+
+    void start();
+    void shutdown();
+
+    void add_blocked_driver(const DriverRawPtr driver);
+    void remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it);
+
+    void park_driver(const DriverRawPtr driver);
+    size_t activate_parked_driver(const ConstDriverPredicator& predicate_func);
+    size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const;
+
+    // only used for collect metrics
+    size_t num_drivers() const { return _num_drivers; }
+
+    void for_each_driver(const ConstDriverConsumer& call) const;
+
+    void bind_cpus(const CpuUtil::CpuIds& cpuids);
+
+private:
+    void run_internal();
+    void on_cancel(DriverRawPtr driver, std::vector<DriverRawPtr>& ready_drivers, DriverList& local_blocked_drivers,
+                   DriverList::iterator& driver_it);
+
+    const std::string _name;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cond;
     DriverList _blocked_drivers;
+<<<<<<< HEAD
+=======
+    CpuUtil::CpuIds _cpud_ids;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     mutable std::shared_mutex _local_mutex;
     DriverList _local_blocked_drivers;
@@ -81,6 +126,10 @@ private:
     mutable std::mutex _global_parked_mutex;
     DriverList _parked_drivers;
 
+<<<<<<< HEAD
     std::atomic<size_t> _blocked_driver_queue_len;
+=======
+    std::atomic<size_t> _num_drivers;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 } // namespace starrocks::pipeline

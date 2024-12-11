@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ifnull
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 若 `expr1` 不为 NULL，返回 `expr1`。若 `expr1` 为 NULL，返回 `expr2`。
 

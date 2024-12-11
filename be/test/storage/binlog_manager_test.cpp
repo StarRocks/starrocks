@@ -64,7 +64,11 @@ protected:
         col.set_has_bitmap_index(false);
 
         _tablet_schema = std::make_unique<TabletSchema>(schema_pb);
+<<<<<<< HEAD
         _schema = ChunkHelper::convert_schema(*_tablet_schema);
+=======
+        _schema = ChunkHelper::convert_schema(_tablet_schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void create_rowset(int version, std::vector<int32_t> rows_per_segment, RowsetSharedPtr& rowset) {
@@ -78,7 +82,11 @@ protected:
         writer_context.version = Version(version, 0);
         writer_context.rowset_path_prefix = _binlog_file_dir;
         writer_context.rowset_state = VISIBLE;
+<<<<<<< HEAD
         writer_context.tablet_schema = _tablet_schema.get();
+=======
+        writer_context.tablet_schema = _tablet_schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         writer_context.writer_type = kHorizontal;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
@@ -110,7 +118,11 @@ protected:
                               std::vector<BinlogFileMetaPBPtr>* metas_for_each_page);
 
     int64_t _next_rowset_uid;
+<<<<<<< HEAD
     std::unique_ptr<TabletSchema> _tablet_schema;
+=======
+    std::shared_ptr<TabletSchema> _tablet_schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Schema _schema;
     std::shared_ptr<FileSystem> _fs;
     std::string _binlog_file_dir = "binlog_manager_test";
@@ -147,7 +159,11 @@ using LsnMap = std::map<BinlogLsn, BinlogFilePtr>;
 using RowsetCountMap = std::unordered_map<int64_t, int32_t>;
 
 TEST_F(BinlogManagerTest, test_ingestion_commit) {
+<<<<<<< HEAD
     int64_t max_file_size = 10000;
+=======
+    int64_t max_file_size = 2500;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int32_t max_page_size = 20;
     CompressionTypePB compress_type = LZ4_FRAME;
     std::shared_ptr<MockRowsetFetcher> rowset_fetcher = std::make_shared<MockRowsetFetcher>();
@@ -160,7 +176,11 @@ TEST_F(BinlogManagerTest, test_ingestion_commit) {
 
     std::shared_ptr<BinlogFileWriter> last_file_writer;
     std::shared_ptr<BinlogFileMetaPB> last_file_meta;
+<<<<<<< HEAD
     for (int64_t version = 1, next_file_id = 1; version < 1000; version++) {
+=======
+    for (int64_t version = 1, next_file_id = 1; version < 100; version++) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         rowset_fetcher->add_rowset(version, mock_rowset);
         ASSERT_EQ(next_file_id, binlog_manager->next_file_id());
         ASSERT_EQ(-1, binlog_manager->ingestion_version());

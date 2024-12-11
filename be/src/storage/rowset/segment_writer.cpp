@@ -37,12 +37,25 @@
 #include <memory>
 #include <utility>
 
+<<<<<<< HEAD
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
+=======
+#include "column/binary_column.h"
+#include "column/chunk.h"
+#include "column/datum_tuple.h"
+#include "column/nullable_column.h"
+#include "column/schema.h"
+#include "common/logging.h" // LOG
+#include "fs/fs.h"          // FileSystem
+#include "gen_cpp/segment.pb.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/row_store_encoder.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/page_io.h"
 #include "storage/seek_tuple.h"
@@ -57,9 +70,18 @@ namespace starrocks {
 const char* const k_segment_magic = "D0R1";
 const uint32_t k_segment_magic_length = 4;
 
+<<<<<<< HEAD
 SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segment_id,
                              const TabletSchema* tablet_schema, SegmentWriterOptions opts)
         : _segment_id(segment_id), _tablet_schema(tablet_schema), _opts(std::move(opts)), _wfile(std::move(wfile)) {
+=======
+SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
+                             SegmentWriterOptions opts)
+        : _segment_id(segment_id),
+          _tablet_schema(std::move(tablet_schema)),
+          _opts(std::move(opts)),
+          _wfile(std::move(wfile)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     CHECK_NOTNULL(_wfile.get());
 }
 
@@ -80,12 +102,21 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     // copy the contents of the slice `nullmap` into the slice `encoded values`, but the cost of copying is still not small.
     // Here we set the compression from _tablet_schema which given from CREATE TABLE statement.
     meta->set_compression(_tablet_schema->compression_type());
+<<<<<<< HEAD
+=======
+    meta->set_compression_level(_tablet_schema->compression_level());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     meta->set_is_nullable(column.is_nullable());
 
     // TODO(mofei) set the format_version from column
     if (column.type() == TYPE_JSON) {
         JsonMetaPB* json_meta = meta->mutable_json_meta();
         json_meta->set_format_version(kJsonMetaDefaultFormatVersion);
+<<<<<<< HEAD
+=======
+        json_meta->set_is_flat(false);
+        json_meta->set_has_remain(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     for (uint32_t i = 0; i < column.subcolumn_count(); ++i) {
@@ -120,6 +151,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         if (footer->has_short_key_index_page()) {
             *_footer.mutable_short_key_index_page() = footer->short_key_index_page();
         }
+<<<<<<< HEAD
+=======
+        _verify_footer();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // in partial update, key columns have been written in partial segment
         // set _num_rows as _num_rows in partial segment
         _num_rows = footer->num_rows();
@@ -162,6 +197,26 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
         opts.need_bloom_filter = column.is_bf_column();
         opts.need_bitmap_index = column.has_bitmap_index();
+<<<<<<< HEAD
+=======
+        opts.need_inverted_index = _tablet_schema->has_index(column.unique_id(), GIN);
+        opts.need_vector_index = _tablet_schema->has_index(column.unique_id(), IndexType::VECTOR);
+
+        RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
+        if (opts.need_inverted_index) {
+            opts.standalone_index_file_paths.emplace(
+                    GIN, IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
+                                                                   _opts.segment_file_mark.rowset_id, _segment_id,
+                                                                   opts.tablet_index.at(GIN).index_id()));
+        } else if (opts.need_vector_index) {
+            opts.standalone_index_file_paths.emplace(
+                    IndexType::VECTOR,
+                    IndexDescriptor::vector_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
+                                                            _opts.segment_file_mark.rowset_id, _segment_id,
+                                                            opts.tablet_index.at(IndexType::VECTOR).index_id()));
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (column.type() == LogicalType::TYPE_ARRAY) {
             if (opts.need_bloom_filter) {
                 return Status::NotSupported("Do not support bloom filter for array type");
@@ -179,6 +234,11 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             }
         }
 
+<<<<<<< HEAD
+=======
+        opts.need_flat = config::enable_json_flat;
+        opts.is_compaction = _opts.is_compaction;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSIGN_OR_RETURN(auto writer, ColumnWriter::create(opts, &column, _wfile.get()));
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
@@ -208,6 +268,20 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     if (_has_key) {
         _index_builder = std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
     }
+<<<<<<< HEAD
+=======
+    const auto& column = _tablet_schema->columns().back();
+    if (column.name() == Schema::FULL_ROW_COLUMN) {
+        std::vector<ColumnId> cids(_tablet_schema->num_columns() - 1);
+        for (int i = 0; i < _tablet_schema->num_columns() - 1; i++) {
+            cids[i] = i;
+        }
+        _schema_without_full_row_column = std::make_unique<Schema>(_tablet_schema->schema(), cids);
+    }
+
+    _verify_footer();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -263,7 +337,15 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_zone_map());
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
+<<<<<<< HEAD
         *index_size += _wfile->size() - index_offset;
+=======
+        RETURN_IF_ERROR(column_writer->write_inverted_index());
+
+        uint64_t standalone_index_size = 0;
+        RETURN_IF_ERROR(column_writer->write_vector_index(&standalone_index_size));
+        *index_size += _wfile->size() - index_offset + standalone_index_size;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // check global dict valid
         const auto& column = _tablet_schema->column(column_index);
@@ -311,6 +393,11 @@ Status SegmentWriter::_write_footer() {
     _footer.set_version(2);
     _footer.set_num_rows(_num_rows);
 
+<<<<<<< HEAD
+=======
+    _verify_footer();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     std::string footer_buf;
     if (!_footer.SerializeToString(&footer_buf)) {
@@ -337,13 +424,38 @@ Status SegmentWriter::_write_raw_data(const std::vector<Slice>& slices) {
 }
 
 Status SegmentWriter::append_chunk(const Chunk& chunk) {
+<<<<<<< HEAD
     DCHECK_EQ(_column_writers.size(), chunk.num_columns());
     for (size_t i = 0; i < _column_writers.size(); ++i) {
+=======
+    size_t chunk_num_rows = chunk.num_rows();
+    size_t chunk_num_columns = chunk.num_columns();
+    for (size_t i = 0; i < chunk_num_columns; ++i) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const Column* col = chunk.get_column_by_index(i).get();
         RETURN_IF_ERROR(_column_writers[i]->append(*col));
     }
 
+<<<<<<< HEAD
     size_t chunk_num_rows = chunk.num_rows();
+=======
+    // TODO(cbl): put the fill full row column logic here is a bit hacky, this segment writer is used in many other
+    //            situations(compaction etc.), so better to put it into somewhere early in the write pipeline
+    //            likely in _sink->flush_chunk at MemTable::flush
+    if (_column_writers.size() == _tablet_schema->num_columns() &&
+        _tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN &&
+        chunk_num_columns + 1 == _column_writers.size()) {
+        // just missing full row column, generate it and write to file
+        auto full_row_col = std::make_unique<BinaryColumn>();
+        auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
+        RETURN_IF_ERROR(row_encoder->encode_chunk_to_full_row_column(*_schema_without_full_row_column, chunk,
+                                                                     full_row_col.get()));
+        RETURN_IF_ERROR(_column_writers[chunk_num_columns]->append(*full_row_col));
+    } else {
+        DCHECK_EQ(_column_writers.size(), chunk_num_columns);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_has_key) {
         for (size_t i = 0; i < chunk_num_rows; i++) {
             // At the begin of one block, so add a short key index entry
@@ -362,4 +474,17 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+void SegmentWriter::_verify_footer() {
+#if !defined(NDEBUG) || defined(BE_TEST)
+    std::set<uint32_t> unique_ids;
+    for (auto&& col : _footer.columns()) {
+        [[maybe_unused]] auto [iter, ok] = unique_ids.emplace(col.unique_id());
+        CHECK(ok) << "Segment footer contains duplicate column id=" << col.unique_id() << ": " << _footer.DebugString();
+    }
+#endif
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

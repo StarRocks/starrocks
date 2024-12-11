@@ -25,6 +25,16 @@ add_library(Geo STATIC
     ${GENSRC_DIR}/geo/wkt_yacc.y.cpp
 )
 
+<<<<<<< HEAD
+=======
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "15.0.0")
+        # ignore warning from geo
+        target_compile_options(Geo PUBLIC "-Wno-unused-but-set-variable")
+    endif ()
+endif()
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 add_custom_command(
     OUTPUT ${GENSRC_DIR}/geo/wkt_lex.l.cpp ${GENSRC_DIR}/geo/wkt_lex.l.h
     COMMAND mkdir -p ${GENSRC_DIR}/geo

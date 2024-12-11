@@ -18,7 +18,11 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import org.apache.logging.log4j.LogManager;
@@ -53,8 +57,13 @@ public class CreateRoutineLoadAnalyzer {
             statement.setRoutineLoadDesc(CreateRoutineLoadStmt.buildLoadDesc(statement.getLoadPropertyList()));
             statement.checkJobProperties();
             statement.checkDataSourceProperties();
+<<<<<<< HEAD
         } catch (UserException e) {
             LOG.error(e);
+=======
+        } catch (StarRocksException e) {
+            LOG.error(e.getMessage(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throw new SemanticException(e.getMessage());
         }
     }

@@ -15,8 +15,23 @@
 
 package com.starrocks.persist;
 
+<<<<<<< HEAD
 import org.junit.After;
 import org.junit.Assert;
+=======
+import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Test;
 
 import java.io.DataInputStream;
@@ -29,7 +44,15 @@ import java.io.IOException;
 public class DropCatalogTest {
 
     private String fileName = "./DropCatalogTest";
+<<<<<<< HEAD
 
+=======
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @After
     public void tearDownDrop() throws Exception {
@@ -56,4 +79,29 @@ public class DropCatalogTest {
         Assert.assertEquals(readDropCatalogInfo.getCatalogName(), "catalog_name");
         in.close();
     }
+<<<<<<< HEAD
+=======
+    @Test
+    public void testDropCatalog() throws Exception {
+        String dropSql = "DROP CATALOG IF EXISTS hive_catalog";
+
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        ConnectorMgr connectorMgr = GlobalStateMgr.getCurrentState().getConnectorMgr();
+
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
+        Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
+
+        StatementBase dropStmtBase = AnalyzeTestUtil.analyzeSuccess(dropSql);
+        Assert.assertEquals("DROP CATALOG IF EXISTS \'hive_catalog\'", dropStmtBase.toSql());
+        Assert.assertTrue(dropStmtBase instanceof DropCatalogStmt);
+        DropCatalogStmt dropCatalogStmt = (DropCatalogStmt) dropStmtBase;
+        DDLStmtExecutor.execute(dropCatalogStmt, connectCtx);
+        Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
+        Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
+
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

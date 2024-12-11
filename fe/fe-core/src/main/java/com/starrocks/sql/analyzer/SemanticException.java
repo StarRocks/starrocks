@@ -24,9 +24,15 @@ import static java.lang.String.format;
 
 public class SemanticException extends StarRocksPlannerException {
 
+<<<<<<< HEAD
     private final String detailMsg;
 
     private final NodePosition pos;
+=======
+    protected final String detailMsg;
+
+    protected final NodePosition pos;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     protected boolean canAppend = true;
 
@@ -49,6 +55,15 @@ public class SemanticException extends StarRocksPlannerException {
         this.canAppend = canAppend;
     }
 
+<<<<<<< HEAD
+=======
+    public SemanticException(String detailMsg, Exception cause) {
+        super(detailMsg, ErrorType.USER_ERROR, cause);
+        this.detailMsg = detailMsg;
+        this.pos = NodePosition.ZERO;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public SemanticException(String formatString, Object... args) {
         this(format(formatString, args), NodePosition.ZERO);
     }

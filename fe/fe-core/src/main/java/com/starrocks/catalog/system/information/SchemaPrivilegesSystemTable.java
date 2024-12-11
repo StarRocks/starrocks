@@ -24,9 +24,19 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class SchemaPrivilegesSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.SCHEMA_PRIVILEGES_ID,
                 "schema_privileges",
+=======
+    private static final String NAME = "schema_privileges";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.SCHEMA_PRIVILEGES_ID,
+                NAME,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("GRANTEE", ScalarType.createVarchar(81))

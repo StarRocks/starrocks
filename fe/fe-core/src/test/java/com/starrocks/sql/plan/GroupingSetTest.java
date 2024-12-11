@@ -107,7 +107,11 @@ public class GroupingSetTest extends PlanTestBase {
         starRocksAssert.query(sql).analysisError("cannot use GROUPING functions without");
 
         sql = "select k10 from baseall group by k10, GROUPING(1193275260000);";
+<<<<<<< HEAD
         starRocksAssert.query(sql).analysisError("grouping functions only support column");
+=======
+        starRocksAssert.query(sql).analysisError("GROUP BY clause cannot contain grouping.");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         sql = "select k10 from baseall group by k10 having GROUPING(1193275260000) > 2;";
         starRocksAssert.query(sql).analysisError("HAVING clause cannot contain grouping");
@@ -326,4 +330,23 @@ public class GroupingSetTest extends PlanTestBase {
                 "  |  <slot 6> : 6: array_agg\n" +
                 "  |  <slot 9> : array_join(7: array_agg, ',')");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testPushDownGroupingSetNormal() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        try {
+            String sql = "select t1b, t1c, t1d, sum(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  5:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[], [14], [14, 15]]");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+            connectContext.getSessionVariable().setCboCteReuse(true);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

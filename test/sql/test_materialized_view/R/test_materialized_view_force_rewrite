@@ -53,6 +53,12 @@ analyze full table mv1;
 -- result:
 [REGEX].*analyze	status	OK
 -- !result
+<<<<<<< HEAD
+=======
+set enable_force_rule_based_mv_rewrite=false;
+-- result:
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 set materialized_view_rewrite_mode="disable";
 -- result:
 -- !result

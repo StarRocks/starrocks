@@ -12,18 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.scheduler;
 
 public class SubmitResult {
     String queryId;
     SubmitStatus status;
+=======
+package com.starrocks.scheduler;
+
+import java.util.concurrent.Future;
+
+public class SubmitResult {
+    private String queryId;
+    private SubmitStatus status;
+    private Future<Constants.TaskRunState> future;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public SubmitResult(String queryId, SubmitStatus status) {
         this.queryId = queryId;
         this.status = status;
     }
 
+<<<<<<< HEAD
+=======
+    public SubmitResult(String queryId, SubmitStatus status, Future<Constants.TaskRunState> future) {
+        this.queryId = queryId;
+        this.status = status;
+        this.future = future;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getQueryId() {
         return queryId;
     }
@@ -40,6 +60,17 @@ public class SubmitResult {
         this.status = status;
     }
 
+<<<<<<< HEAD
+=======
+    public Future<Constants.TaskRunState> getFuture() {
+        return future;
+    }
+
+    public void setFuture(Future<Constants.TaskRunState> future) {
+        this.future = future;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public enum SubmitStatus {
         SUBMITTED,
         REJECTED,

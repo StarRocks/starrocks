@@ -186,4 +186,16 @@ public class OffHeapTable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // for test only.
+    public boolean checkNullsLength() {
+        for (OffHeapColumnVector c : vectors) {
+            if (!c.checkNullsLength()) {
+                return false;
+            }
+        }
+        return true;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

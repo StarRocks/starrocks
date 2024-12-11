@@ -17,9 +17,15 @@
 
 package com.starrocks.plugin;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public class PluginException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+
+public class PluginException extends StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public PluginException(String msg) {
         super(msg);
     }

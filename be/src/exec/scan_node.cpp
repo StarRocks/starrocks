@@ -34,6 +34,10 @@
 
 #include "exec/scan_node.h"
 
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/query_context.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/pipeline/scan/morsel.h"
 
 namespace starrocks {
@@ -59,7 +63,17 @@ Status ScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (options.__isset.scan_use_query_mem_ratio) {
         mem_ratio = options.scan_use_query_mem_ratio;
     }
+<<<<<<< HEAD
     _mem_limit = state->query_mem_tracker_ptr()->limit() * mem_ratio;
+=======
+    if (runtime_state()->query_ctx()) {
+        // Used in pipeline-engine
+        _mem_limit = state->query_ctx()->get_static_query_mem_limit() * mem_ratio;
+    } else if (runtime_state()->query_mem_tracker_ptr()) {
+        // Fallback in non-pipeline
+        _mem_limit = state->query_mem_tracker_ptr()->limit() * mem_ratio;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -98,18 +112,43 @@ static std::map<int, pipeline::MorselQueuePtr> uniform_distribute_morsels(pipeli
         driver_seq = (driver_seq + 1) % dop;
     }
     std::map<int, pipeline::MorselQueuePtr> queue_per_driver;
+<<<<<<< HEAD
     for (auto& [operator_seq, morsels] : morsels_per_driver) {
         queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels)));
     }
+=======
+
+    auto morsel_queue_type = morsel_queue->type();
+    DCHECK(morsel_queue_type == pipeline::MorselQueue::Type::FIXED ||
+           morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
+
+    if (morsel_queue_type == pipeline::MorselQueue::Type::FIXED) {
+        for (auto& [operator_seq, morsels] : morsels_per_driver) {
+            queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels)));
+        }
+    } else {
+        for (auto& [operator_seq, morsels] : morsels_per_driver) {
+            queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::DynamicMorselQueue>(
+                                                           std::move(morsels), morsel_queue->has_more()));
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return queue_per_driver;
 }
 
 StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel_queue_factory(
         const std::vector<TScanRangeParams>& global_scan_ranges,
         const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
+<<<<<<< HEAD
         int pipeline_dop, bool enable_tablet_internal_parallel,
         TTabletInternalParallelMode::type tablet_internal_parallel_mode) {
     if (scan_ranges_per_driver_seq.empty()) {
+=======
+        int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
+        TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan) {
+    if (scan_ranges_per_driver_seq.empty() && !in_colocate_exec_group) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSIGN_OR_RETURN(auto morsel_queue,
                          convert_scan_range_to_morsel_queue(global_scan_ranges, node_id, pipeline_dop,
                                                             enable_tablet_internal_parallel,
@@ -117,13 +156,28 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         int scan_dop = std::min<int>(std::max<int>(1, morsel_queue->max_degree_of_parallelism()), pipeline_dop);
         int io_parallelism = scan_dop * io_tasks_per_scan_operator();
 
+<<<<<<< HEAD
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
         if (!always_shared_scan() && scan_dop > 1 && dynamic_cast<pipeline::FixedMorselQueue*>(morsel_queue.get()) &&
+=======
+        auto morsel_queue_type = morsel_queue->type();
+        bool is_fixed_or_dynamic_morsel_queue = (morsel_queue_type == pipeline::MorselQueue::Type::FIXED ||
+                                                 morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
+
+        // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
+        if (!always_shared_scan() && scan_dop > 1 && is_fixed_or_dynamic_morsel_queue &&
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             morsel_queue->num_original_morsels() <= io_parallelism) {
             auto morsel_queue_map = uniform_distribute_morsels(std::move(morsel_queue), scan_dop);
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),
                                                                             /*could_local_shuffle*/ true);
         } else {
+<<<<<<< HEAD
+=======
+            if (config::use_default_dop_when_shared_scan && enable_shared_scan && is_fixed_or_dynamic_morsel_queue) {
+                scan_dop = pipeline_dop;
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return std::make_unique<pipeline::SharedMorselQueueFactory>(std::move(morsel_queue), scan_dop);
         }
     } else {
@@ -140,8 +194,23 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
             queue_per_driver_seq.emplace(dop, std::move(queue));
         }
 
+<<<<<<< HEAD
         return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queue_per_driver_seq),
                                                                         /*could_local_shuffle*/ false);
+=======
+        // both of global_scan_ranges and scan_ranges_per_driver_seq are empty, create an empty morsel queue
+        if (queue_per_driver_seq.empty()) {
+            queue_per_driver_seq.emplace(pipeline_dop - 1, pipeline::create_empty_morsel_queue());
+        }
+
+        if (output_chunk_by_bucket()) {
+            return std::make_unique<pipeline::BucketSequenceMorselQueueFactory>(std::move(queue_per_driver_seq),
+                                                                                /*could_local_shuffle*/ false);
+        } else {
+            return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queue_per_driver_seq),
+                                                                            /*could_local_shuffle*/ false);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -150,6 +219,7 @@ StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
     pipeline::Morsels morsels;
+<<<<<<< HEAD
     // If this scan node does not accept non-empty scan ranges, create a placeholder one.
     if (!accept_empty_scan_ranges() && scan_ranges.empty()) {
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, TScanRangeParams()));
@@ -159,6 +229,12 @@ StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
         }
     }
 
+=======
+    [[maybe_unused]] bool has_more_morsel = false;
+    pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
+                                             &has_more_morsel);
+    DCHECK(has_more_morsel == false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
 }
 

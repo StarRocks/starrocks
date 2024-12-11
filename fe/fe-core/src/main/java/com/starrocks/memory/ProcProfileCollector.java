@@ -42,11 +42,19 @@ public class ProcProfileCollector extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(ProcProfileCollector.class);
     private static final String CPU_FILE_NAME_PREFIX = "cpu-profile-";
     private static final String MEM_FILE_NAME_PREFIX = "mem-profile-";
+<<<<<<< HEAD
+=======
+    private static final long LOG_INTERVAL = 3600 * 1000L;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private final SimpleDateFormat profileTimeFormat = new SimpleDateFormat("yyyyMMdd-HHmmss");
     private final String profileLogDir;
 
     private long lastCollectTime = -1;
+<<<<<<< HEAD
+=======
+    private long lastLogTime = -1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public ProcProfileCollector() {
         super("ProcProfileCollector");
@@ -77,8 +85,14 @@ public class ProcProfileCollector extends FrontendDaemon {
 
     private void collectMemProfile() {
         String fileName = MEM_FILE_NAME_PREFIX + currentTimeString() + ".html";
+<<<<<<< HEAD
         collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/profiler.sh",
                 "-e", "alloc",
+=======
+        collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/async-profiler/bin/asprof",
+                "-e", "alloc",
+                "--alloc", "2m",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "-d", String.valueOf(Config.proc_profile_collect_time_s),
                 "-f", profileLogDir + "/" +  fileName,
                 getPid());
@@ -86,13 +100,21 @@ public class ProcProfileCollector extends FrontendDaemon {
         try {
             compressFile(fileName);
         } catch (IOException e) {
+<<<<<<< HEAD
             LOG.warn("compress file {} failed", fileName, e);
+=======
+            checkAndLog(() -> LOG.warn("compress file {} failed, reason: {}", fileName, e.getMessage()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     private void collectCPUProfile() {
         String fileName = CPU_FILE_NAME_PREFIX + currentTimeString() + ".html";
+<<<<<<< HEAD
         collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/profiler.sh",
+=======
+        collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/async-profiler/bin/asprof",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "-e", "cpu",
                 "-d", String.valueOf(Config.proc_profile_collect_time_s),
                 "-f", profileLogDir + "/" +  fileName,
@@ -101,7 +123,11 @@ public class ProcProfileCollector extends FrontendDaemon {
         try {
             compressFile(fileName);
         } catch (IOException e) {
+<<<<<<< HEAD
             LOG.warn("compress file {} failed", fileName, e);
+=======
+            checkAndLog(() -> LOG.warn("compress file {} failed, reason: {}", fileName, e.getMessage()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -111,6 +137,7 @@ public class ProcProfileCollector extends FrontendDaemon {
             Process process = processBuilder.start();
             process.waitFor();
             if (process.exitValue() != 0) {
+<<<<<<< HEAD
                 LOG.info("collect profile failed, stdout: {}, stderr: {}",
                         getMsgFromInputStream(process.getInputStream()),
                         getMsgFromInputStream(process.getErrorStream()));
@@ -118,6 +145,15 @@ public class ProcProfileCollector extends FrontendDaemon {
             }
         } catch (IOException | InterruptedException e) {
             LOG.warn("collect profile failed", e);
+=======
+                checkAndLog(() -> LOG.warn("collect profile failed, stdout: {}, stderr: {}",
+                        getMsgFromInputStream(process.getInputStream()),
+                        getMsgFromInputStream(process.getErrorStream())));
+                stopProfile();
+            }
+        } catch (IOException | InterruptedException e) {
+            checkAndLog(() -> LOG.warn("collect profile failed, reason: {}", e.getMessage()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -132,11 +168,19 @@ public class ProcProfileCollector extends FrontendDaemon {
                 process.destroyForcibly();
             }
         } catch (IOException | InterruptedException e) {
+<<<<<<< HEAD
             LOG.warn("stop profile failed", e);
         }
     }
 
     private String getMsgFromInputStream(InputStream inputStream) throws IOException {
+=======
+            checkAndLog(() -> LOG.warn("stop profile failed, reason: {}", e.getMessage()));
+        }
+    }
+
+    private String getMsgFromInputStream(InputStream inputStream) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (inputStream == null) {
             return "";
         }
@@ -147,6 +191,12 @@ public class ProcProfileCollector extends FrontendDaemon {
                 sb.append(line).append("\n");
             }
             return sb.toString();
+<<<<<<< HEAD
+=======
+        } catch (IOException e) {
+            checkAndLog(() -> LOG.warn("get message from input stream failed, reason: {}", e.getMessage()));
+            return "";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -226,4 +276,14 @@ public class ProcProfileCollector extends FrontendDaemon {
                 .getName()
                 .split("@")[0];
     }
+<<<<<<< HEAD
+=======
+
+    private void checkAndLog(Runnable runnable) {
+        if (System.currentTimeMillis() - lastLogTime > LOG_INTERVAL) {
+            runnable.run();
+            lastLogTime = System.currentTimeMillis();
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

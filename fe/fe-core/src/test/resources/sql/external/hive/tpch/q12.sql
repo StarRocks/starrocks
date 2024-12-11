@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_shipmode,
@@ -27,6 +28,8 @@ group by
     l_shipmode
 order by
     l_shipmode ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment statistics]
 PLAN FRAGMENT 0(F04)
 Output Exprs:24: l_shipmode | 28: sum | 29: sum
@@ -121,7 +124,11 @@ TABLE: orders
 NON-PARTITION PREDICATES: 1: o_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=23.0
+<<<<<<< HEAD
 numNodes=0
+=======
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 150000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (1: o_orderkey)
@@ -147,10 +154,17 @@ OutPut Exchange Id: 03
 1:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 24: l_shipmode IN ('REG AIR', 'MAIL'), 21: l_commitdate < 22: l_receiptdate, 20: l_shipdate < 21: l_commitdate, 22: l_receiptdate >= '1997-01-01', 22: l_receiptdate < '1998-01-01'
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 30: l_shipmode >= 'MAIL', 31: l_shipmode <= 'REG AIR', 32: l_receiptdate >= '1997-01-01', 33: l_receiptdate < '1998-01-01'
 partitions=1/1
 avgRowSize=30.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 24: l_shipmode >= 'MAIL', 24: l_shipmode <= 'REG AIR', 22: l_receiptdate >= '1997-01-01', 22: l_receiptdate < '1998-01-01'
+partitions=1/1
+avgRowSize=30.0
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 6125233
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 6125233.086195324] ESTIMATE
@@ -158,5 +172,9 @@ column statistics:
 * l_commitdate-->[6.967872E8, 9.097632E8, 0.0, 4.0, 2466.0] ESTIMATE
 * l_receiptdate-->[8.52048E8, 8.83584E8, 0.0, 4.0, 2554.0] ESTIMATE
 * l_shipmode-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

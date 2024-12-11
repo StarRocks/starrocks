@@ -22,6 +22,10 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -50,7 +54,10 @@ import mockit.Mocked;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+<<<<<<< HEAD
 import java.util.ArrayList;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,16 +69,29 @@ public class PartitionPruneRuleTest {
     @Test
     public void transform1(@Mocked OlapTable olapTable, @Mocked RangePartitionInfo partitionInfo) {
         FeConstants.runningUnitTest = true;
+<<<<<<< HEAD
         Partition part1 = new Partition(1, "p1", null, null);
         Partition part2 = new Partition(2, "p2", null, null);
         Partition part3 = new Partition(3, "p3", null, null);
         Partition part4 = new Partition(4, "p4", null, null);
         Partition part5 = new Partition(5, "p5", null, null);
+=======
+        Partition part1 = new Partition(1, 11, "p1", null, null);
+        Partition part2 = new Partition(2, 22, "p2", null, null);
+        Partition part3 = new Partition(3, 33, "p3", null, null);
+        Partition part4 = new Partition(4, 44, "p4", null, null);
+        Partition part5 = new Partition(5, 55, "p5", null, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         List<Column> columns = Lists.newArrayList(
                 new Column("dealDate", Type.DATE, false)
         );
 
+<<<<<<< HEAD
+=======
+        List<ColumnId> columnNames = Lists.newArrayList(ColumnId.create(columns.get(0).getName()));
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Map<Long, Range<PartitionKey>> keyRange = Maps.newHashMap();
 
         PartitionKey p1 = new PartitionKey();
@@ -126,7 +146,11 @@ public class PartitionPruneRuleTest {
                 partitionInfo.getIdToRange(false);
                 result = keyRange;
 
+<<<<<<< HEAD
                 partitionInfo.getPartitionColumns();
+=======
+                partitionInfo.getPartitionColumns((Map<ColumnId, Column>) any);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 result = columns;
 
                 olapTable.getPartitions();
@@ -163,17 +187,28 @@ public class PartitionPruneRuleTest {
     @Test
     public void transform2(@Mocked OlapTable olapTable, @Mocked RangePartitionInfo partitionInfo) {
         FeConstants.runningUnitTest = true;
+<<<<<<< HEAD
         Partition part1 = new Partition(1, "p1", null, null);
         Partition part2 = new Partition(2, "p2", null, null);
         Partition part3 = new Partition(3, "p3", null, null);
         Partition part4 = new Partition(4, "p4", null, null);
         Partition part5 = new Partition(5, "p5", null, null);
+=======
+        Partition part1 = new Partition(1, 11, "p1", null, null);
+        Partition part2 = new Partition(2, 22, "p2", null, null);
+        Partition part3 = new Partition(3, 33, "p3", null, null);
+        Partition part4 = new Partition(4, 44, "p4", null, null);
+        Partition part5 = new Partition(5, 55, "p5", null, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         List<Column> columns = Lists.newArrayList(
                 new Column("dealDate", Type.DATE, false),
                 new Column("main_brand_id", Type.INT, false)
         );
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Map<Long, Range<PartitionKey>> keyRange = Maps.newHashMap();
 
         PartitionKey p1 = new PartitionKey();
@@ -244,7 +279,11 @@ public class PartitionPruneRuleTest {
                 partitionInfo.getIdToRange(false);
                 result = keyRange;
 
+<<<<<<< HEAD
                 partitionInfo.getPartitionColumns();
+=======
+                partitionInfo.getPartitionColumns((Map<ColumnId, Column>) any);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 result = columns;
 
                 olapTable.getPartitions();
@@ -303,8 +342,13 @@ public class PartitionPruneRuleTest {
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap, null, -1, predicate);
 
+<<<<<<< HEAD
         Partition part1 = new Partition(10001L, "p1", null, null);
         Partition part2 = new Partition(10002L, "p2", null, null);
+=======
+        Partition part1 = new Partition(10001L, 10003L, "p1", null, null);
+        Partition part2 = new Partition(10002L, 10004L, "p2", null, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         List<LiteralExpr> p1 = Lists.newArrayList(
                 new PartitionValue("guangdong").getValue(Type.STRING),
@@ -318,13 +362,23 @@ public class PartitionPruneRuleTest {
         literalExprValues.put(10001L, p1);
         literalExprValues.put(10002L, p2);
 
+<<<<<<< HEAD
         List<Column> partitionColumns = new ArrayList<>();
         partitionColumns.add(new Column("province", Type.STRING));
+=======
+        List<ColumnId> partitionColumns = Lists.newArrayList(ColumnId.create("province"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         new Expectations() {
             {
                 olapTable.getPartitionInfo();
                 result = partitionInfo;
+<<<<<<< HEAD
+=======
+                
+                partitionInfo.isListPartition();
+                result = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                 partitionInfo.getType();
                 result = PartitionType.LIST;
@@ -336,8 +390,13 @@ public class PartitionPruneRuleTest {
                 result = Lists.newArrayList(part1, part2);
                 minTimes = 0;
 
+<<<<<<< HEAD
                 partitionInfo.getPartitionColumns();
                 result = partitionColumns;
+=======
+                partitionInfo.getPartitionColumns((Map<ColumnId, Column>) any);
+                result = Lists.newArrayList(new Column("province", Type.STRING, false));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
 
                 partitionInfo.getPartitionIds(false);
@@ -381,10 +440,17 @@ public class PartitionPruneRuleTest {
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap,
                         null, -1, null, olapTable.getBaseIndexId(),
+<<<<<<< HEAD
                         null, partitionNames, false, Lists.newArrayList(), Lists.newArrayList(), false);
 
         Partition part1 = new Partition(10001L, "p1", null, null);
         Partition part2 = new Partition(10002L, "p2", null, null);
+=======
+                        null, partitionNames, false, Lists.newArrayList(), Lists.newArrayList(), null, false);
+
+        Partition part1 = new Partition(10001L, 10003L, "p1", null, null);
+        Partition part2 = new Partition(10002L, 10004L, "p2", null, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         List<LiteralExpr> p1 = Lists.newArrayList(
                 new PartitionValue("guangdong").getValue(Type.STRING),
@@ -398,8 +464,12 @@ public class PartitionPruneRuleTest {
         literalExprValues.put(10001L, p1);
         literalExprValues.put(10002L, p2);
 
+<<<<<<< HEAD
         List<Column> partitionColumns = new ArrayList<>();
         partitionColumns.add(new Column("province", Type.STRING));
+=======
+        List<ColumnId> partitionColumns = Lists.newArrayList(ColumnId.create("province"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         new Expectations() {
             {
@@ -412,12 +482,23 @@ public class PartitionPruneRuleTest {
                 partitionInfo.getLiteralExprValues();
                 result = literalExprValues;
 
+<<<<<<< HEAD
+=======
+                partitionInfo.isListPartition();
+                result = true;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 olapTable.getPartitions();
                 result = Lists.newArrayList(part1, part2);
                 minTimes = 0;
 
+<<<<<<< HEAD
                 partitionInfo.getPartitionColumns();
                 result = partitionColumns;
+=======
+                partitionInfo.getPartitionColumns((Map<ColumnId, Column>) any);
+                result = Lists.newArrayList(new Column("province", Type.STRING, false));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
 
                 partitionInfo.getPartitionIds(true);

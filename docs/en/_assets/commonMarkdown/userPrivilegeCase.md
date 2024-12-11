@@ -57,7 +57,11 @@ We recommend you customize roles to manage privileges and users. The following e
 
 #### Grant write-only privileges on a specific external catalog
 
+<<<<<<< HEAD
 You can only write data into Iceberg tables (since v3.1).
+=======
+You can only write data into Iceberg tables (since v3.1) and Hive tables (since v3.2).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
    ```SQL
    -- Create a role.

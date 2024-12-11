@@ -131,9 +131,15 @@ Status BitmapIndexIterator::read_union_bitmap(rowid_t from, rowid_t to, Roaring*
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status BitmapIndexIterator::read_union_bitmap(const SparseRange& range, Roaring* result) {
     for (size_t i = 0; i < range.size(); i++) { // NOLINT
         const Range& r = range[i];
+=======
+Status BitmapIndexIterator::read_union_bitmap(const SparseRange<>& range, Roaring* result) {
+    for (size_t i = 0; i < range.size(); i++) { // NOLINT
+        const Range<>& r = range[i];
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         RETURN_IF_ERROR(read_union_bitmap(r.begin(), r.end(), result));
     }
     return Status::OK();

@@ -25,7 +25,11 @@ void SpillProcessTask::reset() {
 SpillProcessChannelPtr SpillProcessChannelFactory::get_or_create(int32_t sequence) {
     DCHECK_LT(sequence, _channels.size());
     if (_channels[sequence] == nullptr) {
+<<<<<<< HEAD
         _channels[sequence] = std::make_shared<SpillProcessChannel>(this);
+=======
+        _channels[sequence] = std::make_shared<SpillProcessChannel>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return _channels[sequence];
 }

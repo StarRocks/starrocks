@@ -17,7 +17,13 @@ package com.starrocks.qe;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Tracers;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
@@ -49,8 +55,13 @@ public class ExecuteExceptionHandler {
             handleRemoteFileNotFound((RemoteFileNotFoundException) e, context);
         } else if (e instanceof RpcException) {
             handleRpcException((RpcException) e, context);
+<<<<<<< HEAD
         } else if (e instanceof UserException) {
             handleUserException((UserException) e, context);
+=======
+        } else if (e instanceof StarRocksException) {
+            handleUserException((StarRocksException) e, context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             throw e;
         }
@@ -74,7 +85,11 @@ public class ExecuteExceptionHandler {
                     ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .getOptionalMetadata(hiveTable.getCatalogName()).get();
                     // refresh catalog level metadata cache
+<<<<<<< HEAD
                     metadata.refreshTable(hiveTable.getDbName(), hiveTable, new ArrayList<>(), true);
+=======
+                    metadata.refreshTable(hiveTable.getCatalogDBName(), hiveTable, new ArrayList<>(), true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     // clear query level metadata cache
                     metadata.clear();
                 }
@@ -83,9 +98,16 @@ public class ExecuteExceptionHandler {
         if (!existExternalCatalog) {
             throw e;
         }
+<<<<<<< HEAD
     }
 
     private static void handleRpcException(RpcException e, RetryContext context) {
+=======
+        Tracers.record(Tracers.Module.EXTERNAL, "HMS.RETRY", String.valueOf(context.retryTime + 1));
+    }
+
+    private static void handleRpcException(RpcException e, RetryContext context) throws Exception {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
         // and hence there is no need to log it here.
         ConnectContext connectContext = context.connectContext;
@@ -98,13 +120,39 @@ public class ExecuteExceptionHandler {
                     context.execPlan == null ? "" : context.execPlan.getExplainString(TExplainLevel.COSTS),
                     e);
         }
+<<<<<<< HEAD
     }
 
     private static void handleUserException(UserException e, RetryContext context) throws Exception {
+=======
+        // rebuild the exec plan in case the node is not available any more.
+        rebuildExecPlan(e, context);
+    }
+
+    private static void rebuildExecPlan(Exception e, RetryContext context) throws Exception {
+        try {
+            context.execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext);
+        } catch (Exception e1) {
+            // encounter exception when re-plan, just log the new error but throw the original cause.
+            if (LOG.isDebugEnabled()) {
+                ConnectContext connectContext = context.connectContext;
+                LOG.debug("encounter exception when retry, [QueryId={}] [SQL={}], ",
+                        DebugUtil.printId(connectContext.getExecutionId()),
+                        context.parsedStmt.getOrigStmt() == null ? "" :
+                                context.parsedStmt.getOrigStmt().originStmt,
+                        e1);
+            }
+            throw e;
+        }
+    }
+
+    private static void handleUserException(StarRocksException e, RetryContext context) throws Exception {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String msg = e.getMessage();
         if (context.parsedStmt instanceof QueryStatement) {
             for (String errMsg : SCHEMA_NOT_MATCH_ERROR) {
                 if (msg.contains(errMsg)) {
+<<<<<<< HEAD
                     try {
                         ExecPlan execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext);
                         context.execPlan = execPlan;
@@ -125,6 +173,18 @@ public class ExecuteExceptionHandler {
             }
         }
 
+=======
+                    rebuildExecPlan(e, context);
+                    return;
+                }
+            }
+            // if it is cancelled due to backend not alive, rebuild the plan and retry again
+            if (e.getErrorCode().equals(InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR)) {
+                rebuildExecPlan(e, context);
+                return;
+            }
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         throw e;
     }
 

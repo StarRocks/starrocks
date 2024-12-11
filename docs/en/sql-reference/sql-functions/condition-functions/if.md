@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # if
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 If `expr1` evaluates to TRUE, returns `expr2`. Otherwise, returns `expr3`.
 

@@ -23,4 +23,8 @@ add_library(ServiceBE
     internal_service.cpp
     lake_service.cpp
     starrocks_be.cpp
+<<<<<<< HEAD
+=======
+    arrow_flight_sql_service.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 )

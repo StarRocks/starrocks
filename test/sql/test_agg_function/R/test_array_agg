@@ -11,7 +11,10 @@ DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 4
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -299,7 +302,11 @@ select array_agg(distinct subject order by 1, name) from ss group by id order by
 ["Math数学欧拉方程","英文English"]
 ["英语外语美誉"]
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1;
+=======
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	1
 [null,"Ti"]	2
@@ -309,7 +316,11 @@ select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr o
 ["张三掩耳盗铃","张三此地无银三百两"]	2
 ["李四大闹天空"]	1
 -- !result
+<<<<<<< HEAD
 select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1;
+=======
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	[null]
 [null,"Ti"]	[null,"Ti"]
@@ -319,7 +330,11 @@ select array_agg(name order by 1), array_agg(distinct name order by 1, score) fr
 ["张三掩耳盗铃","张三此地无银三百两"]	["张三掩耳盗铃","张三此地无银三百两"]
 ["李四大闹天空"]	["李四大闹天空"]
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1;
+=======
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	[null]
 [null,"Ti"]	[null,99]
@@ -349,11 +364,19 @@ select cardinality(array_agg(distinct arr order by score, cardinality(arr), arr)
 3
 3
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 [null]	1	None
 [null,"Ti"]	0	99
 ["May","欧阳诸葛方程","Ti"]	1	98
+=======
+select array_agg(distinct name order by 1,score, 1), count(distinct id), max(score)  from ss group by id order by 1,2;
+-- result:
+[null]	1	None
+[null,"Ti"]	0	99
+["May","Ti","欧阳诸葛方程"]	1	98
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ["Tom"]	1	90
 ["Tom","王武程咬金"]	1	22
 ["张三掩耳盗铃","张三此地无银三百两"]	1	98
@@ -369,6 +392,7 @@ select cardinality(array_agg(distinct mmap order by score,name,subject)) from ss
 2
 1
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1;
 -- result:
 [null]	[null]
@@ -378,6 +402,17 @@ select array_agg(distinct null order by score,1,4.00),array_agg(null order by sc
 [null]	[null,null]
 [null]	[null,null]
 [null]	[null]
+=======
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1, 2;
+-- result:
+[null]	[null]
+[null]	[null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null,null,null]
+[null]	[null,null,null]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
 -- result:
@@ -389,7 +424,11 @@ select array_agg(distinct subject order by 1, null) from ss group by id order by
 ["Math数学欧拉方程","英文English"]
 ["英语外语美誉"]
 -- !result
+<<<<<<< HEAD
 select cardinality(array_agg(distinct arr order by score,name, subject)), cardinality(array_agg(distinct mmap order by score, name,subject)) from ss group by id order by 1;
+=======
+select cardinality(array_agg(distinct arr order by score,name, subject)), cardinality(array_agg(distinct mmap order by score, name,subject)) from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 1	1
 1	1
@@ -399,7 +438,11 @@ select cardinality(array_agg(distinct arr order by score,name, subject)), cardin
 3	3
 3	3
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
+=======
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	[null]	[null]
 [null]	["英语外语美誉"]	["英语外语美誉"]
@@ -459,7 +502,11 @@ select array_agg(distinct subject order by 1) from ss group by id order by 1;
 ["Math数学欧拉方程","英文English"]
 ["英语外语美誉"]
 -- !result
+<<<<<<< HEAD
 select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1;
+=======
+select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1,2,3;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 None	[4]	None
 TiEnglish,欧阳诸葛方程数学大不列颠	[3]	98
@@ -469,7 +516,11 @@ TomEnglish,王武程咬金语文北京上海	[2]	22
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	[11]	98
 李四大闹天空英语外语美誉	[12]	None
 -- !result
+<<<<<<< HEAD
 select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
+=======
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	1	None
 [null,"Ti"]	0	99
@@ -479,7 +530,11 @@ select array_agg( name order by 1,score), count(distinct id), max(score)  from s
 ["张三掩耳盗铃","张三此地无银三百两"]	1	98
 ["李四大闹天空"]	1	None
 -- !result
+<<<<<<< HEAD
 select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1;
+=======
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	1	None
 [null,"English","语文北京上海"]	1	22
@@ -489,6 +544,7 @@ select array_agg( subject order by score,1), count(distinct id), max(score)  fro
 ["Math数学欧拉方程","英文English"]	1	98
 ["英语外语美誉"]	1	None
 -- !result
+<<<<<<< HEAD
 select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
@@ -502,6 +558,21 @@ select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(
 2	2
 3	3
 3	2
+=======
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
+-- !result
+select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1, 2;
+-- result:
+1	1
+1	1
+2	1
+2	2
+2	2
+3	2
+3	3
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 select array_agg( null order by score,4.00) from ss group by id order by 1;
 -- result:
@@ -571,9 +642,15 @@ select cardinality(array_agg(distinct arr order by score,1)) from ss order by 1;
 -- result:
 9
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
 -- result:
 [null,"May","Tom","李四大闹天空","欧阳诸葛方程","王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]	6	99
+=======
+select array_agg(distinct name order by 1, score), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	99
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 select cardinality(array_agg(distinct mmap order by score, cardinality(mmap), name)),max(id) as a from ss order by a;
 -- result:
@@ -674,7 +751,11 @@ select array_agg(distinct subject order by 1, name) from ss group by id order by
 ["Math数学欧拉方程","英文English"]
 ["英语外语美誉"]
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1;
+=======
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	1
 [null,"Ti"]	2
@@ -684,7 +765,11 @@ select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr o
 ["张三掩耳盗铃","张三此地无银三百两"]	2
 ["李四大闹天空"]	1
 -- !result
+<<<<<<< HEAD
 select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1;
+=======
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	[null]
 [null,"Ti"]	[null,"Ti"]
@@ -694,7 +779,11 @@ select array_agg(name order by 1), array_agg(distinct name order by 1, score) fr
 ["张三掩耳盗铃","张三此地无银三百两"]	["张三掩耳盗铃","张三此地无银三百两"]
 ["李四大闹天空"]	["李四大闹天空"]
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1;
+=======
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	[null]
 [null,"Ti"]	[null,99]
@@ -724,11 +813,19 @@ select cardinality(array_agg(distinct arr order by score, 1)) from ss group by i
 3
 3
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 [null]	1	None
 [null,"Ti"]	0	99
 ["May","欧阳诸葛方程","Ti"]	1	98
+=======
+select array_agg(distinct name order by 1,score, 1), count(distinct id), max(score)  from ss group by id order by 1,2;
+-- result:
+[null]	1	None
+[null,"Ti"]	0	99
+["May","Ti","欧阳诸葛方程"]	1	98
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ["Tom"]	1	90
 ["Tom","王武程咬金"]	1	22
 ["张三掩耳盗铃","张三此地无银三百两"]	1	98
@@ -744,6 +841,7 @@ select cardinality(array_agg(distinct mmap order by score,name,subject)) from ss
 2
 1
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1;
 -- result:
 [null]	[null]
@@ -753,6 +851,17 @@ select array_agg(distinct null order by score,1,4.00),array_agg(null order by sc
 [null]	[null,null]
 [null]	[null,null]
 [null]	[null]
+=======
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1, 2;
+-- result:
+[null]	[null]
+[null]	[null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null,null,null]
+[null]	[null,null,null]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
 -- result:
@@ -764,7 +873,11 @@ select array_agg(distinct subject order by 1, null) from ss group by id order by
 ["Math数学欧拉方程","英文English"]
 ["英语外语美誉"]
 -- !result
+<<<<<<< HEAD
 select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by 1;
+=======
+select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by 1, 2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 1	1
 1	1
@@ -774,7 +887,11 @@ select cardinality(array_agg(distinct arr order by score,name,subject)), cardina
 3	3
 3	3
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
+=======
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	[null]	[null]
 [null]	["英语外语美誉"]	["英语外语美誉"]
@@ -834,7 +951,11 @@ select array_agg(distinct subject order by 1) from ss group by id order by 1;
 ["Math数学欧拉方程","英文English"]
 ["英语外语美誉"]
 -- !result
+<<<<<<< HEAD
 select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1;
+=======
+select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1,2,3;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 None	[4]	None
 TiEnglish,欧阳诸葛方程数学大不列颠	[3]	98
@@ -844,7 +965,11 @@ TomEnglish,王武程咬金语文北京上海	[2]	22
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	[11]	98
 李四大闹天空英语外语美誉	[12]	None
 -- !result
+<<<<<<< HEAD
 select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
+=======
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	1	None
 [null,"Ti"]	0	99
@@ -854,7 +979,11 @@ select array_agg( name order by 1,score), count(distinct id), max(score)  from s
 ["张三掩耳盗铃","张三此地无银三百两"]	1	98
 ["李四大闹天空"]	1	None
 -- !result
+<<<<<<< HEAD
 select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1;
+=======
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	1	None
 [null,"English","语文北京上海"]	1	22
@@ -864,6 +993,7 @@ select array_agg( subject order by score,1), count(distinct id), max(score)  fro
 ["Math数学欧拉方程","英文English"]	1	98
 ["英语外语美誉"]	1	None
 -- !result
+<<<<<<< HEAD
 select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
@@ -877,6 +1007,21 @@ select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(
 2	2
 3	3
 3	2
+=======
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
+-- !result
+select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1, 2;
+-- result:
+1	1
+1	1
+2	1
+2	2
+2	2
+3	2
+3	3
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 select array_agg( null order by score,4.00) from ss group by id order by 1;
 -- result:
@@ -946,9 +1091,15 @@ select cardinality(array_agg(distinct arr order by score, 1)) from ss order by 1
 -- result:
 9
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
 -- result:
 [null,"May","Tom","李四大闹天空","欧阳诸葛方程","王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]	6	99
+=======
+select array_agg(distinct name order by 1, score, 1), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	99
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 select cardinality(array_agg(distinct mmap order by score, cardinality(mmap)), name),max(id) as a from ss order by a;
 -- result:
@@ -1116,7 +1267,11 @@ set new_planner_agg_stage = 0;
 set enable_exchange_pass_through = false;
 -- result:
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by 1;
+=======
+select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	1	[null]
 [null,"Ti"]	0	[null,"Ti"]
@@ -1136,7 +1291,11 @@ select array_agg(distinct subject order by 1, name) from ss group by id order by
 ["Math数学欧拉方程","英文English"]
 ["英语外语美誉"]
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1;
+=======
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	1
 [null,"Ti"]	2
@@ -1146,7 +1305,11 @@ select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr o
 ["张三掩耳盗铃","张三此地无银三百两"]	2
 ["李四大闹天空"]	1
 -- !result
+<<<<<<< HEAD
 select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1;
+=======
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	[null]
 [null,"Ti"]	[null,"Ti"]
@@ -1156,7 +1319,11 @@ select array_agg(name order by 1), array_agg(distinct name order by 1, score) fr
 ["张三掩耳盗铃","张三此地无银三百两"]	["张三掩耳盗铃","张三此地无银三百两"]
 ["李四大闹天空"]	["李四大闹天空"]
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1;
+=======
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	[null]
 [null,"Ti"]	[null,99]
@@ -1186,11 +1353,19 @@ select cardinality(array_agg(distinct arr order by score,1)) from ss group by id
 3
 3
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 [null]	1	None
 [null,"Ti"]	0	99
 ["May","欧阳诸葛方程","Ti"]	1	98
+=======
+select array_agg(distinct name order by 1,score, 1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+-- result:
+[null]	1	None
+[null,"Ti"]	0	99
+["May","Ti","欧阳诸葛方程"]	1	98
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ["Tom"]	1	90
 ["Tom","王武程咬金"]	1	22
 ["张三掩耳盗铃","张三此地无银三百两"]	1	98
@@ -1206,6 +1381,7 @@ select cardinality(array_agg(distinct mmap order by score, name,subject)) from s
 2
 1
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1;
 -- result:
 [null]	[null]
@@ -1215,6 +1391,17 @@ select array_agg(distinct null order by score,1,4.00),array_agg(null order by sc
 [null]	[null,null]
 [null]	[null,null]
 [null]	[null]
+=======
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1, 2;
+-- result:
+[null]	[null]
+[null]	[null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null,null,null]
+[null]	[null,null,null]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
 -- result:
@@ -1226,7 +1413,11 @@ select array_agg(distinct subject order by 1, null) from ss group by id order by
 ["Math数学欧拉方程","英文English"]
 ["英语外语美誉"]
 -- !result
+<<<<<<< HEAD
 select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by 1;
+=======
+select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by 1, 2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 1	1
 1	1
@@ -1236,7 +1427,11 @@ select cardinality(array_agg(distinct arr order by score,name,subject)), cardina
 3	3
 3	3
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
+=======
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1, 2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	[null]	[null]
 [null]	["英语外语美誉"]	["英语外语美誉"]
@@ -1296,7 +1491,11 @@ select array_agg(distinct subject order by 1) from ss group by id order by 1;
 ["Math数学欧拉方程","英文English"]
 ["英语外语美誉"]
 -- !result
+<<<<<<< HEAD
 select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1;
+=======
+select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1, 2, 3;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 None	[4]	None
 TiEnglish,欧阳诸葛方程数学大不列颠	[3]	98
@@ -1306,7 +1505,11 @@ TomEnglish,王武程咬金语文北京上海	[2]	22
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	[11]	98
 李四大闹天空英语外语美誉	[12]	None
 -- !result
+<<<<<<< HEAD
 select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
+=======
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1, 2, 3;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	1	None
 [null,"Ti"]	0	99
@@ -1316,7 +1519,11 @@ select array_agg( name order by 1,score), count(distinct id), max(score)  from s
 ["张三掩耳盗铃","张三此地无银三百两"]	1	98
 ["李四大闹天空"]	1	None
 -- !result
+<<<<<<< HEAD
 select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1;
+=======
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1, 2, 3;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 [null]	1	None
 [null,"English","语文北京上海"]	1	22
@@ -1326,6 +1533,7 @@ select array_agg( subject order by score,1), count(distinct id), max(score)  fro
 ["Math数学欧拉方程","英文English"]	1	98
 ["英语外语美誉"]	1	None
 -- !result
+<<<<<<< HEAD
 select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
@@ -1339,6 +1547,21 @@ select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(
 2	2
 3	3
 3	2
+=======
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1, 2,3;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
+-- !result
+select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1, 2;
+-- result:
+1	1
+1	1
+2	1
+2	2
+2	2
+3	2
+3	3
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 select array_agg( null order by score,4.00) from ss group by id order by 1;
 -- result:
@@ -1408,9 +1631,15 @@ select cardinality(array_agg(distinct arr order by score, 1)) from ss order by 1
 -- result:
 9
 -- !result
+<<<<<<< HEAD
 select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
 -- result:
 [null,"May","Tom","李四大闹天空","欧阳诸葛方程","王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]	6	99
+=======
+select array_agg(distinct name order by 1, score, 1), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	99
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 select cardinality(array_agg(distinct mmap order by score, cardinality(mmap), name)),max(id) as a from ss order by a;
 -- result:

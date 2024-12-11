@@ -18,11 +18,17 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
+=======
+import java.util.Map;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class CreateTableLikeStmt extends DdlStmt {
     private final boolean ifNotExists;
     private final TableName tableName;
     private final TableName existedTableName;
 
+<<<<<<< HEAD
     private CreateTableStmt createTableStmt;
 
     public CreateTableLikeStmt(boolean ifNotExists, TableName tableName, TableName existedTableName) {
@@ -31,16 +37,43 @@ public class CreateTableLikeStmt extends DdlStmt {
 
     public CreateTableLikeStmt(boolean ifNotExists, TableName tableName,
                                TableName existedTableName, NodePosition pos) {
+=======
+    private final PartitionDesc partitionDesc;
+    private final DistributionDesc distributionDesc;
+    private final Map<String, String> properties;
+
+    private CreateTableStmt createTableStmt;
+
+    public CreateTableLikeStmt(boolean ifNotExists, TableName tableName,
+                               TableName existedTableName,
+                               PartitionDesc partitionDesc,
+                               DistributionDesc distributionDesc,
+                               Map<String, String> properties,
+                               NodePosition pos) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(pos);
         this.ifNotExists = ifNotExists;
         this.tableName = tableName;
         this.existedTableName = existedTableName;
+<<<<<<< HEAD
+=======
+        this.partitionDesc = partitionDesc;
+        this.distributionDesc = distributionDesc;
+        this.properties = properties;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public boolean isSetIfNotExists() {
         return ifNotExists;
     }
 
+<<<<<<< HEAD
+=======
+    public String getCatalogName() {
+        return tableName.getCatalog();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getDbName() {
         return tableName.getDb();
     }
@@ -73,6 +106,21 @@ public class CreateTableLikeStmt extends DdlStmt {
         this.createTableStmt = createTableStmt;
     }
 
+<<<<<<< HEAD
+=======
+    public PartitionDesc getPartitionDesc() {
+        return partitionDesc;
+    }
+
+    public DistributionDesc getDistributionDesc() {
+        return distributionDesc;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableLikeStatement(this, context);

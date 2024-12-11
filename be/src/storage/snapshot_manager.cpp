@@ -46,6 +46,11 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
+<<<<<<< HEAD
+=======
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
@@ -198,7 +203,40 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     // equal to tablet id in meta
     new_tablet_meta_pb.set_tablet_id(tablet_id);
     new_tablet_meta_pb.set_schema_hash(schema_hash);
+<<<<<<< HEAD
     TabletSchema tablet_schema(new_tablet_meta_pb.schema());
+=======
+    auto tablet_schema = std::make_shared<const TabletSchema>(new_tablet_meta_pb.schema());
+
+    // handle inverted index file
+    std::vector<std::string> all_files;
+    std::vector<std::string> new_inverted_index_files;
+    RETURN_IF_ERROR(FileSystem::Default()->get_children(clone_dir, &all_files));
+    for (const auto& file : all_files) {
+        if (CLucenePlugin::is_index_files(file)) {
+            auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
+            auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
+            auto* p3 = (char*)std::memchr(p2 + 1, '_', file.size() - (p2 - file.data() + 1));
+            if (p1 == nullptr || p2 == nullptr || p3 == nullptr) {
+                return Status::InternalError("invalid index file name: " + file);
+            }
+
+            std::string rowsetid = file.substr(0, p1 - file.data());
+            std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
+            std::string index_id = file.substr(p2 - file.data() + 1, p3 - p2 - 1);
+            std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
+                    clone_dir, rowsetid, std::stoi(segment_id), std::stoi(index_id));
+
+            if (!fs::path_exist(inverted_index_path)) {
+                RETURN_IF_ERROR(fs::create_directories(inverted_index_path));
+            }
+
+            std::string new_file_name = file.substr(p3 - file.data() + 1, file.data() + file.size() - p3);
+            RETURN_IF_ERROR(FileSystem::Default()->rename_file(clone_dir + "/" + file,
+                                                               inverted_index_path + "/" + new_file_name));
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::unordered_map<string, string> old_to_new_rowsetid;
 
@@ -255,12 +293,20 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
 }
 
 Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path,
+<<<<<<< HEAD
                                           TabletSchema& tablet_schema, const RowsetId& rowset_id,
+=======
+                                          TabletSchemaCSPtr& tablet_schema, const RowsetId& rowset_id,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                           RowsetMetaPB* new_rs_meta_pb) {
     // TODO use factory to obtain RowsetMeta when SnapshotManager::convert_rowset_ids supports rowset
     auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
     RowsetSharedPtr org_rowset;
+<<<<<<< HEAD
     if (!RowsetFactory::create_rowset(&tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
+=======
+    if (!RowsetFactory::create_rowset(tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::RuntimeError("fail to create rowset");
     }
     // do not use cache to load index
@@ -274,7 +320,11 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     context.partition_id = org_rowset_meta->partition_id();
     context.tablet_schema_hash = org_rowset_meta->tablet_schema_hash();
     context.rowset_path_prefix = new_path;
+<<<<<<< HEAD
     context.tablet_schema = &tablet_schema;
+=======
+    context.tablet_schema = org_rowset_meta->tablet_schema() ? org_rowset_meta->tablet_schema() : tablet_schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     context.rowset_state = org_rowset_meta->rowset_state();
     context.version = org_rowset_meta->version();
     // keep segments_overlap same as origin rowset
@@ -295,8 +345,13 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
         LOG(WARNING) << "Fail to load new rowset: " << st;
         return st;
     }
+<<<<<<< HEAD
     (*new_rowset)->rowset_meta()->to_rowset_pb(new_rs_meta_pb);
     org_rowset->remove();
+=======
+    (*new_rowset)->rowset_meta()->get_full_meta_pb(new_rs_meta_pb);
+    RETURN_IF_ERROR(org_rowset->remove());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -516,6 +571,36 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     dcg_snapshot_path << snapshot_dir << "/" << tablet->tablet_id() << ".dcgs_snapshot";
     RETURN_IF_ERROR(DeltaColumnGroupListHelper::save_snapshot(dcg_snapshot_path.str(), dcg_snapshot_pb));
 
+<<<<<<< HEAD
+=======
+    // handle inverted index files
+    std::vector<std::string> all_files;
+    RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir, &all_files));
+    for (const auto& file : all_files) {
+        auto is_dir = fs::is_directory(snapshot_dir + "/" + file);
+        if (is_dir.ok() && is_dir.value() && file.find("ivt", 0) != std::string::npos) {
+            std::vector<std::string> index_files;
+            RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir + "/" + file, &index_files));
+            for (const auto& index_file : index_files) {
+                auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
+                auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
+                auto* p3 = (char*)std::memchr(p2 + 1, '.', file.size() - (p2 - file.data() + 1));
+
+                std::string rowsetid = file.substr(0, p1 - file.data());
+                std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
+                std::string index_id = file.substr(p2 - file.data() + 1, p3 - p2 - 1);
+
+                std::string old_name = snapshot_dir + "/" + file + "/" + index_file;
+                std::string new_name =
+                        snapshot_dir + "/" + rowsetid + "_" + segment_id + "_" + index_id + "_" + index_file;
+
+                RETURN_IF_ERROR(FileSystem::Default()->rename_file(old_name, new_name));
+            }
+            RETURN_IF_ERROR(FileSystem::Default()->delete_dir_recursive(snapshot_dir + "/" + file));
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     snapshot_tablet_meta->revise_inc_rs_metas(vector<RowsetMetaSharedPtr>());
     snapshot_tablet_meta->revise_rs_metas(std::move(snapshot_rowset_metas));
     std::string header_path = _get_header_full_path(tablet, snapshot_dir);
@@ -687,8 +772,13 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         auto version = meta_pb.mutable_updates()->add_versions();
 
         uint32_t next_segment_id = 0;
+<<<<<<< HEAD
         version->mutable_version()->set_major(snapshot_version);
         version->mutable_version()->set_minor(0);
+=======
+        version->mutable_version()->set_major_number(snapshot_version);
+        version->mutable_version()->set_minor_number(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         version->set_creation_time(time(nullptr));
         for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
             auto rsid = rowset_meta_pb.rowset_seg_id();
@@ -697,8 +787,13 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         }
         meta_pb.mutable_updates()->set_next_rowset_id(next_segment_id);
         meta_pb.mutable_updates()->set_next_log_id(0);
+<<<<<<< HEAD
         meta_pb.mutable_updates()->mutable_apply_version()->set_major(snapshot_version);
         meta_pb.mutable_updates()->mutable_apply_version()->set_minor(0);
+=======
+        meta_pb.mutable_updates()->mutable_apply_version()->set_major_number(snapshot_version);
+        meta_pb.mutable_updates()->mutable_apply_version()->set_minor_number(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
@@ -716,7 +811,12 @@ StatusOr<SnapshotMeta> SnapshotManager::parse_snapshot_meta(const std::string& f
     return std::move(snapshot_meta);
 }
 
+<<<<<<< HEAD
 Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir) {
+=======
+Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir,
+                                             const TabletSchemaCSPtr& tablet_schema) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (auto& rowset_meta_pb : snapshot_meta->rowset_metas()) {
         RowsetId old_rowset_id;
         RowsetId new_rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -728,6 +828,36 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             auto old_path = Rowset::segment_file_path(clone_dir, old_rowset_id, seg_id);
             auto new_path = Rowset::segment_file_path(clone_dir, new_rowset_id, seg_id);
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
+<<<<<<< HEAD
+=======
+            if (tablet_schema != nullptr && !tablet_schema->indexes()->empty()) {
+                int segment_n = seg_id;
+                const auto& indexes = *tablet_schema->indexes();
+                for (const auto& index : indexes) {
+                    if (index.index_type() == GIN) {
+                        std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
+                                clone_dir, new_rowset_id.to_string(), segment_n, index.index_id());
+                        std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
+                                clone_dir, old_rowset_id.to_string(), segment_n, index.index_id());
+
+                        RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
+                        std::set<std::string> files;
+                        RETURN_IF_ERROR(fs::list_dirs_files(src_inverted_file_path, nullptr, &files));
+                        for (const auto& file : files) {
+                            auto src_absolute_path = fmt::format("{}/{}", src_inverted_file_path, file);
+                            auto dst_absolute_path = fmt::format("{}/{}", dst_inverted_link_path, file);
+
+                            if (link(src_absolute_path.c_str(), dst_absolute_path.c_str()) != 0) {
+                                PLOG(WARNING) << "Fail to link " << src_absolute_path << " to " << dst_absolute_path;
+                                return Status::RuntimeError(
+                                        strings::Substitute("Fail to link index inverted file from $0 to $1",
+                                                            src_absolute_path, dst_absolute_path));
+                            }
+                        }
+                    }
+                }
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         for (int del_id = 0; del_id < rowset_meta_pb.num_delete_files(); del_id++) {
             auto old_path = Rowset::segment_del_file_path(clone_dir, old_rowset_id, del_id);
@@ -740,6 +870,12 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
         rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());
+<<<<<<< HEAD
+=======
+        // reset rowsetid means that it is different from the rowset in snapshot meta.
+        // It is reasonable that reset the creation time here.
+        rowset_meta_pb.set_creation_time(UnixSeconds());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return Status::OK();
 }

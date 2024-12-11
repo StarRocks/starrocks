@@ -49,11 +49,14 @@ public class StreamJoinNode extends JoinNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.STREAM_JOIN_NODE;
         msg.stream_join_node = new TStreamJoinNode();

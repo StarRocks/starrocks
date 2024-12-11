@@ -120,8 +120,12 @@ public class ShowTableStmtTest {
         String sql = "show table status from test";
         ShowTableStatusStmt stmt = (ShowTableStatusStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(ctx, stmt);
         ShowResultSet showResultSet = showExecutor.execute();
+=======
+        ShowResultSet showResultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> resultRows = showResultSet.getResultRows();
         Assert.assertEquals(1, resultRows.size());
         Assert.assertEquals("tbl1", resultRows.get(0).get(0));

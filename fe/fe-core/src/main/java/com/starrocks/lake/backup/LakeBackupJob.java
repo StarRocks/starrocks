@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.lake.backup;
 
 import com.google.common.collect.Maps;
@@ -24,9 +27,15 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.io.Text;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -41,7 +50,13 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.system.Backend;
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.THdfsProperties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -81,7 +96,11 @@ public class LakeBackupJob extends BackupJob {
     protected void checkBackupTables(Database db) {
         for (TableRef tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
+<<<<<<< HEAD
             Table tbl = db.getTable(tblName);
+=======
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (tbl == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
                 return;
@@ -107,6 +126,7 @@ public class LakeBackupJob extends BackupJob {
     }
 
     @Override
+<<<<<<< HEAD
     protected void prepareSnapshotTask(Partition partition, Table tbl, Tablet tablet, MaterializedIndex index,
                                        long visibleVersion, int schemaHash) {
         try {
@@ -115,6 +135,16 @@ public class LakeBackupJob extends BackupJob {
             LakeTableSnapshotInfo snapshotInfo = new LakeTableSnapshotInfo(dbId,
                     tbl.getId(), partition.getId(), index.getId(), tablet.getId(),
                     backend.getId(), schemaHash, visibleVersion);
+=======
+    protected void prepareSnapshotTask(PhysicalPartition partition, Table tbl, Tablet tablet, MaterializedIndex index,
+                                       long visibleVersion, int schemaHash) {
+        try {
+            ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) tablet);
+            LakeTableSnapshotInfo snapshotInfo = new LakeTableSnapshotInfo(dbId,
+                    tbl.getId(), partition.getId(), index.getId(), tablet.getId(),
+                    computeNode.getId(), schemaHash, visibleVersion);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             LockTabletMetadataRequest request = new LockTabletMetadataRequest();
             request.tabletId = tablet.getId();
@@ -122,8 +152,13 @@ public class LakeBackupJob extends BackupJob {
             request.expireTime = (createTime + timeoutMs) / 1000;
             lockRequests.put(snapshotInfo, request);
             unfinishedTaskIds.put(tablet.getId(), 1L);
+<<<<<<< HEAD
         } catch (UserException e) {
             LOG.error(e.getMessage());
+=======
+        } catch (Exception e) {
+            LOG.error(e.getMessage(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             status = new Status(Status.ErrCode.COMMON_ERROR,
                     "failed to choose replica to make snapshot for tablet " + tablet.getId()
                             + ". visible version: " + visibleVersion);
@@ -133,7 +168,11 @@ public class LakeBackupJob extends BackupJob {
     @Override
     protected void sendSnapshotRequests() {
         for (Map.Entry<SnapshotInfo, LockTabletMetadataRequest> entry : lockRequests.entrySet()) {
+<<<<<<< HEAD
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey().getBeId());
+=======
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(entry.getKey().getBeId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LakeService lakeService = null;
             try {
                 lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
@@ -156,7 +195,11 @@ public class LakeBackupJob extends BackupJob {
             request.tabletId = info.getTabletId();
             request.version = ((LakeTableSnapshotInfo) info).getVersion();
             request.expireTime = (createTime + timeoutMs) / 1000;
+<<<<<<< HEAD
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(info.getBeId());
+=======
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(info.getBeId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LakeService lakeService = null;
             try {
                 lakeService = BrpcProxy.getLakeService(backend.getHost(),
@@ -185,7 +228,11 @@ public class LakeBackupJob extends BackupJob {
             snapshot.destPath = repo.getRepoTabletPathBySnapshotInfo(label, info);
             request.snapshots.put(lakeInfo.getTabletId(), snapshot);
         }
+<<<<<<< HEAD
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+=======
+        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         unfinishedTaskIds.put(beId, 1L);
         uploadRequests.put(backend, request);
     }

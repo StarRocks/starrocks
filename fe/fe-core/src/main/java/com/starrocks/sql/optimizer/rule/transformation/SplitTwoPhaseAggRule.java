@@ -73,13 +73,21 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
 
         LogicalAggregationOperator aggOp = input.getOp().cast();
         Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(aggOp.getAggregations().values());
+<<<<<<< HEAD
         if (!distinctCols.isPresent()) {
+=======
+        if (distinctCols.isEmpty()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throw new StarRocksPlannerException("The query contains multiple distinct agg functions, " +
                     "each can't have multi columns.", ErrorType.USER_ERROR);
         }
 
         if (!isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
+<<<<<<< HEAD
             return Lists.newArrayList();
+=======
+            return List.of();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         Map<ColumnRefOperator, CallOperator> newAggMap = Maps.newHashMap(aggOp.getAggregations());

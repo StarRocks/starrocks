@@ -24,6 +24,10 @@
 #include "io/io_profiler.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
+<<<<<<< HEAD
+=======
+#include "storage/persistent_index_tablet_loader.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
@@ -37,6 +41,10 @@
 #include "util/crc32c.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
+<<<<<<< HEAD
+=======
+#include "util/failpoint/fail_point.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/faststring.h"
 #include "util/filesystem_util.h"
 #include "util/raw_container.h"
@@ -76,7 +84,11 @@ T pad(T v, P p) {
 }
 
 static std::string get_l0_index_file_name(std::string& dir, const EditVersion& version) {
+<<<<<<< HEAD
     return strings::Substitute("$0/index.l0.$1.$2", dir, version.major(), version.minor());
+=======
+    return strings::Substitute("$0/index.l0.$1.$2", dir, version.major_number(), version.minor_number());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct IndexHash {
@@ -595,10 +607,18 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
 
 ImmutableIndexWriter::~ImmutableIndexWriter() {
     if (_idx_wb) {
+<<<<<<< HEAD
         FileSystem::Default()->delete_file(_idx_file_path_tmp);
     }
     if (_bf_wb) {
         FileSystem::Default()->delete_file(_bf_file_path);
+=======
+        WARN_IF_ERROR(FileSystem::Default()->delete_file(_idx_file_path_tmp),
+                      "Failed to delete file:" + _idx_file_path_tmp);
+    }
+    if (_bf_wb) {
+        WARN_IF_ERROR(FileSystem::Default()->delete_file(_bf_file_path), "Failed to delete file:" + _bf_file_path);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -610,16 +630,24 @@ Status ImmutableIndexWriter::init(const string& idx_file_path, const EditVersion
     WritableFileOptions wblock_opts{.sync_on_close = sync_on_close, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(_idx_wb, _fs->new_writable_file(wblock_opts, _idx_file_path_tmp));
 
+<<<<<<< HEAD
+=======
+    _bf_file_path = _idx_file_path + BloomFilterSuffix;
+    ASSIGN_OR_RETURN(_bf_wb, _fs->new_writable_file(wblock_opts, _bf_file_path));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // The minimum unit of compression is shard now, and read on a page-by-page basis is disable after compression.
     if (config::enable_pindex_compression) {
         _meta.set_compression_type(CompressionTypePB::LZ4_FRAME);
     } else {
         _meta.set_compression_type(CompressionTypePB::NO_COMPRESSION);
     }
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(_idx_wb, _fs->new_writable_file(wblock_opts, _idx_file_path_tmp));
 
     _bf_file_path = _idx_file_path + BloomFilterSuffix;
     ASSIGN_OR_RETURN(_bf_wb, _fs->new_writable_file(wblock_opts, _bf_file_path));
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -632,7 +660,11 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         _cur_value_size = kIndexValueSize;
     } else {
         if (new_key_length) {
+<<<<<<< HEAD
             CHECK(key_size > _cur_key_size) << "key size is smaller than before";
+=======
+            RETURN_ERROR_IF_FALSE(key_size > _cur_key_size, "key size is smaller than before");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         _cur_key_size = key_size;
     }
@@ -655,7 +687,11 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         // update memory usage is too high, flush bloom filter advance to avoid use too much memory
         if (!StorageEngine::instance()->update_manager()->keep_pindex_bf()) {
             for (auto& bf : _bf_vec) {
+<<<<<<< HEAD
                 _bf_wb->append(Slice(bf->data(), bf->size()));
+=======
+                RETURN_IF_ERROR(_bf_wb->append(Slice(bf->data(), bf->size())));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             _bf_vec.clear();
             _bf_flushed = true;
@@ -705,7 +741,12 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
     auto iter = _shard_info_by_length.find(_cur_key_size);
     if (iter == _shard_info_by_length.end()) {
         if (auto [it, inserted] = _shard_info_by_length.insert({_cur_key_size, {_nshard, 1}}); !inserted) {
+<<<<<<< HEAD
             LOG(WARNING) << "insert shard info failed, key_size: " << _cur_key_size;
+=======
+            LOG(WARNING) << "insert shard info failed, key_size: " << _cur_key_size
+                         << ", maybe duplicate key size which should not happened.";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return Status::InternalError("insert shard info failed");
         }
     } else {
@@ -738,7 +779,11 @@ Status ImmutableIndexWriter::write_bf() {
         }
     }
     for (auto& bf : _bf_vec) {
+<<<<<<< HEAD
         _idx_wb->append(Slice(bf->data(), bf->size()));
+=======
+        RETURN_IF_ERROR(_idx_wb->append(Slice(bf->data(), bf->size())));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     _meta.mutable_shard_bf_off()->Add(pos_before);
     for (auto bf_len : _shard_bf_size) {
@@ -764,11 +809,19 @@ Status ImmutableIndexWriter::finish() {
         RETURN_IF_ERROR(write_bf());
     }
     VLOG(2) << strings::Substitute(
+<<<<<<< HEAD
             "finish writing immutable index $0 #shard:$1 #kv:$2 #moved:$3($4) kv_bytes:$5 usage:$6 compression_type:$7 "
             "bf_bytes:$8",
             _idx_file_path_tmp, _nshard, _total, _total_moved, _total_moved * 1000 / std::max(_total, 1UL) / 1000.0,
             _total_kv_bytes, _total_kv_size * 1000 / std::max(_total_kv_bytes, 1UL) / 1000.0, _meta.compression_type(),
             _total_bf_bytes);
+=======
+            "finish writing immutable index $0 #shard:$1 #kv:$2 #moved:$3($4) kv_bytes:$5 usage:$6 bf_bytes:$7 "
+            "compression_type:$8",
+            _idx_file_path_tmp, _nshard, _total, _total_moved, _total_moved * 1000 / std::max(_total, 1UL) / 1000.0,
+            _total_kv_bytes, _total_kv_size * 1000 / std::max(_total_kv_bytes, 1UL) / 1000.0, _total_bf_bytes,
+            _meta.compression_type());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _version.to_pb(_meta.mutable_version());
     _meta.set_size(_total);
     _meta.set_format_version(PERSISTENT_INDEX_VERSION_6);
@@ -792,7 +845,11 @@ Status ImmutableIndexWriter::finish() {
     RETURN_IF_ERROR(FileSystem::Default()->rename_file(_idx_file_path_tmp, _idx_file_path));
     _idx_wb.reset();
     RETURN_IF_ERROR(_bf_wb->close());
+<<<<<<< HEAD
     FileSystem::Default()->delete_file(_bf_file_path);
+=======
+    (void)FileSystem::Default()->delete_file(_bf_file_path);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _bf_wb.reset();
     return Status::OK();
 }
@@ -806,6 +863,7 @@ public:
 
     Status get(const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found,
                const std::vector<size_t>& idxes) const override {
+<<<<<<< HEAD
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -820,11 +878,30 @@ public:
             }
         }
         *num_found = nfound;
+=======
+        TRY_CATCH_BAD_ALLOC({
+            size_t nfound = 0;
+            for (const auto idx : idxes) {
+                const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
+                uint64_t hash = FixedKeyHash<KeySize>()(key);
+                auto iter = _map.find(key, hash);
+                if (iter == _map.end()) {
+                    values[idx] = NullIndexValue;
+                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
+                } else {
+                    values[idx] = iter->second;
+                    nfound += iter->second.get_value() != NullIndexValue;
+                }
+            }
+            *num_found = nfound;
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
                   size_t* num_found, const std::vector<size_t>& idxes) override {
+<<<<<<< HEAD
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -840,11 +917,31 @@ public:
             }
         }
         *num_found = nfound;
+=======
+        TRY_CATCH_BAD_ALLOC({
+            size_t nfound = 0;
+            for (const auto idx : idxes) {
+                const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
+                const auto value = values[idx];
+                uint64_t hash = FixedKeyHash<KeySize>()(key);
+                if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); inserted) {
+                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
+                } else {
+                    auto old_value = it->second;
+                    old_values[idx] = old_value;
+                    nfound += old_value.get_value() != NullIndexValue;
+                    it->second = value;
+                }
+            }
+            *num_found = nfound;
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
                   const std::vector<size_t>& idxes) override {
+<<<<<<< HEAD
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -859,10 +956,29 @@ public:
             }
         }
         *num_found = nfound;
+=======
+        TRY_CATCH_BAD_ALLOC({
+            size_t nfound = 0;
+            for (const auto idx : idxes) {
+                const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
+                const auto value = values[idx];
+                uint64_t hash = FixedKeyHash<KeySize>()(key);
+                if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); inserted) {
+                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
+                } else {
+                    auto old_value = it->second;
+                    nfound += old_value.get_value() != NullIndexValue;
+                    it->second = value;
+                }
+            }
+            *num_found = nfound;
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status insert(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) override {
+<<<<<<< HEAD
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
             const auto value = values[idx];
@@ -881,11 +997,34 @@ public:
                 return Status::AlreadyExist(msg);
             }
         }
+=======
+        TRY_CATCH_BAD_ALLOC({
+            for (const auto idx : idxes) {
+                const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
+                const auto value = values[idx];
+                uint64_t hash = FixedKeyHash<KeySize>()(key);
+                if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
+                    auto old = reinterpret_cast<uint64_t*>(&(it->second));
+                    auto old_rssid = (uint32_t)((*old) >> 32);
+                    auto old_rowid = (uint32_t)((*old) & ROWID_MASK);
+                    auto new_value = reinterpret_cast<uint64_t*>(const_cast<IndexValue*>(&value));
+                    std::string msg = strings::Substitute(
+                            "FixedMutableIndex<$0> insert found duplicate key, new(rssid=$1 rowid=$2), old(rssid=$3 "
+                            "rowid=$4)",
+                            KeySize, (uint32_t)((*new_value) >> 32), (uint32_t)((*new_value) & ROWID_MASK), old_rssid,
+                            old_rowid);
+                    LOG(WARNING) << msg;
+                    return Status::AlreadyExist(msg);
+                }
+            }
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status erase(const Slice* keys, IndexValue* old_values, KeysInfo* not_found, size_t* num_found,
                  const std::vector<size_t>& idxes) override {
+<<<<<<< HEAD
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -900,10 +1039,29 @@ public:
             }
         }
         *num_found = nfound;
+=======
+        TRY_CATCH_BAD_ALLOC({
+            size_t nfound = 0;
+            for (const auto idx : idxes) {
+                const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
+                uint64_t hash = FixedKeyHash<KeySize>()(key);
+                if (auto [it, inserted] = _map.emplace_with_hash(hash, key, IndexValue(NullIndexValue)); inserted) {
+                    old_values[idx] = NullIndexValue;
+                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
+                } else {
+                    old_values[idx] = it->second;
+                    nfound += it->second.get_value() != NullIndexValue;
+                    it->second = NullIndexValue;
+                }
+            }
+            *num_found = nfound;
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) override {
+<<<<<<< HEAD
         for (unsigned long replace_idxe : replace_idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[replace_idxe].data);
             const auto value = values[replace_idxe];
@@ -912,13 +1070,30 @@ public:
                 it->second = value;
             }
         }
+=======
+        TRY_CATCH_BAD_ALLOC({
+            for (unsigned long replace_idxe : replace_idxes) {
+                const auto& key = *reinterpret_cast<const KeyType*>(keys[replace_idxe].data);
+                const auto value = values[replace_idxe];
+                uint64_t hash = FixedKeyHash<KeySize>()(key);
+                if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
+                    it->second = value;
+                }
+            }
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
                       std::unique_ptr<WritableFile>& index_file, uint64_t* page_size, uint32_t* checksum) override {
         faststring fixed_buf;
+<<<<<<< HEAD
         fixed_buf.reserve(sizeof(size_t) + sizeof(size_t) + idxes.size() * (KeySize + sizeof(IndexValue)));
+=======
+        TRY_CATCH_BAD_ALLOC(
+                fixed_buf.reserve(sizeof(size_t) + sizeof(size_t) + idxes.size() * (KeySize + sizeof(IndexValue))));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         put_fixed32_le(&fixed_buf, KeySize);
         put_fixed32_le(&fixed_buf, idxes.size());
         for (const auto idx : idxes) {
@@ -934,6 +1109,7 @@ public:
     }
 
     Status load_wals(size_t n, const Slice* keys, const IndexValue* values) override {
+<<<<<<< HEAD
         for (size_t i = 0; i < n; i++) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[i].data);
             const auto value = values[i];
@@ -942,6 +1118,18 @@ public:
                 it->second = value;
             }
         }
+=======
+        TRY_CATCH_BAD_ALLOC({
+            for (size_t i = 0; i < n; i++) {
+                const auto& key = *reinterpret_cast<const KeyType*>(keys[i].data);
+                const auto value = values[i];
+                uint64_t hash = FixedKeyHash<KeySize>()(key);
+                if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
+                    it->second = value;
+                }
+            }
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
@@ -950,7 +1138,11 @@ public:
     Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) override {
         size_t kv_header_size = 8;
         std::string buff;
+<<<<<<< HEAD
         raw::stl_string_resize_uninitialized(&buff, kv_header_size);
+=======
+        TRY_CATCH_BAD_ALLOC(raw::stl_string_resize_uninitialized(&buff, kv_header_size));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
         uint32_t key_size = UNALIGNED_LOAD32(buff.data());
         DCHECK(key_size == KeySize);
@@ -959,7 +1151,11 @@ public:
         const size_t kv_pair_size = KeySize + sizeof(IndexValue);
         while (nums > 0) {
             const size_t batch_num = (nums > 4096) ? 4096 : nums;
+<<<<<<< HEAD
             raw::stl_string_resize_uninitialized(&buff, batch_num * kv_pair_size);
+=======
+            TRY_CATCH_BAD_ALLOC(raw::stl_string_resize_uninitialized(&buff, batch_num * kv_pair_size));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
             std::vector<Slice> keys;
             keys.reserve(batch_num);
@@ -1081,7 +1277,11 @@ struct StringHasher2 {
 class EqualOnStringWithHash {
 public:
     bool operator()(const std::string& lhs, const std::string& rhs) const {
+<<<<<<< HEAD
         return memequal(lhs.data(), lhs.size() - kIndexValueSize, rhs.data(), rhs.size() - kIndexValueSize);
+=======
+        return memequal_padded(lhs.data(), lhs.size() - kIndexValueSize, rhs.data(), rhs.size() - kIndexValueSize);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 };
 
@@ -1099,6 +1299,7 @@ public:
 
     Status get(const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found,
                const std::vector<size_t>& idxes) const override {
+<<<<<<< HEAD
         size_t nfound = 0;
         for (const auto idx : idxes) {
             std::string composite_key;
@@ -1120,11 +1321,37 @@ public:
             }
         }
         *num_found = nfound;
+=======
+        TRY_CATCH_BAD_ALLOC({
+            size_t nfound = 0;
+            for (const auto idx : idxes) {
+                std::string composite_key;
+                const auto& skey = keys[idx];
+                const auto value = values[idx];
+                composite_key.reserve(skey.size + kIndexValueSize);
+                composite_key.append(skey.data, skey.size);
+                put_fixed64_le(&composite_key, value.get_value());
+                uint64_t hash = StringHasher2()(composite_key);
+                auto iter = _set.find(composite_key, hash);
+                if (iter == _set.end()) {
+                    values[idx] = NullIndexValue;
+                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
+                } else {
+                    const auto& composite_key = *iter;
+                    auto value = UNALIGNED_LOAD64(composite_key.data() + composite_key.size() - kIndexValueSize);
+                    values[idx] = IndexValue(value);
+                    nfound += value != NullIndexValue;
+                }
+            }
+            *num_found = nfound;
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
                   size_t* num_found, const std::vector<size_t>& idxes) override {
+<<<<<<< HEAD
         size_t nfound = 0;
         for (const auto idx : idxes) {
             std::string composite_key;
@@ -1147,11 +1374,39 @@ public:
             }
         }
         *num_found = nfound;
+=======
+        TRY_CATCH_BAD_ALLOC({
+            size_t nfound = 0;
+            for (const auto idx : idxes) {
+                std::string composite_key;
+                const auto& skey = keys[idx];
+                const auto value = values[idx];
+                composite_key.reserve(skey.size + kIndexValueSize);
+                composite_key.append(skey.data, skey.size);
+                put_fixed64_le(&composite_key, value.get_value());
+                uint64_t hash = StringHasher2()(composite_key);
+                if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
+                    _total_kv_pairs_usage += composite_key.size();
+                } else {
+                    const auto& old_compose_key = *it;
+                    auto old_value =
+                            UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
+                    old_values[idx] = old_value;
+                    nfound += old_value != NullIndexValue;
+                    _set.erase(it);
+                    _set.emplace_with_hash(hash, composite_key);
+                }
+            }
+            *num_found = nfound;
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
                   const std::vector<size_t>& idxes) override {
+<<<<<<< HEAD
         size_t nfound = 0;
         for (const auto idx : idxes) {
             std::string composite_key;
@@ -1175,10 +1430,38 @@ public:
             }
         }
         *num_found = nfound;
+=======
+        TRY_CATCH_BAD_ALLOC({
+            size_t nfound = 0;
+            for (const auto idx : idxes) {
+                std::string composite_key;
+                const auto& skey = keys[idx];
+                const auto value = values[idx];
+                composite_key.reserve(skey.size + kIndexValueSize);
+                composite_key.append(skey.data, skey.size);
+                put_fixed64_le(&composite_key, value.get_value());
+                uint64_t hash = StringHasher2()(composite_key);
+                if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
+                    _total_kv_pairs_usage += composite_key.size();
+                } else {
+                    const auto& old_compose_key = *it;
+                    const auto old_value =
+                            UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
+                    nfound += old_value != NullIndexValue;
+                    // TODO: find a way to modify iterator directly, currently just erase then re-insert
+                    _set.erase(it);
+                    _set.emplace_with_hash(hash, composite_key);
+                }
+            }
+            *num_found = nfound;
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status insert(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) override {
+<<<<<<< HEAD
         for (const auto idx : idxes) {
             std::string composite_key;
             const auto& skey = keys[idx];
@@ -1204,11 +1487,42 @@ public:
                 return Status::AlreadyExist(msg);
             }
         }
+=======
+        TRY_CATCH_BAD_ALLOC({
+            for (const auto idx : idxes) {
+                std::string composite_key;
+                const auto& skey = keys[idx];
+                const auto value = values[idx];
+                composite_key.reserve(skey.size + kIndexValueSize);
+                composite_key.append(skey.data, skey.size);
+                put_fixed64_le(&composite_key, value.get_value());
+                uint64_t hash = StringHasher2()(composite_key);
+                if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                    _total_kv_pairs_usage += composite_key.size();
+                } else {
+                    auto& old_compose_key = *it;
+                    auto old_value =
+                            UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
+                    auto old_rssid = (uint32_t)(old_value >> 32);
+                    auto old_rowid = (uint32_t)(old_value & ROWID_MASK);
+                    auto new_value = reinterpret_cast<uint64_t*>(const_cast<IndexValue*>(&value));
+                    std::string msg = strings::Substitute(
+                            "SliceMutableIndex key_size=$0 insert found duplicate key, "
+                            "new(rssid=$1 rowid=$2), old(rssid=$3 rowid=$4)",
+                            skey.size, (uint32_t)((*new_value) >> 32), (uint32_t)((*new_value) & ROWID_MASK), old_rssid,
+                            old_rowid);
+                    LOG(WARNING) << msg;
+                    return Status::AlreadyExist(msg);
+                }
+            }
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status erase(const Slice* keys, IndexValue* old_values, KeysInfo* not_found, size_t* num_found,
                  const std::vector<size_t>& idxes) override {
+<<<<<<< HEAD
         size_t nfound = 0;
         for (const auto idx : idxes) {
             std::string composite_key;
@@ -1233,10 +1547,40 @@ public:
             }
         }
         *num_found = nfound;
+=======
+        TRY_CATCH_BAD_ALLOC({
+            size_t nfound = 0;
+            for (const auto idx : idxes) {
+                std::string composite_key;
+                const auto& skey = keys[idx];
+                const auto value = NullIndexValue;
+                composite_key.reserve(skey.size + kIndexValueSize);
+                composite_key.append(skey.data, skey.size);
+                put_fixed64_le(&composite_key, value);
+                uint64_t hash = StringHasher2()(composite_key);
+                if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                    old_values[idx] = NullIndexValue;
+                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
+                    _total_kv_pairs_usage += composite_key.size();
+                } else {
+                    auto& old_compose_key = *it;
+                    auto old_value =
+                            UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
+                    old_values[idx] = old_value;
+                    nfound += old_value != NullIndexValue;
+                    // TODO: find a way to modify iterator directly, currently just erase then re-insert
+                    _set.erase(it);
+                    _set.emplace_with_hash(hash, composite_key);
+                }
+            }
+            *num_found = nfound;
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) override {
+<<<<<<< HEAD
         for (const auto idx : idxes) {
             std::string composite_key;
             const auto& skey = keys[idx];
@@ -1253,6 +1597,26 @@ public:
                 _set.emplace_with_hash(hash, composite_key);
             }
         }
+=======
+        TRY_CATCH_BAD_ALLOC({
+            for (const auto idx : idxes) {
+                std::string composite_key;
+                const auto& skey = keys[idx];
+                const auto value = values[idx];
+                composite_key.reserve(skey.size + kIndexValueSize);
+                composite_key.append(skey.data, skey.size);
+                put_fixed64_le(&composite_key, value.get_value());
+                uint64_t hash = StringHasher2()(composite_key);
+                if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                    _total_kv_pairs_usage += composite_key.size();
+                } else {
+                    // TODO: find a way to modify iterator directly, currently just erase then re-insert
+                    _set.erase(it);
+                    _set.emplace_with_hash(hash, composite_key);
+                }
+            }
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
@@ -1264,7 +1628,11 @@ public:
         for (const auto idx : idxes) {
             keys_size += keys[idx].size;
         }
+<<<<<<< HEAD
         fixed_buf.reserve(keys_size + n * (kWALKVSize + kIndexValueSize));
+=======
+        TRY_CATCH_BAD_ALLOC(fixed_buf.reserve(keys_size + n * (kWALKVSize + kIndexValueSize)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         put_fixed32_le(&fixed_buf, kKeySizeMagicNum);
         put_fixed32_le(&fixed_buf, idxes.size());
         for (const auto idx : idxes) {
@@ -1283,6 +1651,7 @@ public:
     }
 
     Status load_wals(size_t n, const Slice* keys, const IndexValue* values) override {
+<<<<<<< HEAD
         for (size_t i = 0; i < n; i++) {
             std::string composite_key;
             const auto& skey = keys[i];
@@ -1299,6 +1668,26 @@ public:
                 _set.emplace_with_hash(hash, composite_key);
             }
         }
+=======
+        TRY_CATCH_BAD_ALLOC({
+            for (size_t i = 0; i < n; i++) {
+                std::string composite_key;
+                const auto& skey = keys[i];
+                const auto value = values[i];
+                composite_key.reserve(skey.size + kIndexValueSize);
+                composite_key.append(skey.data, skey.size);
+                put_fixed64_le(&composite_key, value.get_value());
+                uint64_t hash = StringHasher2()(composite_key);
+                if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                    _total_kv_pairs_usage += composite_key.size();
+                } else {
+                    // TODO: find a way to modify iterator directly, currently just erase then re-insert
+                    _set.erase(it);
+                    _set.emplace_with_hash(hash, composite_key);
+                }
+            }
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
@@ -1310,7 +1699,11 @@ public:
 
     bool dump(phmap::BinaryOutputArchive& ar) override {
         if (!ar.dump(size())) {
+<<<<<<< HEAD
             LOG(ERROR) << "Failed to dump size";
+=======
+            LOG(ERROR) << "Pindex dump snapshot size failed";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return false;
         }
         if (size() == 0) {
@@ -1318,14 +1711,22 @@ public:
         }
         for (const auto& composite_key : _set) {
             if (!ar.dump(static_cast<size_t>(composite_key.size()))) {
+<<<<<<< HEAD
                 LOG(ERROR) << "Failed to dump compose_key_size";
+=======
+                LOG(ERROR) << "Pindex dump compose_key_size failed";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return false;
             }
             if (composite_key.size() == 0) {
                 continue;
             }
             if (!ar.dump(composite_key.data(), composite_key.size())) {
+<<<<<<< HEAD
                 LOG(ERROR) << "Failed to dump composite_key";
+=======
+                LOG(ERROR) << "Pindex dump composite_key failed.";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return false;
             }
         }
@@ -1348,7 +1749,11 @@ public:
     bool load_snapshot(phmap::BinaryInputArchive& ar) override {
         size_t size = 0;
         if (!ar.load(&size)) {
+<<<<<<< HEAD
             LOG(ERROR) << "Failed to load size";
+=======
+            LOG(ERROR) << "Pindex load snapshot failed because load snapshot size failed";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return false;
         }
         if (size == 0) {
@@ -1358,7 +1763,11 @@ public:
         for (auto i = 0; i < size; ++i) {
             size_t compose_key_size = 0;
             if (!ar.load(&compose_key_size)) {
+<<<<<<< HEAD
                 LOG(ERROR) << "Failed to load compose_key_size";
+=======
+                LOG(ERROR) << "Pindex load snapshot failed because load compose_key_size failed";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return false;
             }
             if (compose_key_size == 0) {
@@ -1367,7 +1776,11 @@ public:
             std::string composite_key;
             raw::stl_string_resize_uninitialized(&composite_key, compose_key_size);
             if (!ar.load(composite_key.data(), composite_key.size())) {
+<<<<<<< HEAD
                 LOG(ERROR) << "Failed to load composite_key";
+=======
+                LOG(ERROR) << "Pindex load snapshot failed because load composite_key failed";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return false;
             }
             auto [it, inserted] = _set.emplace(composite_key);
@@ -1987,7 +2400,11 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wblock_opts, file_name));
         DeferOp close_block([&wfile] {
             if (wfile) {
+<<<<<<< HEAD
                 wfile->close();
+=======
+                WARN_IF_ERROR(wfile->close(), fmt::format("failed to close writable_file: {}", wfile->filename()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         });
         meta->clear_wals();
@@ -2008,7 +2425,11 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         std::string file_name = get_l0_index_file_name(_path, version);
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
+<<<<<<< HEAD
         FileSystem::Default()->delete_file(file_name);
+=======
+        (void)FileSystem::Default()->delete_file(file_name);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::set<uint32_t> dumped_shard_idxes;
         {
             // File is closed when archive object is destroyed and file size will be updated after file is
@@ -2095,7 +2516,12 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     for (auto i = 0; i < snapshot_meta.dumped_shard_idxes_size(); ++i) {
         auto [_, insert] = dumped_shard_idxes.insert(snapshot_meta.dumped_shard_idxes(i));
         if (!insert) {
+<<<<<<< HEAD
             LOG(WARNING) << "duplicate shard idx: " << snapshot_meta.dumped_shard_idxes(i);
+=======
+            LOG(WARNING) << "duplicate shard idx: " << snapshot_meta.dumped_shard_idxes(i)
+                         << " which should not happened.";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return Status::InternalError("duplicate shard idx");
         }
     }
@@ -2177,7 +2603,11 @@ Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& pa
     auto writer = std::make_unique<ImmutableIndexWriter>();
     std::string idx_file_path;
     if (!write_tmp_l1) {
+<<<<<<< HEAD
         idx_file_path = strings::Substitute("$0/index.l1.$1.$2", path, version.major(), version.minor());
+=======
+        idx_file_path = strings::Substitute("$0/index.l1.$1.$2", path, version.major_number(), version.minor_number());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     } else {
         idx_file_path = path;
     }
@@ -2200,6 +2630,10 @@ Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& pa
             const auto nbucket = MutableIndex::estimate_nbucket(key_size, size, nshard, npage_hint);
             const auto expand_exponent = nshard / shard_size;
             for (auto i = 0; i < shard_size; ++i) {
+<<<<<<< HEAD
+=======
+                // if keep_delete == true, flush immutable index with Delete Flag
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 RETURN_IF_ERROR(_shards[shard_offset + i]->flush_to_immutable_index(writer, expand_exponent, npage_hint,
                                                                                     page_size, nbucket, keep_delete));
             }
@@ -2345,15 +2779,24 @@ Status ImmutableIndex::_get_in_fixlen_shard(size_t shard_idx, size_t n, const Sl
                                             std::unique_ptr<ImmutableIndexShard>* shard) const {
     const auto& shard_info = _shards[shard_idx];
     uint8_t candidate_idxes[kBucketSizeMax];
+<<<<<<< HEAD
     for (size_t i = 0; i < keys_info.size(); i++) {
         IndexHash h(keys_info[i].second);
+=======
+    for (const auto& key_info : keys_info) {
+        IndexHash h(key_info.second);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto pageid = h.page() % shard_info.npage;
         auto bucketid = h.bucket() % shard_info.nbucket;
         auto& bucket_info = (*shard)->bucket(pageid, bucketid);
         uint8_t* bucket_pos = (*shard)->pack_in_page(bucket_info.pageid, bucket_info.packid);
         auto nele = bucket_info.size;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
+<<<<<<< HEAD
         auto key_idx = keys_info[i].first;
+=======
+        auto key_idx = key_info.first;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
         auto kv_pos = bucket_pos + pad(nele, kPackSize);
         values[key_idx] = NullIndexValue;
@@ -2376,15 +2819,25 @@ Status ImmutableIndex::_get_in_varlen_shard(size_t shard_idx, size_t n, const Sl
                                             std::unique_ptr<ImmutableIndexShard>* shard) const {
     const auto& shard_info = _shards[shard_idx];
     uint8_t candidate_idxes[kBucketSizeMax];
+<<<<<<< HEAD
     for (size_t i = 0; i < keys_info.size(); i++) {
         IndexHash h(keys_info[i].second);
+=======
+
+    for (const auto& key_info : keys_info) {
+        IndexHash h(key_info.second);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto pageid = h.page() % shard_info.npage;
         auto bucketid = h.bucket() % shard_info.nbucket;
         auto& bucket_info = (*shard)->bucket(pageid, bucketid);
         uint8_t* bucket_pos = (*shard)->pack_in_page(bucket_info.pageid, bucket_info.packid);
         auto nele = bucket_info.size;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
+<<<<<<< HEAD
         auto key_idx = keys_info[i].first;
+=======
+        auto key_idx = key_info.first;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const auto* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
         auto offset_pos = bucket_pos + pad(nele, kPackSize);
         values[key_idx] = NullIndexValue;
@@ -2410,7 +2863,11 @@ bool ImmutableIndex::_filter(size_t shard_idx, std::vector<KeyInfo>& keys_info, 
         return false;
     }
     if (!_bf_vec.empty() && _bf_vec.size() <= shard_idx) {
+<<<<<<< HEAD
         LOG(ERROR) << "error shard idx:" << shard_idx << ", size:" << _bf_vec.size();
+=======
+        LOG(ERROR) << "read bloom filter failed, error shard idx:" << shard_idx << ", size:" << _bf_vec.size();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return false;
     }
 
@@ -2438,7 +2895,11 @@ bool ImmutableIndex::_filter(size_t shard_idx, std::vector<KeyInfo>& keys_info, 
     std::unique_ptr<BloomFilter> bf;
     st = BloomFilter::create(BLOCK_BLOOM_FILTER, &bf);
     if (!st.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "shard_idx: " << shard_idx << "bloom filter init failed, " << st;
+=======
+        LOG(WARNING) << "shard_idx: " << shard_idx << "bloom filter create failed, " << st;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return false;
     }
     st = bf->init(bf_buff.data(), len, HASH_MURMUR3_X64_64);
@@ -2512,7 +2973,11 @@ Status ImmutableIndex::_get_in_fixlen_shard_by_page(size_t shard_idx, size_t n, 
             auto pageid = h.page() % shard_info.npage;
             auto bucketid = h.bucket() % shard_info.nbucket;
             auto iter = pages.find(pageid);
+<<<<<<< HEAD
             CHECK(iter != pages.end());
+=======
+            RETURN_ERROR_IF_FALSE(iter != pages.end());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             auto& bucket_info = iter->second.header().buckets[bucketid];
             uint8_t* bucket_pos;
             if (pageid == bucket_info.pageid) {
@@ -2560,7 +3025,11 @@ Status ImmutableIndex::_get_in_varlen_shard_by_page(size_t shard_idx, size_t n, 
             auto pageid = h.page() % shard_info.npage;
             auto bucketid = h.bucket() % shard_info.nbucket;
             auto iter = pages.find(pageid);
+<<<<<<< HEAD
             CHECK(iter != pages.end());
+=======
+            RETURN_ERROR_IF_FALSE(iter != pages.end());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             auto& bucket_info = iter->second.header().buckets[bucketid];
             uint8_t* bucket_pos;
             if (pageid == bucket_info.pageid) {
@@ -2594,10 +3063,13 @@ Status ImmutableIndex::_get_in_varlen_shard_by_page(size_t shard_idx, size_t n, 
                     break;
                 }
             }
+<<<<<<< HEAD
             if (values[key_idx].get_value() == NullIndexValue) {
                 LOG(INFO) << "can not find key:" << keys[key_idx] << ", pageid:" << pageid
                           << ", real pageid:" << bucket_info.pageid;
             }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     return Status::OK();
@@ -2689,9 +3161,16 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     std::unique_ptr<ImmutableIndexShard> shard =
             std::make_unique<ImmutableIndexShard>(shard_info.npage, shard_info.page_size);
     if (shard_info.uncompressed_size == 0) {
+<<<<<<< HEAD
         DCHECK(shard->npage() * shard_info.page_size == shard_info.bytes);
     } else {
         DCHECK(shard->npage() * shard_info.page_size == shard_info.uncompressed_size);
+=======
+        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.bytes, "illegal shard size");
+    } else {
+        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.uncompressed_size,
+                              "illegal shard size");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->data(), shard_info.bytes));
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
@@ -2774,9 +3253,16 @@ Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, con
     std::unique_ptr<ImmutableIndexShard> shard =
             std::make_unique<ImmutableIndexShard>(shard_info.npage, shard_info.page_size);
     if (shard_info.uncompressed_size == 0) {
+<<<<<<< HEAD
         DCHECK(shard->npage() * shard_info.page_size == shard_info.bytes);
     } else {
         DCHECK(shard->npage() * shard_info.page_size == shard_info.uncompressed_size);
+=======
+        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.bytes, "illegal shard size");
+    } else {
+        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.uncompressed_size,
+                              "illegal shard size");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->data(), shard_info.bytes));
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
@@ -2946,6 +3432,10 @@ Status ImmutableIndex::check_not_exist(size_t n, const Slice* keys, size_t key_s
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+DEFINE_FAIL_POINT(immutable_index_no_page_off);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<RandomAccessFile>&& file,
                                                                bool load_bf_data) {
     ASSIGN_OR_RETURN(auto file_size, file->get_size());
@@ -3021,8 +3511,14 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         dest.page_size = page_size;
         dest.uncompressed_size = src.uncompressed_size();
         if (idx->_compression_type == CompressionTypePB::NO_COMPRESSION) {
+<<<<<<< HEAD
             DCHECK(dest.uncompressed_size == 0) << "compression type: " << idx->_compression_type
                                                 << " uncompressed_size: " << dest.uncompressed_size;
+=======
+            RETURN_ERROR_IF_FALSE(dest.uncompressed_size == 0,
+                                  "compression type: " + std::to_string(idx->_compression_type) +
+                                          " uncompressed_size: " + std::to_string(dest.uncompressed_size));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         // This is for compatibility, we don't add data_size in shard_info in the rc version
         // And data_size is added to reslove some bug(https://github.com/StarRocks/starrocks/issues/11868)
@@ -3035,6 +3531,10 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         } else {
             dest.data_size = src.data_size();
         }
+<<<<<<< HEAD
+=======
+        FAIL_POINT_TRIGGER_EXECUTE(immutable_index_no_page_off, { meta.mutable_shards(i)->clear_page_off(); });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (src.page_off().size() == 0) {
             // When upgrading from a historical version that does not support page compression, set page off to 0 to distinguish it
             // from the new version which support page compression.
@@ -3212,7 +3712,12 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
             // so we use index file size as the _usage and the _usage will be adjusted in subsequent compaction.
             if (index_meta.has_l1_version()) {
                 EditVersion version = index_meta.l1_version();
+<<<<<<< HEAD
                 auto l1_file_path = strings::Substitute("$0/index.l1.$1.$2", _path, version.major(), version.minor());
+=======
+                auto l1_file_path =
+                        strings::Substitute("$0/index.l1.$1.$2", _path, version.major_number(), version.minor_number());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 auto l1_st = _fs->get_file_size(l1_file_path);
                 if (!l1_st.ok()) {
                     return l1_st.status();
@@ -3247,7 +3752,12 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     _has_l1 = false;
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
+<<<<<<< HEAD
         auto l1_block_path = strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
+=======
+        auto l1_block_path =
+                strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSIGN_OR_RETURN(auto l1_rfile, _fs->new_random_access_file(l1_block_path));
         // TODO
         // we can reduce load bf data diskio after flush or compaction
@@ -3265,19 +3775,32 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     if (index_meta.l2_versions_size() > 0) {
         DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
         for (int i = 0; i < index_meta.l2_versions_size(); i++) {
+<<<<<<< HEAD
             auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major(),
                                                      index_meta.l2_versions(i).minor(),
                                                      index_meta.l2_version_merged(i) ? MergeSuffix : "");
             ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
             ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
             _l2_versions.emplace_back(EditVersionWithMerge(index_meta.l2_versions(i), index_meta.l2_version_merged(i)));
+=======
+            auto l2_block_path = strings::Substitute(
+                    "$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major_number(),
+                    index_meta.l2_versions(i).minor_number(), index_meta.l2_version_merged(i) ? MergeSuffix : "");
+            ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
+            ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
+            _l2_versions.emplace_back(index_meta.l2_versions(i), index_meta.l2_version_merged(i));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             _l2_vec.emplace_back(std::move(l2_index));
         }
     }
     // if reload, don't update _usage_and_size_by_key_length
     if (!reload) {
         // if has l1, idx range is [0, 1)
+<<<<<<< HEAD
         _reload_usage_and_size_by_key_length(_has_l1 ? 0 : 1, 1, false);
+=======
+        RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(_has_l1 ? 0 : 1, 1, false));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     return Status::OK();
@@ -3301,7 +3824,11 @@ void PersistentIndex::_get_stat_from_immutable_index(ImmutableIndex* immu_index,
     }
 }
 
+<<<<<<< HEAD
 Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& index_meta) {
+=======
+Status PersistentIndex::_build_commit(TabletLoader* loader, PersistentIndexMetaPB& index_meta) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // commit: flush _l0 and build _l1
     // write PersistentIndexMetaPB in RocksDB
     Status status = commit(&index_meta);
@@ -3310,7 +3837,11 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
         return status;
     }
     // write pesistent index meta
+<<<<<<< HEAD
     status = TabletMetaManager::write_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), index_meta);
+=======
+    status = TabletMetaManager::write_persistent_index_meta(loader->data_dir(), loader->tablet_id(), index_meta);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (!status.ok()) {
         LOG(WARNING) << "build persistent index failed because write persistent index meta failed: "
                      << status.to_string();
@@ -3325,6 +3856,7 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
     return status;
 }
 
+<<<<<<< HEAD
 Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets,
                                         const Schema& pkey_schema, int64_t apply_version,
                                         std::unique_ptr<Column> pk_column) {
@@ -3341,6 +3873,18 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
         }
         auto& itrs = res.value();
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+=======
+Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey_schema,
+                                        std::unique_ptr<Column> pk_column) {
+    CHECK_MEM_LIMIT("PersistentIndex::_insert_rowsets");
+    std::vector<uint32_t> rowids;
+    TRY_CATCH_BAD_ALLOC(rowids.reserve(4096));
+    ChunkUniquePtr chunk_shared_ptr;
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096));
+    auto chunk = chunk_shared_ptr.get();
+    RETURN_IF_ERROR(loader->rowset_iterator(pkey_schema, [&](const std::vector<ChunkIteratorPtr>& itrs,
+                                                             uint32_t rowset_id) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (size_t i = 0; i < itrs.size(); i++) {
             auto itr = itrs[i].get();
             if (itr == nullptr) {
@@ -3358,12 +3902,21 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
                     Column* pkc = nullptr;
                     if (pk_column != nullptr) {
                         pk_column->reset_column();
+<<<<<<< HEAD
                         PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+=======
+                        TRY_CATCH_BAD_ALLOC(
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
                     }
+<<<<<<< HEAD
                     uint32_t rssid = rowset->rowset_meta()->get_rowset_seg_id() + i;
+=======
+                    uint32_t rssid = rowset_id + i;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     uint64_t base = ((uint64_t)rssid) << 32;
                     std::vector<IndexValue> values;
                     values.reserve(pkc->size());
@@ -3376,7 +3929,11 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
                         st = insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), values.data(), false);
                     } else {
                         std::vector<Slice> keys;
+<<<<<<< HEAD
                         keys.reserve(pkc->size());
+=======
+                        TRY_CATCH_BAD_ALLOC(keys.reserve(pkc->size()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         const auto* fkeys = pkc->continuous_data();
                         for (size_t i = 0; i < pkc->size(); ++i) {
                             keys.emplace_back(fkeys, _key_size);
@@ -3385,18 +3942,28 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
                         st = insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(), false);
                     }
                     if (!st.ok()) {
+<<<<<<< HEAD
                         LOG(ERROR) << "load index failed: tablet=" << tablet->tablet_id()
                                    << " rowsets num:" << rowsets.size()
                                    << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id() << " segment:" << i
                                    << " reason: " << st.to_string() << " current_size:" << size()
                                    << " updates: " << tablet->updates()->debug_string();
+=======
+                        LOG(ERROR) << "load index failed: tablet=" << loader->tablet_id() << " rowset:" << rowset_id
+                                   << " segment:" << i << " reason: " << st.to_string() << " current_size:" << size();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         return st;
                     }
                 }
             }
             itr->close();
         }
+<<<<<<< HEAD
     }
+=======
+        return Status::OK();
+    }));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -3414,13 +3981,17 @@ bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_met
 }
 
 Status PersistentIndex::load_from_tablet(Tablet* tablet) {
+<<<<<<< HEAD
     MonotonicStopWatch timer;
     timer.start();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (tablet->keys_type() != PRIMARY_KEYS) {
         LOG(WARNING) << "tablet: " << tablet->tablet_id() << " is not primary key tablet";
         return Status::NotSupported("Only PrimaryKey table is supported to use persistent index");
     }
 
+<<<<<<< HEAD
     PersistentIndexMetaPB index_meta;
     Status status = TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta);
     if (!status.ok() && !status.is_not_found()) {
@@ -3607,6 +4178,10 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
               << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
               << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
     return Status::OK();
+=======
+    std::unique_ptr<TabletLoader> loader = std::make_unique<PersistentIndexTabletLoader>(tablet);
+    return _load_by_loader(loader.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status PersistentIndex::prepare(const EditVersion& version, size_t n) {
@@ -3652,7 +4227,11 @@ bool PersistentIndex::_enable_minor_compaction() {
         } else {
             LOG(WARNING) << "PersistentIndex stop do minor compaction, path: " << _path
                          << " , current l2 cnt: " << _l2_versions.size();
+<<<<<<< HEAD
             _reload_usage_and_size_by_key_length(0, _l1_vec.size(), false);
+=======
+            (void)_reload_usage_and_size_by_key_length(0, _l1_vec.size(), false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     return false;
@@ -3755,6 +4334,12 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         stat->reload_meta_cost += watch.elapsed_time();
     }
     _calc_memory_usage();
+<<<<<<< HEAD
+=======
+
+    VLOG(2) << strings::Substitute("commit persistent index successfully, version: [$0,$1]", _version.major_number(),
+                                   _version.minor_number());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -3828,8 +4413,14 @@ public:
 
     void run() override {
         auto scope = IOProfiler::scope(_io_stat_entry);
+<<<<<<< HEAD
         _index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
                                              _found_keys_info);
+=======
+        WARN_IF_ERROR(_index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
+                                                           _found_keys_info),
+                      "Failed to run GetFromImmutableIndexTask");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
 private:
@@ -3929,7 +4520,11 @@ void PersistentIndex::_get_l2_stat(const std::vector<std::unique_ptr<ImmutableIn
 
                     auto iter = usage_and_size_stat.find(key_size);
                     if (iter == usage_and_size_stat.end()) {
+<<<<<<< HEAD
                         usage_and_size_stat.insert({key_size, {usage, size}});
+=======
+                        usage_and_size_stat.insert({static_cast<uint32_t>(key_size), {usage, size}});
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     } else {
                         iter->second.first += usage;
                         iter->second.second += size;
@@ -3982,7 +4577,12 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
         auto iter = _usage_and_size_by_key_length.find(_key_size);
         DCHECK(iter != _usage_and_size_by_key_length.end());
         if (iter == _usage_and_size_by_key_length.end()) {
+<<<<<<< HEAD
             std::string msg = strings::Substitute("no key_size: $0 in usage info", _key_size);
+=======
+            std::string msg =
+                    strings::Substitute("update pindex info failed, no key_size: $0 in usage info", _key_size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         } else {
@@ -3993,7 +4593,12 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
         for (int key_size = 1; key_size <= kSliceMaxFixLength; key_size++) {
             auto iter = _usage_and_size_by_key_length.find(key_size);
             if (iter == _usage_and_size_by_key_length.end()) {
+<<<<<<< HEAD
                 std::string msg = strings::Substitute("no key_size: $0 in usage info", key_size);
+=======
+                std::string msg =
+                        strings::Substitute("update pindex info failed, no key_size: $0 in usage info", key_size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 LOG(WARNING) << msg;
                 return Status::InternalError(msg);
             } else {
@@ -4011,7 +4616,12 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
         DCHECK(_key_size == 0);
         auto iter = _usage_and_size_by_key_length.find(_key_size);
         if (iter == _usage_and_size_by_key_length.end()) {
+<<<<<<< HEAD
             std::string msg = strings::Substitute("no key_size: $0 in usage info", _key_size);
+=======
+            std::string msg =
+                    strings::Substitute("update pindex info failed, no key_size: $0 in usage info", _key_size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
@@ -4170,11 +4780,19 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
 Status PersistentIndex::flush_advance() {
     // flush l0 into _l1_vec
     int idx = _l1_vec.size();
+<<<<<<< HEAD
     std::string l1_tmp_file =
             strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(), _version.minor(), idx);
     RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, true));
 
     VLOG(1) << "flush tmp l1, idx: " << idx << ", file_path: " << l1_tmp_file << " success";
+=======
+    std::string l1_tmp_file = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(),
+                                                  _version.minor_number(), idx);
+    RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, true));
+
+    VLOG(2) << "flush tmp l1, idx: " << idx << ", file_path: " << l1_tmp_file << " success";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // load _l1_vec
     std::unique_ptr<RandomAccessFile> l1_rfile;
     ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(l1_tmp_file));
@@ -4266,8 +4884,15 @@ static StatusOr<EditVersionWithMerge> parse_l2_filename(const std::string& filen
 
 Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                                    const EditVersionWithMerge& min_l2_version) {
+<<<<<<< HEAD
     std::string l0_file_name = strings::Substitute("index.l0.$0.$1", l0_version.major(), l0_version.minor());
     std::string l1_file_name = strings::Substitute("index.l1.$0.$1", l1_version.major(), l1_version.minor());
+=======
+    std::string l0_file_name =
+            strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
+    std::string l1_file_name =
+            strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string l0_prefix("index.l0");
     std::string l1_prefix("index.l1");
     std::string l2_prefix("index.l2");
@@ -4277,7 +4902,11 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
         if ((full.compare(0, l0_prefix.length(), l0_prefix) == 0 && full.compare(l0_file_name) != 0) ||
             (full.compare(0, l1_prefix.length(), l1_prefix) == 0 && full.compare(l1_file_name) != 0)) {
             std::string path = dir + "/" + full;
+<<<<<<< HEAD
             VLOG(1) << "delete expired index file " << path;
+=======
+            VLOG(2) << "delete expired index file " << path;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is " << st.to_string();
@@ -4293,7 +4922,11 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
                 if ((*version_st) < min_l2_version) {
                     // delete expired l2 file
                     std::string path = dir + "/" + full;
+<<<<<<< HEAD
                     VLOG(1) << "delete expired index file " << path;
+=======
+                    VLOG(2) << "delete expired index file " << path;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     Status st = FileSystem::Default()->delete_file(path);
                     if (!st.ok()) {
                         LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is "
@@ -4324,7 +4957,11 @@ Status PersistentIndex::_delete_major_compaction_tmp_index_file() {
         std::string full(name);
         if (major_compaction_tmp_index_file(full)) {
             std::string path = dir + "/" + full;
+<<<<<<< HEAD
             VLOG(1) << "delete tmp index file " << path;
+=======
+            VLOG(2) << "delete tmp index file " << path;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();
@@ -4345,7 +4982,11 @@ Status PersistentIndex::_delete_tmp_index_file() {
             full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0 &&
             !major_compaction_tmp_index_file(full)) {
             std::string path = dir + "/" + full;
+<<<<<<< HEAD
             VLOG(1) << "delete tmp index file " << path;
+=======
+            VLOG(2) << "delete tmp index file " << path;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();
@@ -4531,8 +5172,13 @@ Status merge_shard_kvs_fixed_len_with_delete(std::vector<KVRef>& l0_kvs, std::ve
     phmap::flat_hash_set<KVRef, KVRefHash, KVRefEq<KeySize>> kvs_set;
     kvs_set.reserve(estimated_size);
     DCHECK(!l1_kvs.empty());
+<<<<<<< HEAD
     for (size_t i = 0; i < l1_kvs.size(); i++) {
         for (const auto& kv : l1_kvs[i]) {
+=======
+    for (auto& l1_kv : l1_kvs) {
+        for (const auto& kv : l1_kv) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             auto [it, inserted] = kvs_set.emplace(kv);
             if (!inserted) {
                 DCHECK(it->hash == kv.hash) << "upsert kv in set, hash should be the same";
@@ -4563,8 +5209,13 @@ Status merge_shard_kvs_var_len_with_delete(std::vector<KVRef>& l0_kvs, std::vect
     phmap::flat_hash_set<KVRef, KVRefHash, KVRefEq<0>> kvs_set;
     kvs_set.reserve(estimate_size);
     DCHECK(!l1_kvs.empty());
+<<<<<<< HEAD
     for (size_t i = 0; i < l1_kvs.size(); i++) {
         for (const auto& kv : l1_kvs[i]) {
+=======
+    for (auto& l1_kv : l1_kvs) {
+        for (const auto& kv : l1_kv) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             auto [it, inserted] = kvs_set.emplace(kv);
             if (!inserted) {
                 DCHECK(it->hash == kv.hash) << "upsert kv in set, hash should be the same";
@@ -4748,7 +5399,11 @@ size_t PersistentIndex::_get_tmp_l1_count() {
 Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
     // 1. flush l0 to l1
     const std::string new_l1_filename =
+<<<<<<< HEAD
             strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
+=======
+            strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const size_t tmp_l1_cnt = _get_tmp_l1_count();
     // maybe need to dump snapshot in 1.a
     bool need_snapshot = false;
@@ -4796,9 +5451,15 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
     if (_has_l1) {
         // just link old l1 file to l2
         const std::string l2_file_path =
+<<<<<<< HEAD
                 strings::Substitute("$0/index.l2.$1.$2", _path, _l1_version.major(), _l1_version.minor());
         const std::string old_l1_file_path =
                 strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
+=======
+                strings::Substitute("$0/index.l2.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
+        const std::string old_l1_file_path =
+                strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         VLOG(2) << "PersistentIndex minor compaction, link from " << old_l1_file_path << " to " << l2_file_path;
         // Make new file doesn't exist
         (void)FileSystem::Default()->delete_file(l2_file_path);
@@ -4823,7 +5484,11 @@ Status PersistentIndex::_merge_compaction() {
     }
     auto writer = std::make_unique<ImmutableIndexWriter>();
     const std::string idx_file_path =
+<<<<<<< HEAD
             strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
+=======
+            strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(writer->init(idx_file_path, _version, true));
     RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), 0, _l1_vec.size(), _usage_and_size_by_key_length,
                                                !_l2_vec.empty()));
@@ -4846,12 +5511,22 @@ Status PersistentIndex::_merge_compaction() {
 Status PersistentIndex::_merge_compaction_advance() {
     DCHECK(_l1_vec.size() >= config::max_tmp_l1_num);
     auto writer = std::make_unique<ImmutableIndexWriter>();
+<<<<<<< HEAD
     const std::string idx_file_path_tmp =
             strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(), _version.minor(), _l1_vec.size());
     RETURN_IF_ERROR(writer->init(idx_file_path_tmp, _version, false));
     int merge_l1_start_idx = _l1_vec.size() - config::max_tmp_l1_num;
     int merge_l1_end_idx = _l1_vec.size();
     VLOG(2) << "merge compaction advance, start_idx: " << merge_l1_start_idx << " end_idx: " << merge_l1_end_idx;
+=======
+    const std::string idx_file_path_tmp = strings::Substitute(
+            "$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(), _version.minor_number(), _l1_vec.size());
+    RETURN_IF_ERROR(writer->init(idx_file_path_tmp, _version, false));
+    int merge_l1_start_idx = _l1_vec.size() - config::max_tmp_l1_num;
+    int merge_l1_end_idx = _l1_vec.size();
+    VLOG(2) << strings::Substitute("merge compaction advance, path: $0, start_idx: $1, end_idx: $2", _path,
+                                   merge_l1_start_idx, merge_l1_end_idx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // keep delete flag when older l1 or l2 exist
     bool keep_delete = (merge_l1_start_idx != 0) || !_l2_vec.empty();
 
@@ -4903,8 +5578,13 @@ Status PersistentIndex::_merge_compaction_advance() {
         _l1_vec[i]->destroy();
     }
 
+<<<<<<< HEAD
     const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(),
                                                           _version.minor(), new_l1_vec.size());
+=======
+    const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(),
+                                                          _version.minor_number(), new_l1_vec.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(FileSystem::Default()->rename_file(idx_file_path_tmp, idx_file_path));
     std::unique_ptr<RandomAccessFile> l1_rfile;
     ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(idx_file_path));
@@ -4953,8 +5633,13 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
     auto writer = std::make_unique<ImmutableIndexWriter>();
     // use latest l2 edit version as new l2 edit version
     EditVersion new_l2_version = l2_versions.back();
+<<<<<<< HEAD
     const std::string idx_file_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, new_l2_version.major(),
                                                           new_l2_version.minor(), MergeSuffix);
+=======
+    const std::string idx_file_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, new_l2_version.major_number(),
+                                                          new_l2_version.minor_number(), MergeSuffix);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(writer->init(idx_file_path, new_l2_version, true));
     std::map<uint32_t, std::pair<int64_t, int64_t>> usage_and_size_stat;
     _get_l2_stat(l2_vec, usage_and_size_stat);
@@ -5050,7 +5735,11 @@ Status PersistentIndex::modify_l2_versions(const std::vector<EditVersion>& input
             }
         }
         if (!need_remove) {
+<<<<<<< HEAD
             new_l2_versions.emplace_back(EditVersion(index_meta.l2_versions(i)));
+=======
+            new_l2_versions.emplace_back(index_meta.l2_versions(i));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             new_l2_version_merged.push_back(index_meta.l2_version_merged(i));
         }
     }
@@ -5081,8 +5770,13 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(index_meta.l2_versions(i));
+<<<<<<< HEAD
         auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major(),
                                                  index_meta.l2_versions(i).minor(),
+=======
+        auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major_number(),
+                                                 index_meta.l2_versions(i).minor_number(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                                  index_meta.l2_version_merged(i) ? MergeSuffix : "");
         ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
         ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
@@ -5096,7 +5790,11 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     RETURN_IF_ERROR(_delete_expired_index_file(
             _version, _l1_version,
             _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+<<<<<<< HEAD
     _delete_major_compaction_tmp_index_file();
+=======
+    (void)_delete_major_compaction_tmp_index_file();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -5104,7 +5802,11 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
 // 1. load current l2 vec
 // 2. merge l2 files to new l2 file
 // 3. modify PersistentIndexMetaPB and make this step atomic.
+<<<<<<< HEAD
 Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex) {
+=======
+Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_cancel_major_compaction) {
         return Status::InternalError("cancel major compaction");
     }
@@ -5135,9 +5837,15 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
     DCHECK(prev_index_meta.l2_versions_size() == prev_index_meta.l2_version_merged_size());
     for (int i = 0; i < prev_index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(prev_index_meta.l2_versions(i));
+<<<<<<< HEAD
         auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, prev_index_meta.l2_versions(i).major(),
                                                  prev_index_meta.l2_versions(i).minor(),
                                                  prev_index_meta.l2_version_merged(i) ? MergeSuffix : "");
+=======
+        auto l2_block_path = strings::Substitute(
+                "$0/index.l2.$1.$2$3", _path, prev_index_meta.l2_versions(i).major_number(),
+                prev_index_meta.l2_versions(i).minor_number(), prev_index_meta.l2_version_merged(i) ? MergeSuffix : "");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSIGN_OR_RETURN(auto l2_rfile, fs->new_random_access_file(l2_block_path));
         ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
         l2_vec.emplace_back(std::move(l2_index));
@@ -5164,7 +5872,11 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
         _calc_memory_usage();
     }
+<<<<<<< HEAD
     _delete_major_compaction_tmp_index_file();
+=======
+    (void)_delete_major_compaction_tmp_index_file();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -5220,12 +5932,21 @@ double PersistentIndex::major_compaction_score(const PersistentIndexMetaPB& inde
 Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
     _cancel_major_compaction = true;
 
+<<<<<<< HEAD
     const TabletSchema& tablet_schema = tablet->tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
     for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+=======
+    auto tablet_schema_ptr = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
+    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 
     if (_l0) {
@@ -5271,6 +5992,169 @@ void PersistentIndex::reset_cancel_major_compaction() {
     }
 }
 
+<<<<<<< HEAD
+=======
+Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
+    starrocks::Schema pkey_schema = loader->generate_pkey_schema();
+    DataDir* data_dir = loader->data_dir();
+    TTabletId tablet_id = loader->tablet_id();
+    ASSIGN_OR_RETURN(EditVersion applied_version, loader->applied_version());
+    loader->setting();
+
+    MonotonicStopWatch timer;
+    timer.start();
+
+    PersistentIndexMetaPB index_meta;
+    Status status = TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta);
+    if (!status.ok() && !status.is_not_found()) {
+        return Status::InternalError("get tablet persistent index meta failed");
+    }
+
+    // There are three conditions
+    // First is we do not find PersistentIndexMetaPB in TabletMeta, it maybe the first time to
+    // enable persistent index
+    // Second is we find PersistentIndexMetaPB in TabletMeta, but it's version is behind applied_version
+    // in TabletMeta. It could be happened as below:
+    //    1. Enable persistent index and apply rowset, applied_version is 1-0
+    //    2. Restart be and disable persistent index, applied_version is update to 2-0
+    //    3. Restart be and enable persistent index
+    // In this case, we don't have all rowset data in persistent index files, so we also need to rebuild it
+    // The last is we find PersistentIndexMetaPB and it's version is equal to latest applied version. In this case,
+    // we can load from index file directly
+    if (status.ok()) {
+        // all applied rowsets has save in existing persistent index meta
+        // so we can load persistent index according to PersistentIndexMetaPB
+        EditVersion version = index_meta.version();
+        if (version == applied_version) {
+            if (_need_rebuild_index(index_meta)) {
+                LOG(WARNING) << "we need to rebuild persistent index, tablet id: " << tablet_id;
+                status = Status::InternalError("rebuild persistent index");
+            } else {
+                status = load(index_meta);
+            }
+            if (status.ok()) {
+                VLOG(1) << "load persistent index tablet:" << tablet_id << " version:" << version.to_string()
+                        << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
+                        << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
+                        << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
+                        << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+                        << " memory: " << memory_usage() << " status: " << status.to_string()
+                        << " time:" << timer.elapsed_time() / 1000000 << "ms";
+                return status;
+            } else {
+                LOG(WARNING) << "load persistent index failed, tablet: " << tablet_id << ", status: " << status;
+                if (index_meta.has_l0_meta()) {
+                    EditVersion l0_version = index_meta.l0_meta().snapshot().version();
+                    std::string l0_file_name =
+                            strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
+                    Status st = FileSystem::Default()->delete_file(l0_file_name);
+                    LOG_IF(WARNING, !st.ok()) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
+                }
+                if (index_meta.has_l1_version()) {
+                    EditVersion l1_version = index_meta.l1_version();
+                    std::string l1_file_name =
+                            strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
+                    Status st = FileSystem::Default()->delete_file(l1_file_name);
+                    LOG_IF(WARNING, !st.ok()) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
+                }
+                if (index_meta.l2_versions_size() > 0) {
+                    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
+                    for (int i = 0; i < index_meta.l2_versions_size(); i++) {
+                        EditVersion l2_version = index_meta.l2_versions(i);
+                        std::string l2_file_name = strings::Substitute(
+                                "index.l2.$0.$1$2", l2_version.major_number(), l2_version.minor_number(),
+                                index_meta.l2_version_merged(i) ? MergeSuffix : "");
+                        Status st = FileSystem::Default()->delete_file(l2_file_name);
+                        LOG_IF(WARNING, !st.ok())
+                                << "delete error l2 index file: " << l2_file_name << ", status: " << st;
+                    }
+                }
+            }
+        }
+    }
+
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+
+    // Init PersistentIndex
+    _key_size = fix_size;
+    _size = 0;
+    _version = applied_version;
+    auto st = ShardByLengthMutableIndex::create(_key_size, _path);
+    if (!st.ok()) {
+        LOG(WARNING) << "Build persistent index failed because initialization failed: " << st.status().to_string();
+        return st.status();
+    }
+    _l0 = std::move(st).value();
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    // set _dump_snapshot to true
+    // In this case, only do flush or dump snapshot, set _dump_snapshot to avoid append wal
+    _dump_snapshot = true;
+
+    // clear l1
+    _l1_vec.clear();
+    _usage_and_size_by_key_length.clear();
+    _l1_merged_num.clear();
+    _has_l1 = false;
+    for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
+        auto [l0_shard_offset, l0_shard_size] = shard_info;
+        const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                                      std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
+                                                      0LL, [](size_t s, const auto& e) { return s + e->size(); });
+        const auto l0_kv_pairs_usage = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                                       std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
+                                                       0LL, [](size_t s, const auto& e) { return s + e->usage(); });
+        if (auto [_, inserted] =
+                    _usage_and_size_by_key_length.insert({key_size, {l0_kv_pairs_usage, l0_kv_pairs_size}});
+            !inserted) {
+            std::string msg = strings::Substitute(
+                    "load persistent index from tablet failed, insert usage and size by key size failed, key_size: $0",
+                    key_size);
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+    }
+    // clear l2
+    _l2_vec.clear();
+    _l2_versions.clear();
+
+    // Init PersistentIndexMetaPB
+    //   1. reset |version| |key_size|
+    //   2. delete WALs because maybe PersistentIndexMetaPB has expired wals
+    //   3. reset SnapshotMeta
+    //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
+    index_meta.clear_l0_meta();
+    index_meta.clear_l1_version();
+    index_meta.clear_l2_versions();
+    index_meta.clear_l2_version_merged();
+    index_meta.set_key_size(_key_size);
+    index_meta.set_size(0);
+    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_6);
+    applied_version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    l0_meta->clear_wals();
+    IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
+    applied_version.to_pb(snapshot->mutable_version());
+    PagePointerPB* data = snapshot->mutable_data();
+    data->set_offset(0);
+    data->set_size(0);
+
+    std::unique_ptr<Column> pk_column;
+    if (pkey_schema.num_fields() > 1) {
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    }
+    RETURN_IF_ERROR(_insert_rowsets(loader, pkey_schema, std::move(pk_column)));
+    RETURN_IF_ERROR(_build_commit(loader, index_meta));
+    loader->set_write_amp_score(PersistentIndex::major_compaction_score(index_meta));
+    LOG(INFO) << "build persistent index finish tablet: " << loader->tablet_id() << " version:" << applied_version
+              << " #rowset:" << loader->rowset_num() << " #segment:" << loader->total_segments()
+              << " data_size:" << loader->total_data_size() << " size: " << _size << " l0_size: " << _l0->size()
+              << " l0_capacity:" << _l0->capacity() << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
+              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
+    return Status::OK();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 Status PersistentIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
     for (const auto& l2 : _l2_vec) {
         PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();

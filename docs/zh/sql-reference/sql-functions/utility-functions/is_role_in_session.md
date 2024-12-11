@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # is_role_in_session
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 用于检查指定的角色（包括嵌套角色）在当前会话下是否已经激活。
 

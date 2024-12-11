@@ -34,16 +34,27 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+=======
+import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.SchemaConstants;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.proc.ExternalTableProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.TableProcDir;
 import com.starrocks.common.util.OrderByPair;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -51,6 +62,17 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowClustersStmt;
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ShowTemporaryTableStmt;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.ShowAlterStmt;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
@@ -74,7 +96,11 @@ import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.ShowWarehousesStmt;
+=======
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,7 +119,11 @@ public class ShowStmtAnalyzer {
         new ShowStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
+<<<<<<< HEAD
     static class ShowStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ShowStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         private static final Logger LOGGER = LoggerFactory.getLogger(ShowStmtAnalyzerVisitor.class);
 
@@ -121,6 +151,24 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public Void visitShowTemporaryTablesStatement(ShowTemporaryTableStmt node, ConnectContext context) {
+            String catalogName;
+            if (node.getCatalogName() != null) {
+                catalogName = node.getCatalogName();
+            } else {
+                catalogName = context.getCurrentCatalog();
+            }
+            if (!CatalogMgr.isInternalCatalog(catalogName)) {
+                throw new SemanticException("show temporary table is not supported under non-default catalog");
+            }
+            return visitShowTableStatement(node, context);
+        }
+
+
+        @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Void visitShowTabletStatement(ShowTabletStmt node, ConnectContext context) {
             ShowTabletStmtAnalyzer.analyze(node, context);
             return null;
@@ -180,6 +228,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
+<<<<<<< HEAD
         public Void visitShowWarehousesStatement(ShowWarehousesStmt node, ConnectContext context) {
             return null;
         }
@@ -199,6 +248,8 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Void visitShowDatabasesStatement(ShowDbStmt node, ConnectContext context) {
             String catalogName;
             if (node.getCatalogName() != null) {
@@ -310,6 +361,14 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitDescTableStmt(DescribeStmt node, ConnectContext context) {
+<<<<<<< HEAD
+=======
+            if (node.isTableFunctionTable()) {
+                descTableFunctionTable(node, context);
+                return null;
+            }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             node.getDbTableName().normalization(context);
             TableName tableName = node.getDbTableName();
             String catalogName = tableName.getCatalog();
@@ -333,6 +392,7 @@ public class ShowStmtAnalyzer {
             return null;
         }
 
+<<<<<<< HEAD
         private void descInternalCatalogTable(DescribeStmt node, ConnectContext context) {
             Database db = GlobalStateMgr.getCurrentState().getDb(node.getDb());
             if (db == null) {
@@ -344,6 +404,44 @@ public class ShowStmtAnalyzer {
                 //if getTable not find table, may be is statement "desc materialized-view-name"
                 if (table == null) {
                     for (Table tb : db.getTables()) {
+=======
+        private void descTableFunctionTable(DescribeStmt node, ConnectContext context) {
+            Table table = null;
+            try {
+                table = new TableFunctionTable(node.getTableFunctionProperties());
+            } catch (DdlException e) {
+                throw new StorageAccessException(e);
+            }
+
+            List<Column> columns = table.getFullSchema();
+            for (Column column : columns) {
+                List<String> row = Arrays.asList(
+                        column.getName(),
+                        column.getType().canonicalName().toLowerCase(),
+                        column.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO);
+                node.getTotalRows().add(row);
+            }
+        }
+
+        private void descInternalCatalogTable(DescribeStmt node, ConnectContext context) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(node.getDb());
+            if (db == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
+            }
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                Table table = null;
+                try {
+                    table = MetaUtils.getSessionAwareTable(context, db, node.getDbTableName());
+                } catch (Exception e) {
+                    // if table is not found, may be is statement "desc materialized-view-name",
+                    // ignore this exception.
+                }
+                //if getTable not find table, may be is statement "desc materialized-view-name"
+                if (table == null) {
+                    for (Table tb : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         if (tb.getType() == Table.TableType.OLAP) {
                             OlapTable olapTable = (OlapTable) tb;
                             for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
@@ -364,7 +462,11 @@ public class ShowStmtAnalyzer {
                                                 // If you do not follow this specification, it may cause the BI system,
                                                 // such as superset, to fail to recognize the column type.
                                                 column.getType().canonicalName().toLowerCase(),
+<<<<<<< HEAD
                                                 column.isAllowNull() ? "YES" : "NO",
+=======
+                                                column.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                                 ((Boolean) column.isKey()).toString(),
                                                 defaultStr,
                                                 extraStr);
@@ -404,7 +506,11 @@ public class ShowStmtAnalyzer {
                     if (table.isNativeTableOrMaterializedView()) {
                         node.setOlapTable(true);
                         OlapTable olapTable = (OlapTable) table;
+<<<<<<< HEAD
                         Set<String> bfColumns = olapTable.getCopiedBfColumns();
+=======
+                        Set<String> bfColumns = olapTable.getBfColumnNames();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         Map<Long, List<Column>> indexIdToSchema = olapTable.getIndexIdToSchema();
 
                         // indices order
@@ -443,7 +549,11 @@ public class ShowStmtAnalyzer {
                                         // If you do not follow this specification, it may cause the BI system,
                                         // such as superset, to fail to recognize the column type.
                                         column.getType().canonicalName().toLowerCase(),
+<<<<<<< HEAD
                                         column.isAllowNull() ? "YES" : "NO",
+=======
+                                        column.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                         ((Boolean) column.isKey()).toString(),
                                         defaultStr,
                                         extraStr);
@@ -467,15 +577,24 @@ public class ShowStmtAnalyzer {
                                 mysqlTable.getPort(),
                                 mysqlTable.getUserName(),
                                 mysqlTable.getPasswd(),
+<<<<<<< HEAD
                                 mysqlTable.getMysqlDatabaseName(),
                                 mysqlTable.getMysqlTableName());
+=======
+                                mysqlTable.getCatalogDBName(),
+                                mysqlTable.getCatalogTableName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         node.getTotalRows().add(row);
                     } else {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, table.getType());
                     }
                 }
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
@@ -486,7 +605,11 @@ public class ShowStmtAnalyzer {
             try {
                 node.setNode(ProcService.getInstance().open(procString));
             } catch (AnalysisException e) {
+<<<<<<< HEAD
                 throw new SemanticException(String.format("Unknown proc node path: %s", procString));
+=======
+                throw new SemanticException(String.format("Unknown proc node path: %s. msg: %s", procString, e.getMessage()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
@@ -499,7 +622,11 @@ public class ShowStmtAnalyzer {
             try {
                 node.setNode(ProcService.getInstance().open(path));
             } catch (AnalysisException e) {
+<<<<<<< HEAD
                 throw new SemanticException(String.format("Unknown proc node path: %s", path));
+=======
+                throw new SemanticException(String.format("Unknown proc node path: %s. msg: %s", path, e.getMessage()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             return null;
         }
@@ -530,6 +657,7 @@ public class ShowStmtAnalyzer {
             if (statement.getWhereClause() != null) {
                 analyzeSubPredicate(filterMap, statement.getWhereClause());
             }
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
@@ -539,6 +667,19 @@ public class ShowStmtAnalyzer {
             db.readLock();
             try {
                 Table table = db.getTable(tableName);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (db == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+
+            final String tableName = statement.getTableName();
+            final boolean isTempPartition = statement.isTempPartition();
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                Table table = MetaUtils.getSessionAwareTable(context, db, new TableName(dbName, tableName));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (!(table instanceof OlapTable)) {
                     throw new SemanticException("Table[" + tableName + "] does not exists or is not OLAP table");
                 }
@@ -567,7 +708,11 @@ public class ShowStmtAnalyzer {
                         analyzeOrderBy(statement.getOrderByElements(), statement.getNode());
                 statement.setOrderByPairs(orderByPairs);
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             return null;
         }

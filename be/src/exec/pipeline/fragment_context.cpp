@@ -14,14 +14,31 @@
 
 #include "exec/pipeline/fragment_context.h"
 
+<<<<<<< HEAD
 #include "exec/data_sink.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
+=======
+#include <memory>
+
+#include "exec/data_sink.h"
+#include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/workgroup/work_group.h"
+#include "runtime/batch_write/batch_write_mgr.h"
+#include "runtime/client_cache.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
+<<<<<<< HEAD
+=======
+#include "util/threadpool.h"
+#include "util/thrift_rpc_helper.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/time.h"
 
 namespace starrocks::pipeline {
@@ -29,15 +46,23 @@ namespace starrocks::pipeline {
 FragmentContext::FragmentContext() : _data_sink(nullptr) {}
 
 FragmentContext::~FragmentContext() {
+<<<<<<< HEAD
     _data_sink.reset();
     _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
     clear_all_drivers();
     close_all_pipelines();
+=======
+    _close_stream_load_contexts();
+    _data_sink.reset();
+    _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
+    close_all_execution_groups();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_plan != nullptr) {
         _plan->close(_runtime_state.get());
     }
 }
 
+<<<<<<< HEAD
 void FragmentContext::clear_all_drivers() {
     for (auto& pipe : _pipelines) {
         pipe->clear_drivers();
@@ -62,16 +87,30 @@ size_t FragmentContext::total_dop() const {
     size_t total = 0;
     for (const auto& pipeline : _pipelines) {
         total += pipeline->degree_of_parallelism();
+=======
+size_t FragmentContext::total_dop() const {
+    size_t total = 0;
+    for (const auto& group : _execution_groups) {
+        total += group->total_logical_dop();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return total;
 }
 
+<<<<<<< HEAD
 size_t FragmentContext::num_drivers() const {
     size_t total = 0;
     for (const auto& pipeline : _pipelines) {
         total += pipeline->drivers().size();
     }
     return total;
+=======
+void FragmentContext::close_all_execution_groups() {
+    for (auto& group : _execution_groups) {
+        group->close(_runtime_state.get());
+    }
+    _execution_groups.clear();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void FragmentContext::move_tplan(TPlan& tplan) {
@@ -81,6 +120,7 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
     _data_sink = std::move(data_sink);
 }
 
+<<<<<<< HEAD
 void FragmentContext::count_down_pipeline(size_t val) {
     // Note that _pipelines may be destructed after fetch_add
     // memory_order_seq_cst semantics ensure that previous code does not reorder after fetch_add
@@ -93,6 +133,20 @@ void FragmentContext::count_down_pipeline(size_t val) {
     auto* state = runtime_state();
     auto* query_ctx = state->query_ctx();
 
+=======
+void FragmentContext::count_down_execution_group(size_t val) {
+    // Note that _pipelines may be destructed after fetch_add
+    // memory_order_seq_cst semantics ensure that previous code does not reorder after fetch_add
+    size_t total_execution_groups = _execution_groups.size();
+    bool all_groups_finished = _num_finished_execution_groups.fetch_add(val) + val == total_execution_groups;
+    if (!all_groups_finished) {
+        return;
+    }
+
+    // dump profile if necessary
+    auto* state = runtime_state();
+    auto* query_ctx = state->query_ctx();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     state->runtime_profile()->reverse_childs();
     if (config::pipeline_print_profile) {
         std::stringstream ss;
@@ -104,7 +158,42 @@ void FragmentContext::count_down_pipeline(size_t val) {
 
     finish();
     auto status = final_status();
+<<<<<<< HEAD
     state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+=======
+    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+
+    if (_report_when_finish) {
+        /// TODO: report fragment finish to BE coordinator
+        TReportFragmentFinishResponse res;
+        TReportFragmentFinishParams params;
+        params.__set_query_id(query_id());
+        params.__set_fragment_instance_id(fragment_instance_id());
+        // params.query_id = query_id();
+        // params.fragment_instance_id = fragment_instance_id();
+        const auto& fe_addr = state->fragment_ctx()->fe_addr();
+
+        class RpcRunnable : public Runnable {
+        public:
+            RpcRunnable(const TNetworkAddress& fe_addr, const TReportFragmentFinishResponse& res,
+                        const TReportFragmentFinishParams& params)
+                    : fe_addr(fe_addr), res(res), params(params) {}
+            const TNetworkAddress fe_addr;
+            TReportFragmentFinishResponse res;
+            const TReportFragmentFinishParams params;
+
+            void run() override {
+                (void)ThriftRpcHelper::rpc<FrontendServiceClient>(
+                        fe_addr.hostname, fe_addr.port,
+                        [&](FrontendServiceConnection& client) { client->reportFragmentFinish(res, params); });
+            }
+        };
+        //
+        std::shared_ptr<Runnable> runnable;
+        runnable = std::make_shared<RpcRunnable>(fe_addr, res, params);
+        (void)state->exec_env()->streaming_load_thread_pool()->submit(runnable);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     destroy_pass_through_chunk_buffer();
 
@@ -145,6 +234,7 @@ void FragmentContext::report_exec_state_if_necessary() {
         normalized_report_ns = last_report_ns + interval_ns;
     }
     if (_last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
+<<<<<<< HEAD
         for (auto& pipeline : _pipelines) {
             for (auto& driver : pipeline->drivers()) {
                 driver->runtime_report_action();
@@ -152,6 +242,14 @@ void FragmentContext::report_exec_state_if_necessary() {
         }
 
         state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
+=======
+        iterate_pipeline([](const Pipeline* pipeline) {
+            for (const auto& driver : pipeline->drivers()) {
+                driver->runtime_report_action();
+            }
+        });
+        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -167,6 +265,7 @@ void FragmentContext::set_final_status(const Status& status) {
 
         if (_s_status.is_cancelled()) {
             auto detailed_message = _s_status.detailed_message();
+<<<<<<< HEAD
             std::stringstream ss;
             ss << "[Driver] Canceled, query_id=" << print_id(_query_id)
                << ", instance_id=" << print_id(_fragment_instance_id) << ", reason=" << detailed_message;
@@ -180,13 +279,57 @@ void FragmentContext::set_final_status(const Status& status) {
                 executor->cancel(driver.get());
                 return Status::OK();
             });
+=======
+            std::string cancel_msg =
+                    fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
+                                print_id(_fragment_instance_id), detailed_message);
+            if (detailed_message == "QueryFinished" || detailed_message == "LimitReach" ||
+                detailed_message == "UserCancel" || detailed_message == "TimeOut") {
+                LOG(INFO) << cancel_msg;
+            } else {
+                LOG(WARNING) << cancel_msg;
+            }
+
+            const auto* executors = _workgroup != nullptr
+                                            ? _workgroup->executors()
+                                            : _runtime_state->exec_env()->workgroup_manager()->shared_executors();
+            auto* executor = executors->driver_executor();
+            iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
+        }
+
+        for (const auto& stream_load_context : _stream_load_contexts) {
+            if (stream_load_context->body_sink) {
+                stream_load_context->body_sink->cancel(_s_status);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 }
 
+<<<<<<< HEAD
 void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
     _stream_load_contexts = std::move(contexts);
     _channel_stream_load = true;
+=======
+void FragmentContext::set_pipelines(ExecutionGroups&& exec_groups, Pipelines&& pipelines) {
+    for (auto& group : exec_groups) {
+        if (!group->is_empty()) {
+            _execution_groups.emplace_back(std::move(group));
+        }
+    }
+    _pipelines = std::move(pipelines);
+}
+
+Status FragmentContext::prepare_all_pipelines() {
+    for (auto& group : _execution_groups) {
+        RETURN_IF_ERROR(group->prepare_pipelines(_runtime_state.get()));
+    }
+    return Status::OK();
+}
+
+void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
+    _stream_load_contexts = std::move(contexts);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void FragmentContext::cancel(const Status& status) {
@@ -203,6 +346,7 @@ void FragmentContext::cancel(const Status& status) {
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
         ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id, _fragment_instance_id);
     }
+<<<<<<< HEAD
 
     if (_stream_load_contexts.size() > 0) {
         for (const auto& stream_load_context : _stream_load_contexts) {
@@ -216,6 +360,8 @@ void FragmentContext::cancel(const Status& status) {
         }
         _stream_load_contexts.resize(0);
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
@@ -227,7 +373,11 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
         auto&& ctx = std::make_unique<FragmentContext>();
         auto* raw_ctx = ctx.get();
         _fragment_contexts.emplace(fragment_id, std::move(ctx));
+<<<<<<< HEAD
         raw_ctx->set_workgroup(workgroup::WorkGroupManager::instance()->get_default_workgroup());
+=======
+        raw_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return raw_ctx;
     }
 }
@@ -280,6 +430,7 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
             ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
                                                                                       fragment_id);
         }
+<<<<<<< HEAD
         const auto& stream_load_contexts = it->second->_stream_load_contexts;
 
         if (stream_load_contexts.size() > 0) {
@@ -295,6 +446,8 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
             }
             it->second->_stream_load_contexts.resize(0);
         }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _fragment_contexts.erase(it);
     }
 }
@@ -316,6 +469,7 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
 
 Status FragmentContext::reset_epoch() {
     _num_finished_epoch_pipelines = 0;
+<<<<<<< HEAD
     for (const auto& pipeline : _pipelines) {
         RETURN_IF_ERROR(_runtime_state->reset_epoch());
         RETURN_IF_ERROR(pipeline->reset_epoch(_runtime_state.get()));
@@ -326,10 +480,86 @@ Status FragmentContext::reset_epoch() {
 void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val) {
     bool all_pipelines_finished = _num_finished_epoch_pipelines.fetch_add(val) + val == _pipelines.size();
     if (!all_pipelines_finished) {
+=======
+    const std::function<Status(Pipeline*)> caller = [this](Pipeline* pipeline) {
+        RETURN_IF_ERROR(_runtime_state->reset_epoch());
+        RETURN_IF_ERROR(pipeline->reset_epoch(_runtime_state.get()));
+        return Status::OK();
+    };
+    return iterate_pipeline(caller);
+}
+
+void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val) {
+    size_t total_execution_groups = _execution_groups.size();
+    bool all_groups_finished = _num_finished_epoch_pipelines.fetch_add(val) + val == total_execution_groups;
+    if (!all_groups_finished) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return;
     }
 
     state->query_ctx()->stream_epoch_manager()->count_down_fragment_ctx(state, this);
 }
 
+<<<<<<< HEAD
+=======
+void FragmentContext::init_jit_profile() {
+    if (runtime_state() && runtime_state()->is_jit_enabled() && runtime_state()->runtime_profile()) {
+        _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
+        _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
+    }
+}
+
+void FragmentContext::update_jit_profile(int64_t time_ns) {
+    if (_jit_counter != nullptr) {
+        COUNTER_UPDATE(_jit_counter, 1);
+    }
+
+    if (_jit_timer != nullptr) {
+        COUNTER_UPDATE(_jit_timer, time_ns);
+    }
+}
+void FragmentContext::iterate_pipeline(const std::function<void(Pipeline*)>& call) {
+    for (auto& group : _execution_groups) {
+        group->for_each_pipeline(call);
+    }
+}
+
+Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>& call) {
+    for (auto& group : _execution_groups) {
+        RETURN_IF_ERROR(group->for_each_pipeline(call));
+    }
+    return Status::OK();
+}
+
+Status FragmentContext::prepare_active_drivers() {
+    for (auto& group : _execution_groups) {
+        RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
+    }
+    return Status::OK();
+}
+
+Status FragmentContext::submit_active_drivers(DriverExecutor* executor) {
+    for (auto& group : _execution_groups) {
+        group->attach_driver_executor(executor);
+        group->submit_active_drivers();
+    }
+    return Status::OK();
+}
+
+void FragmentContext::acquire_runtime_filters() {
+    iterate_pipeline([this](Pipeline* pipeline) { pipeline->acquire_runtime_filter(this->runtime_state()); });
+}
+
+void FragmentContext::_close_stream_load_contexts() {
+    for (const auto& context : _stream_load_contexts) {
+        context->body_sink->cancel(Status::Cancelled("Close the stream load pipe"));
+        if (context->enable_batch_write) {
+            _runtime_state->exec_env()->batch_write_mgr()->unregister_stream_load_pipe(context);
+        } else {
+            _runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(context);
+        }
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::pipeline

@@ -158,7 +158,11 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
     tuple_builder.build(&dtb);
     TDescriptorTable tdesc_tbl = dtb.desc_tbl();
     DescriptorTbl* desc_tbl = nullptr;
+<<<<<<< HEAD
     DescriptorTbl::create(state, &pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
+=======
+    CHECK(DescriptorTbl::create(state, &pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return &(desc_tbl->get_tuple_descriptor(0)->slots());
 }
 
@@ -215,12 +219,20 @@ public:
         writer_context.partition_id = 10;
         writer_context.rowset_path_prefix = _root_path;
         writer_context.rowset_state = VISIBLE;
+<<<<<<< HEAD
         writer_context.tablet_schema = _schema.get();
+=======
+        writer_context.tablet_schema = _schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         writer_context.version.first = 10;
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
         _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_writer.get());
+<<<<<<< HEAD
         _vectorized_schema = MemTable::convert_schema(_schema.get(), _slots);
+=======
+        _vectorized_schema = MemTable::convert_schema(_schema, _slots);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void TearDown() override {
@@ -271,7 +283,11 @@ public:
 };
 
 TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
+<<<<<<< HEAD
     const string path = "./ut_dir/MemTableFlushExecutorTest_testDupKeysInsertFlushRead";
+=======
+    const string path = "./MemTableFlushExecutorTest_testDupKeysInsertFlushRead";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
@@ -289,7 +305,12 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+<<<<<<< HEAD
     mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+=======
+    auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(mem_table->finalize().ok());
 
     ASSERT_TRUE(flush_token->submit(std::move(mem_table)).ok());
@@ -300,7 +321,11 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
 }
 
 TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
+<<<<<<< HEAD
     const string path = "./ut_dir/MemTableFlushExecutorTest_testMemtableFlushWithSeg";
+=======
+    const string path = "./MemTableFlushExecutorTest_testMemtableFlushWithSeg";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
@@ -318,7 +343,12 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+<<<<<<< HEAD
     mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+=======
+    auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_TRUE(mem_table->finalize().ok());
 
     size_t ret_num_rows = 0;
@@ -340,7 +370,11 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
 }
 
 TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithNullSeg) {
+<<<<<<< HEAD
     const string path = "./ut_dir/MemTableFlushExecutorTest_testMemtableFlushWithSeg";
+=======
+    const string path = "./MemTableFlushExecutorTest_testMemtableFlushWithSeg";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
 
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();

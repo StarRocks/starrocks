@@ -14,8 +14,12 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "runtime/result_writer.h"
 #include "runtime/runtime_state.h"
+=======
+#include "runtime/buffer_control_result_writer.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -24,7 +28,11 @@ class MysqlRowBuffer;
 class BufferControlBlock;
 class RuntimeProfile;
 
+<<<<<<< HEAD
 class VariableResultWriter final : public ResultWriter {
+=======
+class VariableResultWriter final : public BufferControlResultWriter {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public:
     VariableResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                          RuntimeProfile* parent_profile);
@@ -37,6 +45,7 @@ public:
 
     StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
 
+<<<<<<< HEAD
     StatusOr<bool> try_add_batch(TFetchDataResultPtrs& results) override;
 
     Status close() override;
@@ -58,6 +67,13 @@ private:
     RuntimeProfile::Counter* _serialize_timer = nullptr;
     // number of sent rows
     RuntimeProfile::Counter* _sent_rows_counter = nullptr;
+=======
+private:
+    StatusOr<TFetchDataResultPtr> _process_chunk(Chunk* chunk);
+
+private:
+    const std::vector<ExprContext*>& _output_expr_ctxs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # uuid_numeric
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回一个数值类型的随机 UUID 值。相比`uuid`函数，该函数执行性能提升近2个数量级。
 

@@ -15,8 +15,13 @@
 package com.starrocks.sql.optimizer.rule.transformation.pruner;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.OlapTable;
+=======
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -85,15 +90,25 @@ public class CPBiRel {
 
     // check if referencing table's foreign key constraint aims at referenced Table
     public static boolean isForeignKeyConstraintReferenceToUniqueKey(
+<<<<<<< HEAD
+=======
+            OlapTable baseTable,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ForeignKeyConstraint foreignKeyConstraint,
             OlapTable referencedTable) {
         if (foreignKeyConstraint.getParentTableInfo().getTableId() != referencedTable.getId()) {
             return false;
         }
         Set<String> referencedColumnNames =
+<<<<<<< HEAD
                 foreignKeyConstraint.getColumnRefPairs().stream().map(p -> p.second).collect(Collectors.toSet());
         return referencedTable.getUniqueConstraints().stream()
                 .anyMatch(uk -> new HashSet<>(uk.getUniqueColumns()).equals(referencedColumnNames));
+=======
+                foreignKeyConstraint.getColumnNameRefPairs(baseTable).stream().map(p -> p.second).collect(Collectors.toSet());
+        return referencedTable.getUniqueConstraints().stream()
+                .anyMatch(uk -> new HashSet<>(uk.getUniqueColumnNames(referencedTable)).equals(referencedColumnNames));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static List<CPBiRel> extractCPBiRels(OptExpression lhs, OptExpression rhs,
@@ -114,6 +129,7 @@ public class CPBiRel {
         List<CPBiRel> biRels = Lists.newArrayList();
         if (lhsTable.hasForeignKeyConstraints() && rhsTable.hasUniqueConstraints()) {
             lhsTable.getForeignKeyConstraints().stream()
+<<<<<<< HEAD
                     .filter(fk -> isForeignKeyConstraintReferenceToUniqueKey(fk, rhsTable)).forEach(fk -> {
                         Set<String> lhsColumNames =
                                 fk.getColumnRefPairs().stream().map(p -> p.first).collect(Collectors.toSet());
@@ -123,6 +139,17 @@ public class CPBiRel {
                                 rhsColumnName2ColRef.keySet().containsAll(rhsColumNames)) {
                             Set<Pair<ColumnRefOperator, ColumnRefOperator>> fkColumnRefPairs =
                                     fk.getColumnRefPairs().stream()
+=======
+                    .filter(fk -> isForeignKeyConstraintReferenceToUniqueKey(lhsTable, fk, rhsTable)).forEach(fk -> {
+                        Set<String> lhsColumNames =
+                                fk.getColumnNameRefPairs(lhsTable).stream().map(p -> p.first).collect(Collectors.toSet());
+                        Set<String> rhsColumNames =
+                                fk.getColumnNameRefPairs(lhsTable).stream().map(p -> p.second).collect(Collectors.toSet());
+                        if (lhsColumnName2ColRef.keySet().containsAll(lhsColumNames) &&
+                                rhsColumnName2ColRef.keySet().containsAll(rhsColumNames)) {
+                            Set<Pair<ColumnRefOperator, ColumnRefOperator>> fkColumnRefPairs =
+                                    fk.getColumnNameRefPairs(lhsTable).stream()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                             .map(p ->
                                                     Pair.create(
                                                             lhsColumnName2ColRef.get(p.first),
@@ -135,10 +162,17 @@ public class CPBiRel {
 
         if (lhsTable.getId() == rhsTable.getId() && lhsTable.hasUniqueConstraints()) {
             lhsTable.getUniqueConstraints().stream().filter(uk ->
+<<<<<<< HEAD
                             lhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumns()) &&
                                     rhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumns())
                     ).map(uk ->
                             uk.getUniqueColumns().stream().map(colName ->
+=======
+                            lhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumnNames(lhsTable)) &&
+                                    rhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumnNames(lhsTable))
+                    ).map(uk ->
+                            uk.getUniqueColumnNames(lhsTable).stream().map(colName ->
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     Pair.create(
                                             lhsColumnName2ColRef.get(colName),
                                             rhsColumnName2ColRef.get(colName))

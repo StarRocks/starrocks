@@ -49,6 +49,11 @@ public class RangerStarRocksResource extends RangerAccessResourceImpl {
                 return "resource_group";
             } else if (objectType.equals(ObjectType.STORAGE_VOLUME)) {
                 return "storage_volume";
+<<<<<<< HEAD
+=======
+            } else if (objectType.equals(ObjectType.PIPE)) {
+                return "pipe";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 return "unknown";
             }

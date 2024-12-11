@@ -17,8 +17,13 @@
 #include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
+<<<<<<< HEAD
 #include "exec/pipeline/scan/olap_schema_scan_context.h"
 #include "exec/pipeline/scan/olap_schema_scan_operator.h"
+=======
+#include "exec/pipeline/scan/schema_scan_context.h"
+#include "exec/pipeline/scan/schema_scan_operator.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
@@ -182,7 +187,11 @@ Status SchemaScanNode::open(RuntimeState* state) {
 }
 
 Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
+<<<<<<< HEAD
     VLOG(1) << "SchemaScanNode::GetNext";
+=======
+    VLOG(2) << "SchemaScanNode::GetNext";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
     DCHECK(_is_init);
@@ -276,9 +285,15 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
 
 void SchemaScanNode::close(RuntimeState* state) {
     if (is_closed()) {
+<<<<<<< HEAD
         Status::OK();
     }
     exec_debug_action(TExecNodePhase::CLOSE);
+=======
+        return;
+    }
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
     ScanNode::close(state);
@@ -300,15 +315,26 @@ Status SchemaScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory>> SchemaScanNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
+<<<<<<< HEAD
     // the dop of SchemaScanOperator should always be 1.
     size_t dop = 1;
+=======
+    auto exec_group = context->find_exec_group_by_plan_node_id(_id);
+    context->set_current_execution_group(exec_group);
+    size_t dop = context->dop_of_source_operator(_id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     size_t buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             buffer_capacity, buffer_capacity, _mem_limit, runtime_state()->chunk_size());
 
+<<<<<<< HEAD
     auto scan_op = std::make_shared<pipeline::OlapSchemaScanOperatorFactory>(context->next_operator_id(), this, dop,
                                                                              _tnode, std::move(buffer_limiter));
+=======
+    auto scan_op = std::make_shared<pipeline::SchemaScanOperatorFactory>(context->next_operator_id(), this, dop, _tnode,
+                                                                         std::move(buffer_limiter));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 

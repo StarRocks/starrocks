@@ -44,6 +44,13 @@ public class OriginStatement implements Writable {
         this.idx = idx;
     }
 
+<<<<<<< HEAD
+=======
+    public OriginStatement(String singleOriginStmt) {
+        this(singleOriginStmt, 0);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static OriginStatement read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, OriginStatement.class);
@@ -62,4 +69,15 @@ public class OriginStatement implements Writable {
                 ", idx=" + idx +
                 '}';
     }
+<<<<<<< HEAD
+=======
+
+    public String getOrigStmt() {
+        return originStmt;
+    }
+
+    public int getIdx() {
+        return idx;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -390,6 +390,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: v3.1
 -->
 
+<<<<<<< HEAD
+=======
+<!--
+##### log_register_and_unregister_query_id
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ### Server
 
 ##### frontend_address
@@ -407,9 +421,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
+<<<<<<< HEAD
 - Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an IP address will be randomly selected.
 - Introduced in: -
 
+=======
+- Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an available IP address of the server will be randomly selected. From v3.3.0, StarRocks supports deployment based on IPv6. If the server has both IPv4 and IPv6 addresses, and this parameter is not specified, the system uses an IPv4 address by default. You can change this behavior by setting `net_use_ipv6_when_priority_networks_empty` to `true`.
+- Introduced in: -
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to use IPv6 addresses preferentially when `priority_networks` is not specified. `true` indicates to allow the system to use an IPv6 address preferentially when the server that hosts the node has both IPv4 and IPv6 addresses and `priority_networks` is not specified.
+- Introduced in: v3.3.0
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### http_port
 
 - Default: 8030
@@ -637,6 +666,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Specifies whether asynchronous I/O is enabled for the FE node.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+##### mysql_service_nio_enable_keep_alive
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Enable TCP Keep-Alive for MySQL connections. Useful for long-idled connections behind load balancers.
+- Introduced in: -
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### mysql_service_io_threads_num
 
 - Default: 4
@@ -655,6 +696,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of threads that can be run by the MySQL server in the FE node to process tasks.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+<!--
+##### max_http_sql_service_task_threads_num
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description:
+- Introduced in: -
+-->
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### mysql_server_version
 
 - Default: 5.1.0
@@ -1059,6 +1114,45 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
 - Introduced in: v3.3.0
 
+<<<<<<< HEAD
+=======
+##### black_host_history_sec
+
+- Default: 2 * 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time duration for retaining historical connection failures of BE nodes in the BE Blacklist. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
+- Introduced in: v3.3.0
+
+##### black_host_connect_failures_within_time
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold of connection failures allowed for a blacklisted BE node. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
+- Introduced in: v3.3.0
+
+#### lock_manager_enabled
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable the lock manager. The lock manager performs central management for locks. For example, it can control whether to refine the granularity of metadata locks from the database level to the table level.
+- Introduced in: v3.3.0
+
+##### lock_manager_enable_using_fine_granularity_lock
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks are refined to the table level, lock conflicts and contentions can be reduced, which improves load and query concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
+- Introduced in: v3.3.0
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### enable_legacy_compatibility_for_replication
 
 - Default: false
@@ -1144,6 +1238,40 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable Intermediate Result Spilling for materialized view refresh tasks.
 - Introduced in: v3.1.1
 
+<<<<<<< HEAD
+=======
+##### enable_backup_materialized_view
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronous materialized views.
+- Introduced in: v3.2.0
+
+<!--
+##### enable_show_materialized_views_include_all_task_runs
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### materialized_view_min_refresh_interval
+
+- Default: 60
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 <!--
 ##### skip_whole_phase_lock_mv_limit
 
@@ -1164,6 +1292,27 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the asynchronous materialized view feature. TRUE indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default.
 - Introduced in: v2.4
 
+<<<<<<< HEAD
+=======
+##### enable_colocate_mv_index
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views.
+- Introduced in: v3.2.0
+
+##### default_mv_refresh_immediate
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
+- Introduced in: v3.2.3
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### enable_materialized_view_metrics_collect
 
 - Default: true
@@ -1173,6 +1322,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to collect monitoring metrics for asynchronous materialized views by default.
 - Introduced in: v3.1.11, v3.2.5
 
+<<<<<<< HEAD
+=======
+##### enable_materialized_view_text_based_rewrite
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable text-based query rewrite by default. If this item is set to `true`, the system builds the abstract syntax tree while creating an asynchronous materialized view.
+- Introduced in: v3.2.5
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### enable_mv_automatic_active_check
 
 - Default: true
@@ -1182,6 +1343,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users.
 - Introduced in: v3.1.6
 
+<<<<<<< HEAD
+=======
+##### enable_active_materialized_view_schema_strict_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to strictly check the length consistency of data types when activating an inactive materialized view. When this item is set to `false`, the activation of the materialized view is not affected if the length of the data types has changed in the base table.
+- Introduced in: v3.3.4
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 <!--
 ##### mv_active_checker_interval_seconds
 
@@ -1578,6 +1751,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
+<<<<<<< HEAD
+=======
+##### statistic_auto_collect_small_table_rows
+
+- Default: 10000000
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
+- Introduced in: v3.2
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 <!--
 ##### statistic_auto_collect_small_table_interval
 
@@ -1791,6 +1976,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### stream_load_max_txn_num_per_be
+
+- Default: -1
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### prepared_transaction_default_timeout_second
 
 - Default: 86400
@@ -2114,6 +2313,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+##### enable_sync_publish
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to synchronously execute the apply task at the publish phase of a load transaction. This parameter is applicable only to Primary Key tables. Valid values:
+  - `TRUE` (default): The apply task is synchronously executed at the publish phase of a load transaction. It means that the load transaction is reported as successful only after the apply task is completed, and the loaded data can truly be queried. When a task loads a large volume of data at a time or loads data frequently, setting this parameter to `true` can improve query performance and stability, but may increase load latency.
+  - `FALSE`: The apply task is asynchronously executed at the publish phase of a load transaction. It means that the load transaction is reported as successful after the apply task is submitted, but the loaded data cannot be immediately queried. In this case, concurrent queries need to wait for the apply task to complete or time out before they can continue. When a task loads a large volume of data at a time or loads data frequently, setting this parameter to `false` may affect query performance and stability.
+- Introduced in: v3.2.0
+
+<!--
+##### stream_load_task_keep_max_num
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### stream_load_task_keep_max_second
+
+- Default: 3 * 24 * 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### label_clean_interval_second
 
 - Default: 4 * 3600
@@ -2216,6 +2451,27 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition.
 - Introduced in: v2.5.7
 
+<<<<<<< HEAD
+=======
+##### enable_experimental_rowstore
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the [hybrid row-column storage](../../table_design/hybrid_table.md) feature.
+- Introduced in: v3.2.3
+
+#### enable_experimental_gin
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the [full-text inverted index](../../table_design/indexes/inverted_index.md) feature.
+- Introduced in: v3.3.0
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### storage_usage_soft_limit_percent
 
 - Default: 90
@@ -2265,6 +2521,23 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The timeout duration for the schema change operation (ALTER TABLE).
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+##### enable_fast_schema_evolution
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
+- Introduced in: v3.2.0
+
+> **NOTE**
+>
+> - StarRocks shared-data clusters supports this parameter from v3.3.0.
+> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### recover_with_empty_tablet
 
 - Default: false
@@ -2547,6 +2820,45 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+##### auto_partition_max_creation_number_per_load
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of partitions can be created in a table (with Expression Partitioning strategy) by a loading task.
+- Introduced in: v3.3.2
+
+##### max_partition_number_per_table
+
+- Default: 100000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of partitions can be created in a table.
+- Introduced in: v3.3.2
+
+##### max_bucket_number_per_partition
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of buckets can be created in a partition.
+- Introduced in: v3.3.2
+
+##### max_column_number_per_table
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of columns can be created in a table.
+- Introduced in: v3.3.2
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ### Shared-data
 
 ##### run_mode
@@ -2749,6 +3061,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.
 - Introduced in: v3.1
 
+<<<<<<< HEAD
+=======
+<!--
+##### starmgr_grpc_timeout_seconds
+
+- Default: 5
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### lake_compaction_score_selector_min_score
 
 - Default: 10.0
@@ -2769,13 +3095,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_compaction_history_size
 
+<<<<<<< HEAD
 - Default: 12
+=======
+- Default: 20
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Type: Int
 - Unit: -
 - Is mutable: Yes
 - Description: The number of recent successful Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - Introduced in: v3.1.0
 
+<<<<<<< HEAD
 ##### lake_compaction_fail_history_size
 
 - Default: 12
@@ -2784,6 +3115,38 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The number of recent failed Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - Introduced in: v3.1.0
+=======
+##### lake_publish_version_max_threads
+
+- Default: 512
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
+- Introduced in: v3.2.0
+
+<!--
+##### lake_publish_delete_txnlog_max_threads
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### lake_compaction_default_timeout_second
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 <!--
 ##### lake_autovacuum_max_previous_versions
@@ -2832,6 +3195,81 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
 - Introduced in: v3.1.0
 
+<<<<<<< HEAD
+=======
+##### lake_enable_ingest_slowdown
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Data Ingestion Slowdown in a shared-data cluster. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`.
+- Introduced in: v3.2.0
+
+##### lake_ingest_slowdown_threshold
+
+- Default: 100
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The Compaction Score threshold that triggers Data Ingestion Slowdown in a shared-data cluster. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
+- Introduced in: v3.2.0
+
+##### lake_ingest_slowdown_ratio
+
+- Default: 0.1
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The ratio of the loading rate slowdown when Data Ingestion Slowdown is triggered.
+
+  Data loading tasks consist of two phases: data writing and data committing (COMMIT). Data Ingestion Slowdown is achieved by delaying data committing. The delay ratio is calculated using the following formula: `(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`. For example, if the data writing phase takes 5 minutes, `lake_ingest_slowdown_ratio` is 0.1, and the Compaction Score is 10 higher than `lake_ingest_slowdown_threshold`, the delay in data committing time is `5 * 10 * 0.1 = 5` minutes, which means the average loading speed is halved.
+
+- Introduced in: v3.2.0
+
+> **NOTE**
+>
+> - If a loading task writes to multiple partitions simultaneously, the maximum Compaction Score among all partitions is used to calculate the delay in committing time.
+> - The delay in committing time is calculated during the first attempt to commit. Once set, it will not change. Once the delay time is up, as long as the Compaction Score is not above `lake_compaction_score_upper_bound`, the system will perform the data committing operation.
+> - If the delay in committing time exceeds the timeout of the loading task, the task will fail directly.
+
+##### lake_compaction_score_upper_bound
+
+- Default: 0
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
+- Introduced in: v3.2.0
+
+##### lake_compaction_disable_tables
+
+- Default: ""
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The table list of which compaction is disabled in shared-data mode. The format is `tableId1;tableId2`, seperated by semicolon, for example, `12345;98765`.
+- Introduced in: v3.1.11
+
+##### lake_enable_balance_tablets_between_workers
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to balance the number of tablets among Compute Nodes during the tablet migration of cloud-native tables in a shared-data cluster. `true` indicates to balance the tablets among Compute Nodes, and `false` indicates to disabling this feature.
+- Introduced in: v3.3.4
+
+##### lake_balance_tablets_threshold
+
+- Default: 0.15
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
+- Introduced in: v3.3.4
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ### Other
 
 ##### tmp_dir
@@ -2924,6 +3362,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### lake_enable_batch_publish_version 
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### lake_batch_publish_max_version_num
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### lake_batch_publish_min_version_num
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### capacity_used_percent_high_water
 
 - Default: 0.75
@@ -3161,6 +3635,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### authorization_enable_column_level_privilege
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### authentication_chain
 
 - Default: {AUTHENTICATION_CHAIN_MECHANISM_NATIVE}
@@ -3301,9 +3789,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
 ##### max_automatic_partition_number
 
 - Default: 4096
+=======
+##### max_partition_number_per_table
+
+- Default: 100000
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Type: Long
 - Unit: -
 - Is mutable: Yes
@@ -3312,6 +3806,31 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### enable_automatic_bucket
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### default_automatic_bucket_size
+
+- Default: 0
+- Type: Long
+- Unit:
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### max_agent_tasks_send_per_be
 
 - Default: 10000
@@ -4150,9 +4669,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
 ##### stream_load_profile_collect_second
 
 - Default: 10
+=======
+##### load_profile_collect_threshold_second
+
+- Default: 0
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
@@ -4178,6 +4703,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number.
 - Introduced in: v3.1.0
 
+<<<<<<< HEAD
+=======
+##### enable_colocate_restore
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Backup and Restore for Colocate Tables. `true` indicates enabling Backup and Restore for Colocate Tables and `false` indicates disabling it.
+- Introduced in: v3.2.10, v3.3.3
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 <!--
 ##### enable_persistent_index_by_default
 
@@ -4354,11 +4891,99 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
+<<<<<<< HEAD
 <!--
+=======
+##### allow_system_reserved_names
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow users to create columns whose names are initiated with `__op` and `__row`. To enable this feature, set this parameter to `TRUE`. Please note that these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default.
+- Introduced in: v3.2.0
+
+<!--
+##### use_lock_manager
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### lock_table_num
+
+- Default: 32
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### lock_manager_enable_resolve_deadlock
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### lock_manager_enable_loading_using_fine_granularity_lock
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### lock_manager_dead_lock_detection_delay_time_ms
+
+- Default: 3000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### refresh_dictionary_cache_thread_num
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+##### replication_interval_ms
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The minimum time interval at which the replication tasks are scheduled.
+- Introduced in: v3.3.5
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### replication_max_parallel_table_count
 
 - Default: 100
 - Type: Int
+<<<<<<< HEAD
 - Unit:
 - Is mutable: Yes
 - Description:
@@ -4386,6 +5011,39 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:
 - Introduced in: -
 -->
+=======
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of concurrent data synchronization tasks allowed. StarRocks creates one synchronization task for each table.
+- Introduced in: v3.3.5
+
+##### replication_max_parallel_replica_count
+
+- Default: 10240
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablet replicas allowed for concurrent synchronization.
+- Introduced in: v3.3.5
+
+##### replication_max_parallel_data_size_mb
+
+- Default: 1048576
+- Type: Int
+- Unit: MB
+- Is mutable: Yes
+- Description: The maximum size of data allowed for concurrent synchronization.
+- Introduced in: v3.3.5
+
+##### replication_transaction_timeout_sec
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The timeout duration for synchronization tasks.
+- Introduced in: v3.3.5
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ##### jdbc_meta_default_cache_enable
 
@@ -4431,3 +5089,26 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
 - Introduced in: -
+<<<<<<< HEAD
+=======
+
+##### query_detail_explain_level
+
+- Default: COSTS
+- Type: String
+- Unit: -
+- Is mutable: true
+- Description: The detail level of query plan returned by the EXPLAIN statement. Valid values: COSTS, NORMAL, VERBOSE.
+- Introduced in: v3.2.12, v3.3.5
+
+<!--
+##### max_varchar_length
+
+- Default: 1048576
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

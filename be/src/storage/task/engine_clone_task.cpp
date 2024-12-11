@@ -62,6 +62,10 @@
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/defer_op.h"
+<<<<<<< HEAD
+=======
+#include "util/network_util.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 
@@ -166,7 +170,11 @@ Status EngineCloneTask::_do_clone_primary_tablet(Tablet* tablet) {
         if (st.ok()) {
             st = _finish_clone_primary(tablet, download_path);
         } else if (st.is_not_found()) {
+<<<<<<< HEAD
             LOG(INFO) << fmt::format(
+=======
+            VLOG(1) << fmt::format(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "No missing version found from src replica. tablet: {}, src BE:{}:{}, type: {}, "
                     "missing_version_ranges: {}, committed_version: {}",
                     tablet->tablet_id(), _clone_req.src_backends[0].host, _clone_req.src_backends[0].be_port,
@@ -405,9 +413,15 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
             continue;
         }
 
+<<<<<<< HEAD
         std::string download_url = strings::Substitute("http://$0:$1$2?token=$3&type=V2&file=$4/$5/$6/", src.host,
                                                        src.http_port, HTTP_REQUEST_PREFIX, token, snapshot_path,
                                                        _clone_req.tablet_id, _clone_req.schema_hash);
+=======
+        std::string download_url = strings::Substitute(
+                "http://$0$1?token=$2&type=V2&file=$3/$4/$5/", get_host_port(src.host, src.http_port),
+                HTTP_REQUEST_PREFIX, token, snapshot_path, _clone_req.tablet_id, _clone_req.schema_hash);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         st = _download_files(&data_dir, download_url, local_path);
         (void)_release_snapshot(src.host, src.be_port, snapshot_path);
@@ -479,7 +493,11 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
             ip, port, [&request, &result](BackendServiceConnection& client) { client->make_snapshot(result, request); },
             config::make_snapshot_rpc_timeout_ms));
     if (result.status.status_code != TStatusCode::OK) {
+<<<<<<< HEAD
         return Status(result.status);
+=======
+        return {result.status};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     if (result.__isset.snapshot_path) {
@@ -505,7 +523,11 @@ Status EngineCloneTask::_release_snapshot(const std::string& ip, int port, const
             ip, port, [&snapshot_path, &result](BackendServiceConnection& client) {
                 client->release_snapshot(result, snapshot_path);
             }));
+<<<<<<< HEAD
     return Status(result.status);
+=======
+    return {result.status};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& remote_url_prefix,
@@ -615,7 +637,11 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 
         std::string local_file_path = local_path + file_name;
 
+<<<<<<< HEAD
         VLOG(1) << "Downloading " << remote_file_url << " to " << local_path << ". bytes=" << file_size
+=======
+        VLOG(2) << "Downloading " << remote_file_url << " to " << local_path << ". bytes=" << file_size
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 << " timeout=" << estimate_timeout;
 
         auto download_cb = [&remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
@@ -796,7 +822,11 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
     // clear linked files if errors happen
     if (!res.ok()) {
+<<<<<<< HEAD
         fs::remove(linked_success_files);
+=======
+        (void)fs::remove(linked_success_files);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     return res;
@@ -918,7 +948,11 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     // but some rowset is useless, so that remove them here
     for (auto& rs_meta_ptr : rs_metas_found_in_src) {
         RowsetSharedPtr rowset_to_remove;
+<<<<<<< HEAD
         if (auto s = RowsetFactory::create_rowset(&(cloned_tablet_meta->tablet_schema()), tablet->schema_hash_path(),
+=======
+        if (auto s = RowsetFactory::create_rowset(cloned_tablet_meta->tablet_schema_ptr(), tablet->schema_hash_path(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                                   rs_meta_ptr, &rowset_to_remove);
             !s.ok()) {
             LOG(WARNING) << "failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
@@ -944,7 +978,12 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
     }
     auto snapshot_meta = std::move(res).value();
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, clone_dir));
+=======
+    RETURN_IF_ERROR(
+            SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, clone_dir, tablet->tablet_schema()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // check all files in /clone and /tablet
     std::set<std::string> clone_files;

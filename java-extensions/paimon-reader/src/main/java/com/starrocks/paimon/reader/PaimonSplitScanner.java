@@ -18,6 +18,7 @@ import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.jni.connector.ScannerHelper;
+<<<<<<< HEAD
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,6 +28,13 @@ import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.options.Options;
+=======
+import com.starrocks.jni.connector.SelectedFields;
+import com.starrocks.utils.loader.ThreadContextClassLoader;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.paimon.data.InternalRow;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
@@ -39,25 +47,36 @@ import org.apache.paimon.utils.InternalRowUtils;
 
 import java.io.IOException;
 import java.util.Arrays;
+<<<<<<< HEAD
 import java.util.HashMap;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 
 public class PaimonSplitScanner extends ConnectorScanner {
 
     private static final Logger LOG = LogManager.getLogger(PaimonSplitScanner.class);
+<<<<<<< HEAD
     private final String databaseName;
     private final String tableName;
     private final String splitInfo;
     private final String predicateInfo;
     private final Map<String, String> paimonOptions = new HashMap<>();
     private final String[] requiredFields;
+=======
+    private final String splitInfo;
+    private final String predicateInfo;
+    private final String[] requiredFields;
+    private final String encodedTable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private ColumnType[] requiredTypes;
     private DataType[] logicalTypes;
     private Table table;
     private RecordReaderIterator<InternalRow> iterator;
     private final int fetchSize;
     private final ClassLoader classLoader;
+<<<<<<< HEAD
 
     public PaimonSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -99,6 +118,21 @@ public class PaimonSplitScanner extends ConnectorScanner {
             LOG.error(msg, e);
             throw new IOException(msg, e);
         }
+=======
+    private final String[] nestedFields;
+
+    private String timeZone;
+
+    public PaimonSplitScanner(int fetchSize, Map<String, String> params) {
+        this.fetchSize = fetchSize;
+        this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
+        this.nestedFields = ScannerHelper.splitAndOmitEmptyStrings(params.getOrDefault("nested_fields", ""), ",");
+        this.splitInfo = params.get("split_info");
+        this.predicateInfo = params.get("predicate_info");
+        this.encodedTable = params.get("native_table");
+        this.classLoader = this.getClass().getClassLoader();
+        this.timeZone = params.get("time_zone");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void parseRequiredTypes() {
@@ -116,10 +150,27 @@ public class PaimonSplitScanner extends ConnectorScanner {
             requiredTypes[i] = new ColumnType(type);
             logicalTypes[i] = dataType;
         }
+<<<<<<< HEAD
     }
 
     private void initReader() throws IOException {
 
+=======
+
+        // prune fields
+        SelectedFields ssf = new SelectedFields();
+        for (String nestField : nestedFields) {
+            ssf.addNestedPath(nestField);
+        }
+        for (int i = 0; i < requiredFields.length; i++) {
+            ColumnType type = requiredTypes[i];
+            String name = requiredFields[i];
+            type.pruneOnField(ssf, name);
+        }
+    }
+
+    private void initReader() throws IOException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ReadBuilder readBuilder = table.newReadBuilder();
         RowType rowType = table.rowType();
         List<String> fieldNames = PaimonScannerUtils.fieldNames(rowType);
@@ -128,14 +179,22 @@ public class PaimonSplitScanner extends ConnectorScanner {
         List<Predicate> predicates = PaimonScannerUtils.decodeStringToObject(predicateInfo);
         readBuilder.withFilter(predicates);
         Split split = PaimonScannerUtils.decodeStringToObject(splitInfo);
+<<<<<<< HEAD
         RecordReader<InternalRow> reader = readBuilder.newRead().createReader(split);
+=======
+        RecordReader<InternalRow> reader = readBuilder.newRead().executeFilter().createReader(split);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         iterator = new RecordReaderIterator<>(reader);
     }
 
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
+<<<<<<< HEAD
             initTable();
+=======
+            table = PaimonScannerUtils.decodeStringToObject(encodedTable);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             parseRequiredTypes();
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
             initReader();
@@ -174,7 +233,11 @@ public class PaimonSplitScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {
+<<<<<<< HEAD
                         ColumnValue fieldValue = new PaimonColumnValue(fieldData, logicalTypes[i]);
+=======
+                        ColumnValue fieldValue = new PaimonColumnValue(fieldData, logicalTypes[i], timeZone);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         appendData(i, fieldValue);
                     }
                 }
@@ -192,6 +255,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
+<<<<<<< HEAD
         sb.append("paimon_options: ");
         sb.append(paimonOptions);
         sb.append("\n");
@@ -201,6 +265,8 @@ public class PaimonSplitScanner extends ConnectorScanner {
         sb.append("tableName: ");
         sb.append(tableName);
         sb.append("\n");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         sb.append("splitInfo: ");
         sb.append(splitInfo);
         sb.append("\n");

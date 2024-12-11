@@ -7,8 +7,16 @@ create materialized view user_tags_mv1  distributed by hash(user_id) as select u
 
 show create materialized view user_tags_mv1;
 show create table user_tags_mv1;
+<<<<<<< HEAD
 alter materialized view user_tags_mv1 set ("session.query_timeout" = "3600");
 alter materialized view user_tags_mv1 set ("mv_rewrite_staleness_second" = "3600");
 show create materialized view user_tags_mv1;
 show create table user_tags_mv1;
 drop database test_show_materialized_view;
+=======
+alter materialized view user_tags_mv1 set ("session.insert_timeout" = "3600");
+alter materialized view user_tags_mv1 set ("mv_rewrite_staleness_second" = "3600");
+show create materialized view user_tags_mv1;
+show create table user_tags_mv1;
+drop database test_show_materialized_view;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -137,7 +137,11 @@ public class DbPEntryObject implements PEntryObject {
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
+<<<<<<< HEAD
             return globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
+=======
+            return globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         // do not validate privilege of external database
         return true;
@@ -199,7 +203,11 @@ public class DbPEntryObject implements PEntryObject {
             return "ALL DATABASES";
         } else {
             if (CatalogMgr.isInternalCatalog(catalogId)) {
+<<<<<<< HEAD
                 Database database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(uuid));
+=======
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(Long.parseLong(uuid));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (database == null) {
                     throw new MetaNotFoundException("Can't find database : " + uuid);
                 }

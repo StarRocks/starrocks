@@ -19,9 +19,13 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -39,15 +43,21 @@ public class BrokerMgrTest {
 
     @Before
     public void setUp() throws Exception {
+<<<<<<< HEAD
         UtFrameUtils.PseudoImage.setUpImageVersion();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         new Expectations() {
             {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+<<<<<<< HEAD
 
                 editLog.logGlobalVariable((SessionVariable) any);
                 minTimes = 0;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
     }

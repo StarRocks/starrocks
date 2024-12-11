@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dayofweek_iso
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 根据 ISO 标准，计算某一个日期对应的是一周内的星期几，并返回一个整数值，范围在 `1` 到 `7` 之间。其中，`1` 代表星期一，`7` 代表星期日。
 

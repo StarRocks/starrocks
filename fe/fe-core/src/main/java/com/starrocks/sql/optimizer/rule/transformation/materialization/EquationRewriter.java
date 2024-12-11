@@ -46,7 +46,14 @@ public class EquationRewriter {
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
 
     private AggregateFunctionRewriter aggregateFunctionRewriter;
+<<<<<<< HEAD
     boolean underAggFunctionRewriteContext;
+=======
+    boolean isUnderAggFuncNormalizerContext;
+
+    private final EquivalentShuttle defaultShuttle = new EquivalentShuttle(new EquivalentShuttleContext(null,
+            false, true, IRewriteEquivalent.RewriteEquivalentType.AGGREGATE));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public EquationRewriter() {
         this.equationMap = ArrayListMultimap.create();
@@ -57,11 +64,15 @@ public class EquationRewriter {
         this.columnMapping = columnMapping;
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setAggregateFunctionRewriter(AggregateFunctionRewriter aggregateFunctionRewriter) {
         this.aggregateFunctionRewriter = aggregateFunctionRewriter;
     }
 
+<<<<<<< HEAD
     public boolean isUnderAggFunctionRewriteContext() {
         return underAggFunctionRewriteContext;
     }
@@ -71,6 +82,30 @@ public class EquationRewriter {
     }
 
 
+=======
+    public boolean isUnderAggFuncNormalizerContext() {
+        return isUnderAggFuncNormalizerContext;
+    }
+
+    public void setUnderAggFuncNormalizerContext(boolean underAggFuncNormalizerContext) {
+        this.isUnderAggFuncNormalizerContext = underAggFuncNormalizerContext;
+    }
+
+    public boolean isColWithOnlyGroupByKeys(ScalarOperator expr) {
+        if (expr.getChildren().isEmpty()) {
+            return expr.isConstant() || equationMap.containsKey(expr);
+        }
+        for (ScalarOperator e : expr.getChildren()) {
+            if (expr.isConstant() || equationMap.containsKey(e)) {
+                continue;
+            }
+            if (!isColWithOnlyGroupByKeys(e)) {
+                return false;
+            }
+        }
+        return true;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private final class EquivalentShuttle extends BaseScalarOperatorShuttle {
         private final EquivalentShuttleContext shuttleContext;
@@ -96,7 +131,11 @@ public class EquationRewriter {
                 return tmp.get();
             }
 
+<<<<<<< HEAD
             // rewrite by equivalent
+=======
+            // rewrite by equivalent which only can be predicate type here.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ScalarOperator rewritten = rewriteByEquivalent(predicate, IRewriteEquivalent.RewriteEquivalentType.PREDICATE);
             if (rewritten != null) {
                 shuttleContext.setRewrittenByEquivalent(true);
@@ -108,6 +147,7 @@ public class EquationRewriter {
 
         private ScalarOperator rewriteByEquivalent(ScalarOperator input,
                                                    IRewriteEquivalent.RewriteEquivalentType type) {
+<<<<<<< HEAD
             if (!rewriteEquivalents.containsKey(type)) {
                 return null;
             }
@@ -115,6 +155,29 @@ public class EquationRewriter {
                 ScalarOperator replaced = equivalent.rewrite(shuttleContext, columnMapping, input);
                 if (replaced != null) {
                     return replaced;
+=======
+            if (!shuttleContext.isUseEquivalent()) {
+                return null;
+            }
+            if (type.isAny()) {
+                for (List<RewriteEquivalent> equivalents : rewriteEquivalents.values()) {
+                    for (RewriteEquivalent equivalent : equivalents) {
+                        ScalarOperator replaced = equivalent.rewrite(shuttleContext, columnMapping, input);
+                        if (replaced != null) {
+                            return replaced;
+                        }
+                    }
+                }
+            } else {
+                if (!rewriteEquivalents.containsKey(type)) {
+                    return null;
+                }
+                for (RewriteEquivalent equivalent : rewriteEquivalents.get(type)) {
+                    ScalarOperator replaced = equivalent.rewrite(shuttleContext, columnMapping, input);
+                    if (replaced != null) {
+                        return replaced;
+                    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
             return null;
@@ -129,7 +192,11 @@ public class EquationRewriter {
             }
 
             // rewrite by equivalent
+<<<<<<< HEAD
             ScalarOperator rewritten = rewriteByEquivalent(call, IRewriteEquivalent.RewriteEquivalentType.AGGREGATE);
+=======
+            ScalarOperator rewritten = rewriteByEquivalent(call, shuttleContext.getRewriteEquivalentType());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (rewritten != null) {
                 shuttleContext.setRewrittenByEquivalent(true);
                 return rewritten;
@@ -137,6 +204,7 @@ public class EquationRewriter {
 
             // retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
             if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(call) &&
+<<<<<<< HEAD
                     !isUnderAggFunctionRewriteContext()) {
                 ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(call);
                 if (newChooseScalarOp != null) {
@@ -145,6 +213,19 @@ public class EquationRewriter {
                     // `underAggFunctionRewriteContext` to mark it's under agg function rewriter and no need rewrite again.
                     rewritten = newChooseScalarOp.accept(this, null);
                     setUnderAggFunctionRewriteContext(false);
+=======
+                    !isUnderAggFuncNormalizerContext()) {
+                boolean isRollup = shuttleContext == null ? false : shuttleContext.isRollup();
+                rewritten = aggregateFunctionRewriter.rewriteAggFunction(call, isRollup);
+                if (rewritten != null) {
+                    setUnderAggFuncNormalizerContext(true);
+                    // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
+                    // `underAggFunctionRewriteContext` to mark it's under agg function rewriter and no need rewrite again.
+                    setUnderAggFuncNormalizerContext(false);
+                    if (aggregateFunctionRewriter.getNewColumnRefToAggFuncMap() != null) {
+                        shuttleContext.setNewColumnRefToAggFuncMap(aggregateFunctionRewriter.getNewColumnRefToAggFuncMap());
+                    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     return rewritten;
                 }
             }
@@ -200,6 +281,7 @@ public class EquationRewriter {
         }
     }
 
+<<<<<<< HEAD
     private final EquivalentShuttle shuttle = new EquivalentShuttle(new EquivalentShuttleContext(false));
 
     protected ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
@@ -208,10 +290,54 @@ public class EquationRewriter {
 
     protected Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithRollup(ScalarOperator expr) {
         final EquivalentShuttleContext shuttleContext = new EquivalentShuttleContext(true);
+=======
+    /**
+     * Replace expr with target column with default shuttle by using expr's equivalent.
+     */
+    public ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
+        return expr.accept(defaultShuttle, null);
+    }
+
+    /**
+     * Rewrite expr with equivalent shuttle which can be more robust/powerful than `replaceExprWithTarget`.
+     * NOTE: This method is mainly used in Aggregate's rewrite since there are more equivalences defined in Aggregate.
+     */
+    public Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithRollup(RewriteContext rewriteContext,
+                                                                                ScalarOperator expr) {
+        return replaceExprWithEquivalent(rewriteContext, expr, IRewriteEquivalent.RewriteEquivalentType.AGGREGATE);
+    }
+
+    /**
+     * Replace expr with equivalent shuttle with specific type.
+     * @param rewriteContext rewrite context
+     * @param expr input expr to be rewritten
+     * @param type equivalent type which is used for call operator rewrite to deduce rewriting strategy
+     * @return rewritten expr and equivalent shuttle context
+     */
+    public Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithEquivalent(
+            RewriteContext rewriteContext,
+            ScalarOperator expr,
+            IRewriteEquivalent.RewriteEquivalentType type) {
+        boolean isRollup = rewriteContext.isRollup();
+        final EquivalentShuttleContext shuttleContext = new EquivalentShuttleContext(rewriteContext,
+                isRollup, true, type);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         final EquivalentShuttle shuttle = new EquivalentShuttle(shuttleContext);
         return Pair.create(expr.accept(shuttle, null), shuttleContext);
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Replace expr with equivalent shuttle, by default, we can rewrite call operator with any type of equivalent
+     * since call operator can be aggregate or predicate or group by keys.
+     */
+    public Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithEquivalent(RewriteContext rewriteContext,
+                                                                                    ScalarOperator expr) {
+        return replaceExprWithEquivalent(rewriteContext, expr, IRewriteEquivalent.RewriteEquivalentType.ANY);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean containsKey(ScalarOperator scalarOperator) {
         return equationMap.containsKey(scalarOperator);
     }

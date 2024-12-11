@@ -50,12 +50,19 @@ private:
 
 class CacheInputStreamTest : public ::testing::Test {
 public:
+<<<<<<< HEAD
     static void SetUpTestCase() {
         auto cache = BlockCache::instance();
+=======
+    static void SetUpTestCase() {}
+
+    CacheOptions cache_options() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         CacheOptions options;
         options.mem_space_size = 100 * 1024 * 1024;
 #ifdef WITH_STARCACHE
         options.engine = "starcache";
+<<<<<<< HEAD
 #else
         options.engine = "cachelib";
 #endif
@@ -69,6 +76,30 @@ public:
 
     void SetUp() override {}
     void TearDown() override {}
+=======
+#endif
+        options.enable_checksum = false;
+        options.max_concurrent_inserts = 1500000;
+        options.max_flying_memory_mb = 100;
+        options.enable_tiered_cache = true;
+        options.block_size = block_size;
+        options.skip_read_factor = 1.0;
+        return options;
+    }
+
+    static void TearDownTestCase() {
+        auto cache = BlockCache::instance();
+        if (cache) {
+            BlockCache::instance()->shutdown();
+        }
+    }
+
+    void SetUp() override {
+        _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
+        config::datacache_auto_adjust_enable = false;
+    }
+    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     static void read_stream_data(io::SeekableInputStream* stream, int64_t offset, int64_t size, char* data) {
         ASSERT_OK(stream->seek(offset));
@@ -94,11 +125,25 @@ public:
     }
 
     static const int64_t block_size;
+<<<<<<< HEAD
 };
 
 const int64_t CacheInputStreamTest::block_size = 1024 * 1024;
 
 TEST_F(CacheInputStreamTest, test_aligned_read) {
+=======
+
+private:
+    bool _saved_enable_auto_adjust = false;
+};
+
+const int64_t CacheInputStreamTest::block_size = 256 * 1024;
+
+TEST_F(CacheInputStreamTest, test_aligned_read) {
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const int64_t block_count = 3;
 
     int64_t data_size = block_size * block_count;
@@ -132,6 +177,12 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
 }
 
 TEST_F(CacheInputStreamTest, test_random_read) {
+<<<<<<< HEAD
+=======
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const int64_t block_count = 3;
 
     const int64_t data_size = block_size * block_count;
@@ -171,6 +222,12 @@ TEST_F(CacheInputStreamTest, test_random_read) {
 }
 
 TEST_F(CacheInputStreamTest, test_file_overwrite) {
+<<<<<<< HEAD
+=======
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const int64_t block_count = 3;
 
     int64_t data_size = block_size * block_count;
@@ -215,6 +272,12 @@ TEST_F(CacheInputStreamTest, test_file_overwrite) {
 }
 
 TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
+<<<<<<< HEAD
+=======
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const int64_t block_count = 1;
 
     int64_t data_size = block_size * block_count;
@@ -249,6 +312,12 @@ TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
 }
 
 TEST_F(CacheInputStreamTest, test_read_zero_copy) {
+<<<<<<< HEAD
+=======
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t data_size = block_size + 1024;
     char data[data_size + 1];
     gen_test_data(data, data_size, block_size);
@@ -270,6 +339,12 @@ TEST_F(CacheInputStreamTest, test_read_zero_copy) {
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
+<<<<<<< HEAD
+=======
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const int64_t block_count = 1;
     int64_t data_size = block_size * block_count;
     char data[data_size + 1];
@@ -296,4 +371,162 @@ TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
     ASSERT_EQ(stats.read_cache_count, 0);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
+    CacheOptions options = cache_options();
+    // Because the cache adaptor only work for disk cache.
+    options.disk_spaces.push_back({.path = "./block_disk_cache", .size = 300 * 1024 * 1024});
+    options.enable_tiered_cache = false;
+    ASSERT_OK(BlockCache::instance()->init(options));
+
+    const int64_t block_count = 2;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file5";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
+            new io::SharedBufferedInputStream(stream, file_name, data_size));
+    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_cache_io_adaptor(true);
+    auto& stats = cache_stream.stats();
+
+    const size_t read_size = block_size * block_count;
+    sb_stream->_shared_io_bytes = read_size;
+    sb_stream->_shared_io_timer = 10000;
+
+    // first read from backend
+    {
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+        ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
+        ASSERT_EQ(stats.read_cache_count, 0);
+        ASSERT_EQ(stats.write_cache_count, block_count);
+    }
+
+    auto cache = BlockCache::instance();
+    const int kAdaptorWindowSize = 50;
+
+    {
+        // Record read latencyr to ensure cache latency > remote latency
+        // so all blocks read from remote.
+        for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
+            cache->record_read_cache(read_size, 1000000000);
+            cache->record_read_remote(read_size, 10);
+        }
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+        ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
+        ASSERT_EQ(stats.read_cache_count, 0);
+    }
+
+    {
+        // Record read latencyr to ensure cache latency < remote latency
+        // so all blocks read from cache.
+        for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
+            cache->record_read_cache(read_size, 10);
+            cache->record_read_remote(read_size, 1000000000);
+        }
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+        ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
+        ASSERT_EQ(stats.read_cache_count, block_count);
+    }
+}
+
+TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
+    const int64_t block_count = 2;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file6";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
+            new io::SharedBufferedInputStream(stream, file_name, data_size));
+    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_block_buffer(true);
+
+    // Add a dummy block buffer to check the duplicate shared buffer.
+    CacheInputStream::BlockBuffer dummy_block_buffer;
+    dummy_block_buffer.offset = 10000000;
+    cache_stream._block_map[dummy_block_buffer.offset] = dummy_block_buffer;
+
+    const size_t read_size = block_size * block_count;
+    std::vector<SharedBufferedInputStream::IORange> io_ranges;
+    io_ranges.emplace_back(0, read_size);
+    sb_stream->set_io_ranges(io_ranges);
+
+    // first read from backend
+    {
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+        ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
+        //ASSERT_EQ(stats.write_cache_count, block_count);
+    }
+
+    // second read from shared buffer
+    {
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_EQ(sb_stream->shared_io_bytes(), read_size);
+    }
+}
+
+TEST_F(CacheInputStreamTest, test_peek) {
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
+    const int64_t block_count = 2;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file6";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
+            new io::SharedBufferedInputStream(stream, file_name, data_size));
+    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_block_buffer(true);
+    cache_stream.set_enable_async_populate_mode(true);
+
+    const size_t read_size = block_size * block_count;
+    std::vector<SharedBufferedInputStream::IORange> io_ranges;
+    io_ranges.emplace_back(0, read_size);
+    sb_stream->set_io_ranges(io_ranges);
+
+    // first read from backend
+    {
+        const size_t read_size = block_size;
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+    }
+
+    // peek read from shared buffer
+    {
+        const size_t peek_size = block_size;
+        auto res = cache_stream.peek(peek_size);
+        ASSERT_TRUE(res.ok());
+        auto str_view = res.value();
+        ASSERT_EQ(str_view.length(), peek_size);
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::io

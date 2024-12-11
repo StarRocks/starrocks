@@ -22,9 +22,17 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class GlobalVariablesSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.GLOBAL_VARIABLES_ID,
                 "global_variables",
+=======
+    private static final String NAME = "global_variables";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.GLOBAL_VARIABLES_ID,
+                NAME,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("VARIABLE_NAME", ScalarType.createVarchar(64))

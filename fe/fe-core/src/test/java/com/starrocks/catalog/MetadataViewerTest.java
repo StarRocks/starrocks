@@ -34,7 +34,10 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableMap;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.backup.CatalogMocker;
@@ -44,7 +47,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionNames;
+<<<<<<< HEAD
 import com.starrocks.system.ComputeNode;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -98,15 +104,29 @@ public class MetadataViewerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyString);
                 minTimes = 0;
                 result = db;
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                minTimes = 0;
+                result = db.getTable(CatalogMocker.TEST_TBL_NAME);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
                 result = infoService;
 
@@ -160,10 +180,26 @@ public class MetadataViewerTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
                 minTimes = 0;
                 result = ImmutableMap.of(10003L, new ComputeNode(), 10004L, new ComputeNode(), 10005L,
                         new ComputeNode());
+=======
+                ConnectContext.get();
+                minTimes = 0;
+                result = connectContext;
+
+                long warehouseId = 10000L;
+
+                connectContext.getCurrentWarehouseId();
+                minTimes = 0;
+                result = warehouseId;
+
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                minTimes = 0;
+                result = Lists.newArrayList(10003L, 10004L, 10005L);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 

@@ -12,21 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleDescriptor;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Column;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
+=======
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TColumn;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TMetaScanNode;
@@ -43,6 +61,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
@@ -50,6 +72,7 @@ public class MetaScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(MetaScanNode.class);
     private final Map<Integer, String> columnIdToNames;
     private final OlapTable olapTable;
+<<<<<<< HEAD
     private final List<TScanRangeLocations> result = Lists.newArrayList();
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
@@ -62,6 +85,32 @@ public class MetaScanNode extends ScanNode {
     public void computeRangeLocations() {
         Collection<Partition> partitions = olapTable.getPartitions();
         for (Partition partition : partitions) {
+=======
+    private final List<Column> tableSchema;
+    private final List<String> selectPartitionNames;
+    private final List<TScanRangeLocations> result = Lists.newArrayList();
+
+    public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
+                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames, long warehouseId) {
+        super(id, desc, "MetaScan");
+        this.olapTable = olapTable;
+        this.tableSchema = olapTable.getBaseSchema();
+        this.columnIdToNames = columnIdToNames;
+        this.selectPartitionNames = selectPartitionNames;
+        this.warehouseId = warehouseId;
+    }
+
+    public void computeRangeLocations() {
+        Collection<PhysicalPartition> partitions;
+        if (selectPartitionNames.isEmpty()) {
+            partitions = olapTable.getPhysicalPartitions();
+        } else {
+            partitions = selectPartitionNames.stream().map(olapTable::getPartition)
+                    .map(Partition::getDefaultPhysicalPartition).collect(Collectors.toList());
+        }
+
+        for (PhysicalPartition partition : partitions) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             MaterializedIndex index = partition.getBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
             List<Tablet> tablets = index.getTablets();
@@ -82,8 +131,19 @@ public class MetaScanNode extends ScanNode {
 
                 // random shuffle List && only collect one copy
                 List<Replica> allQueryableReplicas = Lists.newArrayList();
+<<<<<<< HEAD
                 tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
                         visibleVersion, -1, schemaHash);
+=======
+                if (RunMode.isSharedDataMode()) {
+                    tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                            visibleVersion, -1, schemaHash, warehouseId);
+                } else {
+                    tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                            visibleVersion, -1, schemaHash);
+                }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (allQueryableReplicas.isEmpty()) {
                     LOG.error("no queryable replica found in tablet {}. visible version {}",
                             tabletId, visibleVersion);
@@ -105,7 +165,13 @@ public class MetaScanNode extends ScanNode {
                 Collections.shuffle(allQueryableReplicas);
                 boolean tabletIsNull = true;
                 for (Replica replica : allQueryableReplicas) {
+<<<<<<< HEAD
                     ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+=======
+                    ComputeNode node =
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                    .getBackendOrComputeNode(replica.getBackendId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (node == null) {
                         LOG.debug("replica {} not exists", replica.getBackendId());
                         continue;
@@ -144,6 +210,15 @@ public class MetaScanNode extends ScanNode {
         }
         msg.meta_scan_node = new TMetaScanNode();
         msg.meta_scan_node.setId_to_names(columnIdToNames);
+<<<<<<< HEAD
+=======
+        List<TColumn> columnsDesc = Lists.newArrayList();
+        for (Column column : tableSchema) {
+            TColumn tColumn = column.toThrift();
+            columnsDesc.add(tColumn);
+        }
+        msg.meta_scan_node.setColumns(columnsDesc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -158,10 +233,17 @@ public class MetaScanNode extends ScanNode {
                     append(kv.getValue()).
                     append("\n");
         }
+<<<<<<< HEAD
+=======
+        if (!selectPartitionNames.isEmpty()) {
+            output.append(prefix).append("Partitions: ").append(selectPartitionNames).append("\n");
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return output.toString();
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return true;
     }
@@ -170,4 +252,14 @@ public class MetaScanNode extends ScanNode {
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
+=======
+    public boolean canUseRuntimeAdaptiveDop() {
+        return true;
+    }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

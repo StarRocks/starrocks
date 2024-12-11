@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # str_to_jodatime
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a Joda-formatted string into a DATETIME value in the specified Joda DateTime format like `yyyy-MM-dd HH:mm:ss`.
 

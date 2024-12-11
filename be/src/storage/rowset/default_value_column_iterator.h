@@ -53,7 +53,10 @@ public:
               _is_nullable(is_nullable),
               _type_info(std::move(type_info)),
               _schema_length(schema_length),
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
               _pool(),
               _num_rows(num_rows) {}
 
@@ -71,12 +74,24 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override;
 
+<<<<<<< HEAD
     Status next_batch(const SparseRange& range, Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange* row_ranges) override;
+=======
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+
+    ordinal_t get_current_ordinal() const override { return _current_rowid; }
+
+    ordinal_t num_rows() const override { return _num_rows; }
+
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                      CompoundNodeType pred_relation) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     bool all_page_dict_encoded() const override { return false; }
 

@@ -17,7 +17,10 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+<<<<<<< HEAD
 #include <optional>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <unordered_map>
 #include <unordered_set>
 
@@ -26,6 +29,11 @@
 #include "exec/hash_join_components.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/spill/partition.h"
+<<<<<<< HEAD
+=======
+#include "exec/spill/spill_components.h"
+#include "exec/spill/spiller_factory.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -79,7 +87,11 @@ public:
     void set_probe_spiller(std::shared_ptr<spill::Spiller> spiller) { _probe_spiller = std::move(spiller); }
 
 private:
+<<<<<<< HEAD
     bool spilled() const { return _join_builder->spiller()->spilled(); }
+=======
+    bool spilled() const;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     SpillableHashJoinProbeOperator* as_mutable() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 
@@ -93,8 +105,13 @@ private:
 
     Status _load_all_partition_build_side(RuntimeState* state);
 
+<<<<<<< HEAD
     Status _load_partition_build_side(RuntimeState* state, const std::shared_ptr<spill::SpillerReader>& reader,
                                       size_t idx);
+=======
+    Status _load_partition_build_side(workgroup::YieldContext& ctx, RuntimeState* state,
+                                      const std::shared_ptr<spill::SpillerReader>& reader, size_t idx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     void _update_status(Status&& status) const;
 
@@ -133,7 +150,10 @@ private:
     mutable std::mutex _mutex;
     mutable Status _operator_status;
 
+<<<<<<< HEAD
     std::shared_ptr<spill::IOTaskExecutor> _executor;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool _need_post_probe = false;
 };
 

@@ -15,6 +15,10 @@
 package com.starrocks.sql;
 
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.OlapTable.OlapTableState;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 /**
  * Generate a monotonic version for optimistic lock.
@@ -36,6 +40,10 @@ public class OptimisticVersion {
      */
     public static boolean validateTableUpdate(OlapTable olapTable, long candidateVersion) {
         long schemaUpdate = olapTable.lastSchemaUpdateTime.get();
+<<<<<<< HEAD
         return schemaUpdate < candidateVersion;
+=======
+        return olapTable.getState() != OlapTableState.UPDATING_META && schemaUpdate < candidateVersion;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

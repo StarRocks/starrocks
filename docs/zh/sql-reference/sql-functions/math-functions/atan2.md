@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # atan2
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 通过使用两个参数的符号确定象限，计算 x/y 的反正切的主值，返回值在 [-π, π] 范围内。
 

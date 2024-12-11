@@ -78,18 +78,32 @@ public class HudiSliceScanner extends ConnectorScanner {
     private final int fetchSize;
     private final ClassLoader classLoader;
     private final String fsOptionsProps;
+<<<<<<< HEAD
+=======
+    private final String timeZone;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
+<<<<<<< HEAD
         this.hiveColumnTypes = params.get("hive_column_types").split("#");
         this.requiredFields = params.get("required_fields").split(",");
         this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
+=======
+        this.hiveColumnTypes = ScannerHelper.splitAndOmitEmptyStrings(params.get("hive_column_types"), "#");
+        this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
+        this.nestedFields = ScannerHelper.splitAndOmitEmptyStrings(params.getOrDefault("nested_fields", ""), ",");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.instantTime = params.get("instant_time");
         if (params.get("delta_file_paths").length() == 0) {
             this.deltaFilePaths = new String[0];
         } else {
+<<<<<<< HEAD
             this.deltaFilePaths = params.get("delta_file_paths").split(",");
+=======
+            this.deltaFilePaths = ScannerHelper.splitAndOmitEmptyStrings(params.get("delta_file_paths"), ",");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         this.basePath = params.get("base_path");
         this.dataFilePath = params.get("data_file_path");
@@ -103,6 +117,10 @@ public class HudiSliceScanner extends ConnectorScanner {
         for (Map.Entry<String, String> kv : params.entrySet()) {
             LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
         }
+<<<<<<< HEAD
+=======
+        this.timeZone = params.get("time_zone");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private JobConf makeJobConf(Properties properties) {
@@ -114,7 +132,11 @@ public class HudiSliceScanner extends ConnectorScanner {
     }
 
     private void parseRequiredTypes() {
+<<<<<<< HEAD
         String[] hiveColumnNames = this.hiveColumnNames.split(",");
+=======
+        String[] hiveColumnNames = ScannerHelper.splitAndOmitEmptyStrings(this.hiveColumnNames, ",");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         HashMap<String, Integer> hiveColumnNameToIndex = new HashMap<>();
         HashMap<String, String> hiveColumnNameToType = new HashMap<>();
         for (int i = 0; i < hiveColumnNames.length; i++) {
@@ -163,7 +185,11 @@ public class HudiSliceScanner extends ConnectorScanner {
         // recover INT64 based timestamp mark to hive type, TimestampMicros/TimestampMillis => timestamp
 
         List<String> types = new ArrayList<>();
+<<<<<<< HEAD
         String[] hiveColumnNames = this.hiveColumnNames.split(",");
+=======
+        String[] hiveColumnNames = ScannerHelper.splitAndOmitEmptyStrings(this.hiveColumnNames, ",");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (int i = 0; i < this.hiveColumnTypes.length; i++) {
             ColumnType columnType = new ColumnType(hiveColumnNames[i], hiveColumnTypes[i]);
             String type = HudiScannerUtils.mapColumnTypeToHiveType(columnType);
@@ -248,7 +274,11 @@ public class HudiSliceScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {
+<<<<<<< HEAD
                         ColumnValue fieldValue = new HudiColumnValue(fieldInspectors[i], fieldData);
+=======
+                        ColumnValue fieldValue = new HudiColumnValue(fieldInspectors[i], fieldData, timeZone);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         appendData(i, fieldValue);
                     }
                 }

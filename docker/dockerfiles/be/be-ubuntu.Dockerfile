@@ -36,7 +36,11 @@ ARG RUN_AS_USER
 ARG GROUP=starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
+<<<<<<< HEAD
         binutils-dev default-jdk mysql-client curl vim tree net-tools less tzdata locales pigz inotify-tools && \
+=======
+        binutils-dev default-jdk mysql-client curl vim tree net-tools less tzdata locales pigz inotify-tools rclone gdb && \
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         locale-gen en_US.UTF-8 && \

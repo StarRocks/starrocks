@@ -31,6 +31,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -46,7 +51,11 @@ public class ShowTabletStmtAnalyzer {
         new ShowTabletStmtAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class ShowTabletStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ShowTabletStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         private long version = -1;
         private long backendId = -1;
@@ -92,20 +101,35 @@ public class ShowTabletStmtAnalyzer {
             // order by
             List<OrderByElement> orderByElements = statement.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (db == null) {
                     throw new SemanticException("Database %s is not found", dbName);
                 }
                 String tableName = statement.getTableName();
                 Table table = null;
+<<<<<<< HEAD
                 db.readLock();
                 try {
                     table = db.getTable(tableName);
+=======
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+                try {
+                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (table == null) {
                         throw new SemanticException("Table %s is not found", tableName);
                     }
                 } finally {
+<<<<<<< HEAD
                     db.readUnlock();
+=======
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
 
                 orderByPairs = new ArrayList<>();

@@ -50,6 +50,13 @@ public class ConnectorTableInfo {
         return CollectionUtils.isEmpty(relatedMaterializedViews);
     }
 
+<<<<<<< HEAD
+=======
+    public Set<MvId> getRelatedMaterializedViews() {
+        return relatedMaterializedViews;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public String toString() {
         return "ConnectorTableInfo {" +

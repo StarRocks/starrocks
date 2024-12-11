@@ -45,7 +45,13 @@
 #include "util/compression/block_compression.h"
 #include "util/faststring.h"
 #include "util/lru_cache.h"
+<<<<<<< HEAD
 #include "util/starrocks_metrics.h"
+=======
+#include "util/runtime_profile.h"
+#include "util/starrocks_metrics.h"
+#include "util/thrift_util.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \
     do {                                                                              \
@@ -72,6 +78,23 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
           _last_updated_time(time(nullptr)) {
     _span = Tracer::Instance().start_trace_or_add_span("load_channel", txn_trace_parent);
     _span->SetAttribute("load_id", load_id.to_string());
+<<<<<<< HEAD
+=======
+    _create_time_ns = MonotonicNanos();
+
+    _root_profile = std::make_shared<RuntimeProfile>("LoadChannel");
+    _root_profile->add_info_string("LoadId", print_id(load_id));
+    _root_profile->add_info_string("TxnId", std::to_string(txn_id));
+    _profile = _root_profile->create_child(fmt::format("Channel (host={})", BackendOptions::get_localhost()), true);
+    _index_num = ADD_COUNTER(_profile, "IndexNum", TUnit::UNIT);
+    ADD_COUNTER(_profile, "LoadMemoryLimit", TUnit::BYTES)->set(_mem_tracker->limit());
+    _peak_memory_usage = ADD_PEAK_COUNTER(_profile, "PeakMemoryUsage", TUnit::BYTES);
+    _deserialize_chunk_count = ADD_COUNTER(_profile, "DeserializeChunkCount", TUnit::UNIT);
+    _deserialize_chunk_timer = ADD_TIMER(_profile, "DeserializeChunkTime");
+    _profile_report_count = ADD_COUNTER(_profile, "ProfileReportCount", TUnit::UNIT);
+    _profile_report_timer = ADD_TIMER(_profile, "ProfileReportTime");
+    _profile_serialized_size = ADD_COUNTER(_profile, "ProfileSerializedSize", TUnit::BYTES);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 LoadChannel::~LoadChannel() {
@@ -79,6 +102,23 @@ LoadChannel::~LoadChannel() {
     _span->End();
 }
 
+<<<<<<< HEAD
+=======
+void LoadChannel::set_profile_config(const PLoadChannelProfileConfig& config) {
+    if (config.has_enable_profile()) {
+        _enable_profile = config.enable_profile();
+    }
+
+    if (config.has_big_query_profile_threshold_ns()) {
+        _big_query_profile_threshold_ns = config.big_query_profile_threshold_ns();
+    }
+
+    if (config.has_runtime_profile_report_interval_ns()) {
+        _runtime_profile_report_interval_ns = config.runtime_profile_report_interval_ns();
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                        PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     _span->AddEvent("open_index", {{"index_id", request.index_id()}});
@@ -86,10 +126,17 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     ClosureGuard done_guard(done);
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
+<<<<<<< HEAD
     int64_t index_id = request.index_id();
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
 
     Status st = Status::OK();
+=======
+    bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
+
+    Status st = Status::OK();
+    TabletsChannelKey key(request.id(), request.sink_id(), request.index_id());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     {
         // We will `bthread::execution_queue_join()` in the destructor of AsyncDeltaWriter,
         // it will block the bthread, so we put its destructor outside the lock.
@@ -100,6 +147,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
         }
         if (_row_desc == nullptr) {
+<<<<<<< HEAD
             _row_desc = std::make_unique<RowDescriptor>(_schema->tuple_desc(), false);
         }
         auto it = _tablets_channels.find(index_id);
@@ -120,6 +168,28 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     LOG_IF(WARNING, !st.ok()) << "Fail to open index " << index_id << " of load " << _load_id << ": " << st.to_string();
     response->mutable_status()->set_status_code(st.code());
     response->mutable_status()->add_error_msgs(st.get_error_msg());
+=======
+            _row_desc = std::make_unique<RowDescriptor>(_schema->tuple_desc());
+        }
+        auto it = _tablets_channels.find(key);
+        if (it == _tablets_channels.end()) {
+            if (is_lake_tablet) {
+                channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile);
+            } else {
+                channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile);
+            }
+            if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
+                _tablets_channels.insert({key, std::move(channel)});
+            }
+            COUNTER_UPDATE(_index_num, 1);
+        } else if (request.is_incremental()) {
+            st = it->second->incremental_open(request, response, _schema);
+        }
+    }
+    LOG_IF(WARNING, !st.ok()) << "Fail to open index " << key << " of load " << _load_id << ": " << st.to_string();
+    response->mutable_status()->set_status_code(st.code());
+    response->mutable_status()->add_error_msgs(std::string(st.message()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     if (config::enable_load_colocate_mv) {
         response->set_is_repeated_chunk(true);
@@ -130,6 +200,7 @@ void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& r
                              PTabletWriterAddBatchResult* response) {
     _num_chunk++;
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
+<<<<<<< HEAD
     auto channel = get_tablets_channel(request.index_id());
     if (channel == nullptr) {
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
@@ -137,6 +208,25 @@ void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& r
         return;
     }
     channel->add_chunk(chunk, request, response);
+=======
+    TabletsChannelKey key(request.id(), request.sink_id(), request.index_id());
+    auto channel = get_tablets_channel(key);
+    if (channel == nullptr) {
+        LOG(WARNING) << "cannot find the tablets channel associated with the key " << key.to_string();
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        response->mutable_status()->add_error_msgs(
+                fmt::format("cannot find the tablets channel associated with the key {}", key.to_string()));
+        return;
+    }
+    bool close_channel;
+    channel->add_chunk(chunk, request, response, &close_channel);
+    if (close_channel && _should_enable_profile()) {
+        // If close_channel is true, the channel has been removed from _tablets_channels
+        // in TabletsChannel::add_chunk, so there will be no chance to get the channel to
+        // update the profile later. So update the profile here
+        channel->update_profile();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
@@ -150,6 +240,10 @@ void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTablet
     } else {
         _add_chunk(nullptr, request, response);
     }
+<<<<<<< HEAD
+=======
+    report_profile(response, config::pipeline_print_profile);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWriterAddBatchResult* response) {
@@ -186,16 +280,30 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     }
     StarRocksMetrics::instance()->load_channel_add_chunks_total.increment(1);
     StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(watch.elapsed_time() / 1000);
+<<<<<<< HEAD
+=======
+    report_profile(response, config::pipeline_print_profile);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                               PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     _num_segment++;
+<<<<<<< HEAD
     auto channel = get_tablets_channel(request->index_id());
     if (channel == nullptr) {
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
         response->mutable_status()->add_error_msgs("cannot find the tablets channel associated with the index id");
+=======
+    TabletsChannelKey key(request->id(), request->sink_id(), request->index_id());
+    auto channel = get_tablets_channel(key);
+    if (channel == nullptr) {
+        LOG(WARNING) << "cannot find the tablets channel associated with the key " << key.to_string();
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        response->mutable_status()->add_error_msgs(
+                fmt::format("cannot find the tablets channel associated with the key {}", key.to_string()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return;
     }
     auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(channel.get());
@@ -225,26 +333,47 @@ void LoadChannel::abort() {
     }
 }
 
+<<<<<<< HEAD
 void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason) {
     auto channel = get_tablets_channel(index_id);
+=======
+void LoadChannel::abort(const TabletsChannelKey& key, const std::vector<int64_t>& tablet_ids,
+                        const std::string& reason) {
+    auto channel = get_tablets_channel(key);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (channel != nullptr) {
         channel->abort(tablet_ids, reason);
     }
 }
 
+<<<<<<< HEAD
 void LoadChannel::remove_tablets_channel(int64_t index_id) {
     std::unique_lock l(_lock);
     _tablets_channels.erase(index_id);
     if (_tablets_channels.empty()) {
         l.unlock();
+=======
+void LoadChannel::remove_tablets_channel(const TabletsChannelKey& key) {
+    std::unique_lock l(_lock);
+    _tablets_channels.erase(key);
+    if (_tablets_channels.empty()) {
+        l.unlock();
+        _closed.store(true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _load_mgr->remove_load_channel(_load_id);
         // Do NOT touch |this| since here, it could have been deleted.
     }
 }
 
+<<<<<<< HEAD
 std::shared_ptr<TabletsChannel> LoadChannel::get_tablets_channel(int64_t index_id) {
     std::lock_guard l(_lock);
     auto it = _tablets_channels.find(index_id);
+=======
+std::shared_ptr<TabletsChannel> LoadChannel::get_tablets_channel(const TabletsChannelKey& key) {
+    std::lock_guard l(_lock);
+    auto it = _tablets_channels.find(key);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (it != _tablets_channels.end()) {
         return it->second;
     } else {
@@ -271,6 +400,11 @@ Status LoadChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
 }
 
 Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer) {
+<<<<<<< HEAD
+=======
+    COUNTER_UPDATE(_deserialize_chunk_count, 1);
+    SCOPED_TIMER(_deserialize_chunk_timer);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         TRY_CATCH_BAD_ALLOC({
             serde::ProtobufChunkDeserializer des(_chunk_meta);
@@ -301,4 +435,86 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, fast
     }
     return Status::OK();
 }
+<<<<<<< HEAD
+=======
+
+std::vector<std::shared_ptr<TabletsChannel>> LoadChannel::_get_all_channels() {
+    std::vector<std::shared_ptr<TabletsChannel>> channels;
+    std::lock_guard l(_lock);
+    channels.reserve(_tablets_channels.size());
+    for (auto& it : _tablets_channels) {
+        channels.push_back(it.second);
+    }
+    return channels;
+}
+
+bool LoadChannel::_should_enable_profile() {
+    if (_enable_profile) {
+        return true;
+    }
+    if (_big_query_profile_threshold_ns <= 0) {
+        return false;
+    }
+    int64_t query_run_duration = MonotonicNanos() - _create_time_ns;
+    return query_run_duration > _big_query_profile_threshold_ns;
+}
+
+void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print_profile) {
+    if (!_should_enable_profile()) {
+        return;
+    }
+
+    bool expect = false;
+    if (!_is_reporting_profile.compare_exchange_strong(expect, true)) {
+        // skip concurrent report
+        return;
+    }
+    DeferOp defer([this]() { _is_reporting_profile.store(false); });
+
+    int64_t now = MonotonicNanos();
+    bool should_report;
+    if (_closed) {
+        // final profile report
+        bool old = false;
+        should_report = _final_report.compare_exchange_strong(old, true);
+    } else {
+        // runtime profile report periodically
+        should_report = now - _last_report_time_ns >= _runtime_profile_report_interval_ns;
+    }
+    if (!should_report) {
+        return;
+    }
+
+    _last_report_time_ns.store(now);
+    COUNTER_UPDATE(_profile_report_count, 1);
+    SCOPED_TIMER(_profile_report_timer);
+
+    COUNTER_SET(_peak_memory_usage, _mem_tracker->peak_consumption());
+    auto channels = _get_all_channels();
+    for (auto& channel : channels) {
+        channel->update_profile();
+    }
+    _profile->inc_version();
+
+    if (print_profile) {
+        std::stringstream ss;
+        _root_profile->pretty_print(&ss);
+        LOG(INFO) << ss.str();
+    }
+
+    TRuntimeProfileTree thrift_profile;
+    _root_profile->to_thrift(&thrift_profile);
+    uint8_t* buf = nullptr;
+    uint32_t len = 0;
+    ThriftSerializer ser(false, 4096);
+    Status st = ser.serialize(&thrift_profile, &len, &buf);
+    if (!st.ok()) {
+        LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << _load_id << ", txn_id: " << _txn_id
+                   << ", status: " << st;
+        return;
+    }
+    COUNTER_UPDATE(_profile_serialized_size, len);
+    result->set_load_channel_profile((char*)buf, len);
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

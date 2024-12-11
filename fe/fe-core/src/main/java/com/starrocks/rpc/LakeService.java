@@ -26,10 +26,19 @@ import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
+<<<<<<< HEAD
+=======
+import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.DeleteTxnLogResponse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
+<<<<<<< HEAD
+=======
+import com.starrocks.proto.PublishLogVersionBatchRequest;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -61,6 +70,10 @@ public interface LakeService {
     long TIMEOUT_DELETE_DATA = 5 * MILLIS_PER_MINUTE;
     long TIMEOUT_DROP_TABLE = 5 * MILLIS_PER_MINUTE;
     long TIMEOUT_PUBLISH_LOG_VERSION = MILLIS_PER_MINUTE;
+<<<<<<< HEAD
+=======
+    long TIMEOUT_PUBLISH_LOG_VERSION_BATCH = MILLIS_PER_MINUTE;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     long TIMEOUT_ABORT_COMPACTION = 5 * MILLIS_PER_SECOND;
     long TIMEOUT_VACUUM = MILLIS_PER_HOUR;
 
@@ -79,6 +92,12 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "delete_data", onceTalkTimeout = TIMEOUT_DELETE_DATA)
     Future<DeleteDataResponse> deleteData(DeleteDataRequest request);
 
+<<<<<<< HEAD
+=======
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_txn_log", onceTalkTimeout = /*10m=*/600000)
+    Future<DeleteTxnLogResponse> deleteTxnLog(DeleteTxnLogRequest request);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @ProtobufRPC(serviceName = "LakeService", methodName = "get_tablet_stats", onceTalkTimeout = TIMEOUT_GET_TABLET_STATS)
     Future<TabletStatResponse> getTabletStats(TabletStatRequest request);
 
@@ -88,6 +107,13 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = TIMEOUT_PUBLISH_LOG_VERSION)
     Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request);
 
+<<<<<<< HEAD
+=======
+    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version_batch",
+            onceTalkTimeout = TIMEOUT_PUBLISH_LOG_VERSION_BATCH)
+    Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @ProtobufRPC(serviceName = "LakeService", methodName = "lock_tablet_metadata", onceTalkTimeout = 5000)
     Future<LockTabletMetadataResponse> lockTabletMetadata(LockTabletMetadataRequest request);
 

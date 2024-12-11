@@ -26,6 +26,11 @@
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/decimalv3.h"
+<<<<<<< HEAD
+=======
+#include "storage/index/inverted/inverted_index_iterator.h"
+#include "storage/index/inverted/inverted_reader.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/type_traits.h"
@@ -45,7 +50,11 @@ class ExprContext;
 class RuntimeState;
 class SlotDescriptor;
 class BitmapIndexIterator;
+<<<<<<< HEAD
 class BloomFilter;
+=======
+struct NgramBloomFilterReaderOptions;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks
 
 namespace starrocks {
@@ -150,12 +159,39 @@ public:
     // Return false to filter out a data page.
     virtual bool zone_map_filter(const ZoneMapDetail& detail) const { return true; }
 
+<<<<<<< HEAD
     virtual bool support_bloom_filter() const { return false; }
 
     // Return false to filter out a data page.
     virtual bool bloom_filter(const BloomFilter* bf) const { return true; }
 
     virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const {
+=======
+    virtual bool support_original_bloom_filter() const { return false; }
+
+    // return true means this predicate can support ngram bloom filter, don't consider gram number(N)
+    // in ngram_bloom_filter(), if gram number is not equal(only happended in ngram_search right now)
+    // it will return true directly. This design is becasue gram number is hard to get in ScalarColumnIterator
+    // and not all predicate need gram size to determin whether support ngram bloom filter
+    virtual bool support_ngram_bloom_filter() const { return false; }
+
+    // Return false to filter out a data page.
+    virtual bool original_bloom_filter(const BloomFilter* bf) const { return true; }
+
+    // Return false to filter out a data page.
+    virtual bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) const {
+        return true;
+    }
+
+    virtual bool support_bitmap_filter() const { return false; }
+
+    virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
+        return Status::Cancelled("not implemented");
+    }
+
+    virtual Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                                       roaring::Roaring* row_bitmap) const {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::Cancelled("not implemented");
     }
 
@@ -225,6 +261,12 @@ ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInf
 
 ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                          const std::vector<std::string>& operands);
+<<<<<<< HEAD
+=======
+
+ColumnPredicate* new_dictionary_code_in_predicate(const TypeInfoPtr& type, ColumnId id,
+                                                  const std::vector<int32_t>& operands, size_t size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                              const std::vector<std::string>& operands);
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bool is_null);

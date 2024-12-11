@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.sql.plan;
 
 import com.starrocks.server.GlobalStateMgr;
@@ -27,6 +30,10 @@ public class ViewPlanTest extends PlanTestBase {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
 
     private void testView(String sql) throws Exception {
+<<<<<<< HEAD
+=======
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String viewName = "view" + INDEX.getAndIncrement();
         String createView = "create view " + viewName + " as " + sql;
         starRocksAssert.withView(createView);
@@ -39,6 +46,10 @@ public class ViewPlanTest extends PlanTestBase {
     }
 
     private void testViewIgnoreObjectCountDistinct(String sql) throws Exception {
+<<<<<<< HEAD
+=======
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String viewName = "view" + INDEX.getAndIncrement();
         String createView = "create view " + viewName + " as " + sql;
         starRocksAssert.withView(createView);
@@ -893,7 +904,11 @@ public class ViewPlanTest extends PlanTestBase {
     @Test
     public void testSql196() throws Exception {
         String sql = "select k2 from baseall group by ((10800861)/(((NULL)%(((-1114980787)+(-1182952114)))))), " +
+<<<<<<< HEAD
                         "((10800861)*(-9223372036854775808)), k2";
+=======
+                "((10800861)*(-9223372036854775808)), k2";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         testView(sql);
     }
 
@@ -1721,14 +1736,21 @@ public class ViewPlanTest extends PlanTestBase {
 
         AlterViewStmt alterViewStmt =
                 (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, starRocksAssert.getCtx());
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().alterView(alterViewStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterView(alterViewStmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         sqlPlan = getFragmentPlan(alterStmt);
         viewPlan = getFragmentPlan("select * from " + viewName);
         Assert.assertEquals(sqlPlan, viewPlan);
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testLateralJoin() throws Exception {
         starRocksAssert.withTable("CREATE TABLE json_test (" +
@@ -1760,8 +1782,46 @@ public class ViewPlanTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testArrayMapView() throws Exception {
+        String sql = "SELECT [1,2,3]";
+        testView(sql);
+        sql = "SELECT ARRAY<INT>[1,2,3]";
+        testView(sql);
+        sql = "SELECT Map<INT, INT>{1:10,2:20,3:30}";
+        testView(sql);
+        sql = "SELECT Map{1:10,2:20,3:30}";
+        testView(sql);
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testBackquoteAlias() throws Exception {
         String sql = "select `select` from (select v1 from t0) `abc.bcd`(`select`);";
         testView(sql);
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testViewNotInvolveMv() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(true);
+        String createView = "create view v_l as select k1, k2 as k22, k3 as k33 from t7";
+        starRocksAssert.withView(createView);
+
+        createView = "create view v_r as select k1, k2 as k222, k3 as k333 from t8";
+        starRocksAssert.withView(createView);
+
+        String sql = "select l.k1 from v_l l left join v_r r1 on l.k22=r1.k222 left join" +
+                " v_r r2 on trim(l.k33)=r2.k333; ";
+        String sqlPlan = getFragmentPlan(sql);
+        Assert.assertTrue(sqlPlan.contains("OlapScanNode"));
+
+        starRocksAssert.dropView("v_l");
+        starRocksAssert.dropView("v_r");
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
+    }
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

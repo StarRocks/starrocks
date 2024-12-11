@@ -18,9 +18,17 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+<<<<<<< HEAD
 
 import java.util.Collections;
 import java.util.List;
+=======
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 
 /**
@@ -49,6 +57,20 @@ public class OptExprBuilder {
         return expressionMapping;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<ColumnRefOperator, ScalarOperator> getColumnRefToConstOperators() {
+        if (expressionMapping == null) {
+            return null;
+        }
+        return expressionMapping.getColumnRefToConstOperators();
+    }
+
+    public Map<ScalarOperator, ColumnRefOperator> getGeneratedColumnExprOpToColumnRef() {
+        return expressionMapping.getGeneratedColumnExprOpToColumnRef();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setExpressionMapping(ExpressionMapping expressionMapping) {
         this.expressionMapping = expressionMapping;
     }

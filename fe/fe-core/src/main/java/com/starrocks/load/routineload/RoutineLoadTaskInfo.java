@@ -37,18 +37,31 @@ package com.starrocks.load.routineload;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -102,6 +115,11 @@ public abstract class RoutineLoadTaskInfo {
 
     protected StreamLoadTask streamLoadTask = null;
 
+<<<<<<< HEAD
+=======
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public RoutineLoadTaskInfo(UUID id, RoutineLoadJob job, long taskScheduleIntervalMs,
                                long timeToExecuteMs, long taskTimeoutMs) {
         this.id = id;
@@ -193,6 +211,17 @@ public abstract class RoutineLoadTaskInfo {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isRunningTimeout() {
         if (txnStatus == TransactionStatus.COMMITTED || txnStatus == TransactionStatus.VISIBLE) {
             // the corresponding txn is already finished, this task can not be treated as timeout.
@@ -207,9 +236,15 @@ public abstract class RoutineLoadTaskInfo {
         return false;
     }
 
+<<<<<<< HEAD
     abstract TRoutineLoadTask createRoutineLoadTask() throws UserException;
 
     abstract boolean readyToExecute() throws UserException;
+=======
+    abstract TRoutineLoadTask createRoutineLoadTask() throws StarRocksException;
+
+    abstract boolean readyToExecute() throws StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public abstract boolean isProgressKeepUp(RoutineLoadProgress progress);
 
@@ -221,6 +256,7 @@ public abstract class RoutineLoadTaskInfo {
 
         //  label = job_name+job_id+task_id
         label = Joiner.on("-").join(job.getName(), job.getId(), DebugUtil.printId(id));
+<<<<<<< HEAD
         txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                 job.getDbId(), Lists.newArrayList(job.getTableId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
@@ -229,20 +265,40 @@ public abstract class RoutineLoadTaskInfo {
     }
 
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+=======
+
+        txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                job.getDbId(), Lists.newArrayList(job.getTableId()), label, null,
+                new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, job.getId(),
+                timeoutMs / 1000, warehouseId);
+    }
+
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterCommitted(txnState, txnOperated);
         }
     }
 
+<<<<<<< HEAD
     public void afterVisible(TransactionState txnState, boolean txnOperated) throws UserException {
+=======
+    public void afterVisible(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterVisible(txnState, txnOperated);
         }
     }
 
+<<<<<<< HEAD
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) throws UserException {
+=======
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) throws
+            StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterAborted(txnState, txnOperated, txnStatusChangeReason);
@@ -278,6 +334,20 @@ public abstract class RoutineLoadTaskInfo {
         } else {
             row.add(msg);
         }
+<<<<<<< HEAD
+=======
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            // add warehouse in task info
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse == null) {
+                row.add("NULL");
+            } else {
+                row.add(warehouse.getName());
+            }
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return row;
     }
 

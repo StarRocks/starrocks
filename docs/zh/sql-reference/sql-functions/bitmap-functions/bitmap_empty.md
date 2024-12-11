@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_empty
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回一个空 bitmap，主要用于 insert 或 stream load 时填充默认值，如下例:
 

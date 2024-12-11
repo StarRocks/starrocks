@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+<<<<<<< HEAD
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
@@ -90,10 +91,93 @@ public class LakeTableSchemaChangeJobTest {
         connectContext = new ConnectContext(null);
         connectContext.setStartTime();
         connectContext.setThreadLocalInfo();
+=======
+import com.google.api.client.util.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.validation.constraints.NotNull;
+
+public class LakeTableSchemaChangeJobTest {
+    private static final int NUM_BUCKETS = 4;
+    private static ConnectContext connectContext;
+    private static final String DB_NAME = "db_lake_schema_change_test";
+    private static Database db;
+    private LakeTableSchemaChangeJob schemaChangeJob;
+    private LakeTable table;
+
+    public LakeTableSchemaChangeJobTest() {
+    }
+
+    @BeforeClass
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        connectContext = UtFrameUtils.createDefaultCtx();
+    }
+
+    private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
+        return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), createTableStmt.getTableName());
+    }
+
+    private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+    }
+
+    private LakeTableSchemaChangeJob getAlterJob(Table table) {
+        AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
+        List<AlterJobV2> jobs = alterJobMgr.getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
+        alterJobMgr.getSchemaChangeHandler().clearJobs();
+        Assert.assertEquals(1, jobs.size());
+        AlterJobV2 alterJob = jobs.get(0);
+        Assert.assertTrue(alterJob instanceof LakeTableSchemaChangeJob);
+        return (LakeTableSchemaChangeJob) alterJob;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Before
     public void before() throws Exception {
+<<<<<<< HEAD
         new MockUp<StarOSAgent>() {
             @Mock
             public List<Long> createShards(int shardCount, FilePathInfo path, FileCacheInfo cache, long groupId,
@@ -178,15 +262,33 @@ public class LakeTableSchemaChangeJobTest {
         List<AlterClause> alterList = Collections.singletonList(alter);
         schemaChangeJob = (LakeTableSchemaChangeJob) schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+=======
+        String createDbStmtStr = "create database " + DB_NAME;
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        connectContext.setDatabase(DB_NAME);
+        db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(DB_NAME);
+        table = createTable(connectContext, "CREATE TABLE t0(c0 INT) duplicate key(c0) distributed by hash(c0) buckets "
+                    + NUM_BUCKETS);
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 DOUBLE");
+        schemaChangeJob = getAlterJob(table);
+        Config.enable_fast_schema_evolution_in_share_data_mode = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @After
     public void after() throws Exception {
+<<<<<<< HEAD
         db.dropTable(table.getName());
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(DB_NAME, true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testCancelPendingJob() throws IOException {
+<<<<<<< HEAD
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void writeEditLog(LakeTableSchemaChangeJob job) {
@@ -206,6 +308,11 @@ public class LakeTableSchemaChangeJobTest {
             Assert.assertNull(invertedIndex.getTabletMeta(tabletId));
         }
 
+=======
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // test cancel again
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
@@ -213,6 +320,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testDropTableBeforeCancel() {
+<<<<<<< HEAD
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void writeEditLog(LakeTableSchemaChangeJob job) {
@@ -220,6 +328,8 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         db.dropTable(table.getName());
 
         schemaChangeJob.cancel("test");
@@ -230,7 +340,11 @@ public class LakeTableSchemaChangeJobTest {
     public void testPendingJobNoAliveBackend() {
         new MockUp<Utils>() {
             @Mock
+<<<<<<< HEAD
             public Long chooseBackend(LakeTablet tablet) {
+=======
+            public Long chooseNodeId(LakeTablet tablet) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return null;
             }
         };
@@ -241,6 +355,27 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
+                return null;
+            }
+
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
+                return null;
+            }
+        };
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
             schemaChangeJob.runPendingJob();
         });
@@ -256,6 +391,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTableDroppedInPending() {
         new MockUp<Utils>() {
             @Mock
+<<<<<<< HEAD
             public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
@@ -266,6 +402,12 @@ public class LakeTableSchemaChangeJobTest {
                 // nothing to do.
             }
         };
+=======
+            public Long chooseNodeId(LakeTablet tablet) {
+                return 1L;
+            }
+        };
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         db.dropTable(table.getName());
 
@@ -290,6 +432,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testCreateTabletFailed() {
+<<<<<<< HEAD
         new MockUp<Utils>() {
             @Mock
             public Long chooseBackend(LakeTablet tablet) {
@@ -308,6 +451,15 @@ public class LakeTableSchemaChangeJobTest {
             public void writeEditLog(LakeTableSchemaChangeJob job) {
                 // nothing to do.
             }
+=======
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
+                                             long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
+                                             AtomicBoolean isCancelling) throws AlterCancelException {
+                throw new AlterCancelException("Create tablet failed");
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         };
 
         Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
@@ -323,6 +475,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testCreateTabletSuccess() throws AlterCancelException {
+<<<<<<< HEAD
         new MockUp<Utils>() {
             @Mock
             public Long chooseBackend(LakeTablet tablet) {
@@ -356,6 +509,10 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+=======
+        schemaChangeJob.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
@@ -363,11 +520,17 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
+<<<<<<< HEAD
         Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+=======
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testPreviousTxnNotFinished() throws AlterCancelException {
+<<<<<<< HEAD
         new MockUp<Utils>() {
             @Mock
             public Long chooseBackend(LakeTablet tablet) {
@@ -398,6 +561,10 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
+=======
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
                 return false;
             }
@@ -405,7 +572,10 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+<<<<<<< HEAD
         Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
@@ -416,6 +586,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
+<<<<<<< HEAD
         Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
@@ -451,6 +622,16 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
+=======
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+    }
+
+    @Test
+    public void testThrowAnalysisExceptionWhileWaitingTxn() throws AlterCancelException {
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
                 throw new AnalysisException("isPreviousLoadFinished exception");
             }
@@ -458,7 +639,10 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+<<<<<<< HEAD
         Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
             schemaChangeJob.runWaitingTxnJob();
@@ -472,11 +656,17 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
+<<<<<<< HEAD
         Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+=======
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testTableNotExistWhileWaitingTxn() throws AlterCancelException {
+<<<<<<< HEAD
         new MockUp<Utils>() {
             @Mock
             public Long chooseBackend(LakeTablet tablet) {
@@ -515,6 +705,10 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+=======
+        schemaChangeJob.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         db.dropTable(table.getName());
 
@@ -539,11 +733,17 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
+<<<<<<< HEAD
         Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+=======
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testTableDroppedBeforeRewriting() throws AlterCancelException {
+<<<<<<< HEAD
         new MockUp<Utils>() {
             @Mock
             public Long chooseBackend(LakeTablet tablet) {
@@ -587,6 +787,10 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+=======
+        schemaChangeJob.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
@@ -613,11 +817,17 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
+<<<<<<< HEAD
         Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+=======
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testAlterTabletFailed() throws AlterCancelException {
+<<<<<<< HEAD
         new MockUp<Utils>() {
             @Mock
             public Long chooseBackend(LakeTablet tablet) {
@@ -633,11 +843,16 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
+=======
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             public void sendAgentTask(AgentBatchTask batchTask) {
                 batchTask.getAllTasks().stream().findFirst().get().failed();
                 batchTask.getAllTasks().stream().findFirst().get().failed();
                 batchTask.getAllTasks().stream().findFirst().get().failed();
             }
+<<<<<<< HEAD
 
             @Mock
             public void writeEditLog(LakeTableSchemaChangeJob job) {
@@ -658,11 +873,16 @@ public class LakeTableSchemaChangeJobTest {
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
                 return true;
             }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         };
 
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+<<<<<<< HEAD
         Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
@@ -678,11 +898,17 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
+<<<<<<< HEAD
         Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+=======
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testAlterTabletSuccess() throws AlterCancelException {
+<<<<<<< HEAD
         new MockUp<Utils>() {
             @Mock
             public Long chooseBackend(LakeTablet tablet) {
@@ -721,11 +947,21 @@ public class LakeTableSchemaChangeJobTest {
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
                 return true;
             }
+=======
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         };
 
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+<<<<<<< HEAD
         Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
@@ -737,6 +973,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(1, partitions.size());
         Partition partition = partitions.stream().findFirst().orElse(null);
         Assert.assertNotNull(partition);
+<<<<<<< HEAD
         Assert.assertEquals(3, partition.getNextVersion());
         List<MaterializedIndex> shadowIndexes =
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
@@ -744,6 +981,12 @@ public class LakeTableSchemaChangeJobTest {
         MaterializedIndex shadowIndex = shadowIndexes.get(0);
         Assert.assertEquals(shadowTabletIds,
                 shadowIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
+=======
+        Assert.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
+        List<MaterializedIndex> shadowIndexes =
+                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        Assert.assertEquals(1, shadowIndexes.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // Does not support cancel job in FINISHED_REWRITING state.
         schemaChangeJob.cancel("test");
@@ -762,6 +1005,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testPublishVersion() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
+<<<<<<< HEAD
             public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
@@ -771,12 +1015,19 @@ public class LakeTableSchemaChangeJobTest {
                                        long commitTime)
                     throws
                     RpcException {
+=======
+            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                       long newVersion, long warehouseId)
+                        throws
+                        RpcException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 throw new RpcException("publish version failed", "127.0.0.1");
             }
         };
 
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
+<<<<<<< HEAD
             public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
                                              long timeoutSeconds) throws AlterCancelException {
                 // nothing to do.
@@ -813,11 +1064,19 @@ public class LakeTableSchemaChangeJobTest {
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
                 return true;
             }
+=======
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         };
 
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+<<<<<<< HEAD
         Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
@@ -827,27 +1086,43 @@ public class LakeTableSchemaChangeJobTest {
         Partition partition = partitions.stream().findFirst().orElse(null);
         Assert.assertNotNull(partition);
 
+<<<<<<< HEAD
         Assert.assertEquals(1, partition.getVisibleVersion());
         Assert.assertEquals(2, partition.getNextVersion());
         // Disable send publish version
         partition.setNextVersion(3);
+=======
+        Assert.assertEquals(1, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, partition.getDefaultPhysicalPartition().getNextVersion());
+        // Disable send publish version
+        partition.getDefaultPhysicalPartition().setNextVersion(3);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         schemaChangeJob.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         List<MaterializedIndex> shadowIndexes =
+<<<<<<< HEAD
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(1, shadowIndexes.size());
         MaterializedIndex shadowIndex = shadowIndexes.get(0);
         Assert.assertEquals(shadowTabletIds,
                 shadowIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
+=======
+                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        Assert.assertEquals(1, shadowIndexes.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // The partition's visible version has not catch up with the commit version of this schema change job now.
         schemaChangeJob.runFinishedRewritingJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         // Reset partition's next version
+<<<<<<< HEAD
         partition.setVisibleVersion(2, System.currentTimeMillis());
+=======
+        partition.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // Drop table
         db.dropTable(table.getName());
@@ -869,6 +1144,7 @@ public class LakeTableSchemaChangeJobTest {
         // Make publish version success
         new MockUp<Utils>() {
             @Mock
+<<<<<<< HEAD
             public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
@@ -883,6 +1159,10 @@ public class LakeTableSchemaChangeJobTest {
         new MockUp<StarMgrMetaSyncer>() {
             @Mock
             public void dropTabletAndDeleteShard(List<Long> shardIds, StarOSAgent starOSAgent) {
+=======
+            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                       long newVersion, long warehouseId) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 // nothing to do
             }
         };
@@ -896,6 +1176,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals("c1", table.getBaseSchema().get(1).getName());
 
         Assert.assertSame(partition, table.getPartitions().stream().findFirst().get());
+<<<<<<< HEAD
         Assert.assertEquals(3, partition.getVisibleVersion());
         Assert.assertEquals(4, partition.getNextVersion());
 
@@ -918,6 +1199,18 @@ public class LakeTableSchemaChangeJobTest {
             Assert.assertEquals(partition.getId(), tabletMeta.getPartitionId());
             Assert.assertEquals(normalIndex.getId(), tabletMeta.getIndexId());
         }
+=======
+        Assert.assertEquals(3, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(4, partition.getDefaultPhysicalPartition().getNextVersion());
+
+        shadowIndexes = partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        Assert.assertEquals(0, shadowIndexes.size());
+
+        List<MaterializedIndex> normalIndexes =
+                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+        Assert.assertEquals(1, normalIndexes.size());
+        MaterializedIndex normalIndex = normalIndexes.get(0);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // Does not support cancel job in FINISHED state.
         schemaChangeJob.cancel("test");
@@ -926,6 +1219,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testTransactionRaceCondition() throws AlterCancelException {
+<<<<<<< HEAD
         new MockUp<Utils>() {
             @Mock
             public Long chooseBackend(LakeTablet tablet) {
@@ -941,11 +1235,16 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
+=======
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             public void sendAgentTask(AgentBatchTask batchTask) {
                 batchTask.getAllTasks().forEach(t -> t.setFinished(true));
             }
 
             @Mock
+<<<<<<< HEAD
             public void writeEditLog(LakeTableSchemaChangeJob job) {
                 // nothing to do.
             }
@@ -956,6 +1255,8 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             public long getNextTransactionId() {
                 return 10101L;
             }
@@ -975,11 +1276,62 @@ public class LakeTableSchemaChangeJobTest {
             schemaChangeJob.runPendingJob();
         });
         Assert.assertTrue(exception.getMessage().contains(
+<<<<<<< HEAD
                 "concurrent transaction detected while adding shadow index, please re-run the alter table command"));
+=======
+                    "concurrent transaction detected while adding shadow index, please re-run the alter table command"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
         Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testShow() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouseAllowNull(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        LakeTableSchemaChangeJob alterJobV2 =
+                    new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
+        alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
+
+        schemaChangeHandler.addAlterJobV2(alterJobV2);
+        System.out.println(schemaChangeHandler.getAlterJobInfosByDb(db));
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouseAllowNull(long warehouseId) {
+                return null;
+            }
+        };
+
+        SchemaChangeHandler schemaChangeHandler2 = new SchemaChangeHandler();
+        alterJobV2 = new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
+        alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
+        schemaChangeHandler2.addAlterJobV2(alterJobV2);
+        System.out.println(schemaChangeHandler2.getAlterJobInfosByDb(db));
+    }
+
+    @Test
+    public void testCancelPendingJobWithFlag() throws Exception {
+        schemaChangeJob.setIsCancelling(true);
+        schemaChangeJob.runPendingJob();
+        schemaChangeJob.setIsCancelling(false);
+
+        schemaChangeJob.setWaitingCreatingReplica(true);
+        schemaChangeJob.cancel("");
+        schemaChangeJob.setWaitingCreatingReplica(false);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -12,24 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
 import com.starrocks.privilege.ObjectTypeDeprecate;
 import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollection;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.util.HashMap;
 import java.util.List;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Map;
 
 public class RolePrivilegeCollectionInfo implements Writable {
@@ -38,12 +47,15 @@ public class RolePrivilegeCollectionInfo implements Writable {
     private short pluginId;
     @SerializedName(value = "v")
     private short pluginVersion;
+<<<<<<< HEAD
 
     //Deprecated attribute, can be removed in version 3.2
     @Deprecated
     @SerializedName(value = "r")
     private Map<Long, RolePrivilegeCollection> rolePrivCollectionModified;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "r2")
     private Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModifiedV2;
 
@@ -56,6 +68,7 @@ public class RolePrivilegeCollectionInfo implements Writable {
         this.pluginVersion = pluginVersion;
     }
 
+<<<<<<< HEAD
     public Map<Long, RolePrivilegeCollectionV2> getRolePrivCollectionModified() throws PrivilegeException {
         if (rolePrivCollectionModifiedV2 == null) {
             Map<Long, RolePrivilegeCollectionV2> rolePrivMap = new HashMap<>();
@@ -100,6 +113,10 @@ public class RolePrivilegeCollectionInfo implements Writable {
         } else {
             return rolePrivCollectionModifiedV2;
         }
+=======
+    public Map<Long, RolePrivilegeCollectionV2> getRolePrivCollectionModified() {
+        return rolePrivCollectionModifiedV2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public short getPluginId() {

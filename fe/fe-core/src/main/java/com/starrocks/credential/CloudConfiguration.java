@@ -39,7 +39,11 @@ public class CloudConfiguration {
         properties.put(HadoopExt.HADOOP_RUNTIME_JARS, runtimeJars);
         properties.put(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING, toConfString());
         properties.put(HadoopExt.HADOOP_USERNAME, hadoopUsername);
+<<<<<<< HEAD
         tCloudConfiguration.setCloud_properties_v2(properties);
+=======
+        tCloudConfiguration.setCloud_properties(properties);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void applyToConfiguration(Configuration configuration) {

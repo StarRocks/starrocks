@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Contains
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 判断几何图形 `shape1` 是否完全能够包含几何图形 `shape2`。
 

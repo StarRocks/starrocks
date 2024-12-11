@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.google.api.client.util.Lists;
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -22,23 +23,50 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
+=======
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.TableName;
+import com.starrocks.backup.Status;
+import com.starrocks.backup.mv.MVRestoreUpdater;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Random;
 
 public class MaterializedViewTest extends MaterializedViewTestBase {
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
     @BeforeClass
+<<<<<<< HEAD
     public static void setUp() throws Exception {
         MaterializedViewTestBase.setUp();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         Config.default_replication_num = 1;
+=======
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
+
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         starRocksAssert.useTable("depts");
         starRocksAssert.useTable("depts_null");
@@ -50,6 +78,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         starRocksAssert.useTable("dependents");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_unique` (\n" +
+<<<<<<< HEAD
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
                 "    `c_address` varchar(41) NOT NULL COMMENT \"\",\n" +
@@ -61,6 +90,18 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "UNIQUE KEY(`c_custkey`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `c_custkey` int(11) NOT NULL,\n" +
+                "    `c_name` varchar(26) NOT NULL,\n" +
+                "    `c_address` varchar(41) NOT NULL,\n" +
+                "    `c_city` varchar(11) NOT NULL,\n" +
+                "    `c_nation` varchar(16) NOT NULL,\n" +
+                "    `c_region` varchar(13) NOT NULL,\n" +
+                "    `c_phone` varchar(16) NOT NULL,\n" +
+                "    `c_mktsegment` varchar(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`c_custkey`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -69,6 +110,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")\n");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_primary` (\n" +
+<<<<<<< HEAD
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
                 "    `c_address` varchar(41) NOT NULL COMMENT \"\",\n" +
@@ -80,6 +122,18 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`c_custkey`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `c_custkey` int(11) NOT NULL,\n" +
+                "    `c_name` varchar(26) NOT NULL,\n" +
+                "    `c_address` varchar(41) NOT NULL,\n" +
+                "    `c_city` varchar(11) NOT NULL,\n" +
+                "    `c_nation` varchar(16) NOT NULL,\n" +
+                "    `c_region` varchar(13) NOT NULL,\n" +
+                "    `c_phone` varchar(16) NOT NULL,\n" +
+                "    `c_mktsegment` varchar(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`c_custkey`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -88,6 +142,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")\n");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_null` (\n" +
+<<<<<<< HEAD
                 "    `c_custkey` int(11) NULL COMMENT \"\",\n" +
                 "    `c_name` varchar(26) NULL COMMENT \"\",\n" +
                 "    `c_address` varchar(41) NULL COMMENT \"\",\n" +
@@ -99,6 +154,18 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`c_custkey`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `c_custkey` int(11) NULL,\n" +
+                "    `c_name` varchar(26) NULL,\n" +
+                "    `c_address` varchar(41) NULL,\n" +
+                "    `c_city` varchar(11) NULL,\n" +
+                "    `c_nation` varchar(16) NULL,\n" +
+                "    `c_region` varchar(13) NULL,\n" +
+                "    `c_phone` varchar(16) NULL,\n" +
+                "    `c_mktsegment` varchar(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c_custkey`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -108,6 +175,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")\n");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer` (\n" +
+<<<<<<< HEAD
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
                 "    `c_address` varchar(41) NOT NULL COMMENT \"\",\n" +
@@ -119,6 +187,18 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`c_custkey`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `c_custkey` int(11) NOT NULL,\n" +
+                "    `c_name` varchar(26) NOT NULL,\n" +
+                "    `c_address` varchar(41) NOT NULL,\n" +
+                "    `c_city` varchar(11) NOT NULL,\n" +
+                "    `c_nation` varchar(16) NOT NULL,\n" +
+                "    `c_region` varchar(13) NOT NULL,\n" +
+                "    `c_phone` varchar(16) NOT NULL,\n" +
+                "    `c_mktsegment` varchar(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c_custkey`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -127,6 +207,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"unique_constraints\" = \"c_custkey\"\n" +
                 ")\n");
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `dates` (\n" +
+<<<<<<< HEAD
                 "    `d_datekey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `d_date` varchar(20) NOT NULL COMMENT \"\",\n" +
                 "    `d_dayofweek` varchar(10) NOT NULL COMMENT \"\",\n" +
@@ -147,6 +228,27 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`d_datekey`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `d_datekey` int(11) NOT NULL,\n" +
+                "    `d_date` varchar(20) NOT NULL,\n" +
+                "    `d_dayofweek` varchar(10) NOT NULL,\n" +
+                "    `d_month` varchar(11) NOT NULL,\n" +
+                "    `d_year` int(11) NOT NULL,\n" +
+                "    `d_yearmonthnum` int(11) NOT NULL,\n" +
+                "    `d_yearmonth` varchar(9) NOT NULL,\n" +
+                "    `d_daynuminweek` int(11) NOT NULL,\n" +
+                "    `d_daynuminmonth` int(11) NOT NULL,\n" +
+                "    `d_daynuminyear` int(11) NOT NULL,\n" +
+                "    `d_monthnuminyear` int(11) NOT NULL,\n" +
+                "    `d_weeknuminyear` int(11) NOT NULL,\n" +
+                "    `d_sellingseason` varchar(14) NOT NULL,\n" +
+                "    `d_lastdayinweekfl` int(11) NOT NULL,\n" +
+                "    `d_lastdayinmonthfl` int(11) NOT NULL,\n" +
+                "    `d_holidayfl` int(11) NOT NULL,\n" +
+                "    `d_weekdayfl` int(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`d_datekey`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`d_datekey`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -155,6 +257,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"unique_constraints\" = \"d_datekey\"\n" +
                 ")");
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `part` (\n" +
+<<<<<<< HEAD
                 "    `p_partkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `p_name` varchar(23) NOT NULL COMMENT \"\",\n" +
                 "    `p_mfgr` varchar(7) NOT NULL COMMENT \"\",\n" +
@@ -167,6 +270,19 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`p_partkey`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `p_partkey` int(11) NOT NULL,\n" +
+                "    `p_name` varchar(23) NOT NULL,\n" +
+                "    `p_mfgr` varchar(7) NOT NULL,\n" +
+                "    `p_category` varchar(8) NOT NULL,\n" +
+                "    `p_brand` varchar(10) NOT NULL,\n" +
+                "    `p_color` varchar(12) NOT NULL,\n" +
+                "    `p_type` varchar(26) NOT NULL,\n" +
+                "    `p_size` int(11) NOT NULL,\n" +
+                "    `p_container` varchar(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`p_partkey`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -175,6 +291,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"unique_constraints\" = \"p_partkey\"\n" +
                 ")");
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `supplier` (\n" +
+<<<<<<< HEAD
                 "    `s_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `s_name` varchar(26) NOT NULL COMMENT \"\",\n" +
                 "    `s_address` varchar(26) NOT NULL COMMENT \"\",\n" +
@@ -185,6 +302,17 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`s_suppkey`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `s_suppkey` int(11) NOT NULL,\n" +
+                "    `s_name` varchar(26) NOT NULL,\n" +
+                "    `s_address` varchar(26) NOT NULL,\n" +
+                "    `s_city` varchar(11) NOT NULL,\n" +
+                "    `s_nation` varchar(16) NOT NULL,\n" +
+                "    `s_region` varchar(13) NOT NULL,\n" +
+                "    `s_phone` varchar(16) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`s_suppkey`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -194,6 +322,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder` (\n" +
+<<<<<<< HEAD
                 "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `lo_custkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -214,6 +343,27 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`lo_orderkey`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `lo_orderkey` int(11) NOT NULL,\n" +
+                "    `lo_linenumber` int(11) NOT NULL,\n" +
+                "    `lo_custkey` int(11) NOT NULL,\n" +
+                "    `lo_partkey` int(11) NOT NULL,\n" +
+                "    `lo_suppkey` int(11) NOT NULL,\n" +
+                "    `lo_orderdate` int(11) NOT NULL,\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL,\n" +
+                "    `lo_shippriority` int(11) NOT NULL,\n" +
+                "    `lo_quantity` int(11) NOT NULL,\n" +
+                "    `lo_extendedprice` int(11) NOT NULL,\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL,\n" +
+                "    `lo_discount` int(11) NOT NULL,\n" +
+                "    `lo_revenue` int(11) NOT NULL,\n" +
+                "    `lo_supplycost` int(11) NOT NULL,\n" +
+                "    `lo_tax` int(11) NOT NULL,\n" +
+                "    `lo_commitdate` int(11) NOT NULL,\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`lo_orderkey`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "PARTITION BY RANGE(`lo_orderdate`)\n" +
                 "(\n" +
                 "    PARTITION p1 VALUES [(\"-2147483648\"), (\"19930101\")),\n" +
@@ -235,6 +385,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_primary` (\n" +
+<<<<<<< HEAD
                 "    `lo_custkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
@@ -255,6 +406,27 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`lo_custkey`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `lo_custkey` int(11) NOT NULL,\n" +
+                "    `lo_orderkey` int(11) NOT NULL,\n" +
+                "    `lo_linenumber` int(11) NOT NULL,\n" +
+                "    `lo_partkey` int(11) NOT NULL,\n" +
+                "    `lo_suppkey` int(11) NOT NULL,\n" +
+                "    `lo_orderdate` int(11) NOT NULL,\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL,\n" +
+                "    `lo_shippriority` int(11) NOT NULL,\n" +
+                "    `lo_quantity` int(11) NOT NULL,\n" +
+                "    `lo_extendedprice` int(11) NOT NULL,\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL,\n" +
+                "    `lo_discount` int(11) NOT NULL,\n" +
+                "    `lo_revenue` int(11) NOT NULL,\n" +
+                "    `lo_supplycost` int(11) NOT NULL,\n" +
+                "    `lo_tax` int(11) NOT NULL,\n" +
+                "    `lo_commitdate` int(11) NOT NULL,\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`lo_custkey`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`lo_custkey`) BUCKETS 48\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -262,6 +434,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_unique` (\n" +
+<<<<<<< HEAD
                 "    `lo_custkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
@@ -282,6 +455,27 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "UNIQUE KEY(`lo_custkey`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `lo_custkey` int(11) NOT NULL,\n" +
+                "    `lo_orderkey` int(11) NOT NULL,\n" +
+                "    `lo_linenumber` int(11) NOT NULL,\n" +
+                "    `lo_partkey` int(11) NOT NULL,\n" +
+                "    `lo_suppkey` int(11) NOT NULL,\n" +
+                "    `lo_orderdate` int(11) NOT NULL,\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL,\n" +
+                "    `lo_shippriority` int(11) NOT NULL,\n" +
+                "    `lo_quantity` int(11) NOT NULL,\n" +
+                "    `lo_extendedprice` int(11) NOT NULL,\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL,\n" +
+                "    `lo_discount` int(11) NOT NULL,\n" +
+                "    `lo_revenue` int(11) NOT NULL,\n" +
+                "    `lo_supplycost` int(11) NOT NULL,\n" +
+                "    `lo_tax` int(11) NOT NULL,\n" +
+                "    `lo_commitdate` int(11) NOT NULL,\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`lo_custkey`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`lo_custkey`) BUCKETS 48\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -289,6 +483,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_null` (\n" +
+<<<<<<< HEAD
                 "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `lo_custkey` int(11) COMMENT \"\",\n" +
@@ -309,6 +504,27 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`lo_orderkey`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `lo_orderkey` int(11) NOT NULL,\n" +
+                "    `lo_linenumber` int(11) NOT NULL,\n" +
+                "    `lo_custkey` int(11),\n" +
+                "    `lo_partkey` int(11),\n" +
+                "    `lo_suppkey` int(11),\n" +
+                "    `lo_orderdate` int(11),\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL,\n" +
+                "    `lo_shippriority` int(11) NOT NULL,\n" +
+                "    `lo_quantity` int(11) NOT NULL,\n" +
+                "    `lo_extendedprice` int(11) NOT NULL,\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL,\n" +
+                "    `lo_discount` int(11) NOT NULL,\n" +
+                "    `lo_revenue` int(11) NOT NULL,\n" +
+                "    `lo_supplycost` int(11) NOT NULL,\n" +
+                "    `lo_tax` int(11) NOT NULL,\n" +
+                "    `lo_commitdate` int(11) NOT NULL,\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`lo_orderkey`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "PARTITION BY RANGE(`lo_orderdate`)\n" +
                 "(\n" +
                 "    PARTITION p1 VALUES [(\"-2147483648\"), (\"19930101\")),\n" +
@@ -329,12 +545,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t2` (\n" +
+<<<<<<< HEAD
                 "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`c5`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `c5` int(11) NOT NULL,\n" +
+                "    `c6` int(11) NOT NULL,\n" +
+                "    `c7` int(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c5`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -344,12 +568,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t3` (\n" +
+<<<<<<< HEAD
                 "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`c5`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `c5` int(11) NOT NULL,\n" +
+                "    `c6` int(11) NOT NULL,\n" +
+                "    `c7` int(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c5`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -359,12 +591,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t1` (\n" +
+<<<<<<< HEAD
                 "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c2` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c3` int(11) NOT NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`c1`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `c1` int(11) NOT NULL,\n" +
+                "    `c2` int(11) NOT NULL,\n" +
+                "    `c3` int(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c1`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -383,12 +623,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 .withTable(userTagTable);
 
         String eventTable = "CREATE TABLE `event1` (\n" +
+<<<<<<< HEAD
                 "  `event_id` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `event_type` varchar(26) NOT NULL COMMENT \"\",\n" +
                 "  `event_time` datetime NOT NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`event_id`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "  `event_id` int(11) NOT NULL,\n" +
+                "  `event_type` varchar(26) NOT NULL,\n" +
+                "  `event_time` datetime NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`event_id`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`event_id`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -409,8 +657,15 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ");");
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("emps");
         setTableStatistics(t7, 6000000);
+=======
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("emps");
+        setTableStatistics(t7, 6000000);
+
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -906,13 +1161,50 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAggregateWithGroupByKeyExpr() {
+=======
+    public void testAggregateWithGroupByKeyExpr1() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         testRewriteOK("select empid, deptno," +
                         " sum(salary) as total, count(salary) + 1 as cnt" +
                         " from emps group by empid, deptno ",
                 "select abs(empid), sum(salary) from emps group by abs(empid), deptno")
                 .contains("  0:OlapScanNode\n" +
                         "     TABLE: mv0")
+<<<<<<< HEAD
+=======
+                .contains("  1:Project\n" +
+                        "  |  <slot 9> : 9: empid\n" +
+                        "  |  <slot 10> : 10: deptno\n" +
+                        "  |  <slot 11> : 11: total\n" +
+                        "  |  <slot 14> : abs(9: empid)\n" +
+                        "  |  ")
+                .contains("  2:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: sum(11: total)\n" +
+                        "  |  group by: 14: abs, 10: deptno");
+    }
+
+    @Test
+    public void testAggregateWithGroupByKeyExpr2() {
+        testRewriteOK("select empid, deptno," +
+                        " sum(salary) as total, " +
+                        " min(salary) as min_total, " +
+                        " max(salary) as max_total, " +
+                        " count(salary) + 1 as cnt" +
+                        " from emps group by empid, deptno ",
+                "select abs(empid), sum(salary) from emps group by abs(empid), deptno")
+                .contains("  0:OlapScanNode\n" +
+                        "     TABLE: mv0")
+                // only contains required columns from mv scan operator.
+                .contains("  1:Project\n" +
+                        "  |  <slot 9> : 9: empid\n" +
+                        "  |  <slot 10> : 10: deptno\n" +
+                        "  |  <slot 11> : 11: total\n" +
+                        "  |  <slot 16> : abs(9: empid)\n" +
+                        "  |  ")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .contains("  2:AGGREGATE (update serialize)\n" +
                         "  |  STREAMING\n" +
                         "  |  output: sum(11: total)\n" +
@@ -1160,6 +1452,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "from emps group by empid*deptno");
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testAggregateMaterializationAggregateFuncs19() {
         testRewriteOK("select empid, deptno, count(*) as c, sum(empid) as s\n"
@@ -1302,6 +1598,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "group by dependents.empid");
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testJoinAggregateMaterializationAggregateFuncs1() {
         testRewriteOK("select empid, depts.deptno, count(*) as c, sum(empid) as s\n"
@@ -1602,6 +1902,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "join emps on (emps.deptno = depts.deptno)");
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     @Ignore
     public void testJoinMaterialization10() {
@@ -1639,6 +1943,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "(depts.name is not null and emps.name = 'b')");
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     @Ignore
     // TODO: agg push down below Join
@@ -1651,6 +1959,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "join depts on depts.deptno = empid group by empid, depts.deptno");
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     @Ignore
     public void testAggregateOnJoinKeys2() {
@@ -1734,10 +2046,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 " INNER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
                 " INNER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
 
+<<<<<<< HEAD
         String query =
                 "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
                         "FROM `lineorder` INNER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
                         "WHERE `lineorder`.`lo_orderkey` = 100;";
+=======
+        String query = "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
+                "FROM `lineorder` INNER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                "WHERE `lineorder`.`lo_orderkey` = 100;";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         testRewriteOK(mv, query);
     }
@@ -1791,7 +2109,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggJoinViewDelta() {
+<<<<<<< HEAD
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String mv = "SELECT" +
                 " `LO_ORDERKEY` as col1, C_CUSTKEY, S_SUPPKEY, P_PARTKEY," +
                 " sum(LO_QUANTITY) as total_quantity, sum(LO_ORDTOTALPRICE) as total_price, count(*) as num" +
@@ -1827,8 +2148,12 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String mv = "select t1.c1, l.c2 as c2_1, r.c2 as c2_2, r.c3 from hive0.partitioned_db.t1 " +
                 "join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2";
+<<<<<<< HEAD
         String query =
                 "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
+=======
+        String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1860,9 +2185,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "(select * from hive0.partitioned_db.t1 where c1 = 1) a\n" +
                 "join hive0.partitioned_db2.t2 on a.c2 = t2.c2\n" +
                 "join hive0.partitioned_db.t3 on a.c2 = t3.c2";
+<<<<<<< HEAD
         String query =
                 "select a.c2 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
                         "on a.c2 = hive0.partitioned_db.t3.c2";
+=======
+        String query = "select a.c2 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
+                "on a.c2 = hive0.partitioned_db.t3.c2";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2);\" ";
         testRewriteOK(mv, query, constraint)
@@ -1877,9 +2207,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "(select * from hive0.partitioned_db.t1 where c1 = 1) a\n" +
                 "join hive0.partitioned_db2.t2 on a.c2 = t2.c2\n" +
                 "join hive0.partitioned_db.t3 on a.c2 = t3.c2";
+<<<<<<< HEAD
         String query =
                 "select a.c3 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
                         "on a.c2 = hive0.partitioned_db.t3.c2";
+=======
+        String query = "select a.c3 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
+                "on a.c2 = hive0.partitioned_db.t3.c2";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2);\" ";
         testRewriteFail(mv, query, constraint);
@@ -1891,9 +2226,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "where t1.c1 = 1";
+<<<<<<< HEAD
         String query =
                 "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2 " +
                         "where t1.c1 = 1";
+=======
+        String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2 " +
+                "where t1.c1 = 1";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1909,9 +2249,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 l on t1.c2= l.c1 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c1 " +
                 "where t1.c1 = 1";
+<<<<<<< HEAD
         String query =
                 "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c1 " +
                         "where t1.c1 = 1";
+=======
+        String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c1 " +
+                "where t1.c1 = 1";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1925,9 +2270,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "where t1.c1 = 1";
+<<<<<<< HEAD
         String query =
                 "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                         "where t1.c1 = 1";
+=======
+        String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
+                "where t1.c1 = 1";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1941,9 +2291,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "left join hive0.partitioned_db2.t2 l on t1.c2 = l.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "where t1.c1 = 1";
+<<<<<<< HEAD
         String query =
                 "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                         "where t1.c1 = 1";
+=======
+        String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
+                "where t1.c1 = 1";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1957,9 +2312,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "left join hive0.partitioned_db2.t2 l on t1.c2 = l.c2 " +
                 "where t1.c1 = 1";
+<<<<<<< HEAD
         String query =
                 "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                         "where t1.c1 = 1";
+=======
+        String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
+                "where t1.c1 = 1";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1972,9 +2332,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "left join hive0.partitioned_db.t3 on t1.c2= t3.c2 " +
                 "where t1.c1 = 1";
+<<<<<<< HEAD
         String query =
                 "select t1.c1, t3.c3 from hive0.partitioned_db.t1 left join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                         "where t1.c1 = 1";
+=======
+        String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 left join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
+                "where t1.c1 = 1";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2);\" ";
         testRewriteOK(mv, query, constraint);
@@ -2245,9 +2610,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testViewDeltaJoinUKFKInMV2() {
+<<<<<<< HEAD
         String mv =
                 "select emps_no_constraint.empid, emps_no_constraint.deptno, dependents.name from emps_no_constraint\n"
                         + "join dependents using (empid)";
+=======
+        String mv = "select emps_no_constraint.empid, emps_no_constraint.deptno, dependents.name from emps_no_constraint\n"
+                + "join dependents using (empid)";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String query = "select empid, deptno from emps_no_constraint\n"
                 + "where empid = 1";
         String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
@@ -2263,9 +2633,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "join dependents using (empid)"
                 + "inner join depts b on (emps.deptno=b.deptno)\n"
                 + "where emps.empid = 1";
+<<<<<<< HEAD
         String query =
                 "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
                         + "where empid = 1";
+=======
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
                 "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
         testRewriteOK(mv, query, constraint).
@@ -2279,9 +2654,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "left join dependents using (empid)"
                 + "inner join depts b on (emps.deptno=b.deptno)\n"
                 + "where emps.empid = 1";
+<<<<<<< HEAD
         String query =
                 "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
                         + "where empid = 1";
+=======
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
                 "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
         testRewriteOK(mv, query, constraint).
@@ -2296,9 +2676,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "inner join depts b on (emps.deptno=b.deptno)\n"
                 + "left outer join depts a on (emps.deptno=a.deptno)\n"
                 + "where emps.empid = 1";
+<<<<<<< HEAD
         String query =
                 "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
                         + "where empid = 1";
+=======
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
                 "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
         testRewriteFail(mv, query, constraint);
@@ -2311,9 +2696,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "inner join depts b on (emps.deptno=b.deptno)\n"
                 + "left outer join depts a on (emps.deptno=a.deptno)\n"
                 + "where emps.empid = 1";
+<<<<<<< HEAD
         String query =
                 "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
                         + "where empid = 1";
+=======
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String constraint = "\"unique_constraints\" = \"dependents.empid; depts.deptno\"," +
                 "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid);" +
                 "emps_no_constraint(deptno) references depts(deptno)\" ";
@@ -2343,12 +2733,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testViewDeltaColumnCaseSensitiveOnDuplicate() throws Exception {
         {
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+<<<<<<< HEAD
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2357,12 +2755,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+<<<<<<< HEAD
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2371,6 +2777,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+<<<<<<< HEAD
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
@@ -2378,6 +2785,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` decimal(38, 19) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2401,12 +2816,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         {
             // multi key columns
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+<<<<<<< HEAD
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`, `c6`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`, `c6`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c5`, `c6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2414,12 +2837,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+<<<<<<< HEAD
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`C5`, `C6`, `c7`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `C5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`C5`, `C6`, `c7`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`C5`, `C6`, `c7`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2427,6 +2858,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5, C6, c7\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+<<<<<<< HEAD
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
@@ -2434,6 +2866,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2457,12 +2897,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testViewDeltaColumnCaseSensitiveOnPrimary() throws Exception {
         {
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+<<<<<<< HEAD
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2471,12 +2919,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+<<<<<<< HEAD
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "PRIMARY KEY(`c5`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "PRIMARY KEY(`c5`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2484,6 +2940,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+<<<<<<< HEAD
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
@@ -2491,6 +2948,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` decimal(38, 19) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2514,12 +2979,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         {
             // multi key columns
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+<<<<<<< HEAD
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`, `c6`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`, `c6`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c5`, `c6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2527,18 +3000,27 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+<<<<<<< HEAD
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "PRIMARY KEY(`C5`, `C6`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `C5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "PRIMARY KEY(`C5`, `C6`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`C5`, `C6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+<<<<<<< HEAD
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
@@ -2546,6 +3028,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` decimal(38, 19) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2565,16 +3055,28 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testViewDeltaColumnCaseSensitiveOnUnique() throws Exception {
         {
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+<<<<<<< HEAD
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2582,18 +3084,27 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+<<<<<<< HEAD
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "UNIQUE KEY(`C5`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `C5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "UNIQUE KEY(`C5`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`C5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+<<<<<<< HEAD
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
@@ -2601,6 +3112,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` decimal(38, 19) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2623,12 +3142,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         {
             // multi key columns
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+<<<<<<< HEAD
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`, `c6`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`, `c6`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c5`, `c6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2636,18 +3163,27 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+<<<<<<< HEAD
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
                     "UNIQUE KEY(`C5`, `C6`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `C5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "UNIQUE KEY(`C5`, `C6`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`C5`, `C6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+<<<<<<< HEAD
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
                     "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
@@ -2655,6 +3191,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
                     "COMMENT \"OLAP\"\n" +
+=======
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` decimal(38, 19) NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2784,14 +3328,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testRewriteAvg2() {
+<<<<<<< HEAD
         String mv2 = "select user_id, time, sum(tag_id), count(tag_id) from user_tags group by user_id, time;";
+=======
+        String mv2 = "select user_id, time, sum(tag_id) as sum_tag, count(tag_id) as count_tag " +
+                "from user_tags group by user_id, time;";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         testRewriteOK(mv2, "select user_id, avg(tag_id) from user_tags group by user_id;");
     }
 
     @Test
     public void testRewriteAvg3() {
+<<<<<<< HEAD
         String mv2 =
                 "select user_id, time, sum(tag_id % 10), count(tag_id % 10) from user_tags group by user_id, time;";
+=======
+        String mv2 = "select user_id, time, sum(tag_id % 10), count(tag_id % 10) from user_tags group by user_id, time;";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         testRewriteOK(mv2, "select user_id, avg(tag_id % 10) from user_tags group by user_id;");
     }
 
@@ -2807,19 +3360,48 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
         testRewriteOK(mv,
                 "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+=======
+    public void testArrayAggDistinctWithRollup() {
+        String mv = "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id, time;")
+                .notContain("array_unique_agg");
+        testRewriteOK(mv, "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id")
+                .contains("array_unique_agg");
+        testRewriteOK(mv, "select array_distinct(array_agg(tag_id)) from user_tags")
+                .contains("array_unique_agg");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount1() {
+        String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;")
+                .match("  |  <slot 2> : 6: user_id\n" +
+                        "  |  <slot 5> : 7: bitmap_union(to_bitmap(tag_id))");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;")
+                .match("  |  <slot 2> : 7: user_id\n" +
+                        "  |  <slot 6> : bitmap_count(8: bitmap_union(to_bitmap(tag_id)))");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;")
+                .match("  |  <slot 2> : 6: user_id\n" +
+                        "  |  <slot 5> : bitmap_count(7: bitmap_union(to_bitmap(tag_id)))");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testCountDistinctToBitmapCount2() {
         String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;";
+<<<<<<< HEAD
         testRewriteOK(mv,
                 "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
+=======
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
         testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
     }
@@ -2828,8 +3410,12 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testCountDistinctToBitmapCount3() {
         String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id % 10)) from user_tags group by user_id, time;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id % 10)) x from user_tags group by user_id;");
+<<<<<<< HEAD
         testRewriteOK(mv,
                 "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id % 10))) x from user_tags group by user_id;");
+=======
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id % 10))) x from user_tags group by user_id;");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
         testRewriteOK(mv, "select user_id, count(distinct tag_id % 10) x from user_tags group by user_id;");
     }
@@ -2837,31 +3423,47 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testCountDistinctToBitmapCount4() {
         String mv = "select user_id, tag_id from user_tags where user_id > 10;";
+<<<<<<< HEAD
         testRewriteOK(mv,
                 "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
         testRewriteOK(mv,
                 "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
         testRewriteOK(mv,
                 "select user_id, count(distinct tag_id) x from user_tags  where user_id > 10 group by user_id;");
+=======
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags  where user_id > 10 group by user_id;");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testCountDistinctToBitmapCount5() {
         String mv = "select user_id, tag_id from user_tags;";
+<<<<<<< HEAD
         testRewriteOK(mv,
                 "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
         testRewriteOK(mv,
                 "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+=======
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
     }
 
     @Test
     public void testCountDistinctToBitmapCount6() {
         String mv = "select user_id, count(tag_id) from user_tags group by user_id;";
+<<<<<<< HEAD
         testRewriteFail(mv,
                 "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
         testRewriteFail(mv,
                 "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+=======
+        testRewriteFail(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteFail(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         testRewriteFail(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
     }
 
@@ -2935,11 +3537,18 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "bitmap_union(bitmap_hash(concat(user_name, \"b\"))), " +
                 "bitmap_union(bitmap_hash(concat(user_name, \"c\"))) from user_tags group by user_id, time;";
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+<<<<<<< HEAD
         testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x " +
                 "from user_tags group by user_id;");
         // FIXME: MV Rewrite should take care cte reuse node later.
         connectContext.getSessionVariable().setCboCteReuse(false);
+=======
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x " +
+                "from user_tags group by user_id;");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         testRewriteOK(mv, "select user_id, count(distinct user_name), " +
                 " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
                 " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id;");
@@ -2953,6 +3562,35 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testStrColumnCountDistinctToBitmapCount3() {
+        String mv = "select user_id, time, bitmap_union(bitmap_hash(user_name)), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"a\"))), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"b\"))), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"c\"))) from user_tags group by user_id, time;";
+        connectContext.getSessionVariable().setEnableCountDistinctRewriteByHllBitmap(false);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x " +
+                "from user_tags group by user_id;");
+        testRewriteFail(mv, "select user_id, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id;");
+        testRewriteFail(mv, "select user_id, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id, time;");
+        testRewriteFail(mv, "select user_id, time, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id, time;");
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        connectContext.getSessionVariable().setEnableCountDistinctRewriteByHllBitmap(true);
+    }
+
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testBitmapUnionCountToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
@@ -2981,6 +3619,31 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testApproxCountToHLL3() {
+        connectContext.getSessionVariable().setCountDistinctImplementation("ndv");
+        String mv = "select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x, count(distinct tag_id) y " +
+                "from user_tags group by user_id;");
+        connectContext.getSessionVariable().setCountDistinctImplementation("default");
+    }
+
+    @Test
+    public void testApproxCountToHLL4() {
+        connectContext.getSessionVariable().setEnableCountDistinctRewriteByHllBitmap(false);
+        String mv = "select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;";
+        testRewriteFail(mv, "select user_id, count(distinct tag_id) x, count(distinct tag_id) y " +
+                "from user_tags group by user_id;");
+        connectContext.getSessionVariable().setEnableCountDistinctRewriteByHllBitmap(true);
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x, count(distinct tag_id) y " +
+                "from user_tags group by user_id;");
+        testRewriteFail(mv, "select user_id, count(distinct tag_id, user_id) y " +
+                "from user_tags group by user_id;");
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testPercentile1() {
         String mv = "select user_id, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
@@ -2990,8 +3653,12 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testPercentile2() {
+<<<<<<< HEAD
         String mv =
                 "select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;";
+=======
+        String mv = "select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
     }
@@ -3010,9 +3677,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ");\n");
 
+<<<<<<< HEAD
         String mv =
                 "SELECT ds, sum(sum1), bitmap_union(bitmap1), bitmap_union(bitmap2) from test_bitmap_rewrite_agg_tbl " +
                         "group by ds";
+=======
+        String mv = "SELECT ds, sum(sum1), bitmap_union(bitmap1), bitmap_union(bitmap2) from test_bitmap_rewrite_agg_tbl " +
+                "group by ds";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         testRewriteOK(mv, "select cd1 / cd2 from (select ds, bitmap_union_count(bitmap1) as cd1, " +
                 "bitmap_count(bitmap_and(bitmap_union(bitmap1), bitmap_union(bitmap2))) as cd2 " +
                 "from test_bitmap_rewrite_agg_tbl group by ds) t");
@@ -3021,6 +3693,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testQueryWithLimitRewrite() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `aggregate_table_with_null` (\n" +
+<<<<<<< HEAD
                 "  `k1` date NULL COMMENT \"\",\n" +
                 "  `k2` datetime NULL COMMENT \"\",\n" +
                 "  `k3` char(20) NULL COMMENT \"\",\n" +
@@ -3037,6 +3710,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "AGGREGATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "  `k1` date NULL,\n" +
+                "  `k2` datetime NULL,\n" +
+                "  `k3` char(20) NULL,\n" +
+                "  `k4` varchar(20) NULL,\n" +
+                "  `k5` boolean NULL,\n" +
+                "  `v1` bigint(20) SUM NULL,\n" +
+                "  `v2` bigint(20) SUM NULL,\n" +
+                "  `v3` bigint(20) SUM NULL,\n" +
+                "  `v4` bigint(20) MAX NULL,\n" +
+                "  `v5` largeint(40) MAX NULL,\n" +
+                "  `v6` float MIN NULL,\n" +
+                "  `v7` double MIN NULL,\n" +
+                "  `v8` decimal128(38, 9) SUM NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -3048,6 +3738,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `duplicate_table_with_null_partition` (\n" +
+<<<<<<< HEAD
                 "  `k1` date NULL COMMENT \"\",\n" +
                 "  `k2` datetime NULL COMMENT \"\",\n" +
                 "  `k3` char(20) NULL COMMENT \"\",\n" +
@@ -3064,6 +3755,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "  `k1` date NULL,\n" +
+                "  `k2` datetime NULL,\n" +
+                "  `k3` char(20) NULL,\n" +
+                "  `k4` varchar(20) NULL,\n" +
+                "  `k5` boolean NULL,\n" +
+                "  `k6` tinyint(4) NULL,\n" +
+                "  `k7` smallint(6) NULL,\n" +
+                "  `k8` int(11) NULL,\n" +
+                "  `k9` bigint(20) NULL,\n" +
+                "  `k10` largeint(40) NULL,\n" +
+                "  `k11` float NULL,\n" +
+                "  `k12` double NULL,\n" +
+                "  `k13` decimal128(27, 9) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "PARTITION BY RANGE(`k1`)\n" +
                 "(PARTITION p202006 VALUES [(\"0000-01-01\"), (\"2020-07-01\")),\n" +
                 "PARTITION p202007 VALUES [(\"2020-07-01\"), (\"2020-08-01\")),\n" +
@@ -3105,21 +3813,35 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testUnionRewrite() {
         {
+<<<<<<< HEAD
             String mv =
                     "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
                             " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
                             "FROM `customer`\n" +
                             "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+=======
+            String mv = "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
+                    " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
+                    "FROM `customer`\n" +
+                    "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             String query = "select * from lineorder, customer";
             testRewriteOK(mv, query);
         }
 
         {
+<<<<<<< HEAD
             String mv =
                     "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
                             " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
                             "FROM `customer`\n" +
                             "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+=======
+            String mv = "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
+                    " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
+                    "FROM `customer`\n" +
+                    "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             String query = "select * from customer, lineorder";
             testRewriteOK(mv, query);
         }
@@ -3285,11 +4007,18 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testTimeSliceRewrite() throws Exception {
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t_time_slice` (\n" +
+<<<<<<< HEAD
                 "    `dt` datetime NOT NULL COMMENT \"\",\n" +
                 "    `c1` int(11) NOT NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`dt`)\n" +
                 "COMMENT \"OLAP\"\n" +
+=======
+                "    `dt` datetime NOT NULL,\n" +
+                "    `c1` int(11) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`)\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "PARTITION BY RANGE(`dt`)\n" +
                 "(\n" +
                 "    PARTITION p1 VALUES [(\"2023-06-01\"), (\"2023-06-02\")),\n" +
@@ -3309,6 +4038,30 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCountDistinctRollupAgg() throws Exception {
+        {
+            String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
+                    + "from emps group by empid, deptno, locationid";
+            String query = "select empid, count(distinct name) as s\n"
+                    + "from emps where deptno=1 and locationid=1 "
+                    + "group by empid ";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
+                    + "from emps group by empid, deptno, locationid";
+            String query = "select empid, count(distinct name) as s\n"
+                    + "from emps where deptno=1 \n"
+                    + "group by empid ";
+            testRewriteFail(mv, query);
+        }
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testJoinDeriveRewrite() {
         // left outer join
         {
@@ -3405,10 +4158,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey and lo_shipmode = c_name";
+<<<<<<< HEAD
             String query =
                     "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
                             " from lineorder inner join customer" +
                             " on lo_custkey = c_custkey and lo_shipmode = c_name";
+=======
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey and lo_shipmode = c_name";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
@@ -3437,8 +4196,12 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
+<<<<<<< HEAD
 
             String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue" +
+=======
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     " from lineorder left anti join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3538,16 +4301,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "     partitions=1/1");
         }
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey and lo_shipmode = c_name";
+<<<<<<< HEAD
             String query =
                     "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
                             " from lineorder inner join customer" +
                             " on lo_custkey = c_custkey and lo_shipmode = c_name";
+=======
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey and lo_shipmode = c_name";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
@@ -3759,6 +4531,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCountDistinctRollupAgg() throws Exception {
         {
             String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
@@ -3780,6 +4553,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testRightOuterJoin() {
         {
             String q = "select empid, depts.deptno from emps\n"
@@ -3818,7 +4593,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testLeftSemiJoin() {
+=======
+    public void testLeftSemiJoinJoin() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         {
             String q = "select empid from emps\n"
                     + "left semi join depts using (deptno)";
@@ -3837,7 +4616,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testLeftAntiJoin() {
+=======
+    public void testLeftAntiJoinJoin() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         {
             String q = "select empid from emps\n"
                     + "left anti join depts using (deptno)";
@@ -3856,7 +4639,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testRightSemiJoin() {
+=======
+    public void testRightSemiJoinJoin() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         {
             String q = "select deptno from emps\n"
                     + "right semi join depts using (deptno)";
@@ -3987,6 +4774,126 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testOrPredicates() {
+        {
+            String mv = "select * from lineorder where not (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey <= 10000 and lo_linenumber <= 5000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where not (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey <= 1000 and lo_linenumber <= 500";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: 18: lo_orderkey <= 1000, 19: lo_linenumber <= 500");
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > 10000 or lo_linenumber > 5000";
+            String query = "select * from lineorder where not( lo_orderkey <= 10000 and lo_linenumber <= 5000)";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > 10000 or lo_linenumber > 5000";
+            String query = "select * from lineorder where not( lo_orderkey <= 20000 and lo_linenumber <= 10000)";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: (18: lo_orderkey > 20000) OR (19: lo_linenumber > 10000)");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: 18: lo_orderkey > 10000");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10000 or lo_linenumber > 5000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.notContain("PREDICATES");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 15000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10001";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 9999";
+            testRewriteFail(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey >= 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey >= 10000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey >= 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey >= 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey = 10000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber > 6000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > 10000";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber > 6000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber > 6000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey < 1000 and lo_linenumber < 2000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: 18: lo_orderkey < 1000, 19: lo_linenumber < 2000");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000) and (lo_orderkey < 1000 or lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber < 1000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: 18: lo_orderkey > 15000, 19: lo_linenumber < 1000");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_orderkey < 5000) and (lo_linenumber > 10000 or lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber < 1000";
+            testRewriteOK(mv, query);
+        }
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testJoinDerive() throws Exception {
         starRocksAssert.withTable("CREATE TABLE t5 (\n" +
                 "                k1 int,\n" +
@@ -4117,6 +5024,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testJoinWithToBitmapRewrite() throws Exception {
         try {
             String table1 = "CREATE TABLE test_sr_table_join(\n" +
@@ -4291,6 +5199,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testAggWithoutRollup() throws Exception {
         try {
             starRocksAssert.withTable("create table dim_test_sr_table (\n" +
@@ -4336,6 +5246,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
                     "WHERE t1.fdate = 20230705\n" +
                     "GROUP BY fplat_form_itg2_name;";
+<<<<<<< HEAD
+=======
+            testRewriteOK(mv, query);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             starRocksAssert.dropTable("test_sr_table_join");
             starRocksAssert.dropTable("dim_test_sr_table");
@@ -4573,6 +5487,79 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testJoinWithToBitmapRewrite() throws Exception {
+        try {
+            String table1 = "CREATE TABLE test_sr_table_join(\n" +
+                    "fdate int,\n" +
+                    "fetl_time BIGINT ,\n" +
+                    "facct_type BIGINT ,\n" +
+                    "userid STRING ,\n" +
+                    "fplat_form_itg2 BIGINT ,\n" +
+                    "funit BIGINT ,\n" +
+                    "flcnt BIGINT\n" +
+                    ")PARTITION BY range(fdate) (\n" +
+                    "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                    "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                    "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                    "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(userid)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(table1);
+            String table2 = "create table dim_test_sr_table (\n" +
+                    "fplat_form_itg2 bigint,\n" +
+                    "fplat_form_itg2_name string\n" +
+                    ")DISTRIBUTED BY HASH(fplat_form_itg2)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(table2);
+
+            OlapTable t4 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(MATERIALIZED_DB_NAME)
+                    .getTable("test_sr_table_join");
+            setTableStatistics(t4, 150000);
+
+            String mv = "select t1.fdate, t2.fplat_form_itg2_name," +
+                    " BITMAP_UNION(to_bitmap(abs(MURMUR_HASH3_32(t1.userid)))) AS index_0_8228," +
+                    " sum(t1.flcnt)as index_xxx\n" +
+                    "FROM test_sr_table_join t1\n" +
+                    "LEFT JOIN dim_test_sr_table t2\n" +
+                    "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                    "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
+                    "GROUP BY fdate, fplat_form_itg2_name;";
+            String query = "select t2.fplat_form_itg2_name," +
+                    " BITMAP_UNION_COUNT(to_bitmap(abs(MURMUR_HASH3_32(t1.userid)))) AS index_0_8228\n" +
+                    "FROM test_sr_table_join t1\n" +
+                    "LEFT JOIN dim_test_sr_table t2\n" +
+                    "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                    "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
+                    "GROUP BY fplat_form_itg2_name;";
+            testRewriteOK(mv, query);
+        } finally {
+            starRocksAssert.dropTable("test_sr_table_join");
+            starRocksAssert.dropTable("dim_test_sr_table");
+        }
+    }
+
+    @Test
+    public void testCountRewrite() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE count_tbl_1 (\n" +
+                "k1 int,\n" +
+                "k2 int\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1)" +
+                "PROPERTIES (" +
+                "\"replication_num\" = \"1\")\n");
+        testRewriteNonmatch("SELECT count(distinct k1) FROM count_tbl_1", "select count(*) from count_tbl_1");
+        starRocksAssert.dropTable("count_tbl_1");
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testRangePredicateRewrite() throws Exception {
         // range predicate with partition prune
         {
@@ -5337,6 +6324,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
         PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
 
+<<<<<<< HEAD
         {
             testRewriteFail(mv, query);
         }
@@ -5344,6 +6332,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         // For enforce-columns changed which also changed mv's cost model, use force rewrite to force the result.
         connectContext.getSessionVariable()
                 .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
+=======
+        // For enforce-columns changed which also changed mv's cost model, use force rewrite to force the result.
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
+        testRewriteOK(mv, query);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         {
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("UNION");
@@ -5415,6 +6410,47 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testMvRestoreUpdater1() {
+        String mvName = "test0";
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT *  FROM lineorder", mvName);
+        starRocksAssert.withMaterializedView(mv,
+                () -> {
+                    MaterializedView mvTable = (MaterializedView) getTable(MATERIALIZED_DB_NAME, mvName);
+                    Pair<Status, Boolean> result = MVRestoreUpdater.checkMvDefinedQuery(mvTable, Maps.newHashMap(), Pair.create("", ""));
+                    Assert.assertTrue(result.first.ok());
+                });
+
+    }
+
+    @Test
+    public void testMvRestoreUpdater2() {
+        String mvName = "test0";
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT * FROM lineorder", mvName);
+
+        starRocksAssert.withMaterializedView(mv,
+                () -> {
+                    MaterializedView mvTable = (MaterializedView) getTable(MATERIALIZED_DB_NAME, mvName);
+                    Pair<String, String> newDefinedQueries = Pair.create("", "");
+                    Map<TableName, TableName> remoteToLocalTableName = Maps.newHashMap();
+                    remoteToLocalTableName.put(TableName.fromString("test.lineorder"),
+                            TableName.fromString("test.lineorder"));
+                    boolean result = MVRestoreUpdater.renewMvBaseTableNames(mvTable,
+                            remoteToLocalTableName, connectContext, newDefinedQueries);
+                    Assert.assertTrue(result);
+                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.first));
+                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.second));
+                });
+
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testAggregateWithHave() {
         String mv = "select empid, deptno,\n" +
                 " sum(salary) as total, count(salary)  as cnt\n" +
@@ -5556,16 +6592,207 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "TABLE: mv0");
         }
     }
+<<<<<<< HEAD
    @Test
+=======
+
+    @Test
+    public void testAggRollupWithTimeUnit1() throws Exception {
+        String sql = "CREATE TABLE `t0` (\n" +
+                "  `date_col` date NOT NULL,\n" +
+                "  `id` int(11) NOT NULL,\n" +
+                "  `int_col` int(11) NOT NULL,\n" +
+                "  `float_col_1` float NOT NULL,\n" +
+                "  `float_col_2` float NOT NULL,\n" +
+                "  `varchar_col` varchar(255) NOT NULL,\n" +
+                "  `tinyint_col` tinyint(4) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`date_col`, `id`)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n";
+        starRocksAssert.withTable(sql);
+        String mv1 = "create MATERIALIZED VIEW date_mv\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")   as select tinyint_col, date_col , sum(float_col_1 * int_col) as sum_value " +
+                "from t0 group by tinyint_col, date_col;";
+        starRocksAssert.withMaterializedView(mv1);
+
+        // date column should be the same with date_trunc('day', ct)
+        String[] rollupTimeUnits = new String[]{ "day", "week", "month", "quarter", "year" };
+        for (String rollupTimeUnit : rollupTimeUnits) {
+            String query = "select tinyint_col, date_trunc('" + rollupTimeUnit + "', date_col) as date_col, " +
+                    "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                    "group by tinyint_col, date_trunc('" + rollupTimeUnit + "', date_col);";
+            String plan = sql(query).getExecPlan();
+            PlanTestBase.assertContains(plan, "date_mv");
+        }
+        starRocksAssert.dropTable("t0");
+        starRocksAssert.dropMaterializedView("date_mv");
+    }
+
+    @Test
+    public void testAggRollupWithTimeUnit2() throws Exception {
+        String sql = "CREATE TABLE `t0` (\n" +
+                "  `date_col` datetime NOT NULL,\n" +
+                "  `id` int(11) NOT NULL,\n" +
+                "  `int_col` int(11) NOT NULL,\n" +
+                "  `float_col_1` float NOT NULL,\n" +
+                "  `float_col_2` float NOT NULL,\n" +
+                "  `varchar_col` varchar(255) NOT NULL,\n" +
+                "  `tinyint_col` tinyint(4) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`date_col`, `id`)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n";
+        starRocksAssert.withTable(sql);
+        String mv1 = "create MATERIALIZED VIEW date_mv\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")   as select tinyint_col, date_trunc('day', date_col), sum(float_col_1 * int_col) as sum_value " +
+                "from t0 group by tinyint_col, date_trunc('day', date_col);";
+        starRocksAssert.withMaterializedView(mv1);
+
+        // date column should be the same with date_trunc('day', ct)
+        //String[] timeUnits = new String[]{"day", "week",  "month", "quarter", "year"};
+        String[] timeUnits = new String[]{ "week", "month", "quarter", "year" };
+        for (String timeUnit : timeUnits) {
+            {
+                String query = "select tinyint_col, date_trunc('" + timeUnit + "', date_col) as date_col, " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "group by tinyint_col, date_trunc('" + timeUnit + "', date_col);";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertContains(plan, "date_mv");
+            }
+
+            {
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_col >= '2024-01-01 00:00:00' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertContains(plan, "date_mv");
+            }
+
+            {
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_trunc('" + timeUnit + "',  date_col) >= '2024-01-01' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertContains(plan, "date_mv");
+            }
+
+            {
+                // TODO: we can support this later.
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_trunc('" + timeUnit + "',  date_col) = '2024-01-01' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertNotContains(plan, "date_mv");
+            }
+
+            {
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_col >= '2024-09-18 01:00:01' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertNotContains(plan, "date_mv");
+            }
+        }
+        starRocksAssert.dropTable("t0");
+        starRocksAssert.dropMaterializedView("date_mv");
+    }
+
+    @Test
+    public void testCreateMVWithAggStateRewrite() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE s1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT DEFAULT \"0\"\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 " +
+                " REFRESH DEFERRED MANUAL " +
+                "as \n" +
+                "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1, k2;");
+        {
+            String query = "select k1, k2, avg_merge(v1) from (" +
+                    "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2) t " +
+                    "group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "select k1, k2, avg_merge(v1) from (" +
+                    " SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2 " +
+                    " UNION ALL" +
+                    " SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2 " +
+                    ") t " +
+                    "group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+
+        {
+            String query = "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg_merge(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k2, avg_merge(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg(k3 * 4) as v1 from s1 where k1 != 'a' group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k2, avg(k3 * 4) as v1 from s1 where k1 != 'a' group by k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("s1");
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testRangePredicateRewriteCase1() {
         String mv = "select lo_orderkey, lo_orderdate, lo_linenumber, lo_shipmode from lineorder";
         String query = "select distinct lo_orderkey from lineorder where lo_shipmode in (upper('a'), lower('a')) and " +
                 "lo_linenumber = 1";
+<<<<<<< HEAD
         String plan = testRewriteOK(mv, query).geRewritePlan();
         PlanTestBase.assertContains(plan, "     TABLE: mv0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 20: lo_linenumber = 1, (21: lo_shipmode = lower('a')) OR (21: lo_shipmode = upper('a'))\n" +
                 "     partitions=1/1");
+=======
+        String plan = testRewriteOK(mv, query)
+                .getExecPlan();
+        PlanTestBase.assertContains(plan, "   TABLE: mv0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 20: lo_linenumber = 1, 21: lo_shipmode IN ('A', 'a')");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -5573,6 +6800,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         // If agg push down is open, cannot rewrite.
         String mv = "select lo_orderkey from lineorder group by lo_orderkey";
         String sql = "select count(distinct lo_orderkey) from lineorder where lo_orderkey = 1";
+<<<<<<< HEAD
         testRewriteFail(mv, sql);
+=======
+        testRewriteOK(mv, sql);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

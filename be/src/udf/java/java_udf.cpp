@@ -92,6 +92,7 @@ void JVMFunctionHelper::_init() {
     _object_class = JNI_FIND_CLASS("java/lang/Object");
     _object_array_class = JNI_FIND_CLASS("[Ljava/lang/Object;");
     _string_class = JNI_FIND_CLASS("java/lang/String");
+<<<<<<< HEAD
     _throwable_class = JNI_FIND_CLASS("java/lang/Throwable");
     _jarrays_class = JNI_FIND_CLASS("java/util/Arrays");
     _list_class = JNI_FIND_CLASS("java/util/List");
@@ -101,6 +102,17 @@ void JVMFunctionHelper::_init() {
     CHECK(_throwable_class);
     CHECK(_jarrays_class);
     CHECK(_list_class);
+=======
+    _jarrays_class = JNI_FIND_CLASS("java/util/Arrays");
+    _list_class = JNI_FIND_CLASS("java/util/List");
+    _exception_util_class = JNI_FIND_CLASS("org/apache/commons/lang3/exception/ExceptionUtils");
+
+    CHECK(_object_class);
+    CHECK(_string_class);
+    CHECK(_jarrays_class);
+    CHECK(_list_class);
+    CHECK(_exception_util_class);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ADD_NUMBERIC_CLASS(boolean, Boolean, Z);
     ADD_NUMBERIC_CLASS(byte, Byte, B);
@@ -190,12 +202,21 @@ JVMClass& JVMFunctionHelper::function_state_clazz() {
     return *_function_states_clazz;
 }
 
+<<<<<<< HEAD
 #define CHECK_FUNCTION_EXCEPTION(_env, name)                  \
     if (auto e = _env->ExceptionOccurred()) {                 \
         LOCAL_REF_GUARD(e);                                   \
         _env->ExceptionClear();                               \
         LOG(WARNING) << "Exception happend when call " #name; \
         return "";                                            \
+=======
+#define CHECK_FUNCTION_EXCEPTION(_env, name)                   \
+    if (auto e = _env->ExceptionOccurred()) {                  \
+        LOCAL_REF_GUARD(e);                                    \
+        _env->ExceptionClear();                                \
+        LOG(WARNING) << "Exception happened when call " #name; \
+        return "";                                             \
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
 #define RETURN_ERROR_IF_EXCEPTION(env, errmsg)                                   \
@@ -240,6 +261,7 @@ std::string JVMFunctionHelper::to_cxx_string(jstring str) {
 }
 
 std::string JVMFunctionHelper::dumpExceptionString(jthrowable throwable) {
+<<<<<<< HEAD
     std::stringstream ss;
     // toString
     jmethodID toString = getToStringMethod(_throwable_class);
@@ -254,6 +276,15 @@ std::string JVMFunctionHelper::dumpExceptionString(jthrowable throwable) {
     CHECK_FUNCTION_EXCEPTION(_env, "dump_string")
     ss << array_to_string(stack_traces);
     return ss.str();
+=======
+    // toString
+    auto get_stack_trace = _env->GetStaticMethodID(_exception_util_class, "getStackTrace",
+                                                   "(Ljava/lang/Throwable;)Ljava/lang/String;");
+    CHECK(get_stack_trace != nullptr) << "Not Found JNI method getStackTrace";
+    jobject stack_traces = _env->CallStaticObjectMethod(_exception_util_class, get_stack_trace, (jobject)throwable);
+    LOCAL_REF_GUARD(stack_traces);
+    return to_cxx_string((jstring)stack_traces);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 jmethodID JVMFunctionHelper::getToStringMethod(jclass clazz) {
@@ -458,7 +489,11 @@ DirectByteBuffer::~DirectByteBuffer() {
             _handle = nullptr;
             return Status::OK();
         });
+<<<<<<< HEAD
         ret->get_future().get();
+=======
+        (void)ret->get_future().get();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -473,7 +508,11 @@ void JavaGlobalRef::clear() {
             _handle = nullptr;
             return Status::OK();
         });
+<<<<<<< HEAD
         ret->get_future().get();
+=======
+        (void)ret->get_future().get();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 

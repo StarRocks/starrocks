@@ -91,8 +91,19 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open) {
     {
         auto txn_id = next_id();
         auto tablet_id = -1;
+<<<<<<< HEAD
         auto delta_writer = AsyncDeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                      _mem_tracker.get());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }
@@ -100,8 +111,19 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open) {
     {
         auto txn_id = next_id();
         auto tablet_id = _tablet_metadata->id();
+<<<<<<< HEAD
         auto delta_writer = AsyncDeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                      _mem_tracker.get());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->open());
@@ -111,8 +133,19 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open) {
     {
         auto txn_id = next_id();
         auto tablet_id = _tablet_metadata->id();
+<<<<<<< HEAD
         auto delta_writer = AsyncDeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                      _mem_tracker.get());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto t1 = std::thread([&]() {
             for (int i = 0; i < 10000; i++) {
                 ASSERT_OK(delta_writer->open());
@@ -141,8 +174,19 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
+<<<<<<< HEAD
     auto delta_writer =
             AsyncDeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+=======
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_OK(delta_writer->open());
     // Call open() again
     ASSERT_OK(delta_writer->open());
@@ -153,8 +197,13 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write) {
     // Write
     delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
     // finish
+<<<<<<< HEAD
     delta_writer->finish([&](const Status& st) {
         ASSERT_OK(st);
+=======
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_TRUE(res.ok()) << res.ok();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         latch.count_down();
     });
 
@@ -181,7 +230,11 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write) {
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
     auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema.get()));
+=======
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -219,8 +272,19 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_concurrently) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
+<<<<<<< HEAD
     auto delta_writer =
             AsyncDeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+=======
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ASSERT_OK(delta_writer->open());
 
@@ -249,8 +313,13 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_concurrently) {
 
     // finish
     CountDownLatch latch(1);
+<<<<<<< HEAD
     delta_writer->finish([&](const Status& st) {
         ASSERT_OK(st);
+=======
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_TRUE(res.ok()) << res.status();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         latch.count_down();
     });
 
@@ -277,7 +346,11 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_concurrently) {
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
     auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema.get()));
+=======
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -315,8 +388,19 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_after_close) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
+<<<<<<< HEAD
     auto delta_writer =
             AsyncDeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+=======
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_OK(delta_writer->open());
 
     // close()
@@ -345,8 +429,19 @@ TEST_F(LakeAsyncDeltaWriterTest, test_finish_after_close) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
+<<<<<<< HEAD
     auto delta_writer =
             AsyncDeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+=======
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_OK(delta_writer->open());
 
     // close()
@@ -354,8 +449,13 @@ TEST_F(LakeAsyncDeltaWriterTest, test_finish_after_close) {
 
     auto tid = std::this_thread::get_id();
     // finish()
+<<<<<<< HEAD
     delta_writer->finish([&](const Status& st) {
         ASSERT_ERROR(st);
+=======
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_FALSE(res.ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_EQ(tid, std::this_thread::get_id());
     });
 }
@@ -365,8 +465,19 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close) {
     {
         auto txn_id = next_id();
         auto tablet_id = _tablet_metadata->id();
+<<<<<<< HEAD
         auto delta_writer = AsyncDeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                      _mem_tracker.get());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_OK(delta_writer->open());
 
         delta_writer->close();
@@ -376,8 +487,19 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close) {
     {
         auto txn_id = next_id();
         auto tablet_id = _tablet_metadata->id();
+<<<<<<< HEAD
         auto delta_writer = AsyncDeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                      _mem_tracker.get());
+=======
+        ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_OK(delta_writer->open());
         auto t1 = std::thread([&]() {
             for (int i = 0; i < 10000; i++) {
@@ -397,8 +519,19 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close) {
 TEST_F(LakeAsyncDeltaWriterTest, test_open_after_close) {
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
+<<<<<<< HEAD
     auto delta_writer =
             AsyncDeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+=======
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_OK(delta_writer->open());
     delta_writer->close();
     auto st = delta_writer->open();
@@ -422,8 +555,19 @@ TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
+<<<<<<< HEAD
     auto delta_writer =
             AsyncDeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+=======
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_OK(delta_writer->open());
 
     auto tid = std::this_thread::get_id();
@@ -450,4 +594,47 @@ TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(LakeAsyncDeltaWriterTest, test_flush) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    CountDownLatch latch(1);
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
+    delta_writer->flush([&](const Status& st) {
+        ASSERT_OK(st);
+        latch.count_down();
+    });
+    latch.wait();
+    while (delta_writer->queueing_memtable_num() > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    EXPECT_EQ(0, delta_writer->queueing_memtable_num());
+
+    // test flush after close
+    SyncPoint::GetInstance()->LoadDependency({{"AsyncDeltaWriterImpl::close:2", "AsyncDeltaWriterImpl::execute:1"}});
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() { SyncPoint::GetInstance()->DisableProcessing(); });
+    delta_writer->flush([&](const Status& st) { ASSERT_ERROR(st); });
+    delta_writer->close();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::lake

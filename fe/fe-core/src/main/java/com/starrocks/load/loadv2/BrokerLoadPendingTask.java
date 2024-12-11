@@ -36,7 +36,11 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -69,12 +73,20 @@ public class BrokerLoadPendingTask extends LoadTask {
     }
 
     @Override
+<<<<<<< HEAD
     void executeTask() throws UserException {
+=======
+    void executeTask() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG.info("begin to execute broker pending task. job: {}", callback.getCallbackId());
         getAllFileStatus();
     }
 
+<<<<<<< HEAD
     private void getAllFileStatus() throws UserException {
+=======
+    private void getAllFileStatus() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         long start = System.currentTimeMillis();
         long totalFileSize = 0;
         int totalFileNum = 0;

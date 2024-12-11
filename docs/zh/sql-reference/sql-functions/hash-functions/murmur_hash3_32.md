@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # murmur_hash3_32
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回输入字符串的 32 位 murmur3 hash 值。
 

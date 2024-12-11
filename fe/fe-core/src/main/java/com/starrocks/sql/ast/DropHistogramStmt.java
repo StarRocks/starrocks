@@ -15,6 +15,10 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.Expr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
@@ -23,6 +27,7 @@ import java.util.List;
 
 public class DropHistogramStmt extends StatementBase {
     private final TableName tbl;
+<<<<<<< HEAD
     private final List<String> columnNames;
 
     public DropHistogramStmt(TableName tbl, List<String> columnNames) {
@@ -33,6 +38,21 @@ public class DropHistogramStmt extends StatementBase {
         super(pos);
         this.tbl = tbl;
         this.columnNames = columnNames;
+=======
+    private List<String> columnNames;
+    private final List<Expr> columns;
+
+    private boolean isExternal = false;
+
+    public DropHistogramStmt(TableName tbl, List<Expr> columns) {
+        this(tbl, columns, NodePosition.ZERO);
+    }
+
+    public DropHistogramStmt(TableName tbl, List<Expr> columns, NodePosition pos) {
+        super(pos);
+        this.tbl = tbl;
+        this.columns = columns;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public TableName getTableName() {
@@ -43,6 +63,17 @@ public class DropHistogramStmt extends StatementBase {
         return columnNames;
     }
 
+<<<<<<< HEAD
+=======
+    public void setColumnNames(List<String> columnNames) {
+        this.columnNames = columnNames;
+    }
+
+    public List<Expr> getColumns() {
+        return columns;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropHistogramStatement(this, context);
@@ -52,4 +83,15 @@ public class DropHistogramStmt extends StatementBase {
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean isExternal() {
+        return isExternal;
+    }
+
+    public void setExternal(boolean isExternal) {
+        this.isExternal = isExternal;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # log
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Calculates the logarithm of a number to a specified base (or radix). If the base is not specified, this function is equivalent to [ln](../math-functions/ln.md).
 

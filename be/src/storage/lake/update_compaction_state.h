@@ -20,6 +20,10 @@
 #include "common/status.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
+<<<<<<< HEAD
+=======
+#include "storage/tablet_schema.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -35,7 +39,11 @@ public:
     CompactionState(const CompactionState&) = delete;
     CompactionState& operator=(const CompactionState&) = delete;
 
+<<<<<<< HEAD
     Status load_segments(Rowset* rowset, UpdateManager* update_manager, const TabletSchema& tablet_schema,
+=======
+    Status load_segments(Rowset* rowset, UpdateManager* update_manager, const TabletSchemaCSPtr& tablet_schema,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                          uint32_t segment_id);
     void release_segments(uint32_t segment_id);
 
@@ -46,7 +54,12 @@ public:
     std::vector<ColumnUniquePtr> pk_cols;
 
 private:
+<<<<<<< HEAD
     Status _load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id);
+=======
+    Status _load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     UpdateManager* _update_manager = nullptr;
     size_t _memory_usage = 0;
     // to be destructed after segment iters

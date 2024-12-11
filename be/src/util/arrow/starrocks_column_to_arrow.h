@@ -25,7 +25,11 @@
 #include <arrow/status.h>
 #include <arrow/type.h>
 #include <arrow/visitor.h>
+<<<<<<< HEAD
 #include <arrow/visitor_inline.h>
+=======
+#include <arrow/visitor_generate.h>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #include <memory>
 
@@ -39,6 +43,13 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
                                     const std::shared_ptr<arrow::Schema>& schema, arrow::MemoryPool* pool,
                                     std::shared_ptr<arrow::RecordBatch>* result);
 
+<<<<<<< HEAD
+=======
+Status convert_columns_to_arrow_batch(size_t num_rows, const Columns& columns, arrow::MemoryPool* pool,
+                                      const TypeDescriptor* type_descs, const std::shared_ptr<arrow::Schema>& schema,
+                                      std::shared_ptr<arrow::RecordBatch>* result);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // only used for UT test
 Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDescriptor*>& _slot_types,
                                     const std::vector<SlotId>& _slot_ids, const std::shared_ptr<arrow::Schema>& schema,

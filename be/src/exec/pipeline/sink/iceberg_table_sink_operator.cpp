@@ -18,6 +18,10 @@
 
 #include "exec/parquet_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+<<<<<<< HEAD
+=======
+#include "exec/workgroup/work_group.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::pipeline {
 
@@ -31,7 +35,11 @@ Status IcebergTableSinkOperator::prepare(RuntimeState* state) {
 void IcebergTableSinkOperator::close(RuntimeState* state) {
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
+<<<<<<< HEAD
             writer.second->close(state);
+=======
+            WARN_IF_ERROR(writer.second->close(state), "close writer failed");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     Operator::close(state);
@@ -62,12 +70,21 @@ bool IcebergTableSinkOperator::is_finished() const {
 
 Status IcebergTableSinkOperator::set_finishing(RuntimeState* state) {
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+<<<<<<< HEAD
         state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+=======
+        state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+                state->query_ctx(), state->fragment_ctx());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
+<<<<<<< HEAD
             writer.second->close(state);
+=======
+            WARN_IF_ERROR(writer.second->close(state), "close writer failed");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -302,6 +319,13 @@ void calculate_column_stats(const std::shared_ptr<::parquet::FileMetaData>& meta
 
 void IcebergTableSinkOperator::add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer,
                                                        RuntimeState* state) {
+<<<<<<< HEAD
+=======
+    if (writer->metadata() == nullptr) {
+        return;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TIcebergColumnStats iceberg_column_stats;
     calculate_column_stats(writer->metadata(), iceberg_column_stats);
 
@@ -312,7 +336,11 @@ void IcebergTableSinkOperator::add_iceberg_commit_info(starrocks::parquet::Async
     iceberg_data_file.__set_record_count(writer->metadata()->num_rows());
     iceberg_data_file.__set_file_size_in_bytes(writer->file_size());
     std::vector<int64_t> split_offsets;
+<<<<<<< HEAD
     writer->split_offsets(split_offsets);
+=======
+    (void)writer->split_offsets(split_offsets);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     iceberg_data_file.__set_split_offsets(split_offsets);
     iceberg_data_file.__set_column_stats(iceberg_column_stats);
 

@@ -19,34 +19,101 @@ package com.starrocks.utframe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
+<<<<<<< HEAD
 import com.starrocks.common.ClientPool;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
+=======
+import com.starrocks.leader.LeaderImpl;
+import com.starrocks.proto.AbortCompactionRequest;
+import com.starrocks.proto.AbortCompactionResponse;
+import com.starrocks.proto.AbortTxnRequest;
+import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.CompactRequest;
+import com.starrocks.proto.CompactResponse;
+import com.starrocks.proto.DeleteDataRequest;
+import com.starrocks.proto.DeleteDataResponse;
+import com.starrocks.proto.DeleteTabletRequest;
+import com.starrocks.proto.DeleteTabletResponse;
+import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.DeleteTxnLogResponse;
+import com.starrocks.proto.DropTableRequest;
+import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
+import com.starrocks.proto.LockTabletMetadataRequest;
+import com.starrocks.proto.LockTabletMetadataResponse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+<<<<<<< HEAD
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
+=======
+import com.starrocks.proto.PExecShortCircuitResult;
+import com.starrocks.proto.PFetchArrowSchemaRequest;
+import com.starrocks.proto.PFetchArrowSchemaResult;
+import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
+import com.starrocks.proto.PMVMaintenanceTaskResult;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.PTriggerProfileReportResult;
+<<<<<<< HEAD
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
+=======
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
+import com.starrocks.proto.PublishLogVersionBatchRequest;
+import com.starrocks.proto.PublishLogVersionRequest;
+import com.starrocks.proto.PublishLogVersionResponse;
+import com.starrocks.proto.PublishVersionRequest;
+import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RestoreSnapshotsRequest;
+import com.starrocks.proto.RestoreSnapshotsResponse;
+import com.starrocks.proto.StatusPB;
+import com.starrocks.proto.TabletStatRequest;
+import com.starrocks.proto.TabletStatResponse;
+import com.starrocks.proto.UnlockTabletMetadataRequest;
+import com.starrocks.proto.UnlockTabletMetadataResponse;
+import com.starrocks.proto.UploadSnapshotsRequest;
+import com.starrocks.proto.UploadSnapshotsResponse;
+import com.starrocks.proto.VacuumRequest;
+import com.starrocks.proto.VacuumResponse;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
+<<<<<<< HEAD
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
+=======
+import com.starrocks.rpc.PExecShortCircuitRequest;
+import com.starrocks.rpc.PFetchDataRequest;
+import com.starrocks.rpc.PGetFileSchemaRequest;
+import com.starrocks.rpc.PListFailPointRequest;
+import com.starrocks.rpc.PMVMaintenanceTaskRequest;
+import com.starrocks.rpc.PTriggerProfileReportRequest;
+import com.starrocks.rpc.ThriftConnectionPool;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TAgentPublishRequest;
@@ -93,6 +160,11 @@ import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -129,11 +201,26 @@ public class MockedBackend {
 
     private final MockPBackendService pbService;
 
+<<<<<<< HEAD
     public MockedBackend(String host) throws Exception {
         this.host = host;
         brpcPort = BASE_PORT.getAndIncrement();
         heartBeatPort = BASE_PORT.getAndIncrement();
         beThriftPort = BASE_PORT.getAndIncrement();
+=======
+    private final MockLakeService lakeService;
+
+    public MockedBackend(String host) {
+        this(host, BASE_PORT.getAndIncrement());
+    }
+
+    public MockedBackend(String host, int beThriftPort) {
+        this.host = host;
+        this.beThriftPort = beThriftPort;
+
+        brpcPort = BASE_PORT.getAndIncrement();
+        heartBeatPort = BASE_PORT.getAndIncrement();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         httpPort = BASE_PORT.getAndIncrement();
         starletPort = BASE_PORT.getAndIncrement();
 
@@ -141,6 +228,7 @@ public class MockedBackend {
         thriftClient = new MockBeThriftClient(this);
         pbService = new MockPBackendService();
 
+<<<<<<< HEAD
         ((MockGenericPool<?>) ClientPool.beHeartbeatPool).register(this);
         ((MockGenericPool<?>) ClientPool.backendPool).register(this);
 
@@ -149,10 +237,39 @@ public class MockedBackend {
             protected synchronized PBackendService getBackendService(TNetworkAddress address) {
                 return pbService;
             }
+=======
+        lakeService = new MockLakeService();
+
+        ((MockGenericPool<?>) ThriftConnectionPool.beHeartbeatPool).register(this);
+        ((MockGenericPool<?>) ThriftConnectionPool.backendPool).register(this);
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            private synchronized PBackendService getBackendService(TNetworkAddress address) {
+                return pbService;
+            }
+
+            @Mock
+            private synchronized LakeService getLakeServiceImpl(TNetworkAddress address) {
+                return lakeService;
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         };
 
     }
 
+<<<<<<< HEAD
+=======
+    public void setBackendService(PBackendService backendService) {
+        new MockUp<BrpcProxy>() {
+            @Mock
+            private synchronized PBackendService getBackendService(TNetworkAddress address) {
+                return backendService;
+            }
+        };
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getHost() {
         return host;
     }
@@ -348,12 +465,25 @@ public class MockedBackend {
         }
     }
 
+<<<<<<< HEAD
     private static class MockPBackendService implements PBackendService {
         private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
         @Override
         public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
             return executor.submit(() -> {
+=======
+    public static class MockPBackendService implements PBackendService {
+        private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        public <T> Future<T> submit(Callable<T> task) {
+            return executor.submit(task);
+        }
+
+        @Override
+        public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
+            return submit(() -> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 PExecPlanFragmentResult result = new PExecPlanFragmentResult();
                 StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
@@ -365,7 +495,11 @@ public class MockedBackend {
         @Override
         public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
                 PExecBatchPlanFragmentsRequest request) {
+<<<<<<< HEAD
             return executor.submit(() -> {
+=======
+            return submit(() -> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
                 StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
@@ -376,7 +510,11 @@ public class MockedBackend {
 
         @Override
         public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(PCancelPlanFragmentRequest request) {
+<<<<<<< HEAD
             return executor.submit(() -> {
+=======
+            return submit(() -> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
                 StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
@@ -387,7 +525,11 @@ public class MockedBackend {
 
         @Override
         public Future<PFetchDataResult> fetchDataAsync(PFetchDataRequest request) {
+<<<<<<< HEAD
             return executor.submit(() -> {
+=======
+            return submit(() -> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 PFetchDataResult result = new PFetchDataResult();
                 StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
@@ -440,5 +582,114 @@ public class MockedBackend {
         public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
             throw new NotImplementedException("TODO");
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PFetchArrowSchemaResult> fetchArrowSchema(PFetchArrowSchemaRequest request) {
+            return null;
+        }
+
+        public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
+            return null;
+        }
+    }
+
+    private static class MockLakeService implements LakeService {
+        @Override
+        public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<AbortTxnResponse> abortTxn(AbortTxnRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<CompactResponse> compact(CompactRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DeleteTxnLogResponse> deleteTxnLog(DeleteTxnLogRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<TabletStatResponse> getTabletStats(TabletStatRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DropTableResponse> dropTable(DropTableRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<LockTabletMetadataResponse> lockTabletMetadata(LockTabletMetadataRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<UnlockTabletMetadataResponse> unlockTabletMetadata(UnlockTabletMetadataRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<UploadSnapshotsResponse> uploadSnapshots(UploadSnapshotsRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<RestoreSnapshotsResponse> restoreSnapshots(RestoreSnapshotsRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<VacuumResponse> vacuum(VacuumRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

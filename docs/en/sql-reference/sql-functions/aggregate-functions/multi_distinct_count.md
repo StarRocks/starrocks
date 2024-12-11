@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # multi_distinct_count
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the total number of rows of the `expr`, equivalent to count(distinct expr).
 

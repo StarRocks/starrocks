@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_concat
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Concatenates multiple arrays into one array that contains all the elements in the arrays.
 

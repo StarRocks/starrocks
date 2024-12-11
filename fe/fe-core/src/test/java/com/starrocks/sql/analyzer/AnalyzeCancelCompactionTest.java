@@ -37,4 +37,8 @@ public class AnalyzeCancelCompactionTest {
 
         analyzeFail("CANCEL COMPACTION WHERE TXN_ID = \"xxx\"", "Where clause should looks like: TXN_ID = compaction_txn_id.");
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

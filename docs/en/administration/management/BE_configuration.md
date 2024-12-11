@@ -4,6 +4,11 @@ displayed_sidebar: docs
 
 import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
 
+<<<<<<< HEAD
+=======
+import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.md'
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
@@ -12,6 +17,11 @@ import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_not
 
 <BEConfigMethod />
 
+<<<<<<< HEAD
+=======
+<CNConfigMethod />
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## View BE configuration items
 
@@ -48,9 +58,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: String
 - Unit: -
 - Is mutable: No
+<<<<<<< HEAD
 - Description: The CIDR-formatted IP address that is used to specify the priority IP address of a BE node if the machine that hosts the BE node has multiple IP addresses.
 - Introduced in: -
 
+=======
+- Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as `10.10.10.0/24`. If no IP address matches the entries in this list, an available IP address of the server will be randomly selected. From v3.3.0, StarRocks supports deployment based on IPv6. If the server has both IPv4 and IPv6 addresses, and this parameter is not specified, the system uses an IPv4 address by default. You can change this behavior by setting `net_use_ipv6_when_priority_networks_empty` to `true`.
+- Introduced in: -
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to use IPv6 addresses preferentially when `priority_networks` is not specified. `true` indicates to allow the system to use an IPv6 address preferentially when the server that hosts the node has both IPv4 and IPv6 addresses and `priority_networks` is not specified.
+- Introduced in: v3.3.0
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### mem_limit
 
 - Default: 90%
@@ -364,7 +389,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### sys_log_verbose_modules
 
+<<<<<<< HEAD
 - Default:
+=======
+- Default: 
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Type: Strings
 - Unit: -
 - Is mutable: No
@@ -578,6 +607,20 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The number of threads used for checking the consistency of tablets.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+<!--
+##### update_schema_worker_count
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description:
+- Introduced in: -
+-->
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### upload_worker_count
 
 - Default: 0
@@ -688,27 +731,67 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The time interval at which to monitor health status of disks.
 - Introduced in: -
 
+<<<<<<< HEAD
 <!--
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### replication_threads
 
 - Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
+<<<<<<< HEAD
 - Description:
 - Introduced in: -
 -->
 
 <!--
+=======
+- Description: The maximum number of threads used for replication. `0` indicates setting the thread number to four times the BE CPU core count.
+- Introduced in: v3.3.5
+
+##### replication_max_speed_limit_kbps
+
+- Default: 50000
+- Type: Int
+- Unit: KB/s
+- Is mutable: Yes
+- Description: The maximum speed of each replication thread.
+- Introduced in: v3.3.5
+
+##### replication_min_speed_limit_kbps
+
+- Default: 50
+- Type: Int
+- Unit: KB/s
+- Is mutable: Yes
+- Description: The minimum speed of each replication thread.
+- Introduced in: v3.3.5
+##### replication_min_speed_time_seconds
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time duration allowed for a replication thread to be under the minimum speed. Replication will fail if the time when the actual speed is lower than `replication_min_speed_limit_kbps` exceeds this value.
+- Introduced in: v3.3.5
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### clear_expired_replication_snapshots_interval_seconds
 
 - Default: 3600
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
+<<<<<<< HEAD
 - Description:
 - Introduced in: -
 -->
+=======
+- Description: The time interval at which the system clears the expired snapshots left by abnormal replications.
+- Introduced in: v3.3.5
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ##### unused_rowset_monitor_interval
 
@@ -978,6 +1061,20 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The minimum time interval at which compaction is triggered for each tablet in a Primary Key table.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+<!--
+##### update_compaction_chunk_size_for_row_store
+
+- Default: 0
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### max_update_compaction_num_singleton_deltas
 
 - Default: 1000
@@ -1065,7 +1162,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: Yes
+<<<<<<< HEAD
 - Description: The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency. `0` indicates disabling compaction.
+=======
+- Description: The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency. `0` indicates disabling compaction. This parameter is mutable when the Event-based Compaction Framework is enabled.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Introduced in: -
 
 ##### compaction_trace_threshold
@@ -1231,6 +1332,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: No
+<<<<<<< HEAD
 - Description: The maximum percentage limit of memory resources that can be taken up by all load processes on a BE node.
 - Introduced in: -
 
@@ -1244,6 +1346,29 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description:
 - Introduced in: -
 -->
+=======
+- Description: The soft limit (in percentage) of memory resources that can be taken up by all load processes on a BE node.
+- Introduced in: -
+
+
+##### load_process_max_memory_hard_limit_ratio
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The hard limit (ratio) of memory resources that can be taken up by all load processes on a BE node. When `enable_new_load_on_memory_limit_exceeded` is set to `false`, and the memory consumption of all loading processes exceeds `load_process_max_memory_limit_percent * load_process_max_memory_hard_limit_ratio`, new loading processes will be rejected.
+- Introduced in: v3.3.2
+
+##### enable_new_load_on_memory_limit_exceeded
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow new loading processes when the hard memory resource limit is reached. `true` indicates new loading processes will be allowed, and `false` indicates they will be rejected.
+- Introduced in: v3.3.2
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ##### sync_tablet_meta
 
@@ -1630,6 +1755,20 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### stale_memtable_flush_time_sec
+
+- Default: 0
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: 0 means prohibited. Other memtables whose last update time is greater than stale_memtable_flush_time_sec will be persisted when memory is insufficient.
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### dictionary_encoding_ratio
 
 - Default: 0.7
@@ -1641,6 +1780,31 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### dictionary_page_size
+
+- Default: 1048576
+- Type: Int
+- Unit:
+- Is mutable: No
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### dictionary_encoding_ratio_for_non_string_column
+
+- Default: 0
+- Type: Double
+- Unit:
+- Is mutable: No
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### dictionary_speculate_min_chunk_size
 
 - Default: 10000
@@ -1729,6 +1893,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The maximum size limit of memory resources that can be taken up by all load processes on a BE node.
 - Introduced in: -
 
+<<<<<<< HEAD
 ##### load_process_max_memory_limit_percent
 
 - Default: 30
@@ -1749,13 +1914,19 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Introduced in: -
 -->
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### txn_commit_rpc_timeout_ms (Deprecated)
 
 - Default: 60000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
+<<<<<<< HEAD
 - Description: The timeout for a transaction commit RPC. Since v3.1.0, this parameter is deprecated.
+=======
+- Description: The timeout for a transaction commit RPC. Since v3.2.0, this parameter is deprecated.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Introduced in: -
 
 ##### max_consumer_num_per_group
@@ -2043,6 +2214,31 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### enable_zonemap_index_memory_page_cache
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### enable_ordinal_index_memory_page_cache
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### disable_column_pool
 
 - Default: true
@@ -2166,6 +2362,18 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+<<<<<<< HEAD
+=======
+##### query_pool_spill_mem_limit_threshold
+
+- Default: 1.0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: If automatic spilling is enabled, when the memory usage of all queries exceeds `query_pool memory limit * query_pool_spill_mem_limit_threshold`, intermediate result spilling will be triggered.
+- Introduced in: v3.2.7
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### result_buffer_cancelled_interval_time
 
 - Default: 300
@@ -2664,6 +2872,20 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### enable_orc_libdeflate_decompression
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### orc_natural_read_size
 
 - Default: 8388608
@@ -2686,6 +2908,20 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### orc_tiny_stripe_threshold_size
+
+- Default: 8388608
+- Type: Int
+- Unit:
+- Is mutable: No
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### parquet_coalesce_read_enable
 
 - Default: true
@@ -2696,27 +2932,50 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+<<<<<<< HEAD
 <!--
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### parquet_late_materialization_enable
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
+<<<<<<< HEAD
 - Description:
 - Introduced in: -
 -->
 
 <!--
+=======
+- Description: A boolean value to control whether to enable the late materialization of Parquet reader to improve performance. `true` indicates enabling late materialization, and `false` indicates disabling it.
+- Introduced in: -
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### parquet_late_materialization_v2_enable
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
+<<<<<<< HEAD
 - Description:
 - Introduced in: -
 -->
+=======
+- Description: A boolean value to control whether to enable the late materialization v2 of Parquet reader to improve performance. `true` indicates enabling late materialization v2, and `false` indicates disabling it. In v3.3, only `parquet_late_materialization_enable` is used, and this variable is deprecated.
+- Introduced in: v3.2
+
+##### parquet_page_index_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to enable the pageindex of Parquet file to improve performance. `true` indicates enabling pageindex, and `false` indicates disabling it.
+- Introduced in: v3.3
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 <!--
 ##### io_coalesce_read_max_buffer_size
@@ -2740,6 +2999,18 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+<<<<<<< HEAD
+=======
+##### io_coalesce_adaptive_lazy_active
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Based on the selectivity of predicates, adaptively determines whether to combine the I/O of predicate columns and non-predicate columns.
+- Introduced in: v3.2
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 <!--
 ##### io_tasks_per_scan_operator
 
@@ -3084,6 +3355,72 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The size of the query cache in the BE. The default size is 512 MB. The size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+##### enable_json_flat
+
+- Default: false
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.
+- Introduced in: v3.3.0
+
+##### json_flat_null_factor
+
+- Default: 0.3
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The proportion of NULL values in the column to extract for Flat JSON. A column will not be extracted if its proportion of NULL value is higher than this threshold. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### json_flat_sparsity_factor
+
+- Default: 0.9
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### json_flat_column_max
+
+- Default: 100
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description: The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### enable_compaction_flat_json
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable compaction for Flat JSON data.
+- Introduced in: v3.3.3
+
+##### enable_lazy_dynamic_flat_json
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable Lazy Dyamic Flat JSON when a query misses Flat JSON schema in read process. When this item is set to `true`, StarRocks will postpone the Flat JSON operation to calculation process instead of read process.
+- Introduced in: v3.3.3
+
+##### jit_lru_cache_size
+
+- Default: 0
+- Type: Int
+- Unit: GB
+- Is mutable: Yes
+- Description: The LRU cache size for JIT compilation. It represents the actual size of the cache if it is set to greater than 0. If it is set to less than or equal to 0, the system will adaptively set the cache using the formula `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` (while `mem_limit` of the node must be greater or equal to 16 GB).
+- Introduced in: -
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ### Shared-data
 
 ##### starlet_port
@@ -3128,6 +3465,10 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+<<<<<<< HEAD
+=======
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### starlet_cache_evict_interval
 
 - Default: 60
@@ -3136,7 +3477,13 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The interval at which the system performs cache eviction in a shared-data cluster with file data cache enabled.
 - Introduced in: v3.0
+<<<<<<< HEAD
 
+=======
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### starlet_cache_evict_low_water
 
 - Default: 0.1
@@ -3145,7 +3492,13 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The low water at which cache eviction is triggered. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is lower than this value, cache eviction will be triggered.
 - Introduced in: v3.0
+<<<<<<< HEAD
 
+=======
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### starlet_cache_evict_high_water
 
 - Default: 0.2
@@ -3154,6 +3507,10 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The high water at which cache eviction is stopped. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is higher than this value, cache eviction will be stopped.
 - Introduced in: v3.0
+<<<<<<< HEAD
+=======
+-->
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 <!--
 ##### starlet_cache_dir_allocate_policy
@@ -3167,6 +3524,31 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### starlet_cache_evict_percent
+
+- Default: 0.1
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### starlet_cache_evict_throughput_mb
+
+- Default: 200
+- Type: Int
+- Unit: MB
+- Is mutable: No
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### starlet_fs_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -3179,11 +3561,19 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### starlet_use_star_cache
 
+<<<<<<< HEAD
 - Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable Data Cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it.
+=======
+- Default: false in v3.1 and true from v3.2.3
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Data Cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Introduced in: v3.1
 
 <!--
@@ -3284,6 +3674,42 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### starlet_fslib_s3client_nonread_max_retries
+
+- Default: 5
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### starlet_fslib_s3client_nonread_retry_scale_factor
+
+- Default: 200
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### starlet_fslib_s3client_connect_timeout_ms
+
+- Default: 1000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### lake_metadata_cache_limit
 
 - Default: 2147483648
@@ -3305,6 +3731,18 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+<<<<<<< HEAD
+=======
+##### lake_compaction_stream_buffer_size_bytes
+
+- Default: 1048576
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
+- Introduced in: v3.2.3
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 <!--
 ##### experimental_lake_ignore_lost_segment
 
@@ -3407,7 +3845,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### lake_vacuum_retry_min_delay_ms
 
+<<<<<<< HEAD
 - Default: 10
+=======
+- Default: 100
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
@@ -3437,6 +3879,20 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+<<<<<<< HEAD
+=======
+<!--
+##### lake_enable_compaction_async_write
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
@@ -3586,6 +4042,20 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### spill_max_dir_bytes_ratio
+
+- Default: 0.8
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### internal_service_query_rpc_thread_num
 
 - Default: -1
@@ -3663,6 +4133,99 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the `$STARROCKS_HOME` path.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+##### datacache_auto_adjust_enable
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Automatic Scaling for Data Cache disk capacity. When it is enabled, the system dynamically adjusts the cache capacity based on the current disk usage rate.
+- Introduced in: v3.3.0
+
+##### datacache_disk_high_level
+
+- Default: 80
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The upper limit of disk usage (in percentage) that triggers the automatic scaling up of the cache capacity. When the disk usage exceeds this value, the system automatically evicts cache data from the Data Cache.
+- Introduced in: v3.3.0
+
+##### datacache_disk_safe_level
+
+- Default: 70
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The safe level of disk usage (in percentage) for Data Cache. When Data Cache performs automatic scaling, the system adjusts the cache capacity with the goal of maintaining disk usage as close to this value as possible.
+- Introduced in: v3.3.0
+
+##### datacache_disk_low_level
+
+- Default: 60
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The lower limit of disk usage (in percentage) that triggers the automatic scaling down of the cache capacity. When the disk usage remains below this value for the period specified in `datacache_disk_idle_seconds_for_expansion`, and the space allocated for Data Cache is fully utilized, the system will automatically expand the cache capacity by increasing the upper limit.
+- Introduced in: v3.3.0
+
+##### datacache_disk_adjust_interval_seconds
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval of Data Cache automatic capacity scaling. At regular intervals, the system checks the cache disk usage, and triggers Automatic Scaling when necessary.
+- Introduced in: v3.3.0
+
+##### datacache_disk_idle_seconds_for_expansion
+
+- Default: 7200
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The minimum wait time for Data Cache automatic expansion. Automatic scaling up is triggered only if the disk usage remains below `datacache_disk_low_level` for longer than this duration.
+- Introduced in: v3.3.0
+
+##### datacache_min_disk_quota_for_adjustment
+
+- Default: 107374182400
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The minimum effective capacity for Data Cache Automatic Scaling. If the system tries to adjust the cache capacity to less than this value, the cache capacity will be directly set to `0` to prevent suboptimal performance caused by frequent cache fills and evictions due to insufficient cache capacity.
+- Introduced in: v3.3.0
+
+##### datacache_block_buffer_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable Block Buffer to optimize Data Cache efficiency. When Block Buffer is enabled, the system reads the Block data from the Data Cache and caches it in a temporary buffer, thus reducing the extra overhead caused by frequent cache reads.
+- Introduced in: v3.2.0
+
+##### datacache_tiered_cache_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable tiered cache mode for Data Cache. When tiered cache mode is enabled, Data Cache is configured with two layers of caching, memory and disk. When disk data becomes hot data, it is automatically loaded into the memory cache, and when the data in the memory cache becomes cold, it is automatically flushed to disk. When tiered cache mode is not enabled, the memory and disk configured for Data Cache form two separate cache spaces and cache different types of data, with no data flow between them.
+- Introduced in: v3.2.5
+
+##### query_max_memory_limit_percent
+
+- Default: 90
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum memory that the Query Pool can use. It is expressed as a percentage of the Process memory limit.
+- Introduced in: v3.1.0
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 <!--
 ##### datacache_block_size
 
@@ -4128,7 +4691,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### get_txn_status_internal_sec
 
+<<<<<<< HEAD
 - Default: 30
+=======
+- Default: 10
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
@@ -4170,7 +4737,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### lake_vacuum_min_batch_delete_size
 
+<<<<<<< HEAD
 - Default: 1000
+=======
+- Default: 100
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - Type: Int
 - Unit:
 - Is mutable: Yes
@@ -4210,6 +4781,31 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: v3.1.7, v3.2.3
 
 <!--
+<<<<<<< HEAD
+=======
+##### dictionary_cache_refresh_timeout_ms
+
+- Default: 60000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### dictionary_cache_refresh_threadpool_size
+
+- Default: 8
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ##### pk_dump_interval_seconds
 
 - Default: 3600

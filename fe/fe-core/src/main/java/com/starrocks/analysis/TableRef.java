@@ -40,13 +40,19 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.parser.NodePosition;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -83,7 +89,10 @@ import java.util.List;
  * structure of all subclasses.
  */
 public class TableRef implements ParseNode, Writable {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(TableRef.class);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "name")
     protected TableName name;
     @SerializedName(value = "partitionNames")
@@ -215,11 +224,14 @@ public class TableRef implements ParseNode, Writable {
     }
 
     @Override
+<<<<<<< HEAD
     public void analyze(Analyzer analyzer) throws UserException {
         ErrorReport.reportAnalysisException(ErrorCode.ERR_UNRESOLVED_TABLE_REF, tableRefToSql());
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public NodePosition getPos() {
         return pos;
     }

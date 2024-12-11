@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_orderkey,
@@ -21,6 +22,8 @@ group by
 order by
     revenue desc,
     o_orderdate limit 10;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 TOP-N (order by [[35: sum DESC NULLS LAST, 10: o_orderdate ASC NULLS FIRST]])
     TOP-N (order by [[35: sum DESC NULLS LAST, 10: o_orderdate ASC NULLS FIRST]])

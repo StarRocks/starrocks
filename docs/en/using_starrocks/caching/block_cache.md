@@ -141,6 +141,24 @@ Follow these steps to clear the cached data on a CN node:
 
 - If the `datacache.enable` property is set to `false` for a cloud-native table, Data Cache will not be enabled for the table.
 - If the `datacache.partition_duration` property is set to a specific time range, data beyond the time range will not be cached.
+<<<<<<< HEAD
+=======
+- After downgrading a shared-data cluster from v3.3 to v3.2.8 and earlier, if you want to re-use the cached data in Data Cache, you need to manually rename the Blockfile in the directory `starlet_cache` by changing the file name format from `blockfile_{n}.{version}` to `blockfile_{n}`, that is, to remove the suffix of version information. v3.2.9 and later versions are compatible with the file name format in v3.3, so you do not need to perform this operation manually. You can change the name by running the following shell script:
+
+```Bash
+#!/bin/bash
+
+# Replace <starlet_cache_path> with the directory of Data Cache of your cluster, for example, /usr/be/storage/starlet_cache.
+starlet_cache_path="<starlet_cache_path>"
+
+for blockfile in ${starlet_cache_path}/blockfile_*; do
+    if [ -f "$blockfile" ]; then
+        new_blockfile=$(echo "$blockfile" | cut -d'.' -f1)
+        mv "$blockfile" "$new_blockfile"
+    fi
+done
+```
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## Known issues
 

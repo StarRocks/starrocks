@@ -15,11 +15,15 @@
 #ifdef USE_STAROS
 #include "fs/fs_starlet.h"
 
+<<<<<<< HEAD
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
 DIAGNOSTIC_POP
 
+=======
+#include <bvar/bvar.h>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <fmt/core.h>
 #include <fslib/configuration.h>
 #include <fslib/file.h>
@@ -32,15 +36,27 @@ DIAGNOSTIC_POP
 #include <worker.h>
 
 #include "common/config.h"
+<<<<<<< HEAD
 #include "fs/output_stream_adapter.h"
 #include "gutil/strings/util.h"
 #include "io/input_stream.h"
+=======
+#include "fs/encrypt_file.h"
+#include "fs/output_stream_adapter.h"
+#include "gutil/strings/util.h"
+#include "io/input_stream.h"
+#include "io/io_profiler.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "io/output_stream.h"
 #include "io/seekable_input_stream.h"
 #include "io/throttled_output_stream.h"
 #include "io/throttled_seekable_input_stream.h"
 #include "service/staros_worker.h"
 #include "storage/olap_common.h"
+<<<<<<< HEAD
+=======
+#include "util/stopwatch.hpp"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/string_parser.hpp"
 
 namespace starrocks {
@@ -100,7 +116,11 @@ StatusOr<std::pair<std::string, int64_t>> parse_starlet_uri(std::string_view uri
 class StarletInputStream : public starrocks::io::SeekableInputStream {
 public:
     explicit StarletInputStream(ReadOnlyFilePtr file_ptr) : _file_ptr(std::move(file_ptr)){};
+<<<<<<< HEAD
     ~StarletInputStream() = default;
+=======
+    ~StarletInputStream() override = default;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     StarletInputStream(const StarletInputStream&) = delete;
     void operator=(const StarletInputStream&) = delete;
     StarletInputStream(StarletInputStream&&) = delete;
@@ -142,6 +162,11 @@ public:
     }
 
     StatusOr<int64_t> read(void* data, int64_t count) override {
+<<<<<<< HEAD
+=======
+        MonotonicStopWatch watch;
+        watch.start();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
@@ -150,6 +175,10 @@ public:
         if (res.ok()) {
             g_starlet_io_num_reads << 1;
             g_starlet_io_read << *res;
+<<<<<<< HEAD
+=======
+            IOProfiler::add_read(*res, watch.elapsed_time());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return *res;
         } else {
             return to_status(res.status());
@@ -157,6 +186,11 @@ public:
     }
 
     StatusOr<std::string> read_all() override {
+<<<<<<< HEAD
+=======
+        MonotonicStopWatch watch;
+        watch.start();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
@@ -165,6 +199,10 @@ public:
         if (res.ok()) {
             g_starlet_io_num_reads << 1;
             g_starlet_io_read << res.value().size();
+<<<<<<< HEAD
+=======
+            IOProfiler::add_read(res.value().size(), watch.elapsed_time());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return std::move(res).value();
         } else {
             return to_status(res.status());
@@ -177,6 +215,7 @@ public:
             return to_status(stream_st.status());
         }
 
+<<<<<<< HEAD
         const auto& read_stats = (*stream_st)->get_read_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
         stats->reserve(9);
@@ -186,6 +225,19 @@ public:
         stats->append(kIOCountRemote, read_stats.io_count_remote);
         stats->append(kIONsLocalDisk, read_stats.io_ns_local_disk);
         stats->append(kIONsRemote, read_stats.io_ns_remote);
+=======
+        const auto& read_stats = (*stream_st)->get_io_stats();
+        auto stats = std::make_unique<io::NumericStatistics>();
+        stats->reserve(11);
+        stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
+        stats->append(kBytesWriteLocalDisk, read_stats.bytes_write_local_disk);
+        stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
+        stats->append(kIOCountLocalDisk, read_stats.io_count_local_disk);
+        stats->append(kIOCountRemote, read_stats.io_count_remote);
+        stats->append(kIONsReadLocalDisk, read_stats.io_ns_read_local_disk);
+        stats->append(kIONsWriteLocalDisk, read_stats.io_ns_write_local_disk);
+        stats->append(kIONsRemote, read_stats.io_ns_read_remote);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
@@ -199,7 +251,11 @@ private:
 class StarletOutputStream : public starrocks::io::OutputStream {
 public:
     explicit StarletOutputStream(WritableFilePtr file_ptr) : _file_ptr(std::move(file_ptr)){};
+<<<<<<< HEAD
     ~StarletOutputStream() = default;
+=======
+    ~StarletOutputStream() override = default;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     StarletOutputStream(const StarletOutputStream&) = delete;
     void operator=(const StarletOutputStream&) = delete;
     StarletOutputStream(StarletOutputStream&&) = delete;
@@ -218,6 +274,11 @@ public:
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
         }
+<<<<<<< HEAD
+=======
+        MonotonicStopWatch watch;
+        watch.start();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto left = size;
         while (left > 0) {
             auto* p = static_cast<const char*>(data) + size - left;
@@ -229,6 +290,10 @@ public:
         }
         g_starlet_io_num_writes << 1;
         g_starlet_io_write << size;
+<<<<<<< HEAD
+=======
+        IOProfiler::add_write(size, watch.elapsed_time());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
@@ -280,10 +345,18 @@ public:
         }
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+<<<<<<< HEAD
+=======
+        opt.buffer_size = opts.buffer_size;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
         auto file_st = (*fs_st)->open(pair.first, std::move(opt));
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
@@ -294,7 +367,11 @@ public:
             istream = std::make_unique<io::ThrottledSeekableInputStream>(std::move(istream),
                                                                          config::experimental_lake_wait_per_get_ms);
         }
+<<<<<<< HEAD
         return std::make_unique<RandomAccessFile>(std::move(istream), info.path, is_cache_hit);
+=======
+        return RandomAccessFile::from(std::move(istream), info.path, is_cache_hit, opts.encryption_info);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
@@ -305,16 +382,31 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
+<<<<<<< HEAD
         auto file_st = (*fs_st)->open(pair.first, ReadOptions{.skip_fill_local_cache = opts.skip_fill_local_cache});
+=======
+        auto opt = ReadOptions();
+        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.buffer_size = opts.buffer_size;
+        auto file_st = (*fs_st)->open(pair.first, std::move(opt));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
+<<<<<<< HEAD
         auto istream = std::make_shared<StarletInputStream>(std::move(*file_st));
         return std::make_unique<SequentialFile>(std::move(istream), path);
     }
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) {
+=======
+        auto istream = std::make_unique<StarletInputStream>(std::move(*file_st));
+        return SequentialFile::from(std::move(istream), path, opts.encryption_info);
+    }
+
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return new_writable_file(WritableFileOptions(), path);
     }
 
@@ -337,7 +429,12 @@ public:
         if (config::experimental_lake_wait_per_put_ms > 0) {
             os = std::make_unique<io::ThrottledOutputStream>(std::move(os), config::experimental_lake_wait_per_put_ms);
         }
+<<<<<<< HEAD
         return std::make_unique<starrocks::OutputStreamAdapter>(std::move(os), path);
+=======
+        return wrap_encrypted(std::make_unique<starrocks::OutputStreamAdapter>(std::move(os), path),
+                              opts.encryption_info);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     Status delete_file(const std::string& path) override {
@@ -532,7 +629,11 @@ public:
         return to_status((*fs_st)->drop_cache(pair.first));
     }
 
+<<<<<<< HEAD
     Status delete_files(const std::vector<std::string>& paths) override {
+=======
+    Status delete_files(std::span<const std::string> paths) override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         using FsPtr = std::shared_ptr<staros::starlet::fslib::FileSystem>;
         using PathList = std::vector<std::string>;
         auto parsed_paths = std::unordered_map<FsPtr, PathList>{};

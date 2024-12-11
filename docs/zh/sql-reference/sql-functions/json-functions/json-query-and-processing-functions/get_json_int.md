@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # get_json_int
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 解析并获取 `json_str` 内 `json_path` 的整型内容。如果 `json_str` 格式不对或 `json_path` 格式不对，或者无法找到匹配项，则返回 NULL。
 
@@ -22,7 +26,11 @@ get_json_int(json_str, json_path)
 
 ## 返回值说明
 
+<<<<<<< HEAD
 返回值的数据类型 INT。
+=======
+返回值的数据类型 BIGINT。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## 示例
 

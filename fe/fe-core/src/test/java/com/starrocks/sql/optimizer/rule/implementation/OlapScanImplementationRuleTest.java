@@ -38,7 +38,11 @@ public class OlapScanImplementationRuleTest {
         LogicalOlapScanOperator logical = new LogicalOlapScanOperator(table, Maps.newHashMap(), Maps.newHashMap(),
                 null, -1, ConstantOperator.createBoolean(true),
                 1, Lists.newArrayList(1L, 2L, 3L), null,
+<<<<<<< HEAD
                 false, Lists.newArrayList(4L), null, false);
+=======
+                false, Lists.newArrayList(4L), null, null, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         List<OptExpression> output =
                 new OlapScanImplementationRule().transform(new OptExpression(logical), new OptimizerContext(

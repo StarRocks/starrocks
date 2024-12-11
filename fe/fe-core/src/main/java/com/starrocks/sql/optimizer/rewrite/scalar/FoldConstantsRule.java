@@ -12,11 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -31,6 +38,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     private static final Logger LOG = LogManager.getLogger(FoldConstantsRule.class);
@@ -47,9 +58,25 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
+<<<<<<< HEAD
         if (call.isAggregate() || notAllConstant(call.getChildren())) {
             return call;
         }
+=======
+        if (call.isAggregate()) {
+            return call;
+        }
+
+        if (notAllConstant(call.getChildren())) {
+            if (call.getFunction() != null && call.getFunction().isMetaFunction()) {
+                String errMsg = String.format("Meta function %s does not support non-constant arguments",
+                        call.getFunction().getFunctionName());
+                throw new SemanticException(errMsg);
+            }
+            return call;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return ScalarOperatorEvaluator.INSTANCE.evaluation(call, needMonotonicFunc);
     }
 
@@ -137,11 +164,22 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
         ConstantOperator child = (ConstantOperator) operator.getChild(0);
 
+<<<<<<< HEAD
         try {
             return child.castTo(operator.getType());
         } catch (Exception e) {
             LOG.debug("Fold cast constant error: " + operator + ", " + child.toString());
             return operator;
+=======
+        Optional<ConstantOperator> result = child.castTo(operator.getType());
+        if (!result.isPresent()) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Fold cast constant error: " + operator + ", " + child.toString());
+            }
+            return operator;
+        } else {
+            return result.get();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 

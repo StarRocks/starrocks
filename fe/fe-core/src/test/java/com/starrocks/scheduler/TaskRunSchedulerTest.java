@@ -110,9 +110,19 @@ public class TaskRunSchedulerTest {
         List<TaskRun> queue = scheduler.getCopiedPendingTaskRuns();
         Assert.assertEquals(N, queue.size());
 
+<<<<<<< HEAD
         for (int i = 0; i < N; i++) {
             TaskRun taskRun = queue.get(i);
             Assert.assertTrue(taskRun.equals(taskRuns.get(N - 1 - i)));
+=======
+        List<TaskRun> pendingTaskRuns = scheduler.getCopiedPendingTaskRuns();
+        for (int i = 0; i < N; i++) {
+            int j = i;
+            scheduler.scheduledPendingTaskRun(taskRun -> {
+                Assert.assertTrue(taskRun.equals(taskRuns.get(N - 1 - j)));
+                Assert.assertTrue(taskRun.equals(pendingTaskRuns.get(j)));
+            });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -190,8 +200,18 @@ public class TaskRunSchedulerTest {
         for (int i = 0; i < 1; i++) {
             Assert.assertTrue(scheduler.getRunnableTaskRun(1).equals(taskRuns.get(i)));
         }
+<<<<<<< HEAD
         for (int i = 1; i < 10; i++) {
             Assert.assertTrue(scheduler.getRunnableTaskRun(1).equals(taskRuns.get(i)));
+=======
+        List<TaskRun> pendingTaskRuns = scheduler.getCopiedPendingTaskRuns();
+        for (int i = 1; i < 10; i++) {
+            int j = i;
+            scheduler.scheduledPendingTaskRun(taskRun -> {
+                Assert.assertTrue(taskRun.equals(taskRuns.get(j)));
+                Assert.assertTrue(taskRun.equals(pendingTaskRuns.get(j - 1)));
+            });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 

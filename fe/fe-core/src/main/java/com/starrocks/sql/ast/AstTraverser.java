@@ -17,8 +17,14 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Subquery;
+<<<<<<< HEAD
 
 public class AstTraverser<R, C> extends AstVisitor<R, C> {
+=======
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+
+public class AstTraverser<R, C> implements AstVisitor<R, C> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // ---------------------------------------- Query Statement --------------------------------------------------------------
 
@@ -33,7 +39,11 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
     @Override
     public R visitInsertStatement(InsertStmt statement, C context) {
         if (statement.getQueryStatement() != null) {
+<<<<<<< HEAD
             visit(statement.getQueryStatement());
+=======
+            visit(statement.getQueryStatement(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return null;
     }
@@ -42,7 +52,11 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
     public R visitUpdateStatement(UpdateStmt statement, C context) {
         //Update Statement after analyze, all information will be used to build QueryStatement, so it is enough to traverse Query
         if (statement.getQueryStatement() != null) {
+<<<<<<< HEAD
             visit(statement.getQueryStatement());
+=======
+            visit(statement.getQueryStatement(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return null;
     }
@@ -51,7 +65,11 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
     public R visitDeleteStatement(DeleteStmt statement, C context) {
         //Delete Statement after analyze, all information will be used to build QueryStatement, so it is enough to traverse Query
         if (statement.getQueryStatement() != null) {
+<<<<<<< HEAD
             visit(statement.getQueryStatement());
+=======
+            visit(statement.getQueryStatement(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return null;
     }
@@ -59,10 +77,25 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
     @Override
     public R visitSubmitTaskStatement(SubmitTaskStmt statement, C context) {
         if (statement.getInsertStmt() != null) {
+<<<<<<< HEAD
             visit(statement.getInsertStmt());
         }
         if (statement.getCreateTableAsSelectStmt() != null) {
             visit(statement.getCreateTableAsSelectStmt());
+=======
+            visit(statement.getInsertStmt(), context);
+        }
+        if (statement.getCreateTableAsSelectStmt() != null) {
+            visit(statement.getCreateTableAsSelectStmt(), context);
+        }
+        return null;
+    }
+
+    @Override
+    public R visitCreatePipeStatement(CreatePipeStmt statement, C context) {
+        if (statement.getInsertStmt() != null) {
+            visit(statement.getInsertStmt(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return null;
     }
@@ -70,10 +103,17 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
     @Override
     public R visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, C context) {
         if (statement.getQueryStatement() != null) {
+<<<<<<< HEAD
             visit(statement.getQueryStatement());
         }
         if (statement.getInsertStmt() != null) {
             visit(statement.getInsertStmt());
+=======
+            visit(statement.getQueryStatement(), context);
+        }
+        if (statement.getInsertStmt() != null) {
+            visit(statement.getInsertStmt(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return null;
     }
@@ -83,16 +123,25 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
     @Override
     public R visitSelect(SelectRelation node, C context) {
         if (node.hasWithClause()) {
+<<<<<<< HEAD
             node.getCteRelations().forEach(this::visit);
+=======
+            node.getCteRelations().forEach(x -> visit(x, context));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         if (node.getOrderBy() != null) {
             for (OrderByElement orderByElement : node.getOrderBy()) {
+<<<<<<< HEAD
                 visit(orderByElement.getExpr());
+=======
+                visit(orderByElement.getExpr(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
         if (node.getOutputExpression() != null) {
+<<<<<<< HEAD
             node.getOutputExpression().forEach(this::visit);
         }
 
@@ -113,36 +162,80 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
         }
 
         return visit(node.getRelation());
+=======
+            node.getOutputExpression().forEach(x -> visit(x, context));
+        }
+
+        if (node.getPredicate() != null) {
+            visit(node.getPredicate(), context);
+        }
+
+        if (node.getGroupBy() != null) {
+            node.getGroupBy().forEach(x -> visit(x, context));
+        }
+
+        if (node.getAggregate() != null) {
+            node.getAggregate().forEach(x -> visit(x, context));
+        }
+
+        if (node.getHaving() != null) {
+            visit(node.getHaving(), context);
+        }
+
+        return visit(node.getRelation(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public R visitJoin(JoinRelation node, C context) {
         if (node.getOnPredicate() != null) {
+<<<<<<< HEAD
             visit(node.getOnPredicate());
         }
 
         visit(node.getLeft());
         visit(node.getRight());
+=======
+            visit(node.getOnPredicate(), context);
+        }
+
+        visit(node.getLeft(), context);
+        visit(node.getRight(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return null;
     }
 
     @Override
     public R visitSubquery(SubqueryRelation node, C context) {
+<<<<<<< HEAD
         return visit(node.getQueryStatement());
+=======
+        return visit(node.getQueryStatement(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public R visitSetOp(SetOperationRelation node, C context) {
         if (node.hasWithClause()) {
+<<<<<<< HEAD
             node.getCteRelations().forEach(this::visit);
         }
         node.getRelations().forEach(this::visit);
+=======
+            node.getCteRelations().forEach(x -> visit(x, context));
+        }
+        node.getRelations().forEach(x -> visit(x, context));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return null;
     }
 
     @Override
     public R visitCTE(CTERelation node, C context) {
+<<<<<<< HEAD
         return visit(node.getCteQueryStatement());
+=======
+        return visit(node.getCteQueryStatement(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -154,12 +247,20 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
 
     @Override
     public R visitExpression(Expr node, C context) {
+<<<<<<< HEAD
         node.getChildren().forEach(this::visit);
+=======
+        node.getChildren().forEach(x -> visit(x, context));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return null;
     }
 
     @Override
     public R visitSubquery(Subquery node, C context) {
+<<<<<<< HEAD
         return visit(node.getQueryStatement());
+=======
+        return visit(node.getQueryStatement(), context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

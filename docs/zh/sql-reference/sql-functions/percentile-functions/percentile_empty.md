@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_empty
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 构造一个 `percentile` 类型的数值，主要用于 INSERT 或 Stream Load 导入时填充默认值。
 

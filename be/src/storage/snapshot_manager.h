@@ -100,7 +100,12 @@ public:
 
     Status make_snapshot_on_tablet_meta(const TabletSharedPtr& tablet);
 
+<<<<<<< HEAD
     Status assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir);
+=======
+    Status assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir,
+                                const TabletSchemaCSPtr& tablet_schema = nullptr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // this function is only used for ut
     std::string calc_snapshot_id_path(const TabletSharedPtr& tablet, int64_t timeout_s) {
@@ -114,7 +119,11 @@ private:
 
     std::string _get_header_full_path(const TabletSharedPtr& ref_tablet, const std::string& schema_hash_path) const;
 
+<<<<<<< HEAD
     Status _rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path, TabletSchema& tablet_schema,
+=======
+    Status _rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path, TabletSchemaCSPtr& tablet_schema,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                              const RowsetId& next_id, RowsetMetaPB* new_rs_meta_pb);
 
     static SnapshotManager* _s_instance;

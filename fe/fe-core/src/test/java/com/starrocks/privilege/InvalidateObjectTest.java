@@ -13,7 +13,10 @@
 // limitations under the License.
 package com.starrocks.privilege;
 
+<<<<<<< HEAD
 import com.starrocks.common.Config;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -27,22 +30,37 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.Assert;
+<<<<<<< HEAD
 import org.junit.Before;
+=======
+import org.junit.BeforeClass;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.List;
 
 public class InvalidateObjectTest {
+<<<<<<< HEAD
     private ConnectContext ctx;
+=======
+    private static ConnectContext ctx;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static final String DB_NAME = "db";
     private static final String TABLE_NAME_0 = "tbl0";
     private static final String TABLE_NAME_1 = "tbl1";
     private UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
+<<<<<<< HEAD
     private long publicRoleId;
 
     @Before
     public void setUp() throws Exception {
+=======
+    private static long publicRoleId;
+
+    @BeforeClass
+    public static void setUp() throws Exception {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.setUpForPersistTest();
@@ -90,10 +108,16 @@ public class InvalidateObjectTest {
     }
 
     private static void createMaterializedView(String sql, ConnectContext connectContext) throws Exception {
+<<<<<<< HEAD
         Config.enable_experimental_mv = true;
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+=======
+        CreateMaterializedViewStatement createMaterializedViewStatement =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private static void createMvForTest(StarRocksAssert starRocksAssert,

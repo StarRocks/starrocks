@@ -24,9 +24,17 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class FeTabletSchedulesSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.FE_SCHEDULES_ID,
                 "fe_tablet_schedules",
+=======
+    public static final String NAME = "fe_tablet_schedules";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.FE_SCHEDULES_ID,
+                NAME,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))

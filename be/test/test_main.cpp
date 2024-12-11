@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 #include "butil/file_util.h"
 #include "column/column_helper.h"
 #include "column/column_pool.h"
@@ -110,4 +111,10 @@ int main(int argc, char** argv) {
     starrocks::shutdown_logging();
 
     return r;
+=======
+#include "testutil/init_test_env.h"
+
+int main(int argc, char** argv) {
+    return starrocks::init_test_env(argc, argv);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

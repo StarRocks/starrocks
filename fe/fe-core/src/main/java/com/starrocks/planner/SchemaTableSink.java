@@ -16,6 +16,10 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
@@ -25,8 +29,16 @@ import com.starrocks.thrift.TSchemaTableSink;
 public class SchemaTableSink extends DataSink {
     private final String tableName;
 
+<<<<<<< HEAD
     public SchemaTableSink(SystemTable table) {
         tableName = table.getName();
+=======
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    public SchemaTableSink(SystemTable table, long warehouseId) {
+        tableName = table.getName();
+        this.warehouseId = warehouseId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -41,7 +53,12 @@ public class SchemaTableSink extends DataSink {
     protected TDataSink toThrift() {
         TDataSink tDataSink = new TDataSink(TDataSinkType.SCHEMA_TABLE_SINK);
         TSchemaTableSink sink = new TSchemaTableSink();
+<<<<<<< HEAD
         TNodesInfo info = GlobalStateMgr.getCurrentState().createNodesInfo(GlobalStateMgr.getCurrentState().getClusterId());
+=======
+        TNodesInfo info = GlobalStateMgr.getCurrentState().createNodesInfo(warehouseId,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         sink.setTable(tableName);
         sink.setNodes_info(info);
         tDataSink.setSchema_table_sink(sink);
@@ -60,6 +77,10 @@ public class SchemaTableSink extends DataSink {
 
     @Override
     public boolean canUsePipeLine() {
+<<<<<<< HEAD
+=======
+        // @TODO(silverbullet233): need to be adapted on pipeline engine
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return false;
     }
 }

@@ -23,6 +23,7 @@ public class ImportColumnDesc implements ParseNode {
     private String columnName;
     private Expr expr;
 
+<<<<<<< HEAD
     private final NodePosition pos;
 
     public ImportColumnDesc(ImportColumnDesc other) {
@@ -32,6 +33,14 @@ public class ImportColumnDesc implements ParseNode {
             this.expr = other.expr.clone();
         }
     }
+=======
+    // for table function table
+    // if the column is in select list, isMaterialized is true, else false
+    // isMaterialized always is true in broker load
+    private final boolean isMaterialized;
+
+    private final NodePosition pos;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public ImportColumnDesc(String column) {
         this(column, null, NodePosition.ZERO);
@@ -42,9 +51,25 @@ public class ImportColumnDesc implements ParseNode {
     }
 
     public ImportColumnDesc(String column, Expr expr, NodePosition pos) {
+<<<<<<< HEAD
         this.pos = pos;
         this.columnName = column;
         this.expr = expr;
+=======
+        this(column, expr, true, pos);
+    }
+
+    // for table function table
+    public ImportColumnDesc(String column, boolean isMaterialized) {
+        this(column, null, isMaterialized, NodePosition.ZERO);
+    }
+
+    public ImportColumnDesc(String column, Expr expr, boolean isMaterialized, NodePosition pos) {
+        this.pos = pos;
+        this.columnName = column;
+        this.expr = expr;
+        this.isMaterialized = isMaterialized;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void reset(String column, Expr expr) {
@@ -64,6 +89,13 @@ public class ImportColumnDesc implements ParseNode {
         return expr == null;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isMaterialized() {
+        return isMaterialized;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();

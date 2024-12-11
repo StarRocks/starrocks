@@ -18,6 +18,13 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.StarRocksHttpException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.http.HttpConnectContext;
+import com.starrocks.http.rest.ExecuteSqlAction;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -103,7 +110,11 @@ public class ConnectionLimitTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testShowProcessListForUser() throws Exception {
+=======
+    public void testShowProcessListForUser() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String sql = "show processlist for 'test'";
         ExecuteEnv.setup();
         ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test"));
@@ -112,8 +123,12 @@ public class ConnectionLimitTest {
                 starRocksAssert.getCtx().getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, starRocksAssert.getCtx());
         starRocksAssert.getCtx().setConnectScheduler(ExecuteEnv.getInstance().getScheduler());
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
         ShowResultSet resultSet = showExecutor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         System.out.println(resultSet.getResultRows());
         Assert.assertEquals(1, resultSet.getResultRows().size());
         Assert.assertTrue(resultSet.getResultRows().get(0).contains("test"));
@@ -121,4 +136,41 @@ public class ConnectionLimitTest {
         ShowProcesslistStmt showProcesslistStmt = new ShowProcesslistStmt(true);
         Assert.assertNull(showProcesslistStmt.getForUser());
     }
+<<<<<<< HEAD
+=======
+
+    private HttpConnectContext createHttpConnectContextForUser(String qualifiedName) {
+        HttpConnectContext context = new HttpConnectContext();
+        context.setQualifiedUser(qualifiedName);
+        context.setCurrentUserIdentity(new UserIdentity(qualifiedName, "%"));
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setConnectionId(connectionId++);
+
+        return context;
+    }
+
+    @Test
+    public void testHttpConnectContextReachLimit() {
+        ExecuteSqlAction executeSqlAction = new ExecuteSqlAction(null);
+        Config.qe_max_connection = 1;
+        ExecuteEnv.setup();
+
+        Deencapsulation.invoke(executeSqlAction,
+                "registerContext",
+                "select 1",
+                createHttpConnectContextForUser("test"));
+        try {
+            Deencapsulation.invoke(executeSqlAction,
+                    "registerContext",
+                    "select 1",
+                    createHttpConnectContextForUser("test"));
+        } catch (StarRocksHttpException e) {
+            Assert.assertTrue(e.getMessage().contains("Reach cluster-wide connection limit"));
+        }
+
+        // reset
+        Config.qe_max_connection = 4096;
+        ExecuteEnv.setup();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

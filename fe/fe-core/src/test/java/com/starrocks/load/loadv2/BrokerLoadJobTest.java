@@ -42,11 +42,18 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.DdlException;
+import com.starrocks.common.LoadException;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
@@ -56,24 +63,41 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
+<<<<<<< HEAD
 import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
+=======
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.CommitRateExceededException;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TxnCommitAttachment;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.transaction.TxnStateChangeCallback;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+<<<<<<< HEAD
+=======
+import org.apache.spark.sql.AnalysisException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -107,21 +131,32 @@ public class BrokerLoadJobTest {
                 loadStmt.getLabel();
                 minTimes = 0;
                 result = labelName;
+<<<<<<< HEAD
                 labelName.getDbName();
                 minTimes = 0;
                 result = databaseName;
                 globalStateMgr.getDb(databaseName);
                 minTimes = 0;
                 result = database;
+=======
+
+                labelName.getDbName();
+                minTimes = 0;
+                result = databaseName;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 loadStmt.getDataDescriptions();
                 minTimes = 0;
                 result = dataDescriptionList;
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
+<<<<<<< HEAD
                 database.getTable(tableName);
                 minTimes = 0;
                 result = null;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 
@@ -161,7 +196,11 @@ public class BrokerLoadJobTest {
                 labelName.getLabelName();
                 minTimes = 0;
                 result = label;
+<<<<<<< HEAD
                 globalStateMgr.getDb(databaseName);
+=======
+                globalStateMgr.getLocalMetastore().getDb(databaseName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
                 result = database;
                 loadStmt.getDataDescriptions();
@@ -170,7 +209,11 @@ public class BrokerLoadJobTest {
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
+<<<<<<< HEAD
                 database.getTable(tableName);
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
                 result = olapTable;
                 dataDescription.getPartitionNames();
@@ -230,7 +273,11 @@ public class BrokerLoadJobTest {
                 labelName.getLabelName();
                 minTimes = 0;
                 result = label;
+<<<<<<< HEAD
                 globalStateMgr.getDb(databaseName);
+=======
+                globalStateMgr.getLocalMetastore().getDb(databaseName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
                 result = database;
                 loadStmt.getDataDescriptions();
@@ -239,7 +286,11 @@ public class BrokerLoadJobTest {
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
+<<<<<<< HEAD
                 database.getTable(tableName);
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
                 result = olapTable;
                 dataDescription.getPartitionNames();
@@ -295,10 +346,17 @@ public class BrokerLoadJobTest {
                 fileGroupAggInfo.getAllTableIds();
                 minTimes = 0;
                 result = Sets.newHashSet(1L);
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 database.getTable(1L);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), 1L);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -341,12 +399,21 @@ public class BrokerLoadJobTest {
                                          @Injectable boolean txnOperated,
                                          @Injectable String txnStatusChangeReason,
                                          @Mocked LeaderTaskExecutor leaderTaskExecutor,
+<<<<<<< HEAD
                                          @Mocked GlobalTransactionMgr globalTransactionMgr) throws LoadException, UserException {
+=======
+                                         @Mocked GlobalTransactionMgr globalTransactionMgr) throws LoadException,
+            StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         new Expectations() {
             {
                 globalTransactionMgr.beginTransaction(anyLong, Lists.newArrayList(), anyString, (TUniqueId) any,
                         (TransactionState.TxnCoordinator) any,
+<<<<<<< HEAD
                         (TransactionState.LoadJobSourceType) any, anyLong, anyLong);
+=======
+                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 leaderTaskExecutor.submit((LeaderTask) any);
                 minTimes = 0;
                 result = true;
@@ -450,8 +517,31 @@ public class BrokerLoadJobTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testTaskAbortTransactionOnTimeoutFailure(@Mocked GlobalTransactionMgr globalTransactionMgr,
             @Injectable long taskId, @Injectable FailMsg failMsg) throws UserException {
+=======
+    public void testTaskOnResourceGroupTaskFailed(@Injectable long taskId, @Injectable FailMsg failMsg) {
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
+
+            }
+        };
+
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        failMsg = new FailMsg(FailMsg.CancelType.USER_CANCEL, "Failed to allocate resource to query: pending timeout");
+        brokerLoadJob.onTaskFailed(taskId, failMsg);
+
+        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
+        Assert.assertEquals(0, idToTasks.size());
+    }
+
+    @Test
+    public void testTaskAbortTransactionOnTimeoutFailure(@Mocked GlobalTransactionMgr globalTransactionMgr,
+            @Injectable long taskId, @Injectable FailMsg failMsg) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         new Expectations() {
             {
                 globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
@@ -467,7 +557,11 @@ public class BrokerLoadJobTest {
             {
                 globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
                 times = 1;
+<<<<<<< HEAD
                 result = new UserException("Artificial exception");
+=======
+                result = new StarRocksException("Artificial exception");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 
@@ -512,6 +606,7 @@ public class BrokerLoadJobTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPendingTaskOnFinished(@Injectable BrokerPendingTaskAttachment attachment,
                                           @Mocked GlobalStateMgr globalStateMgr,
                                           @Injectable Database database,
@@ -584,6 +679,8 @@ public class BrokerLoadJobTest {
     }
 
     @Test
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testLoadingTaskOnFinishedWithUnfinishedTask(@Injectable BrokerLoadingTaskAttachment attachment,
                                                             @Injectable LoadTask loadTask1,
                                                             @Injectable LoadTask loadTask2) {
@@ -685,7 +782,11 @@ public class BrokerLoadJobTest {
                 attachment1.getTaskId();
                 minTimes = 0;
                 result = 1L;
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 minTimes = 0;
                 result = database;
             }
@@ -814,4 +915,71 @@ public class BrokerLoadJobTest {
         Assert.assertEquals(1, brokerLoadJob.getFinishTimestamp());
         Assert.assertEquals(JobState.LOADING, brokerLoadJob.getState());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCommitRateExceeded(@Injectable BrokerLoadingTaskAttachment attachment1,
+                                       @Injectable LoadTask loadTask1,
+                                       @Mocked GlobalStateMgr globalStateMgr,
+                                       @Injectable Database database,
+                                       @Mocked GlobalTransactionMgr transactionMgr) throws StarRocksException {
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
+        Map<Long, LoadTask> idToTasks = Maps.newHashMap();
+        idToTasks.put(1L, loadTask1);
+        Deencapsulation.setField(brokerLoadJob, "idToTasks", idToTasks);
+        new Expectations() {
+            {
+                attachment1.getCounter(BrokerLoadJob.DPP_NORMAL_ALL);
+                minTimes = 0;
+                result = 10;
+                attachment1.getCounter(BrokerLoadJob.DPP_ABNORMAL_ALL);
+                minTimes = 0;
+                result = 0;
+                attachment1.getTaskId();
+                minTimes = 0;
+                result = 1L;
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                globalStateMgr.getCurrentState().getGlobalTransactionMgr();
+                result = transactionMgr;
+                transactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
+                        (List<TabletFailInfo>) any, (TxnCommitAttachment) any);
+                result = new CommitRateExceededException(100, System.currentTimeMillis() + 10);
+                result = null;
+            }
+        };
+
+        brokerLoadJob.onTaskFinished(attachment1);
+        Set<Long> finishedTaskIds = Deencapsulation.getField(brokerLoadJob, "finishedTaskIds");
+        Assert.assertEquals(1, finishedTaskIds.size());
+        EtlStatus loadingStatus = Deencapsulation.getField(brokerLoadJob, "loadingStatus");
+        Assert.assertEquals("10", loadingStatus.getCounters().get(BrokerLoadJob.DPP_NORMAL_ALL));
+        Assert.assertEquals("0", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
+        int progress = Deencapsulation.getField(brokerLoadJob, "progress");
+        Assert.assertEquals(99, progress);
+    }
+
+    @Test
+    public void testSetProperties(@Injectable BrokerPendingTaskAttachment attachment1,
+                                                       @Injectable LoadTask loadTask1,
+                                                       @Mocked GlobalStateMgr globalStateMgr,
+                                  @Injectable Database database) throws AnalysisException, DdlException {
+
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(LoadStmt.JSONPATHS, "[\"$.key2\"");
+        properties.put(LoadStmt.STRIP_OUTER_ARRAY, "true");
+        properties.put(LoadStmt.JSONROOT, "$.key1");
+        brokerLoadJob.setJobProperties(properties);
+
+        LoadJob.JSONOptions options = Deencapsulation.getField(brokerLoadJob, "jsonOptions");
+
+        Assert.assertEquals("[\"$.key2\"", options.jsonPaths);
+        Assert.assertTrue(options.stripOuterArray);
+        Assert.assertEquals("$.key1", options.jsonRoot);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

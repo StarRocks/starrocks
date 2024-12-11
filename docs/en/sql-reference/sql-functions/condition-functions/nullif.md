@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # nullif
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns NULL if `expr1` is equal to `expr2`. Otherwise, returns `expr1`.
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_diff
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the difference between two date values in the specified unit. This function returns the value of `expr1 - expr2` expressed in terms of `unit`.
 

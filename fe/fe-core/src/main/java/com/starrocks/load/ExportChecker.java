@@ -36,7 +36,11 @@ package com.starrocks.load;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
@@ -172,7 +176,11 @@ public final class ExportChecker extends FrontendDaemon {
         boolean beHasErr = false;
         String errMsg = "";
         for (Long nodeId : job.getBeStartTimeMap().keySet()) {
+<<<<<<< HEAD
             ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+=======
+            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (null == node) {
                 // The current implementation, if the be in the job is not found, 
                 // the job will be cancelled
@@ -197,7 +205,11 @@ public final class ExportChecker extends FrontendDaemon {
         if (beHasErr) {
             try {
                 job.cancel(ExportFailMsg.CancelType.BE_STATUS_ERR, errMsg);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 LOG.warn("try to cancel a completed job. job: {}", job);
             }
             return true;

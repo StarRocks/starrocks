@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_approx
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回第 p 个百分位点的近似值。
 

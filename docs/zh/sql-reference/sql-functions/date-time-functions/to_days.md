@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_days
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回指定日期距离 `0000-01-01` 的天数。
 

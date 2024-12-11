@@ -21,6 +21,10 @@ import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+<<<<<<< HEAD
+=======
+import java.util.Objects;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Set;
 
 public abstract class PhysicalOperator extends Operator {
@@ -75,4 +79,44 @@ public abstract class PhysicalOperator extends Operator {
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
         return false;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        PhysicalOperator that = (PhysicalOperator) o;
+        return Objects.equals(orderSpec, that.orderSpec) &&
+                Objects.equals(distributionSpec, that.distributionSpec);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), orderSpec, distributionSpec);
+    }
+
+    public abstract static class Builder<O extends PhysicalOperator, B extends PhysicalOperator.Builder>
+            extends Operator.Builder<O, B> {
+        @Override
+        public B withOperator(O operator) {
+            super.withOperator(operator);
+            builder.distributionSpec = operator.distributionSpec;
+            builder.orderSpec = operator.orderSpec;
+            return (B) this;
+        }
+
+        public B setOrderSpec(OrderSpec orderSpec) {
+            builder.orderSpec = orderSpec;
+            return (B) this;
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

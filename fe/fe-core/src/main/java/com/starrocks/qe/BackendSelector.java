@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import java.util.Map;
 
 public interface BackendSelector {
@@ -27,4 +28,10 @@ public interface BackendSelector {
         }
         return value;
     }
+=======
+import com.starrocks.common.StarRocksException;
+
+public interface BackendSelector {
+    void computeScanRangeAssignment() throws StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -22,7 +22,11 @@ const i64 IS_SET_DEFAULT_ROWSET_TO_BETA_BIT = 0x01;
 
 struct TMasterInfo {
     1: required Types.TNetworkAddress network_address
+<<<<<<< HEAD
     2: required Types.TClusterId cluster_id
+=======
+    2: optional Types.TClusterId cluster_id     //deprecated
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     3: required Types.TEpoch epoch
     4: optional string token 
     5: optional string backend_ip
@@ -33,6 +37,10 @@ struct TMasterInfo {
     10: optional Types.TRunMode run_mode
     11: optional list<string> disabled_disks
     12: optional list<string> decommissioned_disks
+<<<<<<< HEAD
+=======
+    13: optional bool encrypted;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TBackendInfo {
@@ -45,6 +53,13 @@ struct TBackendInfo {
     7: optional Types.TPort starlet_port
     8: optional i64 reboot_time
     9: optional bool is_set_storage_path
+<<<<<<< HEAD
+=======
+
+    10: optional i64 mem_limit_bytes
+
+    11: optional Types.TPort arrow_flight_port
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct THeartbeatResult {

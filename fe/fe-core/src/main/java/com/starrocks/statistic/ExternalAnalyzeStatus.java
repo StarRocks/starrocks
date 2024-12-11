@@ -16,14 +16,28 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSet;
 
+=======
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ShowResultSet;
+
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+<<<<<<< HEAD
 public class ExternalAnalyzeStatus implements AnalyzeStatus {
 
     private long id;
@@ -48,6 +62,49 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus {
 
     private String reason;
 
+=======
+public class ExternalAnalyzeStatus implements AnalyzeStatus, Writable {
+    @SerializedName("id")
+    private long id;
+
+    @SerializedName("catalogName")
+    private String catalogName;
+
+    @SerializedName("dbName")
+    private String dbName;
+
+    @SerializedName("tableName")
+    private String tableName;
+
+    @SerializedName("tableUUID")
+    private String tableUUID;
+
+    @SerializedName("columns")
+    private List<String> columns;
+
+    @SerializedName("type")
+    private StatsConstants.AnalyzeType type;
+
+    @SerializedName("scheduleType")
+    private StatsConstants.ScheduleType scheduleType;
+
+    @SerializedName("properties")
+    private Map<String, String> properties;
+
+    @SerializedName("status")
+    private StatsConstants.ScheduleStatus status;
+
+    @SerializedName("startTime")
+    private LocalDateTime startTime;
+
+    @SerializedName("endTime")
+    private LocalDateTime endTime;
+
+    @SerializedName("reason")
+    private String reason;
+
+    @SerializedName("progress")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private long progress;
 
     public ExternalAnalyzeStatus(long id, String catalogName, String dbName, String tableName,
@@ -188,4 +245,18 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus {
         rows.add(Lists.newArrayList(catalogName + "." + dbName + "." + tableName, op, msgType, msgText));
         return new ShowResultSet(META_DATA, rows);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        String s = GsonUtils.GSON.toJson(this);
+        Text.writeString(out, s);
+    }
+
+    public static ExternalAnalyzeStatus read(DataInput in) throws IOException {
+        String s = Text.readString(in);
+        return GsonUtils.GSON.fromJson(s, ExternalAnalyzeStatus.class);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

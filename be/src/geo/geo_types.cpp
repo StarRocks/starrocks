@@ -391,7 +391,11 @@ bool GeoPolygon::contains(const GeoShape* rhs) const {
     }
     case GEO_SHAPE_MULTI_LINE_STRING: {
         const GeoMultiLine* multi_line = (const GeoMultiLine*)rhs;
+<<<<<<< HEAD
         for (auto line : multi_line->lines()) {
+=======
+        for (auto& line : multi_line->lines()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!_polygon.Contains(line)) {
                 return false;
             }
@@ -400,7 +404,11 @@ bool GeoPolygon::contains(const GeoShape* rhs) const {
     }
     case GEO_SHAPE_MULTI_POLYGON: {
         const GeoMultiPolygon* multi_polygon = (const GeoMultiPolygon*)rhs;
+<<<<<<< HEAD
         for (auto polygon : multi_polygon->polygons()) {
+=======
+        for (auto& polygon : multi_polygon->polygons()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!_polygon.Contains(polygon)) {
                 return false;
             }
@@ -462,7 +470,11 @@ bool GeoCircle::contains(const GeoShape* rhs) const {
     }
     case GEO_SHAPE_MULTI_LINE_STRING: {
         const GeoMultiLine* multi_line = (const GeoMultiLine*)rhs;
+<<<<<<< HEAD
         for (auto line : multi_line->lines()) {
+=======
+        for (auto& line : multi_line->lines()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!_polygon.Contains(line)) {
                 return false;
             }
@@ -471,7 +483,11 @@ bool GeoCircle::contains(const GeoShape* rhs) const {
     }
     case GEO_SHAPE_MULTI_POLYGON: {
         const GeoMultiPolygon* multi_polygon = (const GeoMultiPolygon*)rhs;
+<<<<<<< HEAD
         for (auto polygon : multi_polygon->polygons()) {
+=======
+        for (auto& polygon : multi_polygon->polygons()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!_polygon.Contains(polygon)) {
                 return false;
             }
@@ -532,7 +548,11 @@ bool GeoMultiPolygon::contains(const GeoShape* rhs) {
     }
     case GEO_SHAPE_MULTI_POINT: {
         const GeoMultiPoint* multi_point = (const GeoMultiPoint*)rhs;
+<<<<<<< HEAD
         for (auto point : multi_point->points()) {
+=======
+        for (auto& point : multi_point->points()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!_contains(point)) {
                 return false;
             }
@@ -541,7 +561,11 @@ bool GeoMultiPolygon::contains(const GeoShape* rhs) {
     }
     case GEO_SHAPE_LINE_STRING: {
         const GeoMultiLine* multi_line = (const GeoMultiLine*)rhs;
+<<<<<<< HEAD
         for (auto line : multi_line->lines()) {
+=======
+        for (auto& line : multi_line->lines()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!_contains(line)) {
                 return false;
             }
@@ -550,7 +574,11 @@ bool GeoMultiPolygon::contains(const GeoShape* rhs) {
     }
     case GEO_SHAPE_POLYGON: {
         const GeoMultiPolygon* multi_polygon = (const GeoMultiPolygon*)rhs;
+<<<<<<< HEAD
         for (auto polygon : multi_polygon->polygons()) {
+=======
+        for (auto& polygon : multi_polygon->polygons()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!_contains(polygon)) {
                 return false;
             }

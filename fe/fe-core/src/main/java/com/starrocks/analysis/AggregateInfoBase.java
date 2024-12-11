@@ -37,8 +37,11 @@ package com.starrocks.analysis;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 
@@ -47,8 +50,11 @@ import java.util.ArrayList;
  * tuple descriptors as well as their smaps for evaluating aggregate functions.
  */
 public abstract class AggregateInfoBase {
+<<<<<<< HEAD
     private static final Logger LOG =
             LoggerFactory.getLogger(AggregateInfoBase.class);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // For aggregations: All unique grouping expressions from a select block.
     // For analytics: Empty.

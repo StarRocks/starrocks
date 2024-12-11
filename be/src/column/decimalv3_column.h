@@ -43,7 +43,11 @@ public:
 
     MutableColumnPtr clone_empty() const override;
 
+<<<<<<< HEAD
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+=======
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string debug_item(size_t idx) const override;
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;

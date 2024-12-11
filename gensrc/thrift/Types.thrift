@@ -58,6 +58,10 @@ typedef i64 TPartitionId
 enum TStorageType {
     ROW,
     COLUMN,
+<<<<<<< HEAD
+=======
+    COLUMN_WITH_ROW
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 enum TStorageMedium {
@@ -125,6 +129,14 @@ struct TScalarType {
 struct TStructField {
     1: optional string name
     2: optional string comment
+<<<<<<< HEAD
+=======
+    3: optional i32 id
+    // physical_name is used to store the physical name of the field in the storage layer.
+    // for example, the physical name of a struct field in a parquet file.
+    // used in delta lake column mapping name mode
+    4: optional string physical_name
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TTypeNode {
@@ -161,7 +173,12 @@ enum TAggregationType {
     NONE,
     BITMAP_UNION,
     REPLACE_IF_NOT_NULL,
+<<<<<<< HEAD
     PERCENTILE_UNION
+=======
+    PERCENTILE_UNION,
+    AGG_STATE_UNION
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 enum TPushType {
@@ -205,6 +222,11 @@ enum TTaskType {
     COMPACTION,
     REMOTE_SNAPSHOT,
     REPLICATE_SNAPSHOT,
+<<<<<<< HEAD
+=======
+    UPDATE_SCHEMA,
+    COMPACTION_CONTROL,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     NUM_TASK_TYPE
 }
 
@@ -275,7 +297,14 @@ enum TFunctionBinaryType {
   IR,
 
   // StarRocks customized UDF in jar.
+<<<<<<< HEAD
   SRJAR
+=======
+  SRJAR,
+  
+  // 
+  PYTHON
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 // Represents a fully qualified function name.
@@ -317,6 +346,19 @@ struct TAggregateFunction {
 struct TTableFunction {
   1: required list<TTypeDesc> ret_types
   2: optional string symbol
+<<<<<<< HEAD
+=======
+  // Table function left join
+  3: optional bool is_left_join
+}
+
+struct TAggStateDesc {
+    1: optional string agg_func_name
+    2: optional list<TTypeDesc> arg_types
+    3: optional TTypeDesc ret_type
+    4: optional bool result_nullable
+    5: optional i32 func_version
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 // Represents a function in the Catalog.
@@ -339,7 +381,11 @@ struct TFunction {
   // Optional comment to attach to the function
   6: optional string comment
 
+<<<<<<< HEAD
   7: optional string signature
+=======
+  7: optional string signature // Deprecated
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
   // HDFS path for the function binary. This binary must exist at the time the
   // function is created.
@@ -351,6 +397,10 @@ struct TFunction {
 
   11: optional i64 id
   12: optional string checksum
+<<<<<<< HEAD
+=======
+  13: optional TAggStateDesc agg_state_desc
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
   // Builtin Function id, used to mark the function in the vectorization engine,
   // and it's different with `id` because `id` is use for serialized and cache
@@ -361,6 +411,12 @@ struct TFunction {
 
   // Ignore nulls
   33: optional bool ignore_nulls
+<<<<<<< HEAD
+=======
+  34: optional bool isolated
+  35: optional string input_type
+  36: optional string content
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 enum TLoadJobState {
@@ -394,7 +450,20 @@ enum TTableType {
     MATERIALIZED_VIEW,
     FILE_TABLE,
     DELTALAKE_TABLE,
+<<<<<<< HEAD
     TABLE_FUNCTION_TABLE
+=======
+    TABLE_FUNCTION_TABLE,
+    ODPS_TABLE,
+    LOGICAL_ICEBERG_METADATA_TABLE,
+    ICEBERG_REFS_TABLE,
+    ICEBERG_HISTORY_TABLE,
+    ICEBERG_METADATA_LOG_ENTRIES_TABLE,
+    ICEBERG_SNAPSHOTS_TABLE,
+    ICEBERG_MANIFESTS_TABLE,
+    ICEBERG_FILES_TABLE,
+    ICEBERG_PARTITIONS_TABLE
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 enum TKeysType {
@@ -547,15 +616,41 @@ struct TIcebergDataFile {
     7: optional TIcebergColumnStats column_stats;
 }
 
+<<<<<<< HEAD
 struct TSinkCommitInfo {
     1: optional TIcebergDataFile iceberg_data_file
     // ... for other tables sink commit info
 
     100: optional bool is_overwrite;
+=======
+struct THiveFileInfo {
+    1: optional string file_name
+    2: optional string partition_path
+    4: optional i64 record_count
+    5: optional i64 file_size_in_bytes
+}
+
+struct TSinkCommitInfo {
+    1: optional TIcebergDataFile iceberg_data_file
+    2: optional THiveFileInfo hive_file_info
+    // ... for other tables sink commit info
+
+    100: optional bool is_overwrite;
+    101: optional string staging_dir
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct TSnapshotInfo {
     1: optional TBackend backend
     2: optional string snapshot_path
     3: optional bool incremental_snapshot
+<<<<<<< HEAD
 }
+=======
+}
+
+enum TTxnType {
+    TXN_NORMAL = 0,
+    TXN_REPLICATION = 1
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

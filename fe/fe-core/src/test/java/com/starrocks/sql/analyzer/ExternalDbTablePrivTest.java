@@ -107,7 +107,11 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.check(statement, ctx);
             Assert.fail();
+<<<<<<< HEAD
         } catch (AccessDeniedException e) {
+=======
+        } catch (Exception e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -125,7 +129,11 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
+<<<<<<< HEAD
         } catch (AccessDeniedException e) {
+=======
+        } catch (Exception e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }

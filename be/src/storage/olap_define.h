@@ -45,8 +45,12 @@ namespace starrocks {
 
 static const uint64_t OLAP_FIX_HEADER_MAGIC_NUMBER = 0;
 
+<<<<<<< HEAD
 // the max length supported for varchar type
 static const uint32_t OLAP_STRING_MAX_LENGTH = 1048576;
+=======
+uint32_t get_olap_string_max_length();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 // the max bytes for stored string length
 using StringLengthType = uint16_t;

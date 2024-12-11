@@ -44,4 +44,12 @@ public class ShowRepositoriesStmt extends ShowStmt {
         }
         return builder.build();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowRepositoriesStatement(this, context);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

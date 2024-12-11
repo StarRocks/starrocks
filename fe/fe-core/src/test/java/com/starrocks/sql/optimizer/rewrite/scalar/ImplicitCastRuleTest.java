@@ -199,6 +199,7 @@ public class ImplicitCastRuleTest {
         ScalarOperator result = rule.apply(op, null);
 
         assertTrue(result.getChild(0) instanceof CastOperator);
+<<<<<<< HEAD
         assertTrue(result.getChild(1) instanceof CastOperator);
         assertTrue(result.getChild(2) instanceof CastOperator);
 
@@ -207,6 +208,16 @@ public class ImplicitCastRuleTest {
         assertEquals(Type.DOUBLE, result.getChild(2).getType());
 
         assertTrue(result.getChild(1).getChild(0).getType().isVarchar());
+=======
+        assertTrue(result.getChild(1) instanceof ConstantOperator);
+        assertTrue(result.getChild(2) instanceof CastOperator);
+
+        assertEquals(Type.VARCHAR, result.getChild(0).getType());
+        assertEquals(Type.VARCHAR, result.getChild(1).getType());
+        assertEquals(Type.VARCHAR, result.getChild(2).getType());
+
+        assertTrue(result.getChild(0).getChild(0).getType().isBigint());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertTrue(result.getChild(2).getChild(0).getType().isDate());
     }
 

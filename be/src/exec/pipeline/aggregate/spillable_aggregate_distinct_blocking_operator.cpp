@@ -33,7 +33,11 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
     if (_is_finished) return Status::OK();
     ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
+<<<<<<< HEAD
         _aggregator->spill_channel()->set_finishing();
+=======
+        _aggregator->spill_channel()->set_finishing_if_not_reuseable();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _is_finished = true;
     });
 
@@ -46,6 +50,7 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
         return Status::OK();
     }
 
+<<<<<<< HEAD
     auto io_executor = _aggregator->spill_channel()->io_executor();
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
         auto spiller = _aggregator->spiller();
@@ -54,16 +59,32 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
 
     _aggregator->ref();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+=======
+    auto flush_function = [this](RuntimeState* state) {
+        auto spiller = _aggregator->spiller();
+        return spiller->flush(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
+    };
+
+    _aggregator->ref();
+    auto set_call_back_function = [this](RuntimeState* state) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return _aggregator->spiller()->set_flush_all_call_back(
                 [this, state]() {
                     auto defer = DeferOp([&]() { _aggregator->unref(state); });
                     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
+<<<<<<< HEAD
                 state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _aggregator->spiller()));
     };
 
     SpillProcessTasksBuilder task_builder(state, io_executor);
+=======
+                state, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
+    };
+
+    SpillProcessTasksBuilder task_builder(state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     task_builder.then(flush_function).finally(set_call_back_function);
 
     RETURN_IF_ERROR(_aggregator->spill_channel()->execute(task_builder));
@@ -93,14 +114,32 @@ Status SpillableAggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* 
         return Status::OK();
     }
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::push_chunk(state, chunk));
+<<<<<<< HEAD
     set_revocable_mem_bytes(_aggregator->hash_set_memory_usage());
     if (_is_finished) return Status::OK();
+=======
+    // direct return if is_finished. (hash set reach limit)
+    if (_is_finished) return Status::OK();
+    set_revocable_mem_bytes(_aggregator->hash_set_memory_usage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {
         return _spill_all_inputs(state, chunk);
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status SpillableAggregateDistinctBlockingSinkOperator::reset_state(RuntimeState* state,
+                                                                   const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
+    RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::reset_state(state, refill_chunks));
+    ONCE_RESET(_set_finishing_once);
+    return Status::OK();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 Status SpillableAggregateDistinctBlockingSinkOperator::_spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF(_aggregator->hash_set_variant().size() == 0, Status::OK());
     _aggregator->hash_set_variant().visit(
@@ -144,6 +183,12 @@ Status SpillableAggregateDistinctBlockingSinkOperatorFactory::prepare(RuntimeSta
     _spill_options->name = "agg-distinct-blocking-spill";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+<<<<<<< HEAD
+=======
+    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     return Status::OK();
 }
@@ -152,8 +197,13 @@ OperatorPtr SpillableAggregateDistinctBlockingSinkOperatorFactory::create(int32_
                                                                           int32_t driver_sequence) {
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
 
+<<<<<<< HEAD
     auto op = std::make_shared<SpillableAggregateDistinctBlockingSinkOperator>(aggregator, this, _id, _plan_node_id,
                                                                                driver_sequence);
+=======
+    auto op = std::make_shared<SpillableAggregateDistinctBlockingSinkOperator>(
+            aggregator, this, _id, _plan_node_id, driver_sequence, _aggregator_factory->get_shared_limit_countdown());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // create spiller
     auto spiller = _spill_factory->create(*_spill_options);
     // create spill process channel
@@ -238,8 +288,20 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::pull_chunk(
     return res;
 }
 
+<<<<<<< HEAD
 StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spilled_chunk(RuntimeState* state) {
     DCHECK(_accumulator.need_input());
+=======
+Status SpillableAggregateDistinctBlockingSourceOperator::reset_state(RuntimeState* state,
+                                                                     const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    _has_last_chunk = true;
+    _accumulator.reset_state();
+    return Status::OK();
+}
+
+StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spilled_chunk(RuntimeState* state) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ChunkPtr res;
 
     if (_accumulator.has_output()) {
@@ -248,9 +310,15 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
     }
 
     if (!_aggregator->is_spilled_eos()) {
+<<<<<<< HEAD
         auto executor = _aggregator->spill_channel()->io_executor();
         auto& spiller = _aggregator->spiller();
         ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, *executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+=======
+        DCHECK(_accumulator.need_input());
+        auto& spiller = _aggregator->spiller();
+        ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (chunk->is_empty()) {
             return chunk;
         }
@@ -260,6 +328,10 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
         _accumulator.push(std::move(res));
 
     } else if (_has_last_chunk) {
+<<<<<<< HEAD
+=======
+        DCHECK(_accumulator.need_input());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _stream_aggregator->pull_eos_chunk());
         if (res != nullptr && !res->is_empty()) {

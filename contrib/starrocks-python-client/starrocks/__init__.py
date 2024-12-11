@@ -14,5 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 __version__ = "1.0.5"
 
+=======
+__version__ = "1.2.0"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

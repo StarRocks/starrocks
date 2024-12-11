@@ -42,7 +42,11 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalRepeatNode;
@@ -52,7 +56,10 @@ import com.starrocks.thrift.TRepeatNode;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.util.Strings;
 
+<<<<<<< HEAD
 import java.nio.ByteBuffer;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -116,7 +123,11 @@ public class RepeatNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -157,6 +168,7 @@ public class RepeatNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return children.get(0).getNumInstances();
     }
@@ -167,6 +179,8 @@ public class RepeatNode extends PlanNode {
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean canUseRuntimeAdaptiveDop() {
         return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
@@ -210,4 +224,12 @@ public class RepeatNode extends PlanNode {
         planNode.setNode_type(TPlanNodeType.REPEAT_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

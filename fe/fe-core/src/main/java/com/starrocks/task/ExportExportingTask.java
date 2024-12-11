@@ -36,21 +36,35 @@ package com.starrocks.task;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.Version;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
+<<<<<<< HEAD
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
+=======
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.scheduler.Coordinator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -77,7 +91,11 @@ public class ExportExportingTask extends PriorityLeaderTask {
     public ExportExportingTask(ExportJob job) {
         this.job = job;
         this.signature = job.getId();
+<<<<<<< HEAD
         this.subTasksDoneSignal = new MarkedCountDownLatch<Integer, Integer>(job.getCoordList().size());
+=======
+        this.subTasksDoneSignal = new MarkedCountDownLatch<>(job.getCoordList().size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -178,7 +196,11 @@ public class ExportExportingTask extends PriorityLeaderTask {
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
+<<<<<<< HEAD
                 LOG.warn(e);
+=======
+                LOG.warn("Failed to execute submitSubTask", e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         return true;
@@ -275,7 +297,11 @@ public class ExportExportingTask extends PriorityLeaderTask {
                     success = true;
                     LOG.info("move {} to {} success. job id: {}", exportedTempFile, exportedFile, job.getId());
                     break;
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     failMsg = e.getMessage();
                     LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
                             exportedTempFile, exportedFile, job.getId(), i, failMsg);
@@ -336,7 +362,11 @@ public class ExportExportingTask extends PriorityLeaderTask {
                     failMsg = e.getMessage();
                     TUniqueId queryId = coord.getQueryId();
                     LOG.warn("export sub task internal error. task idx: {}, task query id: {}",
+<<<<<<< HEAD
                             taskIdx, getQueryId(), e);
+=======
+                            taskIdx, queryId, e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
 
                 if (i < RETRY_NUM - 1) {
@@ -351,9 +381,15 @@ public class ExportExportingTask extends PriorityLeaderTask {
                         try {
                             Coordinator newCoord = exportJob.resetCoord(taskIdx, newQueryId);
                             coord = newCoord;
+<<<<<<< HEAD
                         } catch (UserException e) {
                             // still use old coord if there are any problems when reseting Coord
                             LOG.warn("fail to reset coord for task idx: {}, task query id: {}, reason: {}", taskIdx, 
+=======
+                        } catch (StarRocksException e) {
+                            // still use old coord if there are any problems when reseting Coord
+                            LOG.warn("fail to reset coord for task idx: {}, task query id: {}, reason: {}", taskIdx,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     getQueryId(), e.getMessage());
                             coord.clearExportStatus();
                         }
@@ -392,10 +428,17 @@ public class ExportExportingTask extends PriorityLeaderTask {
         private void actualExecCoord(Coordinator coord) throws Exception {
             int leftTimeSecond = getLeftTimeSecond();
             if (leftTimeSecond <= 0) {
+<<<<<<< HEAD
                 throw new UserException("timeout");
             }
 
             coord.setTimeout(leftTimeSecond);
+=======
+                throw new StarRocksException("timeout");
+            }
+
+            coord.setTimeoutSecond(leftTimeSecond);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             coord.exec();
 
             if (coord.join(leftTimeSecond)) {
@@ -403,10 +446,17 @@ public class ExportExportingTask extends PriorityLeaderTask {
                 if (status.ok()) {
                     onSubTaskFinished(coord.getExportFiles());
                 } else {
+<<<<<<< HEAD
                     throw new UserException(status.getErrorMsg());
                 }
             } else {
                 throw new UserException("timeout");
+=======
+                    throw new StarRocksException(status.getErrorMsg());
+                }
+            } else {
+                throw new StarRocksException("timeout");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 

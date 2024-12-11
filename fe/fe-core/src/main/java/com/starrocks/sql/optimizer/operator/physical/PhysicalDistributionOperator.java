@@ -16,6 +16,10 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Maps;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -23,9 +27,17 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 
 import java.util.List;
+=======
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
+
+import java.util.List;
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Set;
 
 public class PhysicalDistributionOperator extends PhysicalOperator {
@@ -39,15 +51,35 @@ public class PhysicalDistributionOperator extends PhysicalOperator {
 
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
 
+<<<<<<< HEAD
+=======
+    private Map<Integer, ScalarOperator> globalDictsExpr = Maps.newHashMap();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
         return globalDicts;
     }
 
+<<<<<<< HEAD
     public void setGlobalDicts(
             List<Pair<Integer, ColumnDict>> globalDicts) {
         this.globalDicts = globalDicts;
     }
 
+=======
+    public void setGlobalDicts(List<Pair<Integer, ColumnDict>> globalDicts) {
+        this.globalDicts = globalDicts;
+    }
+
+    public Map<Integer, ScalarOperator> getGlobalDictsExpr() {
+        return globalDictsExpr;
+    }
+
+    public void setGlobalDictsExpr(Map<Integer, ScalarOperator> globalDictsExpr) {
+        this.globalDictsExpr = globalDictsExpr;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         return projectInputRow(inputs.get(0).getRowOutputInfo());

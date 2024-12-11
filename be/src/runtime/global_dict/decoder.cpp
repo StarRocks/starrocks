@@ -16,6 +16,7 @@
 
 #include <utility>
 
+<<<<<<< HEAD
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "gutil/casts.h"
@@ -34,18 +35,101 @@ public:
     GlobalDictDecoderBase(Dict dict) : _dict(std::move(dict)) {}
 
     Status decode(Column* in, Column* out) override;
+=======
+#include "column/array_column.h"
+#include "column/column_builder.h"
+#include "column/const_column.h"
+#include "column/datum.h"
+#include "column/nullable_column.h"
+#include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
+#include "gutil/casts.h"
+#include "runtime/global_dict/config.h"
+#include "runtime/global_dict/types.h"
+#include "runtime/types.h"
+
+namespace starrocks {
+
+template <typename Dict>
+class GlobalDictDecoderBase : public GlobalDictDecoder {
+public:
+    using DictCppType = RunTimeCppType<LowCardDictType>;
+    using DictColumnType = RunTimeColumnType<LowCardDictType>;
+    using StringColumnType = RunTimeColumnType<TYPE_VARCHAR>;
+
+    GlobalDictDecoderBase(Dict dict) : _dict(std::move(dict)) {}
+
+    Status decode_string(Column* in, Column* out) override;
+
+    Status decode_array(Column* in, Column* out) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     Dict _dict;
 };
 
+<<<<<<< HEAD
 template <LogicalType type, typename Dict, LogicalType result_type>
 Status GlobalDictDecoderBase<type, Dict, result_type>::decode(Column* in, Column* out) {
+=======
+template <typename Dict>
+Status GlobalDictDecoderBase<Dict>::decode_array(Column* in, Column* out) {
+    DCHECK(in != nullptr);
+    DCHECK(out != nullptr);
+
+    TypeDescriptor stringType;
+    stringType.type = TYPE_VARCHAR;
+    if (in->is_constant()) {
+        auto* const_column = down_cast<ConstColumn*>(in);
+        auto* in_array = down_cast<ArrayColumn*>(const_column->data_column().get());
+        auto in_element = in_array->elements_column();
+        auto in_offsets = in_array->offsets_column();
+
+        auto* out_array = down_cast<ArrayColumn*>(out);
+        auto out_element = out_array->elements_column();
+        auto out_offsets = out_array->offsets_column();
+        out_offsets->swap_column(*in_offsets);
+        return decode_string(in_element.get(), out_element.get());
+    } else if (in->is_nullable()) {
+        auto* in_nullable = down_cast<NullableColumn*>(in);
+        auto* in_array = down_cast<ArrayColumn*>(in_nullable->data_column().get());
+        auto in_null = in_nullable->null_column();
+        auto in_element = in_array->elements_column();
+        auto in_offsets = in_array->offsets_column();
+
+        auto* out_nullable = down_cast<NullableColumn*>(out);
+        auto* out_array = down_cast<ArrayColumn*>(out_nullable->data_column().get());
+        auto out_null = out_nullable->null_column();
+        auto out_element = out_array->elements_column();
+        auto out_offsets = out_array->offsets_column();
+        out_offsets->swap_column(*in_offsets);
+        out_null->swap_column(*in_null);
+        out_nullable->set_has_null(in_nullable->has_null());
+        return decode_string(in_element.get(), out_element.get());
+    } else {
+        auto* in_array = down_cast<ArrayColumn*>(in);
+        auto in_element = in_array->elements_column();
+        auto in_offsets = in_array->offsets_column();
+
+        auto* out_array = down_cast<ArrayColumn*>(out);
+        auto out_element = out_array->elements_column();
+        auto out_offsets = out_array->offsets_column();
+        out_offsets->swap_column(*in_offsets);
+        return decode_string(in_element.get(), out_element.get());
+    }
+
+    return Status::OK();
+}
+
+template <typename Dict>
+Status GlobalDictDecoderBase<Dict>::decode_string(Column* in, Column* out) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DCHECK(in != nullptr);
     DCHECK(out != nullptr);
 
     // handle const columns
     if (in->is_constant()) {
+<<<<<<< HEAD
         if (in->only_null()) {
             bool res = out->append_nulls(in->size());
             DCHECK(res);
@@ -62,6 +146,23 @@ Status GlobalDictDecoderBase<type, Dict, result_type>::decode(Column* in, Column
         auto column = down_cast<ColumnType*>(in);
         for (size_t i = 0; i < in->size(); i++) {
             FieldType key = column->get_data()[i];
+=======
+        auto id = in->get(0).get<DictCppType>();
+        auto iter = _dict.find(id);
+        if (iter == _dict.end()) {
+            return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", id));
+        }
+        out->append_datum(Datum(iter->second));
+        out->assign(in->size(), 0);
+        return Status::OK();
+    }
+
+    if (!in->is_nullable()) {
+        auto res_column = down_cast<StringColumnType*>(out);
+        auto column = down_cast<DictColumnType*>(in);
+        for (size_t i = 0; i < in->size(); i++) {
+            DictCppType key = column->get_data()[i];
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             auto iter = _dict.find(key);
             if (iter == _dict.end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
@@ -75,13 +176,22 @@ Status GlobalDictDecoderBase<type, Dict, result_type>::decode(Column* in, Column
     auto res_column = down_cast<NullableColumn*>(out);
     res_column->null_column_data().resize(in->size());
 
+<<<<<<< HEAD
     auto res_data_column = down_cast<ResultColumnType*>(res_column->data_column().get());
     auto data_column = down_cast<ColumnType*>(column->data_column().get());
+=======
+    auto res_data_column = down_cast<StringColumnType*>(res_column->data_column().get());
+    auto data_column = down_cast<DictColumnType*>(column->data_column().get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     for (size_t i = 0; i < in->size(); i++) {
         if (column->null_column_data()[i] == 0) {
             res_column->null_column_data()[i] = 0;
+<<<<<<< HEAD
             FieldType key = data_column->get_data()[i];
+=======
+            DictCppType key = data_column->get_data()[i];
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             auto iter = _dict.find(key);
             if (iter == _dict.end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
@@ -97,7 +207,11 @@ Status GlobalDictDecoderBase<type, Dict, result_type>::decode(Column* in, Column
 
 template <typename DictType>
 GlobalDictDecoderPtr create_global_dict_decoder(const DictType& dict) {
+<<<<<<< HEAD
     return std::make_unique<GlobalDictDecoderBase<LowCardDictType, DictType, TYPE_VARCHAR>>(dict);
+=======
+    return std::make_unique<GlobalDictDecoderBase<DictType>>(dict);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 // explicit instantiation

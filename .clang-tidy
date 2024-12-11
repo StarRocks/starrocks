@@ -2,11 +2,17 @@
 Checks: >
     -*,
     cppcoreguidelines-virtual-class-destructor,
+<<<<<<< HEAD
     modernize-avoid-bind,
     modernize-concat-nested-namespaces,
     modernize-deprecated-headers,
     modernize-deprecated-ios-base-aliases,
     modernize-loop-convert,
+=======
+    modernize-concat-nested-namespaces,
+    modernize-deprecated-headers,
+    modernize-deprecated-ios-base-aliases,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     modernize-make-shared,
     modernize-make-unique,
     modernize-pass-by-value,
@@ -15,10 +21,16 @@ Checks: >
     modernize-replace-auto-ptr,
     modernize-replace-disallow-copy-and-assign-macro,
     modernize-replace-random-shuffle,
+<<<<<<< HEAD
     modernize-return-braced-init-list,
     modernize-shrink-to-fit,
     modernize-unary-static-assert,
     modernize-use-auto,
+=======
+    -modernize-return-braced-init-list,
+    modernize-shrink-to-fit,
+    modernize-unary-static-assert,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     modernize-use-bool-literals,
     modernize-use-default-member-init,
     modernize-use-emplace,
@@ -40,3 +52,8 @@ Checks: >
     performance-type-promotion-in-math-fn,
     performance-unnecessary-copy-initialization,
     performance-unnecessary-value-param,
+<<<<<<< HEAD
+=======
+
+WarningsAsErrors: '*'
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # days_diff
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the day difference between two date expressions (`expr1` − `expr2`), accurate to the day.
 

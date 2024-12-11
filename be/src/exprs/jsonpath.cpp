@@ -22,6 +22,10 @@
 #include <memory>
 
 #include "column/column_viewer.h"
+<<<<<<< HEAD
+=======
+#include "common/compiler_util.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/status.h"
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
@@ -145,7 +149,11 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
         if (i == 0) {
             std::shared_ptr<ArraySelector> selector(new ArraySelectorNone());
             if (current != "$") {
+<<<<<<< HEAD
                 parsed_paths->emplace_back(JsonPathPiece("", std::move(selector)));
+=======
+                parsed_paths->emplace_back(JsonPathPiece("$", std::move(selector)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 parsed_paths->emplace_back(JsonPathPiece("$", std::move(selector)));
                 continue;
@@ -262,4 +270,67 @@ vpack::Slice JsonPath::extract(const JsonValue* json, const JsonPath& jsonpath, 
     return JsonPathPiece::extract(json, jsonpath.paths, b);
 }
 
+<<<<<<< HEAD
+=======
+bool JsonPath::starts_with(const JsonPath* other) const {
+    if (other->paths.size() > paths.size()) {
+        // this: a.b, other: a.b.c.d
+        return false;
+    }
+
+    size_t i = 0;
+    bool eq_key = true;
+    for (; i < other->paths.size(); i++) {
+        auto& this_path = paths[i];
+        auto& other_path = other->paths[i];
+        if (this_path.key != other_path.key) {
+            eq_key = false;
+            break;
+        }
+        if (!this_path.array_selector->match(*other_path.array_selector)) {
+            break;
+        }
+    }
+
+    if (i == 0) {
+        return false;
+    }
+    return eq_key;
+}
+
+StatusOr<JsonPath*> JsonPath::relativize(const JsonPath* other, JsonPath* output_root) const {
+    if (other->paths.size() > paths.size()) {
+        // this: a.b, other: a.b.c.d
+        return Status::InvalidArgument("Unsupported rollup json path");
+    }
+
+    size_t i = 0;
+    for (; i < other->paths.size(); ++i) {
+        auto& this_path = paths[i];
+        auto& other_path = other->paths[i];
+        if (this_path.key != other_path.key) {
+            break;
+        }
+        if (!this_path.array_selector->match(*other_path.array_selector)) {
+            if (UNLIKELY(NONE != other_path.array_selector->type)) {
+                return Status::InvalidArgument(
+                        fmt::format("Unsupported json path type: {}", other_path.array_selector->type));
+            }
+            output_root->paths.emplace_back("", this_path.array_selector);
+            i++; // to next
+            break;
+        }
+    }
+
+    for (; i < paths.size(); ++i) {
+        output_root->paths.emplace_back(paths[i]);
+    }
+
+    if (this->paths[0].key == "$" && !output_root->paths.empty()) {
+        output_root->paths.insert(output_root->paths.cbegin(), this->paths[0]);
+    }
+    return output_root;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

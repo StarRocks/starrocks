@@ -17,8 +17,13 @@
 
 package com.starrocks.task;
 
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
+=======
+import com.starrocks.common.Status;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TDropAutoIncrementMapReq;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;

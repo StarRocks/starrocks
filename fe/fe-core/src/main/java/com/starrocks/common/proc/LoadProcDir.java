@@ -52,7 +52,11 @@ public class LoadProcDir implements ProcDirInterface {
             .add("Type").add("Priority").add("ScanRows").add("FilteredRows").add("UnselectedRows")
             .add("SinkRows").add("EtlInfo").add("TaskInfo").add("ErrorMsg").add("CreateTime")
             .add("EtlStartTime").add("EtlFinishTime").add("LoadStartTime").add("LoadFinishTime")
+<<<<<<< HEAD
             .add("TrackingSQL").add("JobDetails")
+=======
+            .add("TrackingSQL").add("JobDetails").add("Warehouse")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .build();
 
     // label and state column index of result

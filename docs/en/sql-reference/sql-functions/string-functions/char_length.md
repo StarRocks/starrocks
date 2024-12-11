@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # char_length
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This function returns the length of a string. For multi-byte characters, it returns the number of characters. It currently only supports utf8 coding. Note: This function is also named as character_length.
 

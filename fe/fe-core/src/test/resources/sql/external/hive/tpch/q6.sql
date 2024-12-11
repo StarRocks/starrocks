@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     sum(l_extendedprice * l_discount) as revenue
@@ -8,6 +9,8 @@ where
   and l_shipdate < date '1996-01-01'
   and l_discount between 0.02 and 0.04
   and l_quantity < 24 ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment statistics]
 PLAN FRAGMENT 0(F01)
 Output Exprs:18: sum
@@ -48,10 +51,17 @@ OutPut Exchange Id: 03
 0:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 11: l_shipdate >= '1995-01-01', 11: l_shipdate < '1996-01-01', 7: l_discount >= 0.02, 7: l_discount <= 0.04, 5: l_quantity < 24
+<<<<<<< HEAD
 MIN/MAX PREDICATES: 19: l_shipdate >= '1995-01-01', 20: l_shipdate < '1996-01-01', 21: l_discount >= 0.02, 22: l_discount <= 0.04, 23: l_quantity < 24
 partitions=1/1
 avgRowSize=44.0
 numNodes=0
+=======
+MIN/MAX PREDICATES: 11: l_shipdate >= '1995-01-01', 11: l_shipdate < '1996-01-01', 7: l_discount >= 0.02, 7: l_discount <= 0.04, 5: l_quantity < 24
+partitions=1/1
+avgRowSize=44.0
+dataCacheOptions={populate: false}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 cardinality: 8142765
 column statistics:
 * l_quantity-->[1.0, 24.0, 0.0, 8.0, 50.0] ESTIMATE

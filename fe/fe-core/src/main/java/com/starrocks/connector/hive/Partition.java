@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.connector.hive;
 
 import com.google.gson.JsonObject;
@@ -52,7 +55,12 @@ public class Partition implements PartitionInfo {
         return parameters;
     }
 
+<<<<<<< HEAD
     public RemoteFileInputFormat getInputFormat() {
+=======
+    @Override
+    public RemoteFileInputFormat getFileFormat() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return inputFormat;
     }
 
@@ -60,6 +68,10 @@ public class Partition implements PartitionInfo {
         return textFileFormatDesc;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getFullPath() {
         return fullPath;
     }

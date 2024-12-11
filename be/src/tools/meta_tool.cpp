@@ -96,8 +96,13 @@ using starrocks::PrimaryKeyDump;
 
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "",
+<<<<<<< HEAD
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, "
               "show_meta, check_table_meta_consistency, print_lake_metadata, print_lake_txn_log");
+=======
+              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, show_meta, "
+              "check_table_meta_consistency, print_lake_metadata, print_lake_txn_log, print_lake_schema");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -148,6 +153,11 @@ std::string get_usage(const std::string& progname) {
       {progname} --operation=show_segment_footer --file=</path/to/segment/file>
     dump_segment_data:
       {progname} --operation=dump_segment_data --file=</path/to/segment/file>
+<<<<<<< HEAD
+=======
+    dump_column_size:
+      {progname} --operation=dump_column_size --file=</path/to/segment/file>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     print_pk_dump:
       {progname} --operation=print_pk_dump --file=</path/to/pk/dump/file>
     dump_short_key_index:
@@ -557,8 +567,13 @@ void check_meta_consistency(DataDir* data_dir) {
         tablet_path = starrocks::path_util::join_path_segments(tablet_path, std::to_string(tablet_meta->tablet_id()));
         tablet_path = starrocks::path_util::join_path_segments(tablet_path, std::to_string(tablet_meta->schema_hash()));
 
+<<<<<<< HEAD
         auto& tablet_schema = tablet_meta->tablet_schema();
         const std::vector<starrocks::TabletColumn>& columns = tablet_schema.columns();
+=======
+        auto tablet_schema = tablet_meta->tablet_schema_ptr();
+        const std::vector<starrocks::TabletColumn>& columns = tablet_schema->columns();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         for (const auto& rs : tablet_meta->all_rs_metas()) {
             for (int64_t seg_id = 0; seg_id < rs->num_segments(); ++seg_id) {
@@ -640,6 +655,10 @@ public:
     Status dump_segment_data();
     Status dump_short_key_index(size_t key_column_count);
     Status calc_checksum();
+<<<<<<< HEAD
+=======
+    Status dump_column_size();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     struct ColItem {
@@ -651,6 +670,11 @@ private:
     Status _init();
     void _convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* dest_col);
     std::shared_ptr<Schema> _init_query_schema(const std::shared_ptr<TabletSchema>& tablet_schema);
+<<<<<<< HEAD
+=======
+    std::shared_ptr<Schema> _init_query_schema_by_column_id(const std::shared_ptr<TabletSchema>& tablet_schema,
+                                                            ColumnId id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::shared_ptr<TabletSchema> _init_search_schema_from_footer(const SegmentFooterPB& footer);
     void _analyze_short_key_columns(size_t key_column_count, std::vector<ColItem>* cols);
     Status _output_short_key_string(const std::vector<ColItem>& cols, size_t idx, Slice& key, std::string* result);
@@ -671,6 +695,16 @@ std::shared_ptr<Schema> SegmentDump::_init_query_schema(const std::shared_ptr<Ta
     return std::make_shared<Schema>(tablet_schema->schema());
 }
 
+<<<<<<< HEAD
+=======
+std::shared_ptr<Schema> SegmentDump::_init_query_schema_by_column_id(const std::shared_ptr<TabletSchema>& tablet_schema,
+                                                                     ColumnId id) {
+    std::vector<ColumnId> cids;
+    cids.push_back(id);
+    return std::make_shared<Schema>(tablet_schema->schema(), cids);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void SegmentDump::_convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* dest_col) {
     dest_col->set_unique_id(src_col.unique_id());
     dest_col->set_type(type_to_string(LogicalType(src_col.type())));
@@ -718,7 +752,11 @@ Status SegmentDump::_init() {
 
     // open segment
     size_t footer_length = 16 * 1024 * 1024;
+<<<<<<< HEAD
     auto segment_res = Segment::open(_fs, FileInfo{_path}, 0, _tablet_schema.get(), &footer_length, nullptr);
+=======
+    auto segment_res = Segment::open(_fs, FileInfo{_path}, 0, _tablet_schema, &footer_length, nullptr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (!segment_res.ok()) {
         std::cout << "open segment failed: " << segment_res.status() << std::endl;
         return Status::InternalError("");
@@ -771,7 +809,11 @@ Status SegmentDump::_output_short_key_string(const std::vector<ColItem>& cols, s
     size_t num_short_key_columns = cols.size();
     const KeyCoder* coder = get_key_coder(cols[idx].type->type());
     uint8_t* tmp_mem = _mem_pool.allocate(item_size);
+<<<<<<< HEAD
     coder->decode_ascending(&convert_key, item_size, tmp_mem, &_mem_pool);
+=======
+    (void)coder->decode_ascending(&convert_key, item_size, tmp_mem, &_mem_pool);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     auto logical_type = cols[idx].type->type();
 
@@ -837,7 +879,11 @@ Status SegmentDump::calc_checksum() {
         }
     }
 
+<<<<<<< HEAD
     auto schema = ChunkHelper::convert_schema(*_tablet_schema, return_columns);
+=======
+    auto schema = ChunkHelper::convert_schema(_tablet_schema, return_columns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     SegmentReadOptions seg_opts;
     seg_opts.fs = _fs;
     seg_opts.use_page_cache = false;
@@ -845,7 +891,11 @@ Status SegmentDump::calc_checksum() {
     seg_opts.stats = &stats;
     auto seg_res = _segment->new_iterator(schema, seg_opts);
     if (!seg_res.ok()) {
+<<<<<<< HEAD
         std::cout << "new segment iterator failed: " << seg_res.status().get_error_msg() << std::endl;
+=======
+        std::cout << "new segment iterator failed: " << seg_res.status().message() << std::endl;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return seg_res.status();
     }
     auto seg_iter = std::move(seg_res.value());
@@ -956,6 +1006,62 @@ Status SegmentDump::dump_segment_data() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status SegmentDump::dump_column_size() {
+    Status st = _init();
+    if (!st.ok()) {
+        std::cout << "SegmentDump init failed: " << st << std::endl;
+        return st;
+    }
+
+    std::string result = "";
+    // for each column
+    for (ColumnId id = 0; id < _tablet_schema->num_columns(); id++) {
+        // read column one by one
+        auto schema = _init_query_schema_by_column_id(_tablet_schema, id);
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.use_page_cache = false;
+        OlapReaderStatistics stats;
+        seg_opts.stats = &stats;
+        auto seg_res = _segment->new_iterator(*schema, seg_opts);
+        if (!seg_res.ok()) {
+            std::cout << "new segment iterator failed: " << seg_res.status() << std::endl;
+            return seg_res.status();
+        }
+        auto seg_iter = std::move(seg_res.value());
+
+        // iter chunk
+        auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+        do {
+            st = seg_iter->get_next(chunk.get());
+            if (!st.ok()) {
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                std::cout << "iter chunk failed: " << st.to_string() << std::endl;
+                return st;
+            }
+            chunk->reset();
+        } while (true);
+        const ColumnMetaPB& column_meta = _footer.columns(id);
+        const google::protobuf::EnumValueDescriptor* compession_desc =
+                CompressionTypePB_descriptor()->FindValueByNumber(column_meta.compression());
+        const google::protobuf::EnumValueDescriptor* encoding_desc =
+                EncodingTypePB_descriptor()->FindValueByNumber(column_meta.encoding());
+
+        result += fmt::format(
+                "[ column id: {} compression: {} encoding: {} compressed bytes: {} uncompressed bytes: {}]\n", id,
+                compession_desc->name(), encoding_desc->name(), stats.compressed_bytes_read_request,
+                column_meta.total_mem_footprint());
+    }
+    std::cout << result;
+
+    return Status::OK();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks
 
 int meta_tool_main(int argc, char** argv) {
@@ -999,6 +1105,20 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << "dump segment data failed: " << st << std::endl;
             return -1;
         }
+<<<<<<< HEAD
+=======
+    } else if (FLAGS_operation == "dump_column_size") {
+        if (FLAGS_file == "") {
+            std::cout << "no file flag for dump segment file" << std::endl;
+            return -1;
+        }
+        starrocks::SegmentDump segment_dump(FLAGS_file);
+        Status st = segment_dump.dump_column_size();
+        if (!st.ok()) {
+            std::cout << "dump column size failed: " << st << std::endl;
+            return -1;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     } else if (FLAGS_operation == "print_pk_dump") {
         if (FLAGS_file == "") {
             std::cout << "no file flag for pk dump file" << std::endl;
@@ -1054,11 +1174,19 @@ int meta_tool_main(int argc, char** argv) {
         starrocks::SegmentDump segment_dump(FLAGS_file, FLAGS_column_index);
         Status st = segment_dump.calc_checksum();
         if (!st.ok()) {
+<<<<<<< HEAD
             std::cout << "dump segment data failed: " << st.get_error_msg() << std::endl;
             return -1;
         }
     } else if (FLAGS_operation == "print_lake_metadata") {
         starrocks::lake::TabletMetadataPB metadata;
+=======
+            std::cout << "dump segment data failed: " << st.message() << std::endl;
+            return -1;
+        }
+    } else if (FLAGS_operation == "print_lake_metadata") {
+        starrocks::TabletMetadataPB metadata;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!metadata.ParseFromIstream(&std::cin)) {
             std::cerr << "Fail to parse tablet metadata\n";
             return -1;
@@ -1073,7 +1201,11 @@ int meta_tool_main(int argc, char** argv) {
         }
         std::cout << json << '\n';
     } else if (FLAGS_operation == "print_lake_txn_log") {
+<<<<<<< HEAD
         starrocks::lake::TxnLogPB txn_log;
+=======
+        starrocks::TxnLogPB txn_log;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!txn_log.ParseFromIstream(&std::cin)) {
             std::cerr << "Fail to parse txn log\n";
             return -1;
@@ -1135,7 +1267,10 @@ int meta_tool_main(int argc, char** argv) {
                                                   "get_meta_stats",
                                                   "ls",
                                                   "check_table_meta_consistency",
+<<<<<<< HEAD
                                                   "calc_checksum",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                                   "scan_dcgs"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation: " << FLAGS_operation << std::endl << std::endl;

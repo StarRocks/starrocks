@@ -46,6 +46,7 @@ private:
     AnalytorPtr _analytor = nullptr;
     bool _use_hash_based_partition = false;
     std::vector<ExprContext*> _partition_exprs;
+<<<<<<< HEAD
 
     Status _get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
     Status _get_next_for_unbounded_preceding_range_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
@@ -56,5 +57,7 @@ private:
 
     Status _fetch_next_chunk(RuntimeState* state);
     Status _try_fetch_next_partition_data(RuntimeState* state);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 } // namespace starrocks

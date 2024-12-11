@@ -16,6 +16,7 @@ package com.starrocks.paimon.reader;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
+<<<<<<< HEAD
 import org.apache.paimon.data.InternalArray;
 import org.apache.paimon.data.InternalMap;
 import org.apache.paimon.data.Timestamp;
@@ -26,14 +27,40 @@ import org.apache.paimon.utils.InternalRowUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+=======
+import org.apache.paimon.data.Decimal;
+import org.apache.paimon.data.InternalArray;
+import org.apache.paimon.data.InternalMap;
+import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.types.ArrayType;
+import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.MapType;
+import org.apache.paimon.types.RowType;
+import org.apache.paimon.utils.InternalRowUtils;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 
 public class PaimonColumnValue implements ColumnValue {
     private final Object fieldData;
     private final DataType dataType;
+<<<<<<< HEAD
     public PaimonColumnValue(Object fieldData, DataType dataType) {
         this.fieldData = fieldData;
         this.dataType = dataType;
+=======
+    private final String timeZone;
+    public PaimonColumnValue(Object fieldData, DataType dataType, String timeZone) {
+        this.fieldData = fieldData;
+        this.dataType = dataType;
+        this.timeZone = timeZone;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     @Override
     public boolean getBoolean() {
@@ -67,6 +94,7 @@ public class PaimonColumnValue implements ColumnValue {
 
     @Override
     public String getString(ColumnType.TypeValue type) {
+<<<<<<< HEAD
         if (type == ColumnType.TypeValue.DATE) {
             int epoch = (int) fieldData;
             LocalDate date = LocalDate.ofEpochDay(epoch);
@@ -85,6 +113,9 @@ public class PaimonColumnValue implements ColumnValue {
         } else {
             return fieldData.toString();
         }
+=======
+        return fieldData.toString();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -119,7 +150,24 @@ public class PaimonColumnValue implements ColumnValue {
 
     @Override
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
+<<<<<<< HEAD
 
+=======
+        InternalRow array = (InternalRow) fieldData;
+        List<DataField> fields = ((RowType) dataType).getFields();
+        for (int i = 0; i < structFieldIndex.size(); i++) {
+            Integer idx = structFieldIndex.get(i);
+            PaimonColumnValue cv = null;
+            if (idx != null) {
+                DataField dataField = fields.get(idx);
+                Object o = InternalRowUtils.get(array, idx, dataField.type());
+                if (o != null) {
+                    cv = new PaimonColumnValue(o, dataField.type(), timeZone);
+                }
+            }
+            values.add(cv);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -127,10 +175,44 @@ public class PaimonColumnValue implements ColumnValue {
         return (byte) fieldData;
     }
 
+<<<<<<< HEAD
     private void toPaimonColumnValue(List<ColumnValue> values, InternalArray array, DataType dataType) {
         for (int i = 0; i < array.size(); i++) {
             PaimonColumnValue cv = new PaimonColumnValue(InternalRowUtils.get(array, i, dataType), dataType);
             values.add(cv);
         }
     }
+=======
+    public BigDecimal getDecimal() {
+        return ((Decimal) fieldData).toBigDecimal();
+    }
+
+    private void toPaimonColumnValue(List<ColumnValue> values, InternalArray array, DataType dataType) {
+        for (int i = 0; i < array.size(); i++) {
+            PaimonColumnValue cv = null;
+            Object o = InternalRowUtils.get(array, i, dataType);
+            if (o != null) {
+                cv = new PaimonColumnValue(o, dataType, timeZone);
+            }
+            values.add(cv);
+        }
+    }
+
+    @Override
+    public LocalDate getDate() {
+        return LocalDate.ofEpochDay((int) fieldData);
+    }
+
+    @Override
+    public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+        switch (dataType.getTypeRoot()) {
+            case TIMESTAMP_WITHOUT_TIME_ZONE:
+                return ((Timestamp) fieldData).toLocalDateTime();
+            case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+                return LocalDateTime.ofInstant(((Timestamp) fieldData).toInstant(), ZoneId.of(timeZone));
+            default:
+                throw new UnsupportedOperationException("Unsupported type: " + type);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

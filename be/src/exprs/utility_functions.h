@@ -61,6 +61,15 @@ public:
     DEFINE_VECTORIZED_FN(host_name);
 
     DEFINE_VECTORIZED_FN(get_query_profile);
+<<<<<<< HEAD
+=======
+
+    // Draw a bar graph
+    DEFINE_VECTORIZED_FN(bar);
+
+    // Build a equi-width histogram
+    DEFINE_VECTORIZED_FN(equiwidth_bucket);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

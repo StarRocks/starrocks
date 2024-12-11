@@ -16,7 +16,13 @@ package com.starrocks.sql.common;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.persist.gson.GsonUtils;
+=======
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.persist.gson.GsonUtils;
+import org.apache.logging.log4j.util.Strings;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class QueryDebugOptions {
     private static QueryDebugOptions INSTANCE = new QueryDebugOptions();
@@ -31,6 +37,15 @@ public class QueryDebugOptions {
     @SerializedName(value = "enableQueryTraceLog")
     private boolean enableQueryTraceLog = false;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "mvRefreshTraceMode")
+    private String mvRefreshTraceMode;
+
+    @SerializedName(value = "mvRefreshTraceModule")
+    private String mvRefreshTraceModule;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public QueryDebugOptions() {
         // To make unit test more stable, add retry times for refreshing materialized views.
         if (FeConstants.runningUnitTest) {
@@ -62,6 +77,17 @@ public class QueryDebugOptions {
         this.enableQueryTraceLog = enableQueryTraceLog;
     }
 
+<<<<<<< HEAD
+=======
+    public Tracers.Mode getMvRefreshTraceMode() {
+        return Strings.isEmpty(mvRefreshTraceMode) ? Tracers.Mode.TIMER : Tracers.Mode.valueOf(mvRefreshTraceMode);
+    }
+
+    public Tracers.Module getMvRefreshTraceModule() {
+        return Strings.isEmpty(mvRefreshTraceModule) ? Tracers.Module.BASE : Tracers.Module.valueOf(mvRefreshTraceModule);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static QueryDebugOptions getInstance() {
         return INSTANCE;
     }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_slice
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a given time into the beginning or end of a time interval based on the specified time granularity.
 

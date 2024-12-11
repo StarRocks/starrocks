@@ -23,11 +23,17 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 using PrepareFunction = Status (*)(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
 using CloseFunction = Status (*)(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
 using ScalarFunction = StatusOr<ColumnPtr> (*)(FunctionContext* context, const Columns& columns);
+=======
+using PrepareFunction = std::function<Status(FunctionContext* context, FunctionContext::FunctionStateScope scope)>;
+using CloseFunction = std::function<Status(FunctionContext* context, FunctionContext::FunctionStateScope scope)>;
+using ScalarFunction = std::function<StatusOr<ColumnPtr>(FunctionContext* context, const Columns& columns)>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 struct FunctionDescriptor {
     std::string name;

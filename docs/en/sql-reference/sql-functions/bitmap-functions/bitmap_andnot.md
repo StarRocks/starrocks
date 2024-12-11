@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_andnot
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns bitmap values that exist in `lhs` but do not exist in `rhs`, and returns the new bitmap.
 

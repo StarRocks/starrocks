@@ -41,7 +41,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
+<<<<<<< HEAD
 import com.starrocks.common.util.JdkUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
 import com.starrocks.journal.Journal;
@@ -55,8 +58,14 @@ import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
+<<<<<<< HEAD
 import com.starrocks.service.FeServer;
 import com.starrocks.service.FrontendOptions;
+=======
+import com.starrocks.service.FrontendOptions;
+import com.starrocks.service.FrontendThriftServer;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlService;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.staros.StarMgrServer;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -106,23 +115,35 @@ public class StarRocksFE {
             }
 
             // init config
+<<<<<<< HEAD
             new Config().init(starRocksDir + "/conf/fe.conf");
+=======
+            Config config = new Config();
+            config.init(starRocksDir + "/conf/fe.conf");
+            config.initMutable(starRocksDir + "/conf/fe_mutable.conf");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             // check command line options
             // NOTE: do it before init log4jConfig to avoid unnecessary stdout messages
             checkCommandLineOptions(cmdLineOpts);
 
+<<<<<<< HEAD
             // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
             if (!JdkUtils.checkJavaVersion()) {
                 throw new IllegalArgumentException("Java version doesn't match");
             }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Log4jConfig.initLogging();
 
             // set dns cache ttl
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");
+<<<<<<< HEAD
             // Need to put if before `GlobalStateMgr.getCurrentState().waitForReady()`, because it may access aws service
             setAWSHttpClient();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             // check meta dir
             MetaHelper.checkMetaDir();
@@ -135,9 +156,12 @@ public class StarRocksFE {
             // init globalStateMgr
             GlobalStateMgr.getCurrentState().initialize(args);
 
+<<<<<<< HEAD
             StateChangeExecutor.getInstance().setMetaContext(
                     GlobalStateMgr.getCurrentState().getMetaContext());
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (RunMode.isSharedDataMode()) {
                 Journal journal = GlobalStateMgr.getCurrentState().getJournal();
                 if (journal instanceof BDBJEJournal) {
@@ -167,6 +191,7 @@ public class StarRocksFE {
 
             // init and start:
             // 1. QeService for MySQL Server
+<<<<<<< HEAD
             // 2. FeServer for Thrift Server
             // 3. HttpServer for HTTP Server
             QeService qeService = new QeService(Config.query_port, Config.mysql_service_nio_enabled,
@@ -178,6 +203,23 @@ public class StarRocksFE {
             feServer.start();
             httpServer.start();
             qeService.start();
+=======
+            // 2. FrontendThriftServer for Thrift Server
+            // 3. HttpServer for HTTP Server
+            // 4. ArrowFlightSqlService for Arrow Flight Sql Server
+            QeService qeService = new QeService(Config.query_port, Config.mysql_service_nio_enabled,
+                    ExecuteEnv.getInstance().getScheduler());
+            FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
+            HttpServer httpServer = new HttpServer(Config.http_port);
+            ArrowFlightSqlService arrowFlightSqlService = new ArrowFlightSqlService(Config.arrow_flight_port);
+
+            httpServer.setup();
+
+            frontendThriftServer.start();
+            httpServer.start();
+            qeService.start();
+            arrowFlightSqlService.start();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             ThreadPoolManager.registerAllThreadPoolMetric();
 
@@ -241,7 +283,11 @@ public class StarRocksFE {
         try {
             cmd = commandLineParser.parse(options, args);
         } catch (final ParseException e) {
+<<<<<<< HEAD
             LOG.error(e);
+=======
+            LOG.error(e.getMessage(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             System.err.println("Failed to parse command line. exit now");
             System.exit(-1);
         }
@@ -321,6 +367,7 @@ public class StarRocksFE {
         return new CommandLineOptions(false, null);
     }
 
+<<<<<<< HEAD
     // To resolve: "Multiple HTTP implementations were found on the classpath. To avoid non-deterministic
     // loading implementations, please explicitly provide an HTTP client via the client builders, set
     // the software.amazon.awssdk.http.service.impl system property with the FQCN of the HTTP service to
@@ -334,6 +381,8 @@ public class StarRocksFE {
                 "software.amazon.awssdk.http.urlconnection.UrlConnectionSdkHttpService");
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static void checkCommandLineOptions(CommandLineOptions cmdLineOpts) {
         if (cmdLineOpts.isVersion()) {
             System.out.println("Build version: " + Version.STARROCKS_VERSION);
@@ -346,7 +395,11 @@ public class StarRocksFE {
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
             System.exit(0);
         } else if (cmdLineOpts.runBdbTools()) {
+<<<<<<< HEAD
             
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             BDBTool bdbTool = new BDBTool(BDBEnvironment.getBdbDir(), cmdLineOpts.getBdbToolOpts());
             if (bdbTool.run()) {
                 System.exit(0);

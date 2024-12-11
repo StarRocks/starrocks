@@ -27,8 +27,17 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+<<<<<<< HEAD
 #include "util/race_detect.h"
 
+=======
+#include "util/failpoint/fail_point.h"
+#include "util/race_detect.h"
+
+DEFINE_FAIL_POINT(spill_always_streaming);
+DEFINE_FAIL_POINT(spill_always_selection_streaming);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 namespace starrocks::pipeline {
 bool SpillableAggregateBlockingSinkOperator::need_input() const {
     return !is_finished() && !_aggregator->is_full() && !_aggregator->spill_channel()->has_task();
@@ -47,7 +56,11 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     }
     ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
+<<<<<<< HEAD
         _aggregator->spill_channel()->set_finishing();
+=======
+        _aggregator->spill_channel()->set_finishing_if_not_reuseable();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _is_finished = true;
     });
 
@@ -68,6 +81,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         }
     }
 
+<<<<<<< HEAD
     auto io_executor = _aggregator->spill_channel()->io_executor();
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
@@ -77,16 +91,32 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
 
     _aggregator->ref();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+=======
+    auto flush_function = [this](RuntimeState* state) {
+        auto& spiller = _aggregator->spiller();
+        return spiller->flush(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
+    };
+
+    _aggregator->ref();
+    auto set_call_back_function = [this](RuntimeState* state) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return _aggregator->spiller()->set_flush_all_call_back(
                 [this, state]() {
                     auto defer = DeferOp([&]() { _aggregator->unref(state); });
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
+<<<<<<< HEAD
                 state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _aggregator->spiller()));
     };
 
     SpillProcessTasksBuilder task_builder(state, io_executor);
+=======
+                state, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
+    };
+
+    SpillProcessTasksBuilder task_builder(state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     task_builder.then(flush_function).finally(set_call_back_function);
 
     RETURN_IF_ERROR(_aggregator->spill_channel()->execute(task_builder));
@@ -133,6 +163,18 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status SpillableAggregateBlockingSinkOperator::reset_state(RuntimeState* state,
+                                                           const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    ONCE_RESET(_set_finishing_once);
+    RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
+    RETURN_IF_ERROR(AggregateBlockingSinkOperator::reset_state(state, refill_chunks));
+    return Status::OK();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::push_chunk(state, chunk));
     set_revocable_mem_bytes(_aggregator->hash_map_memory_usage());
@@ -153,16 +195,41 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
     bool ht_need_expansion = _aggregator->hash_map_variant().need_expand(chunk_size);
     const size_t max_mem_usage = state->spill_mem_table_size();
 
+<<<<<<< HEAD
     auto io_executor = _aggregator->spill_channel()->io_executor();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto spiller = _aggregator->spiller();
 
     // goal: control buffered data memory usage, aggregate data as much as possible before spill
     // this strategy is similar to the LIMITED_MEM mode in agg streaming
 
+<<<<<<< HEAD
     // if hash table don't need expand or it's still very small after expansion, just put all data into it
     bool build_hash_table =
             !ht_need_expansion || (ht_need_expansion && _streaming_bytes + ht_mem_usage * 2 <= max_mem_usage);
     if (_streaming_bytes + ht_mem_usage > max_mem_usage) {
+=======
+    bool always_streaming = false;
+    bool always_selection_streaming = false;
+
+    FAIL_POINT_TRIGGER_EXECUTE(spill_always_streaming, {
+        if (_aggregator->hash_map_variant().size() != 0) {
+            always_streaming = true;
+        }
+    });
+    FAIL_POINT_TRIGGER_EXECUTE(spill_always_selection_streaming, {
+        if (_aggregator->hash_map_variant().size() != 0) {
+            always_selection_streaming = true;
+        }
+    });
+
+    // if hash table don't need expand or it's still very small after expansion, just put all data into it
+    bool build_hash_table =
+            !ht_need_expansion || (ht_need_expansion && _streaming_bytes + ht_mem_usage * 2 <= max_mem_usage);
+    build_hash_table = build_hash_table && !always_selection_streaming;
+    if (_streaming_bytes + ht_mem_usage > max_mem_usage || always_streaming) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // if current memory usage exceeds limit,
         // use force streaming mode and spill all data
         SCOPED_TIMER(_aggregator->streaming_timer());
@@ -217,8 +284,13 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         _aggregator->update_num_input_rows(hit_count);
         RETURN_IF_ERROR(_aggregator->check_has_error());
     }
+<<<<<<< HEAD
     // finally, check memory usage of streaming_chunks and hash table, decide wether to spill
 
+=======
+
+    // finally, check memory usage of streaming_chunks and hash table, decide whether to spill
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     size_t revocable_mem_bytes = _streaming_bytes + _aggregator->hash_map_memory_usage();
     set_revocable_mem_bytes(revocable_mem_bytes);
     if (revocable_mem_bytes > max_mem_usage) {
@@ -237,6 +309,10 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
 }
 
 Status SpillableAggregateBlockingSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
+<<<<<<< HEAD
+=======
+    RETURN_IF(_aggregator->hash_map_variant().size() == 0, Status::OK());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (should_spill_hash_table) {
         _aggregator->hash_map_variant().visit(
                 [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
@@ -294,8 +370,17 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "agg-blocking-spill";
+<<<<<<< HEAD
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+=======
+    _spill_options->enable_block_compaction = state->spill_enable_compaction();
+    _spill_options->plan_node_id = _plan_node_id;
+    _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     return Status::OK();
 }
@@ -304,8 +389,13 @@ OperatorPtr SpillableAggregateBlockingSinkOperatorFactory::create(int32_t degree
                                                                   int32_t driver_sequence) {
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
 
+<<<<<<< HEAD
     auto op = std::make_shared<SpillableAggregateBlockingSinkOperator>(aggregator, this, _id, _plan_node_id,
                                                                        driver_sequence);
+=======
+    auto op = std::make_shared<SpillableAggregateBlockingSinkOperator>(
+            aggregator, this, _id, _plan_node_id, driver_sequence, _aggregator_factory->get_shared_limit_countdown());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // create spiller
     auto spiller = _spill_factory->create(*_spill_options);
     // create spill process channel

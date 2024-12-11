@@ -169,7 +169,11 @@ public abstract class TestWithFeService {
     }
 
     public void createDatabase(String db) throws Exception {
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(db);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(db);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void useDatabase(String dbName) {
@@ -189,30 +193,50 @@ public abstract class TestWithFeService {
     public void dropTable(String table, boolean force) throws Exception {
         DropTableStmt dropTableStmt = (DropTableStmt) parseAndAnalyzeStmt(
                 "drop table " + table + (force ? " force" : "") + ";", connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void createTables(String... sqls) throws Exception {
         for (String sql : sqls) {
             CreateTableStmt stmt = (CreateTableStmt) parseAndAnalyzeStmt(sql);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().createTable(stmt);
+=======
+            StarRocksAssert.utCreateTableWithRetry(stmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         updateReplicaPathHash();
     }
 
     private void updateReplicaPathHash() {
         com.google.common.collect.Table<Long, Long, Replica> replicaMetaTable =
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentInvertedIndex()
                         .getReplicaMetaTable();
         for (com.google.common.collect.Table.Cell<Long, Long, Replica> cell : replicaMetaTable.cellSet()) {
             long beId = cell.getColumnKey();
             Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+=======
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                        .getReplicaMetaTable();
+        for (com.google.common.collect.Table.Cell<Long, Long, Replica> cell : replicaMetaTable.cellSet()) {
+            long beId = cell.getColumnKey();
+            Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (be == null) {
                 continue;
             }
             Replica replica = cell.getValue();
             TabletMeta tabletMeta =
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(cell.getRowKey());
+=======
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(cell.getRowKey());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ImmutableMap<String, DiskInfo> diskMap = be.getDisks();
             for (DiskInfo diskInfo : diskMap.values()) {
                 if (diskInfo.getStorageMedium() == tabletMeta.getStorageMedium()) {

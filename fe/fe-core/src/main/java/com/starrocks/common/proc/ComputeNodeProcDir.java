@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.common.proc;
 
 import com.google.common.base.Stopwatch;
@@ -20,6 +23,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -27,12 +31,27 @@ import com.starrocks.server.RunMode;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+=======
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.ListComparator;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.datacache.DataCacheMetrics;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.concurrent.TimeUnit;
 
 public class ComputeNodeProcDir implements ProcDirInterface {
@@ -48,12 +67,21 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
                 .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
                 .add("Version")
+<<<<<<< HEAD
                 .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct").add("HasStoragePath");
+=======
+                .add("CpuCores").add("MemLimit").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
+                .add("DataCacheMetrics").add("HasStoragePath").add("StatusCode");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TITLE_NAMES = builder.build();
         builder = new ImmutableList.Builder<String>()
                 .addAll(TITLE_NAMES)
                 .add("StarletPort")
                 .add("WorkerId")
+<<<<<<< HEAD
+=======
+                .add("WarehouseName")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .add("TabletNum");
         TITLE_NAMES_SHARED_DATA = builder.build();
     }
@@ -90,10 +118,16 @@ public class ComputeNodeProcDir implements ProcDirInterface {
     /**
      * get compute nodes of cluster
      * copy from getClusterBackendInfos, It is necessary to refactor the two methods later
+<<<<<<< HEAD
      * @return
      */
     public static List<List<String>> getClusterComputeNodesInfos() {
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+     */
+    public static List<List<String>> getClusterComputeNodesInfos() {
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> computeNodesInfos = new LinkedList<>();
         List<Long> computeNodeIds;
         computeNodeIds = clusterInfoService.getComputeNodeIds(false);
@@ -138,19 +172,53 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             computeNodeInfo.add(computeNode.getHeartbeatErrMsg());
             computeNodeInfo.add(computeNode.getVersion());
 
+<<<<<<< HEAD
             computeNodeInfo.add(BackendCoreStat.getCoresOfBe(computeNodeId));
+=======
+            computeNodeInfo.add(computeNode.getCpuCores());
+            computeNodeInfo.add(DebugUtil.getPrettyStringBytes(computeNode.getMemLimitBytes()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             computeNodeInfo.add(computeNode.getNumRunningQueries());
             double memUsedPct = computeNode.getMemUsedPct();
             computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
             computeNodeInfo.add(String.format("%.1f", computeNode.getCpuUsedPermille() / 10.0) + " %");
 
+<<<<<<< HEAD
             computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
 
             if (RunMode.isSharedDataMode()) {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(computeNodeId);
                 computeNodeInfo.add(String.valueOf(workerId));
+=======
+            Optional<DataCacheMetrics> dataCacheMetrics = computeNode.getDataCacheMetrics();
+            if (dataCacheMetrics.isPresent()) {
+                DataCacheMetrics.Status status = dataCacheMetrics.get().getStatus();
+                if (status != DataCacheMetrics.Status.DISABLED) {
+                    computeNodeInfo.add(String.format("Status: %s, DiskUsage: %s, MemUsage: %s",
+                            dataCacheMetrics.get().getStatus(),
+                            dataCacheMetrics.get().getDiskUsageStr(),
+                            dataCacheMetrics.get().getMemUsageStr()));
+                } else {
+                    // DataCache is disabled
+                    computeNodeInfo.add(String.format("Status: %s", DataCacheMetrics.Status.DISABLED));
+                }
+            } else {
+                // Didn't receive any datacache report from be
+                computeNodeInfo.add("N/A");
+            }
+
+            computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
+            computeNodeInfo.add(computeNode.getStatus().name());
+
+            if (RunMode.isSharedDataMode()) {
+                computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(computeNodeId);
+                computeNodeInfo.add(String.valueOf(workerId));
+                Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(computeNode.getWarehouseId());
+                computeNodeInfo.add(wh.getName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                 String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
                 long tabletNum = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerTabletNum(workerAddr);

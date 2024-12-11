@@ -12,7 +12,11 @@ BITMAP 与 HLL (HyperLogLog) 类似，常用来加速 count distinct 的去重�
 
 ## 示例
 
+<<<<<<< HEAD
 1. 聚合模型建表时指定字段类型为 BITMAP。
+=======
+1. 建聚合表时指定字段类型为 BITMAP。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ```sql
     CREATE TABLE pv_bitmap (
@@ -25,7 +29,11 @@ BITMAP 与 HLL (HyperLogLog) 类似，常用来加速 count distinct 的去重�
     DISTRIBUTED BY HASH(dt);
     ```
 
+<<<<<<< HEAD
 2. 主键模型建表时指定字段类型为 BITMAP。
+=======
+2. 主键表建表时指定字段类型为 BITMAP。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ```sql
     CREATE TABLE primary_bitmap (

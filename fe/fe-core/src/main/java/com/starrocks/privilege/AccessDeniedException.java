@@ -14,16 +14,57 @@
 
 package com.starrocks.privilege;
 
+<<<<<<< HEAD
 import com.starrocks.common.ErrorCode;
 
 public class AccessDeniedException extends RuntimeException {
+=======
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
+
+import java.util.List;
+import java.util.Set;
+
+public class AccessDeniedException extends Exception {
+
+    public AccessDeniedException() {
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public AccessDeniedException(String message) {
         super(message);
     }
 
+<<<<<<< HEAD
     public static void reportAccessDenied(String privilegeMessage, ObjectType objectType, String object) {
         String errMsg = ErrorCode.ERR_ACCESS_DENIED.formatErrorMsg(
                 privilegeMessage, objectType.name(), object == null ? "" : " " + object);
         throw new AccessDeniedException(errMsg);
+=======
+    public static void reportAccessDenied(String catalog, UserIdentity userIdentity, Set<Long> roleIds, String privilegeType,
+                                          String objectType, String object) {
+        if (catalog == null) {
+            catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        }
+
+        if (Authorizer.getInstance().getAccessControlOrDefault(catalog) instanceof
+                ExternalAccessController) {
+            throw ErrorReportException.report(ErrorCode.ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER,
+                    privilegeType, objectType, object == null ? "" : " " + object);
+        } else {
+            AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+            List<String> activatedRoles = authorizationMgr.getRoleNamesByRoleIds(roleIds);
+            List<String> inactivatedRoles =
+                    authorizationMgr.getInactivatedRoleNamesByUser(userIdentity, activatedRoles);
+
+            throw ErrorReportException.report(ErrorCode.ERR_ACCESS_DENIED, privilegeType, objectType,
+                    object == null ? "" : " " + object,
+                    activatedRoles.isEmpty() ? "NONE" : activatedRoles, inactivatedRoles.isEmpty() ? "NONE" : inactivatedRoles);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

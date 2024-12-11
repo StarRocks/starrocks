@@ -215,6 +215,10 @@ public class CallOperator extends ScalarOperator {
                 Objects.equals(fn, other.fn);
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Only used for meaning equivalence comparison in iceberg table scan predicate
     @Override
     public boolean equivalent(Object obj) {
@@ -236,6 +240,10 @@ public class CallOperator extends ScalarOperator {
                 Objects.equals(fn, other.fn) &&
                 IntStream.range(0, this.arguments.size())
                         .allMatch(i -> this.arguments.get(i).equivalent(other.arguments.get(i)));
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

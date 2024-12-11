@@ -17,6 +17,10 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "fmt/format.h"
+<<<<<<< HEAD
+=======
+#include "gutil/strings/substitute.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "http/http_client.h"
 #include "util/defer_op.h"
 #include "util/md5.h"
@@ -27,8 +31,12 @@ namespace starrocks {
 Status DownloadUtil::download(const std::string& url, const std::string& target_file,
                               const std::string& expected_checksum) {
     auto success = false;
+<<<<<<< HEAD
     auto tmp_file =
             fmt::format("{}_{}_{}", target_file, expected_checksum, ThreadLocalUUIDGenerator::next_uuid_string());
+=======
+    auto tmp_file = fmt::format("{}_{}", target_file, ThreadLocalUUIDGenerator::next_uuid_string());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto fp = fopen(tmp_file.c_str(), "w");
     DeferOp defer([&]() {
         if (fp != nullptr) {
@@ -41,8 +49,15 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
     });
 
     if (fp == nullptr) {
+<<<<<<< HEAD
         LOG(ERROR) << fmt::format("fail to open file {}", tmp_file);
         return Status::InternalError(fmt::format("fail to open tmp file when downloading file from {}", url));
+=======
+        std::string errmsg = strerror(errno);
+        LOG(ERROR) << fmt::format("fail to open file. file = {}, error = {}", tmp_file, errmsg);
+        return Status::InternalError(
+                fmt::format("fail to open tmp file when downloading file from {}. error = {}", url, errmsg));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     Md5Digest digest;
@@ -55,7 +70,12 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
         auto res = fwrite(data, length, 1, fp);
         if (res != 1) {
             LOG(ERROR) << fmt::format("fail to write data to file {}, error={}", tmp_file, ferror(fp));
+<<<<<<< HEAD
             status = Status::InternalError(fmt::format("file to write data when downloading file from {}" + url));
+=======
+            status =
+                    Status::InternalError(strings::Substitute("file to write data when downloading file from $0", url));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return false;
         }
         return true;

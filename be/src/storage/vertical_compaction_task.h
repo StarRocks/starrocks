@@ -27,7 +27,11 @@ namespace starrocks {
 class RowsetWriter;
 class TabletReader;
 class RowSourceMaskBuffer;
+<<<<<<< HEAD
 class RowSourceMask;
+=======
+struct RowSourceMask;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 // need a factory of compaction task
 class VerticalCompactionTask : public CompactionTask {

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # str_to_map
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将给定的字符串分割成键值对 (Key-Value pair)，返回包含这些键值对的 Map。
 

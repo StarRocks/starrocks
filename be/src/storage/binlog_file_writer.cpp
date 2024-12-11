@@ -550,7 +550,11 @@ StatusOr<std::shared_ptr<BinlogFileWriter>> BinlogFileWriter::reopen(int64_t fil
             std::make_shared<BinlogFileWriter>(file_id, file_path, page_size, compression_type);
     Status status = writer->init(previous_meta);
     if (!status.ok()) {
+<<<<<<< HEAD
         writer->close(false);
+=======
+        (void)writer->close(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG(WARNING) << "Failed to reopen writer: " << file_path << ", " << status;
         return status;
     }

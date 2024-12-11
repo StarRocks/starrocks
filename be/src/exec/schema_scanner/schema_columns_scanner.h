@@ -42,6 +42,10 @@ private:
     TGetDbsResult _db_result;
     TGetTablesResult _table_result;
     TDescribeTableResult _desc_result;
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static SchemaScanner::ColumnDesc _s_col_columns[];
 };
 

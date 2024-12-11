@@ -19,8 +19,12 @@ aad_1 Array<Array<Array<DECIMAL(26, 2)>>>
 DUPLICATE KEY(`pk`)
 DISTRIBUTED BY HASH(`pk`) BUCKETS 3
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false"
+=======
+"replication_num" = "1"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 );
 
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Polygon,ST_PolyFromText,ST_PolygonFromText
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a WKT (Well Known Text) to a corresponding polygon memory form.
 

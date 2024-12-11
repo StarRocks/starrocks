@@ -14,13 +14,28 @@
 package com.starrocks.privilege.ranger;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
+=======
+import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.NullLiteral;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.privilege.AccessControlProvider;
+<<<<<<< HEAD
 import com.starrocks.privilege.NativeAccessControl;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
+=======
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.NativeAccessController;
+import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
+import com.starrocks.privilege.ranger.starrocks.RangerStarRocksResource;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
@@ -33,19 +48,33 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.ranger.plugin.policyengine.RangerAccessRequest;
+=======
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.ranger.plugin.model.RangerPolicy;
+import org.apache.ranger.plugin.model.RangerServiceDef;
+import org.apache.ranger.plugin.policyengine.RangerAccessRequest;
+import org.apache.ranger.plugin.policyengine.RangerAccessRequestImpl;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.ranger.plugin.policyengine.RangerAccessResult;
 import org.apache.ranger.plugin.policyengine.RangerAccessResultProcessor;
 import org.apache.ranger.plugin.service.RangerBasePlugin;
 import org.junit.Assert;
+<<<<<<< HEAD
 import org.junit.Before;
+=======
+import org.junit.BeforeClass;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+<<<<<<< HEAD
 import java.util.HashMap;
 import java.util.List;
 
@@ -58,6 +87,27 @@ public class RangerInterfaceTest {
     public void setUp() throws Exception {
         new Expectations() {
             {
+=======
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class RangerInterfaceTest {
+    static ConnectContext connectContext;
+    static StarRocksAssert starRocksAssert;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            void init() {
+            }
+
+            @Mock
+            RangerAccessResult evalDataMaskPolicies(RangerAccessRequest request, RangerAccessResultProcessor resultProcessor) {
+                return null;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 
@@ -85,7 +135,10 @@ public class RangerInterfaceTest {
                 return null;
             }
         };
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         TableName tableName = new TableName("db", "tbl");
@@ -101,6 +154,7 @@ public class RangerInterfaceTest {
 
     @Test
     public void testAccessControlProvider() {
+<<<<<<< HEAD
         new MockUp<RangerBasePlugin>() {
             @Mock
             void init() {
@@ -130,6 +184,122 @@ public class RangerInterfaceTest {
         accessControlProvider.setAccessControl("hive", new NativeAccessControl());
         Assert.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
                 instanceof NativeAccessControl);
+=======
+        AccessControlProvider accessControlProvider = new AccessControlProvider(null,
+                new NativeAccessController());
+        accessControlProvider.removeAccessControl("hive");
+
+        accessControlProvider.setAccessControl("hive", new NativeAccessController());
+        accessControlProvider.setAccessControl("hive", new RangerStarRocksAccessController());
+        Assert.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
+                instanceof RangerStarRocksAccessController);
+        accessControlProvider.removeAccessControl("hive");
+
+        Assert.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
+                instanceof NativeAccessController);
+
+        accessControlProvider.setAccessControl("hive", new RangerStarRocksAccessController());
+        Assert.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
+                instanceof RangerStarRocksAccessController);
+        accessControlProvider.setAccessControl("hive", new NativeAccessController());
+        Assert.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
+                instanceof NativeAccessController);
+    }
+
+    @Test
+    public void testMaskingExpr() {
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult evalDataMaskPolicies(RangerAccessRequest request, RangerAccessResultProcessor resultProcessor) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setMaskType(RangerPolicy.MASK_TYPE_NULL);
+                return result;
+            }
+        };
+
+        RangerStarRocksAccessController rangerStarRocksAccessController = new RangerStarRocksAccessController();
+
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        TableName tableName = new TableName("db", "tbl");
+        List<Column> columns = Lists.newArrayList(new Column("v1", Type.INT));
+
+        Map<String, Expr> e = rangerStarRocksAccessController.getColumnMaskingPolicy(connectContext, tableName, columns);
+        Assert.assertTrue(new ArrayList<>(e.values()).get(0) instanceof NullLiteral);
+
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult evalDataMaskPolicies(RangerAccessRequest request, RangerAccessResultProcessor resultProcessor) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setMaskType(RangerPolicy.MASK_TYPE_CUSTOM);
+                result.setMaskedValue("v + 1");
+                return result;
+            }
+        };
+
+        e = rangerStarRocksAccessController.getColumnMaskingPolicy(connectContext, tableName, columns);
+        Assert.assertTrue(new ArrayList<>(e.values()).get(0) instanceof ArithmeticExpr);
+    }
+
+    @Test
+    public void testRowAccessExpr() {
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult evalRowFilterPolicies(RangerAccessRequest request, RangerAccessResultProcessor resultProcessor) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setFilterExpr("v1 = 1");
+                return result;
+            }
+        };
+        RangerStarRocksAccessController rangerStarRocksAccessController = new RangerStarRocksAccessController();
+
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        TableName tableName = new TableName("db", "tbl");
+
+        Expr rowFilter = rangerStarRocksAccessController.getRowAccessPolicy(connectContext, tableName);
+        Assert.assertTrue(rowFilter instanceof BinaryPredicate);
+    }
+
+    @Test
+    public void testPermission() {
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(true);
+                return result;
+            }
+        };
+        RangerStarRocksAccessController rangerStarRocksAccessController = new RangerStarRocksAccessController();
+
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+
+        try {
+            rangerStarRocksAccessController.hasPermission(
+                    RangerStarRocksResource.builder().setSystem().build(), UserIdentity.ROOT, PrivilegeType.OPERATE);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(false);
+                return result;
+            }
+        };
+
+        Assert.assertThrows(AccessDeniedException.class, () -> rangerStarRocksAccessController.hasPermission(
+                RangerStarRocksResource.builder().setSystem().build(), UserIdentity.ROOT, PrivilegeType.OPERATE));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test

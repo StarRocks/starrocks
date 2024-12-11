@@ -38,7 +38,10 @@
 
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
+<<<<<<< HEAD
 #include "storage/memtable.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -46,12 +49,24 @@ class MemtableFlushTask final : public Runnable {
 public:
     MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<MemTable> memtable, bool eos,
                       std::function<void(std::unique_ptr<SegmentPB>, bool)> cb)
+<<<<<<< HEAD
             : _flush_token(flush_token), _memtable(std::move(memtable)), _eos(eos), _cb(std::move(cb)) {}
+=======
+            : _flush_token(flush_token),
+              _memtable(std::move(memtable)),
+              _eos(eos),
+              _cb(std::move(cb)),
+              _create_time_ns(MonotonicNanos()) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ~MemtableFlushTask() override = default;
 
     void run() override {
         _flush_token->_stats.queueing_memtable_num--;
+<<<<<<< HEAD
+=======
+        _flush_token->_stats.pending_time_ns += MonotonicNanos() - _create_time_ns;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::unique_ptr<SegmentPB> segment = nullptr;
         if (_memtable) {
             SCOPED_THREAD_LOCAL_MEM_SETTER(_memtable->mem_tracker(), false);
@@ -83,11 +98,20 @@ private:
     std::unique_ptr<MemTable> _memtable;
     bool _eos;
     std::function<void(std::unique_ptr<SegmentPB>, bool)> _cb;
+<<<<<<< HEAD
 };
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
     os << "(flush time(ms)=" << stat.flush_time_ns / 1000 / 1000 << ", flush count=" << stat.flush_count << ")"
        << ", flush flush_size_bytes = " << stat.flush_size_bytes;
+=======
+    int64_t _create_time_ns;
+};
+
+std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
+    os << "(flush time(ms)=" << stat.memtable_stats.flush_time_ns / 1000 / 1000 << ", flush count=" << stat.flush_count
+       << "), flush flush_size_bytes=" << stat.memtable_stats.flush_memory_size;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return os;
 }
 
@@ -131,12 +155,18 @@ void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment) {
         return;
     }
 
+<<<<<<< HEAD
     MonotonicStopWatch timer;
     timer.start();
     set_status(memtable->flush(segment));
     _stats.flush_time_ns += timer.elapsed_time();
     _stats.flush_count++;
     _stats.flush_size_bytes += memtable->memory_usage();
+=======
+    set_status(memtable->flush(segment));
+    _stats.flush_count++;
+    _stats.memtable_stats += memtable->get_stat();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {

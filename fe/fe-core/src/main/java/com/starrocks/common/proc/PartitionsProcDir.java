@@ -51,13 +51,22 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+<<<<<<< HEAD
 import com.starrocks.catalog.HashDistributionInfo;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+<<<<<<< HEAD
 import com.starrocks.catalog.RangePartitionInfo;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -66,18 +75,30 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.function.BiFunction;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 
 /*
@@ -119,7 +140,14 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("AsyncWrite")
                     .add("AvgCS") // Average compaction score
                     .add("P50CS") // 50th percentile compaction score
+<<<<<<< HEAD
                     .add("MaxCS"); // Maximum compaction score
+=======
+                    .add("MaxCS") // Maximum compaction score
+                    .add("DataVersion")
+                    .add("VersionEpoch")
+                    .add("VersionTxnType");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             this.titleNames = builder.build();
         } else {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
@@ -139,7 +167,14 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("LastConsistencyCheckTime")
                     .add("DataSize")
                     .add("IsInMemory")
+<<<<<<< HEAD
                     .add("RowCount");
+=======
+                    .add("RowCount")
+                    .add("DataVersion")
+                    .add("VersionEpoch")
+                    .add("VersionTxnType");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             this.titleNames = builder.build();
         }
     }
@@ -268,6 +303,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
 
+<<<<<<< HEAD
         BiFunction<PartitionInfo, Partition, List<Comparable>> partitionInfoGetter;
         if (table.isOlapTableOrMaterializedView()) {
             partitionInfoGetter = this::getOlapPartitionInfo;
@@ -278,6 +314,12 @@ public class PartitionsProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
         db.readLock();
+=======
+        // get info
+        List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             List<Long> partitionIds;
             PartitionInfo tblPartitionInfo = table.getPartitionInfo();
@@ -297,6 +339,7 @@ public class PartitionsProcDir implements ProcDirInterface {
             for (Long partitionId : partitionIds) {
                 Partition partition = table.getPartition(partitionId);
                 String partitionName = partition.getName();
+<<<<<<< HEAD
                 if (partitionName != null &&
                         !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                     partitionInfos.add(partitionInfoGetter.apply(tblPartitionInfo, partition));
@@ -306,10 +349,34 @@ public class PartitionsProcDir implements ProcDirInterface {
             }
         } finally {
             db.readUnlock();
+=======
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    if (partitionName != null &&
+                            !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                        if (table.isOlapTableOrMaterializedView()) {
+                            partitionInfos.add(
+                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                        } else {
+                            partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                        }
+                    } else if (Config.enable_display_shadow_partitions) {
+                        if (table.isOlapTableOrMaterializedView()) {
+                            partitionInfos.add(
+                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                        } else {
+                            partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                        }
+                    }
+                }
+            }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return partitionInfos;
     }
 
+<<<<<<< HEAD
     public static String distributionKeyAsString(DistributionInfo distributionInfo) {
         if (distributionInfo.getType() == DistributionInfoType.HASH) {
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
@@ -322,31 +389,60 @@ public class PartitionsProcDir implements ProcDirInterface {
                 sb.append(distributionColumns.get(i).getName());
             }
             return sb.toString();
+=======
+    public static String distributionKeyAsString(Table table, DistributionInfo distributionInfo) {
+        if (distributionInfo.getType() == DistributionInfoType.HASH) {
+            List<String> columnNames = MetaUtils.getColumnNamesByColumnIds(
+                    table.getIdToColumn(), distributionInfo.getDistributionColumns());
+            return Joiner.on(", ").join(columnNames);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             return "ALL KEY";
         }
     }
 
+<<<<<<< HEAD
     private List<Comparable> getOlapPartitionInfo(PartitionInfo tblPartitionInfo, Partition partition) {
         List<Comparable> partitionInfo = new ArrayList<Comparable>();
         partitionInfo.add(partition.getId()); // PartitionId
         partitionInfo.add(partition.getName()); // PartitionName
         partitionInfo.add(partition.getVisibleVersion()); // VisibleVersion
         partitionInfo.add(TimeUtils.longToTimeString(partition.getVisibleVersionTime())); // VisibleVersionTime
+=======
+    private List<Comparable> getOlapPartitionInfo(PartitionInfo tblPartitionInfo,
+                                                  Partition partition, PhysicalPartition physicalPartition) {
+        List<Comparable> partitionInfo = new ArrayList<Comparable>();
+        partitionInfo.add(physicalPartition.getId()); // PartitionId
+        partitionInfo.add(partition.getName()); // PartitionName
+        partitionInfo.add(physicalPartition.getVisibleVersion()); // VisibleVersion
+        partitionInfo.add(TimeUtils.longToTimeString(physicalPartition.getVisibleVersionTime())); // VisibleVersionTime
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         partitionInfo.add(0); // VisibleVersionHash
         partitionInfo.add(partition.getState()); // State
 
         // partition key , range or list value
+<<<<<<< HEAD
         partitionInfo.add(Joiner.on(", ").join(findPartitionColNames(tblPartitionInfo)));
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId()));
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         partitionInfo.add(distributionKeyAsString(distributionInfo));
+=======
+        partitionInfo.add(Joiner.on(", ").join(tblPartitionInfo.getPartitionColumns(table.getIdToColumn())
+                .stream().map(Column::getName).collect(Collectors.toList())));
+        partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId()));
+        DistributionInfo distributionInfo = partition.getDistributionInfo();
+        partitionInfo.add(distributionKeyAsString(table, distributionInfo));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         partitionInfo.add(distributionInfo.getBucketNum());
 
         short replicationNum = tblPartitionInfo.getReplicationNum(partition.getId());
         partitionInfo.add(String.valueOf(replicationNum));
 
+<<<<<<< HEAD
         long dataSize = partition.getDataSize();
+=======
+        long dataSize = physicalPartition.storageDataSize();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ByteSizeValue byteSizeValue = new ByteSizeValue(dataSize);
         DataProperty dataProperty = tblPartitionInfo.getDataProperty(partition.getId());
         partitionInfo.add(dataProperty.getStorageMedium().name());
@@ -354,18 +450,33 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(TimeUtils.longToTimeString(partition.getLastCheckTime()));
         partitionInfo.add(byteSizeValue);
         partitionInfo.add(tblPartitionInfo.getIsInMemory(partition.getId()));
+<<<<<<< HEAD
         partitionInfo.add(partition.getRowCount());
+=======
+        partitionInfo.add(physicalPartition.storageRowCount());
+
+        partitionInfo.add(physicalPartition.getDataVersion()); // DataVersion
+        partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
+        partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         return partitionInfo;
     }
 
+<<<<<<< HEAD
     private List<Comparable> getLakePartitionInfo(PartitionInfo tblPartitionInfo, Partition partition) {
         PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), partition.getId());
+=======
+    private List<Comparable> getLakePartitionInfo(PartitionInfo tblPartitionInfo, Partition partition,
+                                                  PhysicalPartition physicalPartition) {
+        PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), physicalPartition.getId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
         Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
         DataCacheInfo cacheInfo = tblPartitionInfo.getDataCacheInfo(partition.getId());
         List<Comparable> partitionInfo = new ArrayList<Comparable>();
 
+<<<<<<< HEAD
         partitionInfo.add(partition.getId()); // PartitionId
         partitionInfo.add(partition.getName()); // PartitionName
         partitionInfo.add(statistics != null ? statistics.getCompactionVersion().getVersion() : 0); // CompactVersion
@@ -378,11 +489,27 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
         partitionInfo.add(new ByteSizeValue(partition.getDataSize())); // DataSize
         partitionInfo.add(partition.getRowCount()); // RowCount
+=======
+        partitionInfo.add(physicalPartition.getId()); // PartitionId
+        partitionInfo.add(partition.getName()); // PartitionName
+        partitionInfo.add(statistics != null ? statistics.getCompactionVersion().getVersion() : 0); // CompactVersion
+        partitionInfo.add(physicalPartition.getVisibleVersion()); // VisibleVersion
+        partitionInfo.add(physicalPartition.getNextVersion()); // NextVersion
+        partitionInfo.add(partition.getState()); // State
+        partitionInfo.add(Joiner.on(", ").join(tblPartitionInfo.getPartitionColumns(table.getIdToColumn())
+                .stream().map(Column::getName).collect(Collectors.toList()))); // Partition key
+        partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
+        partitionInfo.add(distributionKeyAsString(table, partition.getDistributionInfo())); // DistributionKey
+        partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
+        partitionInfo.add(new ByteSizeValue(physicalPartition.storageDataSize())); // DataSize
+        partitionInfo.add(physicalPartition.storageRowCount()); // RowCount
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         partitionInfo.add(cacheInfo.isEnabled()); // EnableCache
         partitionInfo.add(cacheInfo.isAsyncWriteBack()); // AsyncWrite
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getAvg() : 0.0)); // AvgCS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getP50() : 0.0)); // P50CS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getMax() : 0.0)); // MaxCS
+<<<<<<< HEAD
         return partitionInfo;
     }
 
@@ -396,6 +523,14 @@ public class PartitionsProcDir implements ProcDirInterface {
             partitionColumns = new ArrayList<>();
         }
         return partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
+=======
+
+        partitionInfo.add(physicalPartition.getDataVersion()); // DataVersion
+        partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
+        partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
+
+        return partitionInfo;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static String findRangeOrListValues(PartitionInfo partitionInfo, long partitionId) {
@@ -423,6 +558,7 @@ public class PartitionsProcDir implements ProcDirInterface {
     public ProcNodeInterface lookup(String partitionIdOrName) throws AnalysisException {
         long partitionId = -1L;
 
+<<<<<<< HEAD
 
         db.readLock();
         try {
@@ -433,6 +569,18 @@ public class PartitionsProcDir implements ProcDirInterface {
                 partition = table.getPartition(partitionIdOrName, false);
                 if (partition == null) {
                     partition = table.getPartition(partitionIdOrName, true);
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            PhysicalPartition partition;
+            try {
+                partition = table.getPhysicalPartition(Long.parseLong(partitionIdOrName));
+            } catch (NumberFormatException e) {
+                partition = table.getPartition(partitionIdOrName, false).getDefaultPhysicalPartition();
+                if (partition == null) {
+                    partition = table.getPartition(partitionIdOrName, true).getDefaultPhysicalPartition();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
 
@@ -442,7 +590,11 @@ public class PartitionsProcDir implements ProcDirInterface {
 
             return new IndicesProcDir(db, table, partition);
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 

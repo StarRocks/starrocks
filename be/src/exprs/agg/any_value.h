@@ -97,7 +97,11 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
+<<<<<<< HEAD
         InputColumnType* column = down_cast<InputColumnType*>(dst);
+=======
+        auto* column = down_cast<InputColumnType*>(dst);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (size_t i = start; i < end; ++i) {
             AggDataTypeTraits<LT>::append_value(column, this->data(state).result);
         }
@@ -106,4 +110,57 @@ public:
     std::string get_name() const override { return "any_value"; }
 };
 
+<<<<<<< HEAD
+=======
+struct AnyValueSemiState {
+    void update(FunctionContext* ctx, const Column& column, size_t offset) {
+        if (!has_fill) {
+            data_column = ctx->create_column(*ctx->get_arg_type(0), false);
+            data_column->append(column, offset, 1);
+            has_fill = true;
+        }
+    }
+
+    ColumnPtr data_column = nullptr;
+    bool has_fill = false;
+};
+
+class AnyValueSemiAggregateFunction final
+        : public AggregateFunctionBatchHelper<AnyValueSemiState, AnyValueSemiAggregateFunction> {
+public:
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        this->data(state).update(ctx, *columns[0], row_num);
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        this->data(state).update(ctx, *columns[0], 0);
+    }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        this->data(state).update(ctx, *column, row_num);
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        if (this->data(state).data_column != nullptr) {
+            to->append(*(this->data(state).data_column.get()));
+        }
+    }
+
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
+        *dst = src[0];
+    }
+
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        if (this->data(state).data_column != nullptr) {
+            to->append(*(this->data(state).data_column.get()));
+        }
+    }
+
+    std::string get_name() const override { return "any_value"; }
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

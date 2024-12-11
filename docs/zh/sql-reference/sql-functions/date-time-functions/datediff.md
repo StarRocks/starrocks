@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # datediff
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算两个日期的差值，结果精确到天。
 

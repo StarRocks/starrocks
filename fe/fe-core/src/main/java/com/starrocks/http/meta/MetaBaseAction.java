@@ -34,6 +34,10 @@
 
 package com.starrocks.http.meta;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -49,9 +53,13 @@ import java.io.File;
 
 public class MetaBaseAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(MetaBaseAction.class);
+<<<<<<< HEAD
     private static String CONTENT_DISPOSITION = "Content-disposition";
 
     public static final String CLUSTER_ID = "cluster_id";
+=======
+    private static final String CONTENT_DISPOSITION = "Content-disposition";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final String TOKEN = "token";
     public static final String RUN_MODE = "run_mode";
 
@@ -90,7 +98,11 @@ public class MetaBaseAction extends WebBaseAction {
         return true;
     }
 
+<<<<<<< HEAD
     protected void writeFileResponse(BaseRequest request, BaseResponse response, File file) {
+=======
+    protected void writeFileResponse(BaseRequest request, BaseResponse response, File file, String checksum) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (file == null || !file.exists()) {
             response.appendContent("File does not exist.");
             writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
@@ -100,6 +112,12 @@ public class MetaBaseAction extends WebBaseAction {
         // add custom header
         response.updateHeader(CONTENT_DISPOSITION, "attachment; filename=" + file.getName());
         response.updateHeader(MetaHelper.X_IMAGE_SIZE, String.valueOf(file.length()));
+<<<<<<< HEAD
+=======
+        if (!Strings.isNullOrEmpty(checksum)) {
+            response.updateHeader(MetaHelper.X_IMAGE_CHECKSUM, checksum);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         writeObjectResponse(request, response, HttpResponseStatus.OK, file, file.getName(), true);
         return;
@@ -107,7 +125,11 @@ public class MetaBaseAction extends WebBaseAction {
 
     private boolean isFromValidFe(BaseRequest request) {
         String clientHost = request.getHostString();
+<<<<<<< HEAD
         Frontend fe = GlobalStateMgr.getCurrentState().getFeByHost(clientHost);
+=======
+        Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByHost(clientHost);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (fe == null) {
             LOG.warn("request is not from valid FE. client: {}", clientHost);
             return false;

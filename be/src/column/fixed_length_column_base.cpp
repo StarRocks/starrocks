@@ -19,8 +19,13 @@
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_helper.h"
 #include "gutil/casts.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 #include "storage/decimal12.h"
+=======
+#include "storage/decimal12.h"
+#include "types/large_int_value.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 #include "util/value_generator.h"
@@ -29,11 +34,16 @@ namespace starrocks {
 
 template <typename T>
 StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
+<<<<<<< HEAD
     if (capacity_limit_reached()) {
         return Status::InternalError("Size of FixedLengthColumn exceed the limit");
     } else {
         return nullptr;
     }
+=======
+    RETURN_IF_ERROR(capacity_limit_reached());
+    return nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 template <typename T>
@@ -65,7 +75,11 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
 
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
+<<<<<<< HEAD
 ColumnPtr FixedLengthColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
+=======
+ColumnPtr FixedLengthColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto dest = this->clone_empty();
     auto& dest_data = down_cast<FixedLengthColumnBase<T>&>(*dest);
     dest_data._data.resize(offsets.back());
@@ -89,7 +103,11 @@ void FixedLengthColumnBase<T>::fill_default(const Filter& filter) {
 }
 
 template <typename T>
+<<<<<<< HEAD
 Status FixedLengthColumnBase<T>::fill_range(const Buffer<T>& ids, const std::vector<uint8_t>& filter) {
+=======
+Status FixedLengthColumnBase<T>::fill_range(const std::vector<T>& ids, const Filter& filter) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DCHECK_EQ(filter.size(), _data.size());
     size_t j = 0;
     for (size_t i = 0; i < _data.size(); ++i) {
@@ -104,14 +122,21 @@ Status FixedLengthColumnBase<T>::fill_range(const Buffer<T>& ids, const std::vec
 }
 
 template <typename T>
+<<<<<<< HEAD
 Status FixedLengthColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
+=======
+void FixedLengthColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
     size_t replace_num = src.size();
     for (uint32_t i = 0; i < replace_num; ++i) {
         DCHECK_LT(indexes[i], _data.size());
         _data[indexes[i]] = src_data[i];
     }
+<<<<<<< HEAD
     return Status::OK();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 template <typename T>
@@ -276,6 +301,7 @@ int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const
 }
 
 template <typename T>
+<<<<<<< HEAD
 void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     if constexpr (IsDecimal<T>) {
         buf->push_decimal(_data[idx].to_string());
@@ -283,6 +309,18 @@ void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t 
         buf->push_number(_data[idx]);
     } else {
         // date/datetime or something else.
+=======
+void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+    if constexpr (IsDecimal<T>) {
+        buf->push_decimal(_data[idx].to_string());
+    } else if constexpr (IsDate<T>) {
+        buf->push_date(_data[idx], is_binary_protocol);
+    } else if constexpr (IsTimestamp<T>) {
+        buf->push_timestamp(_data[idx], is_binary_protocol);
+    } else if constexpr (std::is_arithmetic_v<T>) {
+        buf->push_number(_data[idx], is_binary_protocol);
+    } else {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::string s = _data[idx].to_string();
         buf->push_string(s.data(), s.size());
     }

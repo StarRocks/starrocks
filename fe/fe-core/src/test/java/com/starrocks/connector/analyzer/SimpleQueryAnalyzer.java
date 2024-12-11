@@ -72,7 +72,11 @@ public class SimpleQueryAnalyzer {
         new Visitor().process(node);
     }
 
+<<<<<<< HEAD
     private static class Visitor extends AstVisitor<Void, Void> {
+=======
+    private static class Visitor implements AstVisitor<Void, Void> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Void process(ParseNode node) {
             return node.accept(this, null);
         }

@@ -41,4 +41,12 @@ public class ShowAuthorStmt extends ShowStmt {
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowAuthorStatement(this, context);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

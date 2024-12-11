@@ -24,7 +24,12 @@
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
+<<<<<<< HEAD
 #include "storage/lake/tablet_manager.h"
+=======
+#include "storage/lake/starlet_location_provider.h"
+#include "storage/lake/versioned_tablet.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
@@ -80,7 +85,11 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+=======
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
 
@@ -108,10 +117,17 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
     ASSIGN_OR_ABORT(auto seg0,
                     Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path)}, 0,
+<<<<<<< HEAD
                                   _tablet_schema.get()));
     ASSIGN_OR_ABORT(auto seg1,
                     Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path)}, 1,
                                   _tablet_schema.get()));
+=======
+                                  _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg1,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path)}, 1,
+                                  _tablet_schema));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -158,8 +174,13 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
+<<<<<<< HEAD
     auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema, {0}));
     auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema, {1}));
+=======
+    auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {0}));
+    auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {1}));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Chunk c0_chunk({c0}, schema0);
     Chunk c1_chunk({c1}, schema1);
@@ -168,7 +189,11 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
 
     const int segment_rows = c0_chunk.num_rows() + c2_chunk.num_rows();
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+=======
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, next_id(), segment_rows + 1));
 
     // generate 2 segments automatically
@@ -199,10 +224,17 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
     ASSIGN_OR_ABORT(auto seg0,
                     Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path)}, 0,
+<<<<<<< HEAD
                                   _tablet_schema.get()));
     ASSIGN_OR_ABORT(auto seg1,
                     Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path)}, 1,
                                   _tablet_schema.get()));
+=======
+                                  _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg1,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path)}, 1,
+                                  _tablet_schema));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -245,7 +277,11 @@ TEST_P(LakeTabletWriterTest, test_write_fail) {
 
     Chunk chunk0({c0, c1}, _schema);
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+=======
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
     ASSERT_OK(fs::remove_all(kTestDirectory));
@@ -264,7 +300,11 @@ TEST_P(LakeTabletWriterTest, test_close_without_finish) {
 
     Chunk chunk0({c0, c1}, _schema);
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+=======
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
 
@@ -302,8 +342,13 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
+<<<<<<< HEAD
     auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema, {0}));
     auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema, {1}));
+=======
+    auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {0}));
+    auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {1}));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Chunk c0_chunk({c0}, schema0);
     Chunk c1_chunk({c1}, schema1);
@@ -312,7 +357,11 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
 
     const int segment_rows = c0_chunk.num_rows() + c2_chunk.num_rows();
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+=======
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, next_id(), segment_rows + 1));
 
     ASSERT_OK(writer->open());
@@ -334,6 +383,28 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
     writer->close();
 }
 
+<<<<<<< HEAD
+=======
+#ifdef USE_STAROS
+
+TEST_P(LakeTabletWriterTest, test_write_sdk) {
+    auto provider = std::make_shared<starrocks::lake::StarletLocationProvider>();
+    auto location = provider->root_location(12345);
+
+    Tablet tablet(_tablet_mgr.get(), next_id(), provider, _tablet_metadata);
+    auto meta_location = tablet.metadata_location(0);
+    auto column_size = tablet.get_schema()->get()->num_columns();
+    auto txn_log_location = tablet.txn_log_location(0);
+    auto txn_vlog_location = tablet.txn_vlog_location(0);
+    auto test_segment_location = tablet.segment_location("test_segment");
+    auto root_location = tablet.root_location();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, next_id(), 1));
+    writer->close();
+}
+
+#endif // USE_STAROS
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 INSTANTIATE_TEST_SUITE_P(LakeTabletWriterTest, LakeTabletWriterTest,
                          ::testing::Values(DUP_KEYS, AGG_KEYS, UNIQUE_KEYS, PRIMARY_KEYS));
 

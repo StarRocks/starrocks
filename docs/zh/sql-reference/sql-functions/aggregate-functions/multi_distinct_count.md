@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # multi_distinct_count
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回 `expr` 中去除重复值后的行数，功能等同于 COUNT(DISTINCT expr)。
 

@@ -38,6 +38,19 @@ public class MergeProjectWithChildRule extends TransformationRule {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public boolean check(OptExpression input, OptimizerContext context) {
+        if (!input.getInputs().isEmpty() &&
+                input.getInputs().get(0).getOp().getOpType() == OperatorType.LOGICAL_META_SCAN) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalProjectOperator logicalProjectOperator = (LogicalProjectOperator) input.getOp();
         LogicalOperator child = (LogicalOperator) input.inputAt(0).getOp();

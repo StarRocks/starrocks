@@ -56,7 +56,11 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.KafkaUtil;
@@ -64,6 +68,11 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.qe.OriginStatement;
@@ -74,7 +83,10 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+<<<<<<< HEAD
 import com.starrocks.warehouse.Warehouse;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -183,14 +195,22 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     public void prepare() throws UserException {
+=======
+    public void prepare() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super.prepare();
         checkCustomPartition(customKafkaPartitions);
         // should reset converted properties each time the job being prepared.
         // because the file info can be changed anytime.
         convertCustomProperties(true);
 
+<<<<<<< HEAD
         ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties);
+=======
+        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, warehouseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public synchronized void convertCustomProperties(boolean rebuild) throws DdlException {
@@ -228,7 +248,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     public void divideRoutineLoadJob(int currentConcurrentTaskNum) throws UserException {
+=======
+    public void divideRoutineLoadJob(int currentConcurrentTaskNum) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<RoutineLoadTaskInfo> result = new ArrayList<>();
         writeLock();
         try {
@@ -247,6 +271,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(), this,
                             taskSchedIntervalS * 1000,
                             timeToExecuteMs, taskKafkaProgress, taskTimeoutSecond * 1000);
+<<<<<<< HEAD
+=======
+                    kafkaTaskInfo.setWarehouseId(warehouseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     routineLoadTaskInfoList.add(kafkaTaskInfo);
                     result.add(kafkaTaskInfo);
                 }
@@ -266,6 +294,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     @Override
     public int calculateCurrentConcurrentTaskNum() throws MetaNotFoundException {
+<<<<<<< HEAD
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         // TODO: need to refactor after be split into cn + dn
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
@@ -274,6 +303,16 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             aliveNodeNum = 0;
             for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+=======
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        // TODO: need to refactor after be split into cn + dn
+        int aliveNodeNum = systemInfoService.getAliveBackendNumber();
+        if (RunMode.isSharedDataMode()) {
+            aliveNodeNum = 0;
+            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            for (long nodeId : computeIds) {
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (node != null && node.isAlive()) {
                     ++aliveNodeNum;
                 }
@@ -281,6 +320,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         }
         int partitionNum = currentKafkaPartitions.size();
         if (partitionNum == 0) {
+<<<<<<< HEAD
             // In non-stop states (NEED_SCHEDULE/RUNNING), having `partitionNum` as 0 is equivalent 
             // to `currentKafkaPartitions` being uninitialized. When `currentKafkaPartitions` is 
             // uninitialized, it indicates that the job has just been created and hasn't been scheduled yet. 
@@ -288,6 +328,15 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             partitionNum = customKafkaPartitions.size();
             if (partitionNum == 0) {
                 // If the user hasn't specified partition information, then we no longer take the `partition` 
+=======
+            // In non-stop states (NEED_SCHEDULE/RUNNING), having `partitionNum` as 0 is equivalent
+            // to `currentKafkaPartitions` being uninitialized. When `currentKafkaPartitions` is
+            // uninitialized, it indicates that the job has just been created and hasn't been scheduled yet.
+            // At this point, the user-specified number of partitions is used.
+            partitionNum = customKafkaPartitions.size();
+            if (partitionNum == 0) {
+                // If the user hasn't specified partition information, then we no longer take the `partition`
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 // variable into account when calculating concurrency.
                 partitionNum = Integer.MAX_VALUE;
             }
@@ -340,7 +389,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
+=======
+    protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super.updateProgress(attachment);
         this.progress.update(attachment.getProgress());
         this.timestampProgress.update(attachment.getTimestampProgress());
@@ -359,6 +412,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(timeToExecuteMs, oldKafkaTaskInfo,
                 ((KafkaProgress) progress).getPartitionIdToOffset(oldKafkaTaskInfo.getPartitions()),
                 ((KafkaTaskInfo) routineLoadTaskInfo).getLatestOffset());
+<<<<<<< HEAD
+=======
+        kafkaTaskInfo.setWarehouseId(routineLoadTaskInfo.getWarehouseId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // remove old task
         routineLoadTaskInfoList.remove(routineLoadTaskInfo);
         // add new task
@@ -377,7 +434,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     // update current kafka partition at the same time
     // current kafka partitions = customKafkaPartitions == 0 ? all of partition of kafka topic : customKafkaPartitions
     @Override
+<<<<<<< HEAD
     protected boolean unprotectNeedReschedule() throws UserException {
+=======
+    protected boolean unprotectNeedReschedule() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // only running and need_schedule job need to be changed current kafka partitions
         if (this.state == JobState.RUNNING || this.state == JobState.NEED_SCHEDULE) {
             if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
@@ -436,7 +497,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             return false;
         }
     }
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     protected String getStatistic() {
         Map<String, Object> summary = Maps.newHashMap();
@@ -446,15 +511,22 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         summary.put("unselectedRows", Long.valueOf(unselectedRows));
         summary.put("receivedBytes", Long.valueOf(receivedBytes));
         summary.put("taskExecuteTimeMs", Long.valueOf(totalTaskExcutionTimeMs));
+<<<<<<< HEAD
         summary.put("receivedBytesRate", Long.valueOf(receivedBytes / totalTaskExcutionTimeMs * 1000));
         summary.put("loadRowsRate",
                 Long.valueOf((totalRows - errorRows - unselectedRows) / totalTaskExcutionTimeMs * 1000));
+=======
+        summary.put("receivedBytesRate", Long.valueOf(receivedBytes * 1000 / totalTaskExcutionTimeMs));
+        summary.put("loadRowsRate",
+                Long.valueOf((totalRows - errorRows - unselectedRows) * 1000 / totalTaskExcutionTimeMs));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         summary.put("committedTaskNum", Long.valueOf(committedTaskNum));
         summary.put("abortedTaskNum", Long.valueOf(abortedTaskNum));
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(summary);
     }
 
+<<<<<<< HEAD
     private List<Integer> getAllKafkaPartitions() throws UserException {
         convertCustomProperties(false);
         return KafkaUtil.getAllKafkaPartitions(brokerList, topic, ImmutableMap.copyOf(convertedCustomProperties));
@@ -463,10 +535,22 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws UserException {
         // check db and table
         Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDBName());
+=======
+    private List<Integer> getAllKafkaPartitions() throws StarRocksException {
+        convertCustomProperties(false);
+        return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
+                ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
+    }
+
+    public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {
+        // check db and table
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDBName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDBName());
         }
 
+<<<<<<< HEAD
         long tableId = -1L;
         db.readLock();
         try {
@@ -476,6 +560,21 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             tableId = table.getId();
         } finally {
             db.readUnlock();
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), stmt.getTableName());
+        if (table == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName());
+        }
+
+        long tableId = table.getId();
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+        try {
+            unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
+            Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, table.getFullSchema(), false);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // init kafka routine load job
@@ -488,7 +587,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return kafkaRoutineLoadJob;
     }
 
+<<<<<<< HEAD
     private void checkCustomPartition(List<Integer> customKafkaPartitions) throws UserException {
+=======
+    private void checkCustomPartition(List<Integer> customKafkaPartitions) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (customKafkaPartitions.isEmpty()) {
             return;
         }
@@ -532,7 +635,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     protected void setOptional(CreateRoutineLoadStmt stmt) throws UserException {
+=======
+    protected void setOptional(CreateRoutineLoadStmt stmt) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super.setOptional(stmt);
 
         if (!stmt.getKafkaPartitionOffsets().isEmpty()) {
@@ -760,7 +867,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
             if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
                 for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
+<<<<<<< HEAD
                     if (! customKafkaPartitions.contains(pair.first)) {
+=======
+                    if (!customKafkaPartitions.contains(pair.first)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
                     }
                 }
@@ -768,7 +879,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 // check if partition is validate
                 try {
                     checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     throw new DdlException("The specified partition is not in the consumed partitions ", e);
                 }
             }
@@ -807,7 +922,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     // update substate according to the lag.
     @Override
+<<<<<<< HEAD
     public void updateSubstate() throws UserException {
+=======
+    public void updateSubstate() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         KafkaProgress progress = (KafkaProgress) getTimestampProgress();
         Map<Integer, Long> partitionTimestamps = progress.getPartitionIdToOffset();
         long now = System.currentTimeMillis();
@@ -819,7 +938,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 updateSubstate(JobSubstate.UNSTABLE, new ErrorReason(InternalErrorCode.SLOW_RUNNING_ERR,
                         String.format("The lag [%d] of partition [%d] exceeds " +
                                         "Config.routine_load_unstable_threshold_second [%d]",
+<<<<<<< HEAD
                                 lag,  partition, Config.routine_load_unstable_threshold_second)));
+=======
+                                lag, partition, Config.routine_load_unstable_threshold_second)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return;
             }
         }

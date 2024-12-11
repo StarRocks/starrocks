@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_date
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回 DATETIME 类型值中的日期部分。
 

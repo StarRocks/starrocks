@@ -14,19 +14,29 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Ignore;
+=======
+import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
+<<<<<<< HEAD
     public static void setUp() throws Exception {
         PlanTestBase.beforeClass();
         MaterializedViewTestBase.setUp();
+=======
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         executeSqlFile("sql/materialized-view/tpch-hive/ddl_tpch_mv1.sql");
@@ -63,7 +73,10 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     @Ignore
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testQuery7() {
         runFileUnitTest("materialized-view/tpch-hive/q7");
     }
@@ -108,8 +121,12 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
         runFileUnitTest("materialized-view/tpch-hive/q17");
     }
 
+<<<<<<< HEAD
     // @Test
     // Ken is working on this, disable this case before it is fixed.
+=======
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testQuery18() {
         runFileUnitTest("materialized-view/tpch-hive/q18");
     }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_X
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 If point is of a valid Point type, return the corresponding X-coordinate value.
 

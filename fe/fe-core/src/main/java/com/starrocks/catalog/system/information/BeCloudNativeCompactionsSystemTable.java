@@ -23,9 +23,17 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class BeCloudNativeCompactionsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.BE_CLOUD_NATIVE_COMPACTIONS,
                 "be_cloud_native_compactions",
+=======
+    private static final String NAME = "be_cloud_native_compactions";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.BE_CLOUD_NATIVE_COMPACTIONS,
+                NAME,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
@@ -38,6 +46,10 @@ public class BeCloudNativeCompactionsSystemTable {
                         .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("PROGRESS", ScalarType.createType(PrimitiveType.INT))
                         .column("STATUS", ScalarType.createType(PrimitiveType.VARCHAR))
+<<<<<<< HEAD
+=======
+                        .column("PROFILE", ScalarType.createType(PrimitiveType.VARCHAR))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         .build(), TSchemaTableType.SCH_BE_CLOUD_NATIVE_COMPACTIONS);
     }
 }

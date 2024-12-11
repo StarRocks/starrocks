@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_join
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将数组中的所有元素连接生成一个字符串。
 

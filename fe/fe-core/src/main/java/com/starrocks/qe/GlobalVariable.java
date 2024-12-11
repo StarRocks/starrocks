@@ -38,7 +38,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
 import com.starrocks.system.BackendCoreStat;
+=======
+import com.starrocks.encryption.KeyMgr;
+import com.starrocks.system.BackendResourceStat;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -75,6 +80,10 @@ public final class GlobalVariable {
     public static final String QUERY_QUEUE_MAX_QUEUED_QUERIES = "query_queue_max_queued_queries";
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN_V2 = "activate_all_roles_on_login_v2";
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_TDE = "enable_tde";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
@@ -173,6 +182,12 @@ public final class GlobalVariable {
             alias = ACTIVATE_ALL_ROLES_ON_LOGIN, show = ACTIVATE_ALL_ROLES_ON_LOGIN)
     private static boolean activateAllRolesOnLogin = false;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ENABLE_TDE, flag = VariableMgr.GLOBAL | VariableMgr.READ_ONLY)
+    public static boolean enableTde = KeyMgr.isEncrypted();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;
     }
@@ -231,22 +246,44 @@ public final class GlobalVariable {
 
     public static int getQueryQueueDriverHighWater() {
         if (queryQueueDriverHighWater == 0) {
+<<<<<<< HEAD
             return BackendCoreStat.getAvgNumOfHardwareCoresOfBe() * 16;
+=======
+            return BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() * 16;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return queryQueueDriverHighWater;
     }
 
+<<<<<<< HEAD
+=======
+    public static void setQueryQueueDriverHighWater(int queryQueueDriverHighWater) {
+        GlobalVariable.queryQueueDriverHighWater = queryQueueDriverHighWater;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static boolean isQueryQueueDriverLowWaterEffective() {
         return queryQueueDriverLowWater >= 0;
     }
 
     public static int getQueryQueueDriverLowWater() {
         if (queryQueueDriverLowWater == 0) {
+<<<<<<< HEAD
             return BackendCoreStat.getAvgNumOfHardwareCoresOfBe() * 8;
+=======
+            return BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() * 8;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return queryQueueDriverLowWater;
     }
 
+<<<<<<< HEAD
+=======
+    public static void setQueryQueueDriverLowWater(int queryQueueDriverLowWater) {
+        GlobalVariable.queryQueueDriverLowWater = queryQueueDriverLowWater;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static boolean isQueryQueueMemUsedPctLimitEffective() {
         return queryQueueMemUsedPctLimit > 0;
     }

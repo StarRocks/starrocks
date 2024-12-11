@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # named_struct
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 根据给定的字段名和字段值来构建 STRUCT。该参数支持 named struct，使用该函数时需要指定字段名称。
 

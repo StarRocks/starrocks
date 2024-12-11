@@ -15,7 +15,11 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import org.junit.Assert;
@@ -40,7 +44,11 @@ public class CancelLoadStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNoDb() throws UserException, AnalysisException {
+=======
+    public void testNoDb() throws StarRocksException, AnalysisException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         AnalyzeTestUtil.getStarRocksAssert().useDatabase(null);
         analyzeFail("CANCEL LOAD", "No database selected");
     }

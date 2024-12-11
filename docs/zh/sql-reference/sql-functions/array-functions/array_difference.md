@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_difference
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 对于数值型数组，返回相邻两个元素的差(从后者中减去前者)构成的数组。
 

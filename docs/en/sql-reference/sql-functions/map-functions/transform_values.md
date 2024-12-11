@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # transform_values
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Transforms values in a map using a [Lambda expression](../Lambda_expression.md) and produces a new value for each entry in the map.
 

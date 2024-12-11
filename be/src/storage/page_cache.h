@@ -116,6 +116,11 @@ public:
 
     bool adjust_capacity(int64_t delta, size_t min_capacity = 0);
 
+<<<<<<< HEAD
+=======
+    void prune();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     static StoragePageCache* _s_instance;
 

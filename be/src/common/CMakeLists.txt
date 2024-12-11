@@ -23,6 +23,10 @@ add_library(Common STATIC
   configbase.cpp
   s3_uri.cpp
   tracer.cpp
+<<<<<<< HEAD
+=======
+  process_exit.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   prof/heap_prof.cpp
 )
 

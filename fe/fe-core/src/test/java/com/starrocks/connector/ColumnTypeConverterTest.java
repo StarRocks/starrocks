@@ -14,6 +14,10 @@
 
 package com.starrocks.connector;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableList;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
@@ -23,8 +27,15 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.avro.Schema;
+=======
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import org.apache.avro.Schema;
+import org.apache.hadoop.hive.common.type.HiveVarchar;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -32,11 +43,22 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.catalog.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
+import static com.starrocks.catalog.ScalarType.getOlapMaxVarcharLength;
+import static com.starrocks.catalog.Type.UNKNOWN_TYPE;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToMapType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
 import static com.starrocks.connector.ColumnTypeConverter.getPrecisionAndScale;
+<<<<<<< HEAD
+=======
+import static com.starrocks.connector.ColumnTypeConverter.toHiveType;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class ColumnTypeConverterTest {
 
@@ -106,7 +128,11 @@ public class ColumnTypeConverterTest {
         Type resType = fromHiveTypeToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
+<<<<<<< HEAD
         itemType = ScalarType.createDefaultExternalTableString();
+=======
+        itemType = ScalarType.createDefaultCatalogString();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         arrayType = new ArrayType(itemType);
         typeStr = "Array<string>";
         resType = fromHiveTypeToArrayType(typeStr);
@@ -160,7 +186,11 @@ public class ColumnTypeConverterTest {
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createType(PrimitiveType.DATE);
+<<<<<<< HEAD
         valueType = ScalarType.createDefaultExternalTableString();
+=======
+        valueType = ScalarType.createDefaultCatalogString();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         mapType = new MapType(keyType, valueType);
         typeStr = "map<date,string>";
         resType = fromHiveTypeToMapType(typeStr);
@@ -231,7 +261,11 @@ public class ColumnTypeConverterTest {
             String typeStr = "struct<struct_test:int,c1:struct<c1:int,cc1:string>>";
             StructType c1 = new StructType(Lists.newArrayList(
                     new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+<<<<<<< HEAD
                     new StructField("cc1", ScalarType.createDefaultExternalTableString())
+=======
+                    new StructField("cc1", ScalarType.createDefaultCatalogString())
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ));
             StructType root = new StructType(Lists.newArrayList(
                     new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
@@ -291,10 +325,22 @@ public class ColumnTypeConverterTest {
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, varcharType);
 
+<<<<<<< HEAD
         Type stringType = ScalarType.createDefaultExternalTableString();
         typeStr = "string";
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, stringType);
+=======
+        Type stringType = ScalarType.createDefaultCatalogString();
+        typeStr = "string";
+        resType = ColumnTypeConverter.fromHiveType(typeStr);
+        Assert.assertEquals(resType, stringType);
+
+        Assert.assertEquals("varchar(65535)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH)));
+        Assert.assertEquals("varchar(65534)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(getOlapMaxVarcharLength())));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(CATALOG_MAX_VARCHAR_LENGTH)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -316,7 +362,11 @@ public class ColumnTypeConverterTest {
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.STRING));
         arraySchema = Schema.createArray(unionSchema);
+<<<<<<< HEAD
         Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultExternalTableString()));
+=======
+        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultCatalogString()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
@@ -333,12 +383,23 @@ public class ColumnTypeConverterTest {
         Schema structSchema = Schema.createRecord(fields);
 
         StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
+<<<<<<< HEAD
         StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
+=======
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultCatalogString());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
         StructType structType = new StructType(structFields);
         Assert.assertEquals(structType, fromHudiType(structSchema));
+<<<<<<< HEAD
+=======
+
+        structSchema = Schema.createRecord(
+                ImmutableList.of(new Schema.Field("enum", Schema.create(Schema.Type.NULL))));
+        Assert.assertEquals(UNKNOWN_TYPE, fromHudiType(structSchema));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -353,15 +414,28 @@ public class ColumnTypeConverterTest {
         Schema mapSchema = Schema.createMap(structSchema);
 
         StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
+<<<<<<< HEAD
         StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
+=======
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultCatalogString());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
         StructType structType = new StructType(structFields);
 
+<<<<<<< HEAD
         MapType mapType = new MapType(ScalarType.createDefaultExternalTableString(), structType);
 
         Assert.assertEquals(mapType, fromHudiType(mapSchema));
+=======
+        MapType mapType = new MapType(ScalarType.createDefaultCatalogString(), structType);
+
+        Assert.assertEquals(mapType, fromHudiType(mapSchema));
+
+        mapSchema = Schema.createMap(Schema.create(Schema.Type.NULL));
+        Assert.assertEquals(UNKNOWN_TYPE, fromHudiType(mapSchema));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -390,4 +464,50 @@ public class ColumnTypeConverterTest {
         other = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 4), false);
         Assert.assertFalse(columnEquals(base, other));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testSRTypeToHiveType() {
+        Assert.assertEquals("tinyint", toHiveType(Type.TINYINT));
+        Assert.assertEquals("smallint", toHiveType(Type.SMALLINT));
+        Assert.assertEquals("int", toHiveType(Type.INT));
+        Assert.assertEquals("bigint", toHiveType(Type.BIGINT));
+        Assert.assertEquals("float", toHiveType(Type.FLOAT));
+        Assert.assertEquals("double", toHiveType(Type.DOUBLE));
+        Assert.assertEquals("boolean", toHiveType(Type.BOOLEAN));
+        Assert.assertEquals("binary", toHiveType(Type.VARBINARY));
+        Assert.assertEquals("date", toHiveType(Type.DATE));
+        Assert.assertEquals("timestamp", toHiveType(Type.DATETIME));
+
+        Assert.assertEquals("char(10)", toHiveType(ScalarType.createCharType(10)));
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Unsupported Hive type: CHAR(10000). Supported CHAR types: CHAR(<=255)",
+                () -> toHiveType(ScalarType.createCharType(10000)));
+
+        Assert.assertEquals("varchar(100)", toHiveType(ScalarType.createVarchar(100)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarcharType(200000)));
+
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(getOlapMaxVarcharLength())));
+
+        ScalarType itemType = ScalarType.createType(PrimitiveType.DATE);
+        ArrayType arrayType = new ArrayType(new ArrayType(itemType));
+        Assert.assertEquals("array<array<date>>", toHiveType(arrayType));
+
+        ScalarType keyType = ScalarType.createType(PrimitiveType.TINYINT);
+        ScalarType valueType = ScalarType.createType(PrimitiveType.SMALLINT);
+        MapType mapType = new MapType(keyType, valueType);
+        String typeStr = "map<tinyint,smallint>";
+        Assert.assertEquals(typeStr, toHiveType(mapType));
+
+        typeStr = "struct<a:struct<aa:date>,b:int>";
+        StructField aa = new StructField("aa", ScalarType.createType(PrimitiveType.DATE));
+
+        StructType innerStruct = new StructType(Lists.newArrayList(aa));
+        StructField a = new StructField("a", innerStruct);
+        StructField b = new StructField("b", ScalarType.createType(PrimitiveType.INT));
+        StructType outerStruct = new StructType(Lists.newArrayList(a, b));
+        Assert.assertEquals(typeStr, toHiveType(outerStruct));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

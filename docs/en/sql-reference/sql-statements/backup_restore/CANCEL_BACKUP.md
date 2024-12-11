@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## Description
 
+<<<<<<< HEAD
 Cancels an on-going BACKUP task in a specified database. For more information, see [data backup and restoration](../../../administration/management/Backup_and_restore.md).
+=======
+Cancels an ongoing BACKUP task in a specified database.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## Syntax
 

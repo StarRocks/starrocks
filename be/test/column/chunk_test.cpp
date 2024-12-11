@@ -22,6 +22,10 @@
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+<<<<<<< HEAD
+=======
+#include "testutil/column_test_helper.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "testutil/parallel_test.h"
 
 namespace starrocks {
@@ -108,6 +112,29 @@ GROUP_SLOW_TEST_F(ChunkTest, test_chunk_upgrade_if_overflow) {
 }
 
 // NOLINTNEXTLINE
+<<<<<<< HEAD
+=======
+TEST_F(ChunkTest, test_remove_column_by_slot_id) {
+    auto c1 = ColumnTestHelper::build_column<int32_t>({1});
+    auto c2 = ColumnTestHelper::build_column<int32_t>({2});
+    auto c3 = ColumnTestHelper::build_column<int32_t>({3});
+    auto c4 = ColumnTestHelper::build_column<int32_t>({4});
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(c1, 1);
+    chunk->append_column(c2, 2);
+    chunk->append_column(c3, 3);
+    chunk->append_column(c4, 4);
+
+    chunk->remove_column_by_slot_id(2);
+    ASSERT_EQ(chunk->get_column_by_slot_id(1)->get(0).get_int32(), 1);
+    ASSERT_FALSE(chunk->is_slot_exist(2));
+    ASSERT_EQ(chunk->get_column_by_slot_id(3)->get(0).get_int32(), 3);
+    ASSERT_EQ(chunk->get_column_by_slot_id(4)->get(0).get_int32(), 4);
+}
+
+// NOLINTNEXTLINE
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 TEST_F(ChunkTest, test_chunk_downgrade) {
     auto c1 = BinaryColumn::create();
     c1->append_string("1");
@@ -221,7 +248,11 @@ TEST_F(ChunkTest, get_column_by_index) {
 TEST_F(ChunkTest, test_copy_one_row) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
 
+<<<<<<< HEAD
     std::unique_ptr<Chunk> new_chunk = chunk->clone_empty_with_tuple();
+=======
+    std::unique_ptr<Chunk> new_chunk = chunk->clone_empty();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (size_t i = 0; i < chunk->num_rows(); ++i) {
         new_chunk->append(*chunk, i, 1);
     }

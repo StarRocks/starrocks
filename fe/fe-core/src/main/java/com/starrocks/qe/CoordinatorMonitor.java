@@ -19,6 +19,10 @@ import com.google.common.collect.Queues;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.Coordinator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

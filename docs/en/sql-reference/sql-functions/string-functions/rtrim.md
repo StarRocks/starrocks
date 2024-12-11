@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # rtrim
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Removes the trailing spaces or specified characters from the end (right) of the `str` argument. Removing specified characters are supported from StarRocks 2.5.0.
 

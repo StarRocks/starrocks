@@ -11,8 +11,12 @@ s5  struct<c0 INT,c1 STRUCT<c INT, b string>>
 DUPLICATE KEY(pk)
 DISTRIBUTED BY HASH(pk) BUCKETS 3
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false"
+=======
+"replication_num" = "1"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 );
 
 -- error tests

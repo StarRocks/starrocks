@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     o_orderpriority,
@@ -20,6 +21,8 @@ group by
     o_orderpriority
 order by
     o_orderpriority ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:6: O_ORDERPRIORITY | 29: count
@@ -83,7 +86,10 @@ tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=300000000
 avgRowSize=16.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -107,6 +113,9 @@ tabletRatio=10/10
 tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=5675676
 avgRowSize=27.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [end]
 

@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableList;
@@ -20,19 +23,36 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HiveTable;
+=======
+import com.starrocks.catalog.HiveResource;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.InternalCatalog;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.TemporaryTableMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -58,7 +78,11 @@ public class ReplayMetadataMgr extends MetadataMgr {
                              ResourceMgr resourceMgr,
                              Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> externalTableInfoMap,
                              Map<String, Map<String, ColumnStatistic>> identifyToColumnStats) {
+<<<<<<< HEAD
         super(localMetastore, connectorMgr, new ConnectorTblMetaInfoMgr());
+=======
+        super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         init(resourceMgr, externalTableInfoMap, identifyToColumnStats);
     }
 
@@ -138,7 +162,12 @@ public class ReplayMetadataMgr extends MetadataMgr {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+=======
+    public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                           ConnectorMetadatRequestContext requestContext) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return replayTableMap.get(catalogName).get(dbName).get(tableName).partitionNames;
     }
 
@@ -159,7 +188,17 @@ public class ReplayMetadataMgr extends MetadataMgr {
         if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
             catalogName = CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive");
         }
+<<<<<<< HEAD
         return replayTableMap.get(catalogName).get(dbName).get(tblName).table;
+=======
+
+        HiveTableInfo tableInfo = replayTableMap.get(catalogName).get(dbName).get(tblName);
+        if (tableInfo != null) {
+            return tableInfo.table;
+        }
+        // probably it's a hive view but being created in default catalog.
+        return super.getTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -171,9 +210,15 @@ public class ReplayMetadataMgr extends MetadataMgr {
                                          ScalarOperator predicate) {
         Statistics.Builder resStatistics = Statistics.builder();
         Map<ColumnRefOperator, ColumnStatistic> res = new HashMap<>();
+<<<<<<< HEAD
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
         Statistics statistics =  replayTableMap.get(catalogName).get(dbName).get(tblName).statistics;
+=======
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
+        Statistics statistics = replayTableMap.get(catalogName).get(dbName).get(tblName).statistics;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Map<ColumnRefOperator, ColumnStatistic> columnStatisticMap = statistics.getColumnStatistics();
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatisticMap.entrySet()) {
             for (ColumnRefOperator columnRefOperator : columns.keySet()) {
@@ -188,7 +233,11 @@ public class ReplayMetadataMgr extends MetadataMgr {
     }
 
     @Override
+<<<<<<< HEAD
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
+=======
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Lists.newArrayList(MOCKED_FILES);
     }
 

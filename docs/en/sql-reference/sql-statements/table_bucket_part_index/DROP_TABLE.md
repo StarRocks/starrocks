@@ -11,13 +11,21 @@ This statement is used to delete a table.
 ## Syntax
 
 ```sql
+<<<<<<< HEAD
 DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE]
+=======
+DROP [TEMPORARY] TABLE [IF EXISTS] [db_name.]table_name [FORCE]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ```
 
 Note:
 
 - After a table is dropped, you can use the [RECOVER](../backup_restore/RECOVER.md) statement to restore the table within a specified period (1 day by default).
 - If DROP Table FORCE is executed, the table will be deleted directly and cannot be recovered without checking whether there are unfinished activities in the database. Generally, this operation is not recommended.
+<<<<<<< HEAD
+=======
+- Once dropped, temporary tables cannot be restored using RECOVER.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## Examples
 

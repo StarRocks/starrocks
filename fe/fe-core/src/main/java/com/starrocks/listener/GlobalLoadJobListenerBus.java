@@ -18,6 +18,11 @@ package com.starrocks.listener;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.DmlType;
+import com.starrocks.transaction.InsertOverwriteJobStats;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -53,11 +58,22 @@ public class GlobalLoadJobListenerBus {
      * @param db database of the target table
      * @param table target table that has changed
      */
+<<<<<<< HEAD
     public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
         if (transactionState == null) {
             return;
         }
         listeners.stream().forEach(listener -> listener.onDMLStmtJobTransactionFinish(transactionState, db, table));
+=======
+    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
+                                              DmlType dmlType) {
+        if (transactionState == null) {
+            return;
+        }
+        listeners.stream().forEach(listener -> listener.onDMLStmtJobTransactionFinish(transactionState, db, table,
+                dmlType
+        ));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     /**
@@ -65,11 +81,19 @@ public class GlobalLoadJobListenerBus {
      * @param db database of the target table
      * @param table target table that has changed
      */
+<<<<<<< HEAD
     public void onInsertOverwriteJobCommitFinish(Database db, Table table) {
         if (db == null || table == null) {
             return;
         }
         listeners.stream().forEach(listener -> listener.onInsertOverwriteJobCommitFinish(db, table));
+=======
+    public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
+        if (db == null || table == null) {
+            return;
+        }
+        listeners.stream().forEach(listener -> listener.onInsertOverwriteJobCommitFinish(db, table, stats));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     /**

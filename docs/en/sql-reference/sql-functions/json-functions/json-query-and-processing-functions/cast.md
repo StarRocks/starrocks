@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # cast
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a value between the JSON type and SQL type.
 

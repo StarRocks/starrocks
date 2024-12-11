@@ -15,6 +15,10 @@
 #include <gtest/gtest.h>
 
 #include "common/logging.h"
+<<<<<<< HEAD
+=======
+#include "fs/encrypt_file.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "io/array_input_stream.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
@@ -101,4 +105,24 @@ PARALLEL_TEST(SeekableInputStreamTest, test_read_at_fully) {
     ASSERT_ERROR(in.read_at_fully(1, buff, 10));
 }
 
+<<<<<<< HEAD
+=======
+// NOLINTNEXTLINE
+PARALLEL_TEST(SeekableInputStreamTest, test_encrypted) {
+    TestInputStream in("0123456789", 5);
+    char buff[10];
+    ASSERT_OK(in.read_at_fully(1, buff, 9));
+    ASSERT_EQ(10, *in.position());
+
+    ASSERT_ERROR(in.read_at_fully(1, buff, 10));
+    ASSERT_FALSE(in.is_encrypted());
+    std::unique_ptr<SeekableInputStream> s =
+            std::make_unique<SeekableInputStreamWrapper>(&in, Ownership::kDontTakeOwnership);
+    ASSERT_FALSE(s->is_encrypted());
+
+    EncryptSeekableInputStream encrypted(std::move(s), {EncryptionAlgorithmPB::AES_128, "0000000000000000"});
+    ASSERT_TRUE(encrypted.is_encrypted());
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::io

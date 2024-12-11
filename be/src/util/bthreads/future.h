@@ -115,6 +115,10 @@ public:
 
 private:
     friend class Promise<R>;
+<<<<<<< HEAD
+=======
+    friend class SharedFuture<R>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     explicit Future(std::shared_ptr<SharedState<R>> state) : BaseType(std::move(state)) {}
 };
@@ -150,6 +154,10 @@ public:
 
 private:
     friend class Promise<R&>;
+<<<<<<< HEAD
+=======
+    friend class SharedFuture<R&>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     explicit Future(std::shared_ptr<SharedState<R&>> state) : BaseType(std::move(state)) {}
 };
@@ -183,6 +191,10 @@ public:
 
 private:
     friend class Promise<void>;
+<<<<<<< HEAD
+=======
+    friend class SharedFuture<void>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     explicit Future(std::shared_ptr<SharedState<void>> state) : BaseType(std::move(state)) {}
 };
@@ -237,6 +249,10 @@ public:
 private:
     friend class Promise<R>;
     friend class Future<R>;
+<<<<<<< HEAD
+=======
+    friend class FutureBase<R>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     using BaseType = FutureBase<R>;
 

@@ -22,7 +22,11 @@ jobs:
       contents: read
     steps:
       - name: checkout repository
+<<<<<<< HEAD
         uses: actions/checkout@v3
+=======
+        uses: actions/checkout@v4
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
       - name: Log in to the Container registry
         uses: docker/login-action@v2

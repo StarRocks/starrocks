@@ -20,5 +20,9 @@ import javax.validation.constraints.NotNull;
 
 public interface Sorter {
     @NotNull
+<<<<<<< HEAD
     List<PartitionStatistics> sort(@NotNull List<PartitionStatistics> partitionStatistics);
+=======
+    List<PartitionStatisticsSnapshot> sort(@NotNull List<PartitionStatisticsSnapshot> partitionStatistics);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

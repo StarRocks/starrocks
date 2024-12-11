@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_hash
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 对任意类型的输入计算 32 位的哈希值，返回包含该哈希值的 bitmap。
 

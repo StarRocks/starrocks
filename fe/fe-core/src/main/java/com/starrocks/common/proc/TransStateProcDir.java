@@ -55,7 +55,11 @@ public class TransStateProcDir implements ProcDirInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
+<<<<<<< HEAD
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+=======
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         long dbId = ProcUtils.getDbId(dbIdOrName);
         result.setRows(transactionMgr.getDbTransStateInfo(dbId));
         return result;

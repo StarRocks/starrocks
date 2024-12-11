@@ -29,17 +29,31 @@
 namespace starrocks::pipeline {
 class ExecStateReporter {
 public:
+<<<<<<< HEAD
     ExecStateReporter();
 
     static TReportExecStatusParams create_report_exec_status_params(QueryContext* query_ctx,
                                                                     FragmentContext* fragment_ctx,
                                                                     RuntimeProfile* profile, const Status& status,
                                                                     bool done);
+=======
+    explicit ExecStateReporter(const CpuUtil::CpuIds& cpuids);
+
+    static std::unique_ptr<TReportExecStatusParams> create_report_exec_status_params(
+            QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,
+            RuntimeProfile* load_channel_profile, const Status& status, bool done);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static Status report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
                                      const TNetworkAddress& fe_addr);
 
     void submit(std::function<void()>&& report_task, bool priority = false);
 
+<<<<<<< HEAD
+=======
+    void bind_cpus(const CpuUtil::CpuIds& cpuids) const;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // STREAM MV
     static TMVMaintenanceTasks create_report_epoch_params(const QueryContext* query_ctx,
                                                           const std::vector<FragmentContext*>& fragment_ctxs);

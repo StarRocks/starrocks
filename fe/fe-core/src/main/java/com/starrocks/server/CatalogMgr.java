@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
@@ -19,7 +23,10 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.google.gson.annotations.SerializedName;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
@@ -28,27 +35,45 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.DbsProcDir;
 import com.starrocks.common.proc.ExternalDbsProcDir;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
+<<<<<<< HEAD
 import com.starrocks.connector.Connector;
+=======
+import com.starrocks.connector.CatalogConnector;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.ConnectorType;
+<<<<<<< HEAD
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
+=======
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.persist.AlterCatalogLog;
+import com.starrocks.persist.DropCatalogLog;
+import com.starrocks.persist.ImageWriter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+<<<<<<< HEAD
 import com.starrocks.privilege.NativeAccessControl;
+=======
+import com.starrocks.privilege.NativeAccessController;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.privilege.ranger.hive.RangerHiveAccessController;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -59,9 +84,12 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -98,6 +126,7 @@ public class CatalogMgr {
         createCatalog(stmt.getCatalogType(), stmt.getCatalogName(), stmt.getComment(), stmt.getProperties());
     }
 
+<<<<<<< HEAD
     public void createCatalog(String type, String catalogName, String comment, Map<String, String> properties)
             throws DdlException {
         if (Strings.isNullOrEmpty(type)) {
@@ -139,11 +168,86 @@ public class CatalogMgr {
             if (!isResourceMappingCatalog(catalogName)) {
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog);
             }
+=======
+    public void createCatalogForRestore(Catalog catalog) throws DdlException {
+        dropCatalogForRestore(catalog, false);
+        createCatalog(catalog.getType(), catalog.getName(), catalog.getComment(), catalog.getConfig());
+    }
+
+    // please keep connector and catalog create together, they need keep in consistent asap.
+    public void createCatalog(String type, String catalogName, String comment, Map<String, String> properties)
+            throws DdlException {
+        CatalogConnector connector = null;
+        Catalog catalog = null;
+        writeLock();
+        try {
+            if (Strings.isNullOrEmpty(type)) {
+                throw new DdlException("Missing properties 'type'");
+            }
+
+            Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+
+            try {
+                Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+                String serviceName = properties.get("ranger.plugin.hive.service.name");
+                if (serviceName == null || serviceName.isEmpty()) {
+                    if (Config.access_control.equals("ranger")) {
+                        Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                    } else {
+                        Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+                    }
+                } else {
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+                }
+
+                connector = connectorMgr.createConnector(
+                        new ConnectorContext(catalogName, type, properties), false);
+                if (null == connector) {
+                    LOG.error("{} connector [{}] create failed", type, catalogName);
+                    throw new DdlException("connector create failed");
+                }
+                long id = isResourceMappingCatalog(catalogName) ?
+                        ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
+                        GlobalStateMgr.getCurrentState().getNextId();
+                catalog = new ExternalCatalog(id, catalogName, comment, properties);
+                catalogs.put(catalogName, catalog);
+
+                if (!isResourceMappingCatalog(catalogName)) {
+                    GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog);
+                }
+            } catch (StarRocksConnectorException e) {
+                LOG.error("connector create failed. catalog [{}] ", catalogName, e);
+                throw new DdlException(String.format("connector create failed {%s}", e.getMessage()));
+            }
+        } catch (Exception e) {
+            if (connector != null && connectorMgr.connectorExists(catalogName)) {
+                connectorMgr.removeConnector(catalogName);
+            }
+
+            if (catalog != null) {
+                catalogs.remove(catalogName);
+            }
+
+            throw e;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             writeUnLock();
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void dropCatalogForRestore(Catalog catalog, boolean isReplay) {
+        if (!isReplay && catalogExists(catalog.getName())) {
+            DropCatalogStmt stmt = new DropCatalogStmt(catalog.getName());
+            dropCatalog(stmt);
+        } else if (isReplay) {
+            DropCatalogLog dropCatalogLog = new DropCatalogLog(catalog.getName());
+            replayDropCatalog(dropCatalogLog);
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void dropCatalog(DropCatalogStmt stmt) {
         String catalogName = stmt.getName();
         readLock();
@@ -184,7 +288,11 @@ public class CatalogMgr {
                     if (Config.access_control.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                     } else {
+<<<<<<< HEAD
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+=======
+                        Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     }
                 } else {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
@@ -236,10 +344,15 @@ public class CatalogMgr {
         return !Strings.isNullOrEmpty(name) && !isInternalCatalog(name) && !isResourceMappingCatalog(name);
     }
 
+<<<<<<< HEAD
+=======
+    // please keep connector and catalog create together, they need keep in consistent asap.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void replayCreateCatalog(Catalog catalog) throws DdlException {
         String type = catalog.getType();
         String catalogName = catalog.getName();
         Map<String, String> config = catalog.getConfig();
+<<<<<<< HEAD
         if (Strings.isNullOrEmpty(type)) {
             throw new DdlException("Missing properties 'type'");
         }
@@ -280,6 +393,64 @@ public class CatalogMgr {
             catalogs.put(catalogName, catalog);
         } finally {
             writeUnLock();
+=======
+        CatalogConnector catalogConnector = null;
+
+        try {
+            if (Strings.isNullOrEmpty(type)) {
+                throw new DdlException("Missing properties 'type'");
+            }
+
+            // skip unsupported connector type
+            if (!ConnectorType.isSupport(type)) {
+                LOG.error("Replay catalog [{}] encounter unknown catalog type [{}], ignore it", catalogName, type);
+                return;
+            }
+
+            readLock();
+            try {
+                Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+            } finally {
+                readUnlock();
+            }
+
+            String serviceName = config.get("ranger.plugin.hive.service.name");
+            if (serviceName == null || serviceName.isEmpty()) {
+                if (Config.access_control.equals("ranger")) {
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                } else {
+                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+                }
+            } else {
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+            }
+
+            try {
+                catalogConnector = connectorMgr.createConnector(
+                        new ConnectorContext(catalogName, type, config), true);
+                if (catalogConnector == null) {
+                    LOG.error("{} connector [{}] create failed.", type, catalogName);
+                    throw new DdlException("connector create failed");
+                }
+            } catch (StarRocksConnectorException e) {
+                LOG.error("connector create failed [{}], reason {}", catalogName, e.getMessage());
+                throw new DdlException(String.format("connector create failed: %s", e.getMessage()));
+            }
+
+            writeLock();
+            try {
+                catalogs.put(catalogName, catalog);
+            } finally {
+                writeUnLock();
+            }
+        } catch (Exception e) {
+            if (catalogConnector != null && connectorMgr.connectorExists(catalogName)) {
+                connectorMgr.removeConnector(catalogName);
+            }
+
+            catalogs.remove(catalogName);
+            throw e;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -315,7 +486,11 @@ public class CatalogMgr {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                 } else {
+<<<<<<< HEAD
                     Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+=======
+                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             } else {
                 Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
@@ -328,6 +503,7 @@ public class CatalogMgr {
         }
     }
 
+<<<<<<< HEAD
     public long loadCatalogs(DataInputStream dis, long checksum) throws IOException, DdlException {
         int catalogCount = 0;
         try {
@@ -351,6 +527,8 @@ public class CatalogMgr {
         return checksum;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void loadResourceMappingCatalog() {
         LOG.info("start to replay resource mapping catalog");
 
@@ -374,6 +552,7 @@ public class CatalogMgr {
         LOG.info("finished replaying resource mapping catalogs from resources");
     }
 
+<<<<<<< HEAD
     public long saveCatalogs(DataOutputStream dos, long checksum) throws IOException {
         SerializeData data = new SerializeData();
         data.catalogs = catalogs.entrySet().stream()
@@ -391,6 +570,8 @@ public class CatalogMgr {
         public Map<String, Catalog> catalogs;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<List<String>> getCatalogsInfo() {
         return procNode.fetchResult().getRows();
     }
@@ -498,15 +679,25 @@ public class CatalogMgr {
         }
     }
 
+<<<<<<< HEAD
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Map<String, Catalog> serializedCatalogs = catalogs.entrySet().stream()
                 .filter(entry -> !isResourceMappingCatalog(entry.getKey()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         int numJson = 1 + serializedCatalogs.size();
+<<<<<<< HEAD
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_MGR, numJson);
 
         writer.writeJson(serializedCatalogs.size());
+=======
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.CATALOG_MGR, numJson);
+
+        writer.writeInt(serializedCatalogs.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (Catalog catalog : serializedCatalogs.values()) {
             writer.writeJson(catalog);
         }
@@ -515,15 +706,24 @@ public class CatalogMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+<<<<<<< HEAD
         int serializedCatalogsSize = reader.readInt();
         for (int i = 0; i < serializedCatalogsSize; ++i) {
             Catalog catalog = reader.readJson(Catalog.class);
+=======
+        reader.readCollection(Catalog.class, catalog -> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             try {
                 replayCreateCatalog(catalog);
             } catch (Exception e) {
                 LOG.error("Failed to load catalog {}, ignore the error, continue load", catalog.getName(), e);
             }
+<<<<<<< HEAD
         }
+=======
+        });
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         loadResourceMappingCatalog();
     }
 }

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.lake;
 
@@ -19,25 +20,53 @@ import autovalue.shaded.com.google.common.common.collect.Lists;
 import autovalue.shaded.com.google.common.common.collect.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableCollection;
+=======
+package com.starrocks.lake;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.staros.proto.ShardGroupInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.NetUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStatusCode;
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -58,9 +87,15 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
     private List<Long> getAllPartitionShardGroupId() {
         List<Long> groupIds = new ArrayList<>();
+<<<<<<< HEAD
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
+=======
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 continue;
             }
@@ -68,6 +103,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 continue;
             }
 
+<<<<<<< HEAD
             db.readLock();
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db)) {
@@ -81,6 +117,23 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 }
             } finally {
                 db.readUnlock();
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db)) {
+                    if (table.isCloudNativeTableOrMaterializedView()) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getAllPartitionsIncludeRecycleBin((OlapTable) table)
+                                .stream()
+                                .map(Partition::getSubPartitions)
+                                .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupIds))
+                                .forEach(groupIds::addAll);
+                    }
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         return groupIds;
@@ -92,9 +145,19 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         // group shards by be
         for (long shardId : shardIds) {
             try {
+<<<<<<< HEAD
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
             } catch (UserException ignored1) {
+=======
+                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                Warehouse warehouse = manager.getBackgroundWarehouse();
+                long workerGroupId = manager.selectWorkerGroupByWarehouseId(warehouse.getId())
+                        .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
+                shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
+            } catch (StarRocksException ignored1) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 // ignore error
             }
         }
@@ -104,7 +167,12 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             Set<Long> shards = entry.getValue();
 
             // 1. drop tablet
+<<<<<<< HEAD
             ComputeNode node = GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackendOrComputeNode(backendId);
+=======
+            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getBackendOrComputeNode(backendId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (node == null) {
                 continue;
             }
@@ -125,7 +193,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     }
                 }
             } catch (Throwable e) {
+<<<<<<< HEAD
                 LOG.error(e);
+=======
+                LOG.error(e.getMessage(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (e instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }
@@ -153,6 +225,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
      * 3. shard groups with empty shards and older than threshold, will be permanently deleted.
      */
     private void deleteUnusedShardAndShardGroup() {
+<<<<<<< HEAD
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
 
         List<Long> groupIdFe = getAllPartitionShardGroupId();
@@ -160,6 +233,15 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         .stream()
                         .filter(x -> x.getGroupId() != 0L)
                         .collect(Collectors.toList());
+=======
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+
+        List<Long> groupIdFe = getAllPartitionShardGroupId();
+        List<ShardGroupInfo> shardGroupsInfo = starOSAgent.listShardGroup()
+                .stream()
+                .filter(x -> x.getGroupId() != 0L)
+                .collect(Collectors.toList());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         if (shardGroupsInfo.isEmpty()) {
             return;
@@ -210,6 +292,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     public int deleteUnusedWorker() {
         int cnt = 0;
         try {
+<<<<<<< HEAD
             List<String> workerAddresses = GlobalStateMgr.getCurrentStarOSAgent().listDefaultWorkerGroupIpPort();
 
             // filter backend
@@ -217,22 +300,48 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             for (Backend backend : backends) {
                 if (backend.getStarletPort() != 0) {
                     String workerAddr = backend.getHost() + ":" + backend.getStarletPort();
+=======
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+            long workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouse.getId())
+                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            List<String> workerAddresses = GlobalStateMgr.getCurrentState().getStarOSAgent().listWorkerGroupIpPort(workerGroupId);
+
+            // filter backend
+            List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
+            for (Backend backend : backends) {
+                if (backend.getStarletPort() != 0) {
+                    String workerAddr = NetUtils.getHostPortInAccessibleFormat(backend.getHost(),
+                            backend.getStarletPort());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     workerAddresses.remove(workerAddr);
                 }
             }
 
             // filter compute node
+<<<<<<< HEAD
             ImmutableCollection<ComputeNode> computeNodes =
                     GlobalStateMgr.getCurrentSystemInfo().getComputeNodes(false /* needAlive */);
             for (ComputeNode computeNode : computeNodes) {
                 if (computeNode.getStarletPort() != 0) {
                     String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
+=======
+            List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
+            for (ComputeNode computeNode : computeNodes) {
+                if (computeNode.getStarletPort() != 0) {
+                    String workerAddr = NetUtils.getHostPortInAccessibleFormat(computeNode.getHost(),
+                            computeNode.getStarletPort());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     workerAddresses.remove(workerAddr);
                 }
             }
 
             for (String unusedWorkerAddress : workerAddresses) {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentStarOSAgent().removeWorker(unusedWorkerAddress);
+=======
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(unusedWorkerAddress, workerGroupId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 LOG.info("unused worker {} removed from star mgr", unusedWorkerAddress);
                 cnt++;
             }
@@ -243,9 +352,15 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     public void syncTableMetaAndColocationInfo() {
+<<<<<<< HEAD
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 continue;
             }
@@ -253,7 +368,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 continue;
             }
 
+<<<<<<< HEAD
             List<Table> tables = db.getTables();
+=======
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (Table table : tables) {
                 if (!table.isCloudNativeTableOrMaterializedView()) {
                     continue;
@@ -268,6 +387,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     // return true if starmgr shard meta changed
+<<<<<<< HEAD
     private boolean syncTableMetaInternal(Database db, OlapTable table, boolean forceDeleteData) throws DdlException {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
         HashMap<Long, Set<Long>> redundantGroupToShards = new HashMap<>();
@@ -305,6 +425,65 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 redundantGroupToShards.put(groupId, starmgrShardIdsSet);
             } finally {
                 db.readUnlock();
+=======
+    @VisibleForTesting
+    public boolean syncTableMetaInternal(Database db, OlapTable table, boolean forceDeleteData) throws DdlException {
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        HashMap<Long, Set<Long>> redundantGroupToShards = new HashMap<>();
+        List<PhysicalPartition> physicalPartitions = new ArrayList<>();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) == null) {
+                return false; // table might be dropped
+            }
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getAllPartitionsIncludeRecycleBin(table)
+                    .stream()
+                    .map(Partition::getSubPartitions)
+                    .forEach(physicalPartitions::addAll);
+            table.setShardGroupChanged(false);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+
+        for (PhysicalPartition physicalPartition : physicalPartitions) {
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                // schema change might replace the shards in the original shard group
+                if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+                    return false;
+                }
+                // automatic bucketing will create new shards in the original shard group
+                if (table.isAutomaticBucketing()) {
+                    return false;
+                }
+                // automatic bucketing will change physicalPartitions make shard group changed even after it's done
+                if (table.hasShardGroupChanged()) {
+                    return false;
+                }
+
+                // no need to check db/table/partition again, everything still works
+                for (MaterializedIndex materializedIndex :
+                        physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    long groupId = materializedIndex.getShardGroupId();
+                    Set<Long> starmgrShardIdsSet = null;
+                    if (redundantGroupToShards.get(groupId) != null) {
+                        starmgrShardIdsSet = redundantGroupToShards.get(groupId);
+                    } else {
+                        List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                        starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                    }
+
+                    for (Tablet tablet : materializedIndex.getTablets()) {
+                        starmgrShardIdsSet.remove(tablet.getId());
+                    }
+                    // collect shard in starmgr but not in fe
+                    redundantGroupToShards.put(materializedIndex.getShardGroupId(), starmgrShardIdsSet);
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
@@ -333,6 +512,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
     private void syncTableColocationInfo(Database db, OlapTable table) throws DdlException {
         // quick check
+<<<<<<< HEAD
         if (!GlobalStateMgr.getCurrentColocateIndex().isLakeColocateTable(table.getId())) {
             return;
         }
@@ -349,6 +529,25 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         null /* expectGroupId */);
         } finally {
             db.writeUnlock();
+=======
+        if (!GlobalStateMgr.getCurrentState().getColocateTableIndex().isLakeColocateTable(table.getId())) {
+            return;
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            // check db and table again
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db.getId()) == null) {
+                return;
+            }
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) == null) {
+                return;
+            }
+            GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(table, true /* isJoin */,
+                    null /* expectGroupId */);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -371,12 +570,20 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     public void syncTableMeta(String dbName, String tableName, boolean forceDeleteData) throws DdlException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             throw new DdlException(String.format("db %s does not exist.", dbName));
         }
 
+<<<<<<< HEAD
         Table table = db.getTable(tableName);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (table == null) {
             throw new DdlException(String.format("table %s does not exist.", tableName));
         }

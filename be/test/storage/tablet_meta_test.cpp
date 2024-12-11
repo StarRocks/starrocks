@@ -52,7 +52,10 @@ TEST(TabletMetaTest, test_create) {
 
     TTabletSchema& schema = request.tablet_schema;
     schema.__set_schema_hash(12345);
+<<<<<<< HEAD
     schema.__set_is_in_memory(false);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     schema.__set_keys_type(TKeysType::DUP_KEYS);
     schema.__set_short_key_column_count(1);
 
@@ -138,7 +141,10 @@ TEST(TabletMetaTest, test_create) {
     const TabletSchema& tablet_schema = tablet_meta->tablet_schema();
     ASSERT_EQ(3, tablet_schema.num_columns());
     ASSERT_EQ(KeysType::DUP_KEYS, tablet_schema.keys_type());
+<<<<<<< HEAD
     ASSERT_EQ(false, tablet_schema.is_in_memory());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     const TabletColumn& c0 = tablet_schema.column(0);
     const TabletColumn& c1 = tablet_schema.column(1);
@@ -220,8 +226,13 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_TRUE(c2_1.subcolumn(0).is_nullable());
     ASSERT_FALSE(c2_1.subcolumn(0).has_bitmap_index());
     ASSERT_FALSE(c2_1.subcolumn(0).has_default_value());
+<<<<<<< HEAD
     ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.subcolumn(0).length());
     ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.subcolumn(0).index_length());
+=======
+    ASSERT_EQ(10 + sizeof(get_olap_string_max_length()), c2_1.subcolumn(0).length());
+    ASSERT_EQ(10 + sizeof(get_olap_string_max_length()), c2_1.subcolumn(0).index_length());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_EQ(0, c2_1.subcolumn(0).subcolumn_count());
 
     std::shared_ptr<BinlogConfig> binlog_config_ptr = tablet_meta->get_binlog_config();

@@ -15,7 +15,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.connector.exception.StarRocksConnectorException;
+=======
+import com.starrocks.common.DdlException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.DropDbStmt;
@@ -25,6 +29,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
@@ -40,7 +48,11 @@ public class AnalyzeDropDbTest {
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
 
+<<<<<<< HEAD
         createIcebergCatalogStmt = "create external catalog hive_catalog properties (\"type\"=\"hive\", " +
+=======
+        createIcebergCatalogStmt = "create external catalog hudi_catalog properties (\"type\"=\"hudi\", " +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\")";
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
     }
@@ -56,10 +68,18 @@ public class AnalyzeDropDbTest {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof AnalysisException);
+<<<<<<< HEAD
             Assert.assertTrue(e.getMessage().contains("Getting analyzing error. Detail message: Unknown catalog"));
         }
 
         String stmt = "DROP DATABASE hive_catalog.iceberg_db";
+=======
+            Assert.assertTrue(e.getMessage().contains("Getting analyzing error." +
+                    " Detail message: Unknown catalog 'not_exist_catalog'."));
+        }
+
+        String stmt = "DROP DATABASE hudi_catalog.iceberg_db";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         DropDbStmt dropDbStmt =
                 (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
 
@@ -67,8 +87,21 @@ public class AnalyzeDropDbTest {
             DDLStmtExecutor.execute(dropDbStmt, connectContext);
             Assert.fail();
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertTrue(e instanceof StarRocksConnectorException);
             Assert.assertTrue(e.getMessage().contains("This connector doesn't support dropping databases"));
         }
     }
+=======
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Can't drop database"));
+        }
+    }
+
+    @Test
+    public void testDropSystem() throws Exception {
+        analyzeFail("DROP database `information_schema`", "Access denied;");
+        analyzeFail("DROP Database `sys`", "Access denied;");
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

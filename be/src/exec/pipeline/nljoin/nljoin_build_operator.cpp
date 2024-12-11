@@ -53,8 +53,12 @@ Status NLJoinBuildOperator::set_finishing(RuntimeState* state) {
 }
 
 Status NLJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+<<<<<<< HEAD
     _cross_join_context->append_build_chunk(_driver_sequence, chunk);
     return Status::OK();
+=======
+    return _cross_join_context->append_build_chunk(_driver_sequence, chunk);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 size_t NLJoinBuildOperator::output_amplification_factor() const {

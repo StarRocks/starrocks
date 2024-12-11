@@ -23,10 +23,17 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class PrivilegeType {
+<<<<<<< HEAD
     private final int id;
     private final String name;
 
     private PrivilegeType(int id, String name) {
+=======
+    protected final int id;
+    protected final String name;
+
+    protected PrivilegeType(int id, String name) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.id = id;
         this.name = name;
     }
@@ -38,6 +45,11 @@ public class PrivilegeType {
     public String name() {
         if (VALID_PRIVILEGE_TYPE.contains(this)) {
             return name;
+<<<<<<< HEAD
+=======
+        } else if (this.equals(ANY)) {
+            return "ANY";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             return "UNKNOWN";
         }
@@ -73,6 +85,15 @@ public class PrivilegeType {
     public static final PrivilegeType CREATE_RESOURCE_GROUP = new PrivilegeType(25, "CREATE RESOURCE GROUP");
     public static final PrivilegeType CREATE_EXTERNAL_CATALOG = new PrivilegeType(26, "CREATE EXTERNAL CATALOG");
     public static final PrivilegeType CREATE_STORAGE_VOLUME = new PrivilegeType(27, "CREATE STORAGE VOLUME");
+<<<<<<< HEAD
+=======
+    public static final PrivilegeType CREATE_PIPE = new PrivilegeType(28, "CREATE PIPE");
+
+    /**
+     * NOTICE: PrivilegeType cannot use a value exceeding 20000, please follow the above sequence number
+     */
+    public static final PrivilegeType CREATE_WAREHOUSE = new PrivilegeType(20004, "CREATE WAREHOUSE");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static final Set<PrivilegeType> VALID_PRIVILEGE_TYPE = new ImmutableSet.Builder<PrivilegeType>().add(
             GRANT,
@@ -101,7 +122,13 @@ public class PrivilegeType {
             CREATE_RESOURCE,
             CREATE_RESOURCE_GROUP,
             CREATE_EXTERNAL_CATALOG,
+<<<<<<< HEAD
             CREATE_STORAGE_VOLUME
+=======
+            CREATE_STORAGE_VOLUME,
+            CREATE_PIPE,
+            CREATE_WAREHOUSE
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ).build();
 
     public static final Map<String, PrivilegeType> NAME_TO_PRIVILEGE = VALID_PRIVILEGE_TYPE.stream().collect(Collectors.toMap(

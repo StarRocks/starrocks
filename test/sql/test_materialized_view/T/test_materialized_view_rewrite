@@ -243,7 +243,11 @@ from emps right semi join depts using (deptno);
 
 refresh materialized view mv_right_semi with sync mode;
 
+<<<<<<< HEAD
 explain select deptno 
+=======
+[UC]explain select deptno
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 from emps right semi join depts using (deptno);
 
 select deptno 
@@ -260,7 +264,11 @@ from emps right anti join depts using (deptno);
 
 refresh materialized view mv_right_anti with sync mode;
 
+<<<<<<< HEAD
 explain select depts.deptno
+=======
+[UC]explain select depts.deptno
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 from emps right anti join depts using (deptno);
 
 select depts.deptno 
@@ -292,7 +300,11 @@ group by user_id, user_name;
 
 refresh materialized view agg_count_mv2 with sync mode;
 
+<<<<<<< HEAD
 explain select user_id, count(1) as cnt
+=======
+[UC]explain select user_id, count(1) as cnt
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 from user_tags
 group by user_id;
 
@@ -308,7 +320,10 @@ PARTITION BY RANGE(`time`)
 DISTRIBUTED BY HASH(`time`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -339,7 +354,11 @@ group by user_id, user_name;
 refresh materialized view agg_count_mv4 with sync mode;
 
 
+<<<<<<< HEAD
 explain select user_id, count(1) as cnt
+=======
+[UC]explain select user_id, count(1) as cnt
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 from user_tags_2
 group by user_id;
 
@@ -353,7 +372,11 @@ group by user_id, user_name;
 
 refresh materialized view agg_count_mv5 with sync mode;
 
+<<<<<<< HEAD
 explain select user_id, user_name, count(1) as cnt
+=======
+[UC]explain select user_id, user_name, count(1) as cnt
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 from user_tags_2
 group by user_id, user_name;
 

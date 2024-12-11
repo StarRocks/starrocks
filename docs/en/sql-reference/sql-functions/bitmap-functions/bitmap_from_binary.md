@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_from_binary
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a binary string with a specific format to a bitmap.
 

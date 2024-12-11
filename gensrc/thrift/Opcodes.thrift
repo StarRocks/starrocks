@@ -86,6 +86,10 @@ enum TExprOpcode {
     BIT_SHIFT_LEFT,
     BIT_SHIFT_RIGHT,
     BIT_SHIFT_RIGHT_LOGICAL,
+<<<<<<< HEAD
+=======
+    JIT,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 // Stream Operation Types

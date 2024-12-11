@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bit_shift_left
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将一个数值或数值表达式的二进制表示向左移动指定的位数。该函数执行**算术左移**。
 

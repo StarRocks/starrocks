@@ -15,7 +15,10 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.ImmutableList;
 
 import java.util.List;

@@ -174,7 +174,11 @@ TEST(TestBitStreamUtil, TestMixed) {
             EXPECT_EQ(val, parity);
             parity = !parity;
         } else {
+<<<<<<< HEAD
             int val;
+=======
+            int val = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             result = reader.GetValue(10, &val);
             EXPECT_EQ(val, i);
         }

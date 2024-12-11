@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # regexp_replace
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 对字符串 str 进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。
 

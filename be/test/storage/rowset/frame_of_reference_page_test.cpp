@@ -41,12 +41,19 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "gutil/int128.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
+<<<<<<< HEAD
+=======
+#include "types/large_int_value.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/logging.h"
 
 using starrocks::PageBuilderOptions;
@@ -62,7 +69,11 @@ public:
         // TODO(alvinz): To reuse this colum
         auto column = ColumnHelper::create_column(index_type, false);
         size_t n = 1;
+<<<<<<< HEAD
         decoder->next_batch(&n, column.get());
+=======
+        ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_EQ(1, n);
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
@@ -101,7 +112,11 @@ public:
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
             uint32_t seek_off = random() % size;
+<<<<<<< HEAD
             for_page_decoder.seek_to_position_in_page(seek_off);
+=======
+            ASSERT_TRUE(for_page_decoder.seek_to_position_in_page(seek_off).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             EXPECT_EQ((int32_t)(seek_off), for_page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&for_page_decoder, &ret);
@@ -144,20 +159,34 @@ public:
         ASSERT_EQ(size, for_page_decoder.count());
 
         auto column1 = ChunkHelper::column_from_field_type(Type, false);
+<<<<<<< HEAD
         SparseRange read_range;
         read_range.add(Range(0, size / 3));
         read_range.add(Range(size / 2, (size * 2 / 3)));
         read_range.add(Range((size * 3 / 4), size));
+=======
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, size / 3));
+        read_range.add(Range<>(size / 2, (size * 2 / 3)));
+        read_range.add(Range<>((size * 3 / 4), size));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         size_t read_num = read_range.span_size();
 
         status = for_page_decoder.next_batch(read_range, column1.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(read_num, column1->size());
 
+<<<<<<< HEAD
         SparseRangeIterator read_iter = read_range.new_iterator();
         size_t offset = 0;
         while (read_iter.has_more()) {
             Range r = read_iter.next(read_num);
+=======
+        SparseRangeIterator<> read_iter = read_range.new_iterator();
+        size_t offset = 0;
+        while (read_iter.has_more()) {
+            Range<> r = read_iter.next(read_num);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (uint i = 0; i < r.span_size(); ++i) {
                 ASSERT_EQ(src[r.begin() + i], column1->get(offset + i).get<CppType>());
             }

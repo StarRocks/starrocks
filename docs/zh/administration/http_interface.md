@@ -57,6 +57,7 @@ displayed_sidebar: docs
 
 | HTTP 请求方法       | HTTP 请求路径                                                     | 描述                                                                                                                |
 |------------------| --------------------------------------------------------------  |-------------------------------------------------------------------------------------------------------------------- |
+<<<<<<< HEAD
 | PUT              | /api/`{db}/{table}`/_stream_load                                  | Stream Load 操作，详见 [Stream Load](../loading/StreamLoad.md)                          |
 | POST/PUT         | /api/transaction/`{txn_op}`                                       | Stream Load 事务接口，详见 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)   |
 | PUT              | /api/transaction/load                                           |
@@ -89,11 +90,46 @@ displayed_sidebar: docs
 | GET              | /api/pipeline_blocking_drivers/`{action}`                         |
 | GET              | /greplog                                                        |
 | GET              | /varz                                                           | 查看当前 BE 配置。                                                                                                     |
+=======
+| PUT              | `/api/{db}/{table}/_stream_load`                                  | Stream Load 操作，详见 [Stream Load](../loading/StreamLoad.md)                          |
+| POST/PUT         | `/api/transaction/{txn_op}`                                       | Stream Load 事务接口，详见 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)   |
+| PUT              | `/api/transaction/load`                                           |
+| HEAD/GET         | `/api/_download_load`                                             |
+| HEAD/GET         | `/api/_tablet/_download`                                          |
+| HEAD/GET         | `/api/_load_error_log`                                            |
+| GET              | `/api/health`                                                     |
+| GET              | `/api/_stop_be`                                                   |
+| GET              | `/pprof/heap`                                                     |
+| GET              | `/pprof/growth`                                                   |
+| GET              | `/pprof/profile`                                                  |
+| GET              | `/pprof/pmuprofile`                                               |
+| GET              | `/pprof/contention`                                               |
+| GET              | `/pprof/cmdline`                                                  |
+| HEAD/GET/POST    | `/pprof/symbol`                                                   |
+| GET              | `/metrics`                                                        | 查看当前 BE 的 metrics。                                                                                                 |
+| HEAD             | `/api/meta/header/{tablet_id}`                                    |
+| GET              | `/api/checksum`                                                   |
+| GET              | `/api/reload_tablet`                                              |
+| POST             | `/api/restore_tablet`                                             |
+| GET              | `/api/snapshot`                                                   |
+| GET              | `/api/compaction/show?tablet_id={}`                               | 查看指定 tablet 的 compaction 信息。
+| POST             | `/api/compact?tablet_id={}&compaction_type={base/cumulative}`     | 手动对指定 tablet 进行 compaction。                                                                                       |
+| GET              | `/api/compaction/show_repair`                                     |
+| PUT              | `/api/compaction/submit_repair`                                   |
+| POST             | `/api/update_config`                                              | 更新 BE 配置，详见 [更新 BE 配置](../administration/management/BE_configuration.md)。  |
+| GET/PUT          | `/api/runtime_filter_cache/{action}`                              |
+| POST             | `/api/compact_rocksdb_meta`                                       |
+| GET/PUT          | `/api/query_cache/{action}`                                       |
+| GET              | `/api/pipeline_blocking_drivers/{action}`                         |
+| GET              | `/greplog`                                                        |
+| GET              | `/varz`                                                           | 查看当前 BE 配置。                                                                                                     |
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## CN
 
 | HTTP 请求方法       | HTTP 请求路径                                                   | 描述                                                                                                                |
 |------------------| --------------------------------------------------------------  |-------------------------------------------------------------------------------------------------------------------- |
+<<<<<<< HEAD
 | GET              | /api/health                                                     |
 | GET              | /pprof/heap                                                     |
 | GET              | /pprof/growth                                                   |
@@ -103,3 +139,14 @@ displayed_sidebar: docs
 | GET              | /pprof/cmdline                                                  |
 | HEAD/GET/POST    | /pprof/symbol                                                   |
 | GET              | /metrics                                                        | 查看当前 CN 的 metrics。                                                                                                 |
+=======
+| GET              | `/api/health`                                                     |
+| GET              | `/pprof/heap`                                                     |
+| GET              | `/pprof/growth`                                                   |
+| GET              | `/pprof/profile`                                                  |
+| GET              | `/pprof/pmuprofile`                                               |
+| GET              | `/pprof/contention`                                               |
+| GET              | `/pprof/cmdline`                                                  |
+| HEAD/GET/POST    | `/pprof/symbol`                                                   |
+| GET              | `/metrics`                                                        | 查看当前 CN 的 metrics。                                                                                                 |
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

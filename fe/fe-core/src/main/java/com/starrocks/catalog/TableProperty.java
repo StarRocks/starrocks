@@ -37,12 +37,24 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.common.AnalysisException;
+=======
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.TableName;
+import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
@@ -56,6 +68,10 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -64,7 +80,10 @@ import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
 import org.apache.parquet.Strings;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInput;
@@ -72,7 +91,10 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
+<<<<<<< HEAD
 import java.util.LinkedHashMap;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -91,17 +113,32 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public static final String BINLOG_PROPERTY_PREFIX = "binlog";
     public static final String BINLOG_PARTITION = "binlog_partition_";
 
+<<<<<<< HEAD
     public enum QueryRewriteConsistencyMode {
         DISABLE,    // 0: disable query rewrite
         LOOSE,      // 1: enable query rewrite, and skip the partition version check
         CHECKED;    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
+=======
+    public static final String CLOUD_NATIVE_INDEX_TYPE = "CLOUD_NATIVE";
+    public static final String LOCAL_INDEX_TYPE = "LOCAL";
+
+    public enum QueryRewriteConsistencyMode {
+        DISABLE,    // 0: disable query rewrite
+        LOOSE,      // 1: enable query rewrite, and skip the partition version check, still need to check mv partition exist
+        CHECKED,    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
+        NOCHECK;   // 3: enable query rewrite, and rewrite without any check
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         public static QueryRewriteConsistencyMode defaultQueryRewriteConsistencyMode() {
             return CHECKED;
         }
 
         public static QueryRewriteConsistencyMode defaultForExternalTable() {
+<<<<<<< HEAD
             return DISABLE;
+=======
+            return CHECKED;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         public static QueryRewriteConsistencyMode parse(String str) {
@@ -113,6 +150,71 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * The value for enable_query_rewrite variable
+     */
+    public enum MVQueryRewriteSwitch {
+        DEFAULT,    // default, no check but eligible for query rewrite
+        TRUE,       // enabled, check the semantic and is eligible for query rewrite
+        FALSE,      // disabled
+        ;
+
+        public boolean isEnable() {
+            return TRUE == this || DEFAULT == this;
+        }
+
+        public static MVQueryRewriteSwitch defaultValue() {
+            return DEFAULT;
+        }
+
+        public static MVQueryRewriteSwitch parse(String str) {
+            if (StringUtils.isEmpty(str)) {
+                return DEFAULT;
+            }
+            return EnumUtils.getEnumIgnoreCase(MVQueryRewriteSwitch.class, str);
+        }
+
+        public static String valueList() {
+            return Joiner.on(",").join(MVQueryRewriteSwitch.values());
+        }
+    }
+
+    /**
+     * The value for transparent_mv_rewrite_mode variable
+     */
+    public enum MVTransparentRewriteMode {
+        FALSE, // default, mv acts as a normal table, only return the contained data no matter it's fresh or not
+        TRUE, // transparent, mv acts as transparent table of its defined query, its result is the same as its
+        // defined query.And it will redirect to its defined query if transparent rewrite failed or exceptions occurs.
+        TRANSPARENT_OR_ERROR, // try to transparent rewrite, and it will throw exception if transparent rewrite failed or
+        // exceptions occurs.
+        TRANSPARENT_OR_DEFAULT; // try to transparent rewrite, and it will use the original materialized view without partition
+        // compensated if transparent rewrite failed or exceptions occurs.
+
+        public boolean isEnable() {
+            return TRUE == this || TRANSPARENT_OR_ERROR == this || TRANSPARENT_OR_DEFAULT == this;
+        }
+
+        public static MVTransparentRewriteMode defaultValue() {
+            return FALSE;
+        }
+
+        public static MVTransparentRewriteMode parse(String str) {
+            if (StringUtils.isEmpty(str)) {
+                return FALSE;
+            }
+            return EnumUtils.getEnumIgnoreCase(MVTransparentRewriteMode.class, str);
+        }
+
+        public static String valueList() {
+            return Joiner.on(",").join(MVTransparentRewriteMode.values());
+
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
@@ -126,9 +228,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private PeriodDuration partitionTTL = PeriodDuration.ZERO;
 
+<<<<<<< HEAD
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
     private int partitionRefreshNumber = INVALID;
+=======
+    // This property can be used to specify the retention condition of the partition table or materialized view,
+    // it's a SQL expression, and the partition will be deleted if the condition is not true.
+    private String partitionRetentionCondition = null;
+
+    // This property only applies to materialized views
+    // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
+    private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
@@ -139,6 +251,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // Indicates which tables do not listen to auto refresh events when load
     private List<TableName> excludedTriggerTables;
 
+<<<<<<< HEAD
+=======
+    // This property only applies to materialized views,
+    // Indicates which tables do not refresh the base table when auto refresh
+    private List<TableName> excludedRefreshTables;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // This property only applies to materialized views
     private List<String> mvSortKeys;
 
@@ -152,12 +271,24 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private QueryRewriteConsistencyMode queryRewriteConsistencyMode =
             QueryRewriteConsistencyMode.defaultQueryRewriteConsistencyMode();
 
+<<<<<<< HEAD
+=======
+    private MVQueryRewriteSwitch mvQueryRewriteSwitch = MVQueryRewriteSwitch.DEFAULT;
+    private MVTransparentRewriteMode mvTransparentRewriteMode = MVTransparentRewriteMode.FALSE;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private boolean isInMemory = false;
 
     private boolean enablePersistentIndex = false;
 
     // Only meaningful when enablePersistentIndex = true.
+<<<<<<< HEAD
     TPersistentIndexType persistendIndexType;
+=======
+    TPersistentIndexType persistentIndexType;
+
+    private int primaryIndexCacheExpireSec = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     /*
      * the default storage volume of this table.
@@ -177,12 +308,34 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default compression type of this table.
     private TCompressionType compressionType = TCompressionType.LZ4_FRAME;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "compressionLevel")
+    // the default compression level of this table, only used for zstd for now.
+    private int compressionLevel = -1;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // the default write quorum
     private TWriteQuorumType writeQuorum = TWriteQuorumType.MAJORITY;
 
     // the default disable replicated storage
     private boolean enableReplicatedStorage = false;
 
+<<<<<<< HEAD
+=======
+    private String storageType;
+
+    // the default automatic bucket size
+    private long bucketSize = 0;
+
+    // the default mutable bucket number
+    private long mutableBucketNum = 0;
+
+    private boolean enableLoadProfile = false;
+
+    private String baseCompactionForbiddenTimeRanges = "";
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
@@ -190,13 +343,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "hasDelete")
     private boolean hasDelete = false;
     @SerializedName(value = "hasForbitGlobalDict")
+<<<<<<< HEAD
     private boolean hasForbitGlobalDict = false;
+=======
+    private boolean hasForbiddenGlobalDict = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @SerializedName(value = "storageInfo")
     private StorageInfo storageInfo;
 
+<<<<<<< HEAD
     // partitionId -> binlogAvailabeVersion
     private Map<Long, Long> binlogAvailabeVersions = new HashMap<>();
+=======
+    // partitionId -> binlogAvailableVersion
+    private Map<Long, Long> binlogAvailableVersions = new HashMap<>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private BinlogConfig binlogConfig;
 
@@ -207,10 +369,21 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // foreign key constraint for mv rewrite
     private List<ForeignKeyConstraint> foreignKeyConstraints;
 
+<<<<<<< HEAD
     private PeriodDuration dataCachePartitionDuration;
 
     public TableProperty() {
         this.properties = new LinkedHashMap<>();
+=======
+    private boolean useFastSchemaEvolution;
+
+    private PeriodDuration dataCachePartitionDuration;
+
+    private Multimap<String, String> location;
+
+    public TableProperty() {
+        this(Maps.newLinkedHashMap());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public TableProperty(Map<String, String> properties) {
@@ -225,7 +398,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
             Preconditions.checkState(false, "gsonPostProcess shouldn't fail");
         }
         newTableProperty.hasDelete = this.hasDelete;
+<<<<<<< HEAD
         newTableProperty.hasForbitGlobalDict = this.hasForbitGlobalDict;
+=======
+        newTableProperty.hasForbiddenGlobalDict = this.hasForbiddenGlobalDict;
+        if (this.storageInfo != null) {
+            newTableProperty.storageInfo =
+                    new StorageInfo(this.storageInfo.getFilePathInfo(), this.storageInfo.getCacheInfo());
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return newTableProperty;
     }
 
@@ -253,6 +434,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildEnablePersistentIndex();
                 buildPersistentIndexType();
                 break;
+<<<<<<< HEAD
+=======
+            case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
+                buildPrimaryIndexCacheExpireSec();
+                break;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
                 break;
@@ -262,6 +449,21 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
                 break;
+<<<<<<< HEAD
+=======
+            case OperationType.OP_MODIFY_BUCKET_SIZE:
+                buildBucketSize();
+                break;
+            case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
+                buildMutableBucketNum();
+                break;
+            case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
+                buildEnableLoadProfile();
+                break;
+            case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
+                buildBaseCompactionForbiddenTimeRanges();
+                break;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 buildBinlogConfig();
                 break;
@@ -269,8 +471,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildBinlogAvailableVersion();
                 break;
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
+<<<<<<< HEAD
                 buildPartitionLiveNumber();
                 buildDataCachePartitionDuration();
+=======
+                buildPartitionTTL();
+                buildPartitionLiveNumber();
+                buildPartitionRetentionCondition();
+                buildDataCachePartitionDuration();
+                buildLocation();
+                buildStorageCoolDownTTL();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -291,6 +502,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildConstraint();
         buildMvSortKeys();
         buildQueryRewrite();
+<<<<<<< HEAD
+=======
+        buildMVQueryRewriteSwitch();
+        buildMVTransparentRewriteMode();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return this;
     }
 
@@ -324,11 +540,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildBinlogAvailableVersion() {
+<<<<<<< HEAD
         binlogAvailabeVersions = new HashMap<>();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (entry.getKey().startsWith(BINLOG_PARTITION)) {
                 long partitionId = Long.parseLong(entry.getKey().split("_")[2]);
                 binlogAvailabeVersions.put(partitionId, Long.parseLong(entry.getValue()));
+=======
+        binlogAvailableVersions = new HashMap<>();
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(BINLOG_PARTITION)) {
+                long partitionId = Long.parseLong(entry.getKey().split("_")[2]);
+                binlogAvailableVersions.put(partitionId, Long.parseLong(entry.getValue()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         return this;
@@ -346,7 +570,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
 
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+<<<<<<< HEAD
             Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+=======
+            Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (ttlDuration != null) {
                 partitionTTL = ttlDuration.second;
             }
@@ -375,6 +603,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public TableProperty buildPartitionRetentionCondition() {
+        partitionRetentionCondition = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, "");
+        return this;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public TableProperty buildResourceGroup() {
         resourceGroup = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP,
                 null);
@@ -382,6 +618,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildExcludedTriggerTables() {
+<<<<<<< HEAD
         String excludedRefreshConf = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, null);
         List<TableName> tables = Lists.newArrayList();
         if (excludedRefreshConf == null) {
@@ -389,13 +626,31 @@ public class TableProperty implements Writable, GsonPostProcessable {
         } else {
             List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults()
                     .splitToList(excludedRefreshConf);
+=======
+        excludedTriggerTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+        excludedRefreshTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES);
+        return this;
+    }
+
+    private List<TableName> parseExcludedTables(String propertiesKey) {
+        String excludedTables = properties.getOrDefault(propertiesKey, null);
+        List<TableName> tables = Lists.newArrayList();
+        if (excludedTables != null) {
+            List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults()
+                    .splitToList(excludedTables);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (String table : tableList) {
                 TableName tableName = AnalyzerUtils.stringToTableName(table);
                 tables.add(tableName);
             }
+<<<<<<< HEAD
             excludedTriggerTables = tables;
         }
         return this;
+=======
+        }
+        return tables;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public TableProperty buildMvSortKeys() {
@@ -419,18 +674,64 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
     public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) throws AnalysisException {
+=======
+    public TableProperty buildMVQueryRewriteSwitch() {
+        String value = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+        this.mvQueryRewriteSwitch = MVQueryRewriteSwitch.parse(value);
+        return this;
+    }
+
+    public static MVQueryRewriteSwitch analyzeQueryRewriteSwitch(String value) {
+        MVQueryRewriteSwitch res = MVQueryRewriteSwitch.parse(value);
+        if (res == null) {
+            String valueList = MVQueryRewriteSwitch.valueList();
+            throw new SemanticException(
+                    PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE
+                            + " can only be " + valueList + " but got " + value);
+        }
+        return res;
+    }
+
+    public TableProperty buildMVTransparentRewriteMode() {
+        String value = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+        this.mvTransparentRewriteMode = MVTransparentRewriteMode.parse(value);
+        return this;
+    }
+
+    public static MVTransparentRewriteMode analyzeMVTransparentRewrite(String value) {
+        MVTransparentRewriteMode res = MVTransparentRewriteMode.parse(value);
+        if (res == null) {
+            String valueList = MVTransparentRewriteMode.valueList();
+            throw new SemanticException(
+                    PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE
+                            + " can only be " + valueList + " but got " + value);
+        }
+        return res;
+    }
+
+    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
         if (res == null) {
             String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
                     .stream().map(Enum::name).collect(Collectors.joining(","));
+<<<<<<< HEAD
             throw new AnalysisException(
+=======
+            throw new SemanticException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY + " could only be " + allValues + " but got " + value);
         }
         return res;
     }
 
+<<<<<<< HEAD
     public static QueryRewriteConsistencyMode analyzeExternalTableQueryRewrite(String value) throws AnalysisException {
+=======
+    public static QueryRewriteConsistencyMode analyzeExternalTableQueryRewrite(String value) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
             // old version use the boolean value
             boolean boolValue = Boolean.parseBoolean(value);
@@ -440,7 +741,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
             if (res == null) {
                 String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
                         .stream().map(Enum::name).collect(Collectors.joining(","));
+<<<<<<< HEAD
                 throw new AnalysisException(
+=======
+                throw new SemanticException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE + " could only be " + allValues + " but " +
                                 "got " + value);
             }
@@ -455,7 +760,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         if (value != null) {
             try {
                 forceExternalTableQueryRewrite = analyzeExternalTableQueryRewrite(value);
+<<<<<<< HEAD
             } catch (AnalysisException e) {
+=======
+            } catch (SemanticException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, e);
             }
         }
@@ -465,7 +774,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         if (value != null) {
             try {
                 queryRewriteConsistencyMode = analyzeQueryRewriteMode(value);
+<<<<<<< HEAD
             } catch (AnalysisException e) {
+=======
+            } catch (SemanticException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY, e);
             }
         }
@@ -493,6 +806,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 return this;
             }
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         compressionType = TCompressionType.LZ4_FRAME;
         return this;
     }
@@ -510,16 +827,62 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public TableProperty buildBucketSize() {
+        if (properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE) != null) {
+            bucketSize = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE));
+        }
+        return this;
+    }
+
+    public TableProperty buildMutableBucketNum() {
+        if (properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM) != null) {
+            mutableBucketNum = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM));
+        }
+        return this;
+    }
+
+    public TableProperty buildEnableLoadProfile() {
+        if (properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE) != null) {
+            enableLoadProfile = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE));
+        }
+        return this;
+    }
+
+    public TableProperty buildBaseCompactionForbiddenTimeRanges() {
+        baseCompactionForbiddenTimeRanges = properties.getOrDefault(
+                PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, "");
+        return this;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
         return this;
     }
 
+<<<<<<< HEAD
     public TableProperty buildPersistentIndexType() {
         String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
         if (type.equals("LOCAL")) {
             persistendIndexType = TPersistentIndexType.LOCAL;
+=======
+    public TableProperty buildPrimaryIndexCacheExpireSec() {
+        primaryIndexCacheExpireSec = Integer.parseInt(properties.getOrDefault(
+                PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, "0"));
+        return this;
+    }
+
+    public TableProperty buildPersistentIndexType() {
+        String defaultType = Config.enable_cloud_native_persistent_index_by_default ? CLOUD_NATIVE_INDEX_TYPE : LOCAL_INDEX_TYPE;
+        String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, defaultType);
+        if (type.equals(LOCAL_INDEX_TYPE)) {
+            persistentIndexType = TPersistentIndexType.LOCAL;
+        } else if (type.equals(CLOUD_NATIVE_INDEX_TYPE)) {
+            persistentIndexType = TPersistentIndexType.CLOUD_NATIVE;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return this;
     }
@@ -527,7 +890,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public static String persistentIndexTypeToString(TPersistentIndexType type) {
         switch (type) {
             case LOCAL:
+<<<<<<< HEAD
                 return "LOCAL";
+=======
+                return LOCAL_INDEX_TYPE;
+            case CLOUD_NATIVE:
+                return CLOUD_NATIVE_INDEX_TYPE;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             default:
                 // shouldn't happen
                 // for it has been checked outside
@@ -539,7 +908,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildConstraint() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
             try {
+<<<<<<< HEAD
                 uniqueConstraints = UniqueConstraint.parse(
+=======
+                uniqueConstraints = UniqueConstraint.parse(null, null, null,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
             } catch (Exception e) {
                 LOG.warn("Failed to parse unique constraints, ignore this unique constraint", e);
@@ -577,6 +950,32 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public TableProperty buildStorageType() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
+            storageType = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE);
+        }
+        return this;
+    }
+
+    public TableProperty buildLocation() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            String locationStr = properties.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+            if (locationStr.isEmpty()) {
+                properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+                location = null;
+            } else {
+                location = PropertyAnalyzer.analyzeLocationStringToMap(
+                        properties.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION));
+            }
+        } else {
+            location = null;
+        }
+        return this;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
     }
@@ -597,6 +996,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return replicationNum;
     }
 
+<<<<<<< HEAD
+=======
+    public void setCompressionLevel(int compressionLevel) {
+        this.compressionLevel = compressionLevel;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setPartitionTTLNumber(int partitionTTLNumber) {
         this.partitionTTLNumber = partitionTTLNumber;
     }
@@ -613,6 +1019,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return partitionTTL;
     }
 
+<<<<<<< HEAD
+=======
+    public String getPartitionRetentionCondition() {
+        return partitionRetentionCondition;
+    }
+
+    public void setPartitionRetentionCondition(String partitionRetentionCondition) {
+        this.partitionRetentionCondition = partitionRetentionCondition;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public int getAutoRefreshPartitionsLimit() {
         return autoRefreshPartitionsLimit;
     }
@@ -645,6 +1062,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.excludedTriggerTables = excludedTriggerTables;
     }
 
+<<<<<<< HEAD
+=======
+    public List<TableName> getExcludedRefreshTables() {
+        return excludedRefreshTables;
+    }
+
+    public void setExcludedRefreshTables(List<TableName> excludedRefreshTables) {
+        this.excludedRefreshTables = excludedRefreshTables;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<String> getMvSortKeys() {
         return mvSortKeys;
     }
@@ -669,6 +1097,25 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this.queryRewriteConsistencyMode;
     }
 
+<<<<<<< HEAD
+=======
+    public void setMvQueryRewriteSwitch(MVQueryRewriteSwitch value) {
+        this.mvQueryRewriteSwitch = value;
+    }
+
+    public MVQueryRewriteSwitch getMvQueryRewriteSwitch() {
+        return this.mvQueryRewriteSwitch;
+    }
+
+    public void setMvTransparentRewriteMode(MVTransparentRewriteMode value) {
+        this.mvTransparentRewriteMode = value;
+    }
+
+    public MVTransparentRewriteMode getMvTransparentRewriteMode() {
+        return this.mvTransparentRewriteMode;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isInMemory() {
         return isInMemory;
     }
@@ -677,12 +1124,33 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
+<<<<<<< HEAD
     public String getPersistentIndexTypeString() {
         return persistentIndexTypeToString(persistendIndexType);
     }
 
     public TPersistentIndexType getPersistentIndexType() {
         return persistendIndexType;
+=======
+    public int primaryIndexCacheExpireSec() {
+        return primaryIndexCacheExpireSec;
+    }
+
+    public String getPersistentIndexTypeString() {
+        return persistentIndexTypeToString(persistentIndexType);
+    }
+
+    public TPersistentIndexType getPersistentIndexType() {
+        return persistentIndexType;
+    }
+
+    public String storageType() {
+        return storageType;
+    }
+
+    public Multimap<String, String> getLocation() {
+        return location;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public TWriteQuorumType writeQuorum() {
@@ -693,6 +1161,25 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enableReplicatedStorage;
     }
 
+<<<<<<< HEAD
+=======
+    public long getBucketSize() {
+        return bucketSize;
+    }
+
+    public long getMutableBucketNum() {
+        return mutableBucketNum;
+    }
+
+    public boolean enableLoadProfile() {
+        return enableLoadProfile;
+    }
+
+    public String getBaseCompactionForbiddenTimeRanges() {
+        return baseCompactionForbiddenTimeRanges;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getStorageVolume() {
         return storageVolume;
     }
@@ -701,6 +1188,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return compressionType;
     }
 
+<<<<<<< HEAD
+=======
+    public int getCompressionLevel() {
+        return compressionLevel;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean hasDelete() {
         return hasDelete;
     }
@@ -709,12 +1203,21 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.hasDelete = hasDelete;
     }
 
+<<<<<<< HEAD
     public boolean hasForbitGlobalDict() {
         return hasForbitGlobalDict;
     }
 
     public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
         this.hasForbitGlobalDict = hasForbitGlobalDict;
+=======
+    public boolean hasForbiddenGlobalDict() {
+        return hasForbiddenGlobalDict;
+    }
+
+    public void setHasForbiddenGlobalDict(boolean hasForbiddenGlobalDict) {
+        this.hasForbiddenGlobalDict = hasForbiddenGlobalDict;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void setStorageInfo(StorageInfo storageInfo) {
@@ -745,8 +1248,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.foreignKeyConstraints = foreignKeyConstraints;
     }
 
+<<<<<<< HEAD
     public Map<Long, Long> getBinlogAvailaberVersions() {
         return binlogAvailabeVersions;
+=======
+    public Map<Long, Long> getBinlogAvailableVersions() {
+        return binlogAvailableVersions;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public PeriodDuration getDataCachePartitionDuration() {
@@ -758,7 +1266,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public void clearBinlogAvailableVersion() {
+<<<<<<< HEAD
         binlogAvailabeVersions.clear();
+=======
+        binlogAvailableVersions.clear();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<String, String> entry = it.next();
             if (entry.getKey().startsWith(BINLOG_PARTITION)) {
@@ -767,6 +1279,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public TableProperty buildUseFastSchemaEvolution() {
+        useFastSchemaEvolution = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "false"));
+        return this;
+    }
+
+    public boolean getUseFastSchemaEvolution() {
+        return useFastSchemaEvolution;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
@@ -789,6 +1314,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
         buildPersistentIndexType();
+<<<<<<< HEAD
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionLiveNumber();
@@ -797,5 +1323,23 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildBinlogAvailableVersion();
         buildDataCachePartitionDuration();
         buildMvProperties();
+=======
+        buildPrimaryIndexCacheExpireSec();
+        buildCompressionType();
+        buildWriteQuorum();
+        buildPartitionLiveNumber();
+        buildPartitionRetentionCondition();
+        buildReplicatedStorage();
+        buildBucketSize();
+        buildEnableLoadProfile();
+        buildBinlogConfig();
+        buildBinlogAvailableVersion();
+        buildDataCachePartitionDuration();
+        buildUseFastSchemaEvolution();
+        buildStorageType();
+        buildMvProperties();
+        buildLocation();
+        buildBaseCompactionForbiddenTimeRanges();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

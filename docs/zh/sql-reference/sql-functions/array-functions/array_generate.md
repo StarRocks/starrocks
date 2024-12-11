@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_generate
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 生成一个包含数值元素的数组，数值范围在 `start` 和 `end` 之间，步长为 `step`。
 

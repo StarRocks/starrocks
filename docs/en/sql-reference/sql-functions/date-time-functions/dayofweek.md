@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dayofweek
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the weekday index for a given date. For example, the index for Sunday is 1, for Monday is 2, for Saturday is 7.
 

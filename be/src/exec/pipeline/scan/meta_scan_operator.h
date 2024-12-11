@@ -58,6 +58,7 @@ private:
     void attach_chunk_source(int32_t source_index) override {}
     void detach_chunk_source(int32_t source_index) override {}
     bool has_shared_chunk_source() const override { return false; }
+<<<<<<< HEAD
     ChunkPtr get_chunk_from_buffer() override;
     size_t num_buffered_chunks() const override;
     size_t buffer_size() const override;
@@ -66,6 +67,9 @@ private:
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
+=======
+    BalancedChunkBuffer& get_chunk_buffer() const override { return _ctx->get_chunk_buffer(); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     MetaScanContextPtr _ctx;
 };

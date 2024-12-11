@@ -38,11 +38,18 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.FsBroker;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
@@ -66,7 +73,10 @@ import com.starrocks.thrift.TBrokerPWriteRequest;
 import com.starrocks.thrift.TBrokerReadResponse;
 import com.starrocks.thrift.TBrokerRenamePathRequest;
 import com.starrocks.thrift.TBrokerVersion;
+<<<<<<< HEAD
 import com.starrocks.thrift.TFileBrokerService;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -90,6 +100,7 @@ public class BrokerUtil {
      * @param path
      * @param brokerDesc
      * @param fileStatuses: file path, size, isDir, isSplitable
+<<<<<<< HEAD
      * @throws UserException if broker op failed
      */
     public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
@@ -112,6 +123,25 @@ public class BrokerUtil {
                         + ",broker=" + address + ",msg=" + tBrokerListResponse.getOpStatus().getMessage());
             }
             failed = false;
+=======
+     * @throws StarRocksException if broker op failed
+     */
+    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
+            throws StarRocksException {
+        TNetworkAddress address = getAddress(brokerDesc);
+        try {
+            TBrokerListPathRequest request = new TBrokerListPathRequest(
+                    TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
+            TBrokerListResponse tBrokerListResponse = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.brokerPool,
+                    address,
+                    client -> client.listPath(request));
+
+            if (tBrokerListResponse.getOpStatus().getStatusCode() != TBrokerOperationStatusCode.OK) {
+                throw new StarRocksException("Broker list path failed. path=" + path
+                        + ",broker=" + address + ",msg=" + tBrokerListResponse.getOpStatus().getMessage());
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (TBrokerFileStatus tBrokerFileStatus : tBrokerListResponse.getFiles()) {
                 if (tBrokerFileStatus.isDir) {
                     continue;
@@ -120,10 +150,15 @@ public class BrokerUtil {
             }
         } catch (TException e) {
             LOG.warn("Broker list path exception, path={}, address={}, exception={}", path, address, e);
+<<<<<<< HEAD
             throw new UserException("Broker list path exception. path=" + path +
                     ", broker=" + address + " exception: " + e.getMessage());
         } finally {
             returnClient(client, address, failed);
+=======
+            throw new StarRocksException("Broker list path exception. path=" + path +
+                    ", broker=" + address + " exception: " + e.getMessage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -132,13 +167,21 @@ public class BrokerUtil {
     }
 
     public static List<String> parseColumnsFromPath(String filePath, List<String> columnsFromPath)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (columnsFromPath == null || columnsFromPath.isEmpty()) {
             return Collections.emptyList();
         }
         String[] strings = filePath.split("/");
         if (strings.length < 2) {
+<<<<<<< HEAD
             throw new UserException(
+=======
+            throw new StarRocksException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "Fail to parse columnsFromPath, expected: " + columnsFromPath + ", filePath: " + filePath);
         }
         String[] columns = new String[columnsFromPath.size()];
@@ -149,12 +192,20 @@ public class BrokerUtil {
                 continue;
             }
             if (str == null || !str.contains("=")) {
+<<<<<<< HEAD
                 throw new UserException(
+=======
+                throw new StarRocksException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         "Fail to parse columnsFromPath, expected: " + columnsFromPath + ", filePath: " + filePath);
             }
             String[] pair = str.split("=", 2);
             if (pair.length != 2) {
+<<<<<<< HEAD
                 throw new UserException(
+=======
+                throw new StarRocksException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         "Fail to parse columnsFromPath, expected: " + columnsFromPath + ", filePath: " + filePath);
             }
             int index = columnsFromPath.indexOf(pair[0]);
@@ -168,7 +219,11 @@ public class BrokerUtil {
             }
         }
         if (size != columnsFromPath.size()) {
+<<<<<<< HEAD
             throw new UserException(
+=======
+            throw new StarRocksException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "Fail to parse columnsFromPath, expected: " + columnsFromPath + ", filePath: " + filePath);
         }
         return Lists.newArrayList(columns);
@@ -180,17 +235,25 @@ public class BrokerUtil {
      * @param path
      * @param brokerDesc
      * @return byte[]
+<<<<<<< HEAD
      * @throws UserException if broker op failed or not only one file
      */
     public static byte[] readFile(String path, BrokerDesc brokerDesc) throws UserException {
         TNetworkAddress address = getAddress(brokerDesc);
         TFileBrokerService.Client client = borrowClient(address);
         boolean failed = true;
+=======
+     * @throws StarRocksException if broker op failed or not only one file
+     */
+    public static byte[] readFile(String path, BrokerDesc brokerDesc) throws StarRocksException {
+        TNetworkAddress address = getAddress(brokerDesc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TBrokerFD fd = null;
         try {
             // get file size
             TBrokerListPathRequest request = new TBrokerListPathRequest(
                     TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
+<<<<<<< HEAD
             TBrokerListResponse tBrokerListResponse = null;
             try {
                 tBrokerListResponse = client.listPath(request);
@@ -200,11 +263,24 @@ public class BrokerUtil {
             }
             if (tBrokerListResponse.getOpStatus().getStatusCode() != TBrokerOperationStatusCode.OK) {
                 throw new UserException("Broker list path failed. path=" + path + ", broker=" + address
+=======
+            TBrokerListResponse tBrokerListResponse = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.brokerPool,
+                    address,
+                    client -> client.listPath(request));
+
+            if (tBrokerListResponse.getOpStatus().getStatusCode() != TBrokerOperationStatusCode.OK) {
+                throw new StarRocksException("Broker list path failed. path=" + path + ", broker=" + address
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         + ",msg=" + tBrokerListResponse.getOpStatus().getMessage());
             }
             List<TBrokerFileStatus> fileStatuses = tBrokerListResponse.getFiles();
             if (fileStatuses.size() != 1) {
+<<<<<<< HEAD
                 throw new UserException("Broker files num error. path=" + path + ", broker=" + address
+=======
+                throw new StarRocksException("Broker files num error. path=" + path + ", broker=" + address
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         + ", files num: " + fileStatuses.size());
             }
 
@@ -212,6 +288,7 @@ public class BrokerUtil {
             long fileSize = fileStatuses.get(0).getSize();
 
             // open reader
+<<<<<<< HEAD
             String clientId = FrontendOptions.getLocalHostAddress() + ":" + Config.rpc_port;
             TBrokerOpenReaderRequest tOpenReaderRequest = new TBrokerOpenReaderRequest(
                     TBrokerVersion.VERSION_ONE, path, 0, clientId, brokerDesc.getProperties());
@@ -224,6 +301,19 @@ public class BrokerUtil {
             }
             if (tOpenReaderResponse.getOpStatus().getStatusCode() != TBrokerOperationStatusCode.OK) {
                 throw new UserException("Broker open reader failed. path=" + path + ", broker=" + address
+=======
+            String clientId = NetUtils.getHostPortInAccessibleFormat(
+                    FrontendOptions.getLocalHostAddress(), Config.rpc_port);
+            TBrokerOpenReaderRequest tOpenReaderRequest = new TBrokerOpenReaderRequest(
+                    TBrokerVersion.VERSION_ONE, path, 0, clientId, brokerDesc.getProperties());
+            TBrokerOpenReaderResponse tOpenReaderResponse = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.brokerPool,
+                    address,
+                    client -> client.openReader(tOpenReaderRequest));
+
+            if (tOpenReaderResponse.getOpStatus().getStatusCode() != TBrokerOperationStatusCode.OK) {
+                throw new StarRocksException("Broker open reader failed. path=" + path + ", broker=" + address
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         + ", msg=" + tOpenReaderResponse.getOpStatus().getMessage());
             }
             fd = tOpenReaderResponse.getFd();
@@ -231,6 +321,7 @@ public class BrokerUtil {
             // read
             TBrokerPReadRequest tPReadRequest = new TBrokerPReadRequest(
                     TBrokerVersion.VERSION_ONE, fd, 0, fileSize);
+<<<<<<< HEAD
             TBrokerReadResponse tReadResponse = null;
             try {
                 tReadResponse = client.pread(tPReadRequest);
@@ -243,10 +334,22 @@ public class BrokerUtil {
                         + ", msg=" + tReadResponse.getOpStatus().getMessage());
             }
             failed = false;
+=======
+            TBrokerReadResponse tReadResponse = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.brokerPool,
+                    address,
+                    client -> client.pread(tPReadRequest));
+
+            if (tReadResponse.getOpStatus().getStatusCode() != TBrokerOperationStatusCode.OK) {
+                throw new StarRocksException("Broker read failed. path=" + path + ", broker=" + address
+                        + ", msg=" + tReadResponse.getOpStatus().getMessage());
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return tReadResponse.getData();
         } catch (TException e) {
             String failMsg = "Broker read file exception. path=" + path + ", broker=" + address;
             LOG.warn(failMsg, e);
+<<<<<<< HEAD
             throw new UserException(failMsg);
         } finally {
             // close reader
@@ -277,6 +380,30 @@ public class BrokerUtil {
 
             // return client
             returnClient(client, address, failed);
+=======
+            throw new StarRocksException(failMsg);
+        } finally {
+            // close reader
+            if (fd != null) {
+                TBrokerOperationStatus tOperationStatus = null;
+                try {
+                    TBrokerCloseReaderRequest tCloseReaderRequest = new TBrokerCloseReaderRequest(
+                            TBrokerVersion.VERSION_ONE, fd);
+                    tOperationStatus = ThriftRPCRequestExecutor.call(
+                            ThriftConnectionPool.brokerPool,
+                            address,
+                            client -> client.closeReader(tCloseReaderRequest));
+                } catch (TException e) {
+                    LOG.warn("Broker close reader failed. path={}, address={}", path, address, e);
+                }
+                if (tOperationStatus == null) {
+                    LOG.warn("Broker close reader failed: operation status is null. path={}, address={}", path, address);
+                } else if (tOperationStatus.getStatusCode() != TBrokerOperationStatusCode.OK) {
+                    LOG.warn("Broker close reader failed. path={}, address={}, error={}", path, address,
+                            tOperationStatus.getMessage());
+                }
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -286,9 +413,15 @@ public class BrokerUtil {
      * @param data
      * @param destFilePath
      * @param brokerDesc
+<<<<<<< HEAD
      * @throws UserException if broker op failed
      */
     public static void writeFile(byte[] data, String destFilePath, BrokerDesc brokerDesc) throws UserException {
+=======
+     * @throws StarRocksException if broker op failed
+     */
+    public static void writeFile(byte[] data, String destFilePath, BrokerDesc brokerDesc) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         BrokerWriter writer = new BrokerWriter(destFilePath, brokerDesc);
         try {
             writer.open();
@@ -305,10 +438,17 @@ public class BrokerUtil {
      * @param srcFilePath
      * @param destFilePath
      * @param brokerDesc
+<<<<<<< HEAD
      * @throws UserException if broker op failed
      */
     public static void writeFile(String srcFilePath, String destFilePath,
                                  BrokerDesc brokerDesc) throws UserException {
+=======
+     * @throws StarRocksException if broker op failed
+     */
+    public static void writeFile(String srcFilePath, String destFilePath,
+                                 BrokerDesc brokerDesc) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         BrokerWriter writer = new BrokerWriter(destFilePath, brokerDesc);
         ByteBuffer byteBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE_B);
         try (FileInputStream fis = new FileInputStream(srcFilePath); FileChannel channel = fis.getChannel()) {
@@ -327,7 +467,11 @@ public class BrokerUtil {
             String failMsg = "Write file exception. filePath = " + srcFilePath
                     + ", destPath = " + destFilePath;
             LOG.warn(failMsg, e);
+<<<<<<< HEAD
             throw new UserException(failMsg);
+=======
+            throw new StarRocksException(failMsg);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             // close broker file writer and local file input stream
             writer.close();
@@ -339,6 +483,7 @@ public class BrokerUtil {
      *
      * @param path
      * @param brokerDesc
+<<<<<<< HEAD
      * @throws UserException if broker op failed
      */
     public static void deletePath(String path, BrokerDesc brokerDesc) throws UserException {
@@ -477,16 +622,100 @@ public class BrokerUtil {
         private String brokerFilePath;
         private BrokerDesc brokerDesc;
         private TFileBrokerService.Client client;
+=======
+     * @throws StarRocksException if broker op failed
+     */
+    public static void deletePath(String path, BrokerDesc brokerDesc) throws StarRocksException {
+        TNetworkAddress address = getAddress(brokerDesc);
+        try {
+            TBrokerDeletePathRequest tDeletePathRequest = new TBrokerDeletePathRequest(
+                    TBrokerVersion.VERSION_ONE, path, brokerDesc.getProperties());
+            TBrokerOperationStatus tOperationStatus = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.brokerPool,
+                    address,
+                    client -> client.deletePath(tDeletePathRequest));
+            if (tOperationStatus.getStatusCode() != TBrokerOperationStatusCode.OK) {
+                throw new StarRocksException("Broker delete path failed. path=" + path + ", broker=" + address
+                        + ", msg=" + tOperationStatus.getMessage());
+            }
+        } catch (TException e) {
+            LOG.warn("Broker read path exception, path={}, address={}, exception={}", path, address, e);
+            throw new StarRocksException("Broker read path exception. path=" + path + ",broker=" + address);
+        }
+    }
+
+    public static boolean checkPathExist(String remotePath, BrokerDesc brokerDesc) throws StarRocksException {
+        TNetworkAddress address = getAddress(brokerDesc);
+        try {
+            TBrokerCheckPathExistRequest req = new TBrokerCheckPathExistRequest(TBrokerVersion.VERSION_ONE,
+                    remotePath, brokerDesc.getProperties());
+            TBrokerCheckPathExistResponse rep = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.brokerPool,
+                    address,
+                    client -> client.checkPathExist(req));
+            if (rep.getOpStatus().getStatusCode() != TBrokerOperationStatusCode.OK) {
+                throw new StarRocksException("Broker check path exist failed. path=" + remotePath + ", broker=" + address +
+                        ", msg=" + rep.getOpStatus().getMessage());
+            }
+            return rep.isPathExist;
+        } catch (TException e) {
+            LOG.warn("Broker check path exist failed, path={}, address={}, exception={}", remotePath, address, e);
+            throw new StarRocksException("Broker check path exist exception. path=" + remotePath + ",broker=" + address);
+        }
+    }
+
+    public static void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc) throws
+            StarRocksException {
+        rename(origFilePath, destFilePath, brokerDesc, Config.broker_client_timeout_ms);
+    }
+
+    public static void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc, int timeoutMs)
+            throws StarRocksException {
+        TNetworkAddress address = getAddress(brokerDesc);
+        try {
+            TBrokerRenamePathRequest req = new TBrokerRenamePathRequest(TBrokerVersion.VERSION_ONE, origFilePath,
+                    destFilePath, brokerDesc.getProperties());
+            TBrokerOperationStatus rep = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.brokerPool,
+                    address,
+                    client -> client.renamePath(req));
+
+            if (rep.getStatusCode() != TBrokerOperationStatusCode.OK) {
+                throw new StarRocksException("failed to rename " + origFilePath + " to " + destFilePath +
+                        ", msg: " + rep.getMessage() + ", broker: " + address);
+            }
+        } catch (TException e) {
+            LOG.warn("Broker rename file failed, origin path={}, dest path={}, address={}, exception={}",
+                    origFilePath, destFilePath, address, e);
+            throw new StarRocksException("Broker rename file exception. origin path=" + origFilePath +
+                    ", dest path=" + destFilePath + ", broker=" + address);
+        }
+    }
+
+    private static TNetworkAddress getAddress(BrokerDesc brokerDesc) {
+        String localIP = FrontendOptions.getLocalHostAddress();
+        FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerDesc.getName(), localIP);
+        return new TNetworkAddress(broker.ip, broker.port);
+    }
+
+    private static class BrokerWriter {
+        private String brokerFilePath;
+        private BrokerDesc brokerDesc;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         private TNetworkAddress address;
         private TBrokerFD fd;
         private long currentOffset;
         private boolean isReady;
+<<<<<<< HEAD
         private boolean failed;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         public BrokerWriter(String brokerFilePath, BrokerDesc brokerDesc) {
             this.brokerFilePath = brokerFilePath;
             this.brokerDesc = brokerDesc;
             this.isReady = false;
+<<<<<<< HEAD
             this.failed = true;
         }
 
@@ -512,12 +741,36 @@ public class BrokerUtil {
                             + ", msg=" + tOpenWriterResponse.getOpStatus().getMessage());
                 }
                 failed = false;
+=======
+        }
+
+        public void open() throws StarRocksException {
+            address = BrokerUtil.getAddress(brokerDesc);
+            try {
+                String clientId = NetUtils.getHostPortInAccessibleFormat(
+                        FrontendOptions.getLocalHostAddress(), Config.rpc_port);
+                TBrokerOpenWriterRequest tOpenWriterRequest = new TBrokerOpenWriterRequest(
+                        TBrokerVersion.VERSION_ONE, brokerFilePath, TBrokerOpenMode.APPEND,
+                        clientId, brokerDesc.getProperties());
+
+                TBrokerOpenWriterResponse tOpenWriterResponse = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.brokerPool,
+                        address,
+                        client -> client.openWriter(tOpenWriterRequest));
+
+                if (tOpenWriterResponse.getOpStatus().getStatusCode() != TBrokerOperationStatusCode.OK) {
+                    throw new StarRocksException("Broker open writer failed. destPath=" + brokerFilePath
+                            + ", broker=" + address
+                            + ", msg=" + tOpenWriterResponse.getOpStatus().getMessage());
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 fd = tOpenWriterResponse.getFd();
                 currentOffset = 0L;
                 isReady = true;
             } catch (TException e) {
                 String failMsg = "Broker open writer exception. filePath=" + brokerFilePath + ", broker=" + address;
                 LOG.warn(failMsg, e);
+<<<<<<< HEAD
                 throw new UserException(failMsg);
             }
         }
@@ -544,16 +797,46 @@ public class BrokerUtil {
                             + ", msg=" + tOperationStatus.getMessage());
                 }
                 failed = false;
+=======
+                throw new StarRocksException(failMsg);
+            }
+        }
+
+        public void write(ByteBuffer byteBuffer, long bufferSize) throws StarRocksException {
+            if (!isReady) {
+                throw new StarRocksException(
+                        "Broker writer is not ready. filePath=" + brokerFilePath + ", broker=" + address);
+            }
+
+            try {
+                TBrokerPWriteRequest tPWriteRequest = new TBrokerPWriteRequest(
+                        TBrokerVersion.VERSION_ONE, fd, currentOffset, byteBuffer);
+
+                TBrokerOperationStatus tOperationStatus = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.brokerPool,
+                        address,
+                        client -> client.pwrite(tPWriteRequest));
+
+                if (tOperationStatus.getStatusCode() != TBrokerOperationStatusCode.OK) {
+                    throw new StarRocksException("Broker write failed. filePath=" + brokerFilePath + ", broker=" + address
+                            + ", msg=" + tOperationStatus.getMessage());
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 currentOffset += bufferSize;
             } catch (TException e) {
                 String failMsg = "Broker write exception. filePath=" + brokerFilePath + ", broker=" + address;
                 LOG.warn(failMsg, e);
+<<<<<<< HEAD
                 throw new UserException(failMsg);
+=======
+                throw new StarRocksException(failMsg);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
         public void close() {
             // close broker writer
+<<<<<<< HEAD
             failed = true;
             TBrokerOperationStatus tOperationStatus = null;
             if (fd != null) {
@@ -568,12 +851,27 @@ public class BrokerUtil {
                     } catch (TException ex) {
                         LOG.warn("Broker close writer failed. filePath={}, address={}", brokerFilePath, address, ex);
                     }
+=======
+            if (fd != null) {
+                TBrokerOperationStatus tOperationStatus = null;
+                try {
+                    TBrokerCloseWriterRequest tCloseWriterRequest = new TBrokerCloseWriterRequest(
+                            TBrokerVersion.VERSION_ONE, fd);
+                    tOperationStatus = ThriftRPCRequestExecutor.call(
+                            ThriftConnectionPool.brokerPool,
+                            address,
+                            client -> client.closeWriter(tCloseWriterRequest));
+
+                } catch (TException e) {
+                    LOG.warn("Broker close writer failed. filePath={}, address={}", brokerFilePath, address, e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
                 if (tOperationStatus == null || tOperationStatus.getStatusCode() != TBrokerOperationStatusCode.OK) {
                     String errMsg = (tOperationStatus == null) ?
                             "encounter exception when closing writer" : tOperationStatus.getMessage();
                     LOG.warn("Broker close writer failed. filePath={}, address={}, error={}", brokerFilePath,
                             address, errMsg);
+<<<<<<< HEAD
                 } else {
                     failed = false;
                 }
@@ -584,5 +882,11 @@ public class BrokerUtil {
             isReady = false;
         }
 
+=======
+                }
+            }
+            isReady = false;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

@@ -15,7 +15,12 @@
 
 package com.starrocks.connector.hive.glue.util;
 
+<<<<<<< HEAD
 import com.amazonaws.services.glue.model.Partition;
+=======
+
+import software.amazon.awssdk.services.glue.model.Partition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 
@@ -25,7 +30,11 @@ public class PartitionKey {
     private final int hashCode;
 
     public PartitionKey(Partition partition) {
+<<<<<<< HEAD
         this(partition.getValues());
+=======
+        this(partition.values());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public PartitionKey(List<String> partitionValues) {

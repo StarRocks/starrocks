@@ -20,6 +20,10 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/location_provider.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/lake/metacache.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -46,6 +50,7 @@ Status Tablet::delete_metadata(int64_t version) {
     return _mgr->delete_tablet_metadata(_id, version);
 }
 
+<<<<<<< HEAD
 bool Tablet::get_enable_persistent_index(int64_t version) {
     auto tablet_metadata = _mgr->get_tablet_metadata(_id, version);
     if (!tablet_metadata.ok()) {
@@ -64,6 +69,10 @@ StatusOr<PersistentIndexTypePB> Tablet::get_persistent_index_type(int64_t versio
         return Status::InternalError("get tablet metadata failed");
     }
     return (*tablet_metadata)->persistent_index_type();
+=======
+Status Tablet::metadata_exists(int64_t version) {
+    return _mgr->tablet_metadata_exists(_id, version);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status Tablet::put_txn_log(const TxnLog& log) {
@@ -90,6 +99,7 @@ StatusOr<TxnLogPtr> Tablet::get_txn_vlog(int64_t version) {
     return _mgr->get_txn_vlog(_id, version);
 }
 
+<<<<<<< HEAD
 Status Tablet::delete_txn_log(int64_t txn_id) {
     return _mgr->delete_txn_log(_id, txn_id);
 }
@@ -123,20 +133,67 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int6
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalGeneralTabletWriter>(*this, tablet_schema, txn_id, max_rows_per_segment);
+=======
+StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
+                                                           uint32_t max_rows_per_segment, ThreadPool* flush_pool,
+                                                           bool is_compaction) {
+    ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        if (type == kHorizontal) {
+            return std::make_unique<HorizontalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool,
+                                                              is_compaction);
+        } else {
+            DCHECK(type == kVertical);
+            return std::make_unique<VerticalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
+                                                            flush_pool, is_compaction);
+        }
+    } else {
+        if (type == kHorizontal) {
+            return std::make_unique<HorizontalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, is_compaction,
+                                                                   flush_pool);
+        } else {
+            DCHECK(type == kVertical);
+            return std::make_unique<VerticalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
+                                                                 is_compaction, flush_pool);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 }
 
+<<<<<<< HEAD
 StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, Schema schema) {
     return std::make_shared<TabletReader>(*this, version, std::move(schema));
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return _mgr->get_tablet_schema(_id, &_version_hint);
+=======
+const std::shared_ptr<const TabletSchema> Tablet::tablet_schema() const {
+    auto tablet_schema_or = _mgr->get_tablet_schema(_id, nullptr);
+    if (!tablet_schema_or.ok()) {
+        return nullptr;
+    }
+    return tablet_schema_or.value();
+}
+
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
+    if (_tablet_schema) {
+        return _tablet_schema;
+    } else if (_tablet_metadata) {
+        return std::make_shared<TabletSchema>(_tablet_metadata->schema());
+    } else {
+        return _mgr->get_tablet_schema(_id, &_version_hint);
+    }
+}
+
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t schema_id) {
+    return _mgr->get_tablet_schema_by_id(_id, schema_id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_metadata, get_metadata(version));
+<<<<<<< HEAD
     return get_rowsets(*tablet_metadata);
 }
 
@@ -186,6 +243,25 @@ std::string Tablet::metadata_root_location() const {
 
 std::string Tablet::txn_log_location(int64_t txn_id) const {
     return _mgr->txn_log_location(_id, txn_id);
+=======
+    return get_rowsets(tablet_metadata);
+}
+
+std::vector<RowsetPtr> Tablet::get_rowsets(const TabletMetadataPtr& metadata) {
+    return Rowset::get_rowsets(_mgr, metadata);
+}
+
+std::string Tablet::metadata_location(int64_t version) const {
+    return _location_provider->tablet_metadata_location(_id, version);
+}
+
+std::string Tablet::metadata_root_location() const {
+    return _location_provider->metadata_root_location(_id);
+}
+
+std::string Tablet::txn_log_location(int64_t txn_id) const {
+    return _location_provider->txn_log_location(_id, txn_id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 std::string Tablet::txn_slog_location(int64_t txn_id) const {
@@ -193,6 +269,7 @@ std::string Tablet::txn_slog_location(int64_t txn_id) const {
 }
 
 std::string Tablet::txn_vlog_location(int64_t version) const {
+<<<<<<< HEAD
     return _mgr->txn_vlog_location(_id, version);
 }
 
@@ -214,6 +291,33 @@ std::string Tablet::root_location() const {
 
 Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate) {
     auto txn_log = std::make_shared<lake::TxnLog>();
+=======
+    return _location_provider->txn_vlog_location(_id, version);
+}
+
+std::string Tablet::segment_location(std::string_view segment_name) const {
+    return _location_provider->segment_location(_id, segment_name);
+}
+
+std::string Tablet::del_location(std::string_view del_name) const {
+    return _location_provider->del_location(_id, del_name);
+}
+
+std::string Tablet::delvec_location(std::string_view delvec_name) const {
+    return _location_provider->delvec_location(_id, delvec_name);
+}
+
+std::string Tablet::sst_location(std::string_view sst_name) const {
+    return _mgr->sst_location(_id, sst_name);
+}
+
+std::string Tablet::root_location() const {
+    return _location_provider->root_location(_id);
+}
+
+Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate) {
+    auto txn_log = std::make_shared<TxnLog>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     txn_log->set_tablet_id(_id);
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
@@ -235,4 +339,29 @@ StatusOr<bool> Tablet::has_delete_predicates(int64_t version) {
     return false;
 }
 
+<<<<<<< HEAD
+=======
+int64_t Tablet::data_size() {
+    auto size = _mgr->get_tablet_data_size(_id, &_version_hint);
+    if (size.ok()) {
+        return size.value();
+    } else {
+        LOG(WARNING) << "failed to get tablet " << _id << " data size: " << size.status();
+        return 0;
+    }
+}
+
+size_t Tablet::num_rows() const {
+    // set_version_hint should be called before to avoid list tablet metadata
+    DCHECK(_version_hint != 0);
+    auto num_rows = _mgr->get_tablet_num_rows(_id, _version_hint);
+    if (num_rows.ok()) {
+        return num_rows.value();
+    } else {
+        LOG(WARNING) << "failed to get tablet rows num" << _id << "num rows: " << num_rows.status();
+        return 0;
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::lake

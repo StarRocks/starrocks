@@ -27,6 +27,11 @@ using WorkGroupPtr = std::shared_ptr<WorkGroup>;
 
 class ScanTaskQueue;
 
+<<<<<<< HEAD
+=======
+enum class ScanSchedEntityType : uint8_t { OLAP, CONNECTOR };
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 template <typename Q>
 class WorkGroupSchedEntity;
 using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;
@@ -41,4 +46,9 @@ using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;
 struct ScanTask;
 struct ScanTaskGroup;
 
+<<<<<<< HEAD
+=======
+class PipelineExecutorSet;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::workgroup

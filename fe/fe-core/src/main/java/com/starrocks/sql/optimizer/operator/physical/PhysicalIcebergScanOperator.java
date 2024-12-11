@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.iceberg.IcebergMORParams;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -22,8 +26,18 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 
+<<<<<<< HEAD
 public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
+=======
+import java.util.ArrayList;
+import java.util.List;
+
+public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
+    private ScanOperatorPredicates predicates;
+    private List<IcebergMORParams> tableFullMORParams = new ArrayList<>();
+    private IcebergMORParams morParams = IcebergMORParams.EMPTY;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public PhysicalIcebergScanOperator(LogicalIcebergScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_ICEBERG_SCAN, scanOperator);
@@ -40,6 +54,25 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
         this.predicates = predicates;
     }
 
+<<<<<<< HEAD
+=======
+    public List<IcebergMORParams> getTableFullMORParams() {
+        return tableFullMORParams;
+    }
+
+    public void setTableFullMORParams(List<IcebergMORParams> tableFullMORParams) {
+        this.tableFullMORParams = tableFullMORParams;
+    }
+
+    public IcebergMORParams getMORParams() {
+        return morParams;
+    }
+
+    public void setMORParams(IcebergMORParams morParams) {
+        this.morParams = morParams;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalIcebergScan(this, context);

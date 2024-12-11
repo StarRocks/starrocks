@@ -35,7 +35,10 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -47,13 +50,19 @@ import org.junit.Test;
 
 public class DeleteStmtTest {
     @Mocked
+<<<<<<< HEAD
     private Auth auth;
     @Mocked
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private ConnectContext ctx;
 
     @Before
     public void setUp() {
+<<<<<<< HEAD
         MockedAuth.mockedAuth(auth);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
     }
 

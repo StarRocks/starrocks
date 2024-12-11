@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # approx_top_k
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the top `k` most frequently occurring item values in an `expr` along with their approximate counts.
 
@@ -19,7 +23,11 @@ APPROX_TOP_K(<expr> [ , <k> [ , <counter_num> ] ] )
 ## Arguments
 
 - `expr`: An expression of STRING, BOOLEAN, DATE, DATETIME, or numeric type.
+<<<<<<< HEAD
 - `k`: An optional INTEGER literal greater than 0. If `k` is not specified, it defaults to `5`. The maximum value is `100000`
+=======
+- `k`: An optional INTEGER literal greater than 0. If `k` is not specified, it defaults to `5`. The maximum value is `100000`.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - `counter_num`: An optional INTEGER literal greater than or equal to `k`, The larger the `counter_num` is, the more accurate the result will be. However, this also comes with increased CPU and memory costs.
 
   - The maximum value is `100000`.

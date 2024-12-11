@@ -49,6 +49,10 @@ StarRocks 的异步物化视图支持多种分区策略和函数，方便您实�
   - 目前不支持 List 分区和表达式分区。
   - 基表的两个相邻分区必须具有连续的范围。
 - 对于 External Catalog 中的多级分区基表，只能使用一级分区路径来创建分区物化视图。例如，对于以 `yyyyMMdd/hour` 格式分区的表，只能构建按 `yyyyMMdd` 分区的物化视图。
+<<<<<<< HEAD
+=======
+- 从 v3.2.3 版本开始，StarRocks 支持在使用 [Partition Transforms (分区变换)](https://iceberg.apache.org/spec/#partition-transforms) 的 Iceberg 表上创建分区物化视图，物化视图将根据变换后的列进行分区。更多信息，参考 [使用物化视图加速数据湖查询 - 选择合适的刷新策略](./data_lake_query_acceleration_with_materialized_views.md#适的刷新策略)。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 :::
 
@@ -225,7 +229,10 @@ FROM par_tbl1
 GROUP BY datekey, k1;
 ```
 
+<<<<<<< HEAD
 <!--
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ### 多基表对齐分区
 
 ![Partitioned Materialized View-3](../../../_assets/partitioned_mv-3.png)
@@ -270,7 +277,10 @@ GROUP BY
   par_tbl3.datekey_new,
   par_tbl3.k1;
 ```
+<<<<<<< HEAD
 -->
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ### 实现增量刷新和透明改写
 

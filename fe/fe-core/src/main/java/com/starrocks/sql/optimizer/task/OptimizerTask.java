@@ -52,7 +52,10 @@ public abstract class OptimizerTask {
             if (groupExpression.hasRuleExplored(rule)) {
                 continue;
             }
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!rule.getPattern().matchWithoutChild(groupExpression)) {
                 continue;
             }

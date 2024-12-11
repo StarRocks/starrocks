@@ -61,6 +61,10 @@ public class Storage {
 
     public static final String IMAGE_NEW = "image.ckpt";
     public static final String IMAGE = "image";
+<<<<<<< HEAD
+=======
+    public static final String CHECKSUM = "checksum";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final String VERSION_FILE = "VERSION";
     public static final String ROLE_FILE = "ROLE";
 
@@ -91,6 +95,7 @@ public class Storage {
         this.metaDir = metaDir;
     }
 
+<<<<<<< HEAD
     public Storage(int clusterID, String token, long imageJournalId, String metaDir) {
         this.clusterID = clusterID;
         this.token = token;
@@ -98,6 +103,8 @@ public class Storage {
         this.metaDir = metaDir;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Storage(String metaDir) throws IOException {
         this.metaDir = metaDir;
 
@@ -155,10 +162,13 @@ public class Storage {
         return clusterID;
     }
 
+<<<<<<< HEAD
     public void setClusterID(int clusterID) {
         this.clusterID = clusterID;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getToken() {
         return token;
     }
@@ -183,6 +193,7 @@ public class Storage {
         return nodeName;
     }
 
+<<<<<<< HEAD
     public String getMetaDir() {
         return metaDir;
     }
@@ -191,6 +202,8 @@ public class Storage {
         this.metaDir = metaDir;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public long getImageJournalId() {
         return imageJournalId;
     }
@@ -257,6 +270,7 @@ public class Storage {
         }
     }
 
+<<<<<<< HEAD
     public void clear() throws IOException {
         File metaFile = new File(metaDir);
         if (metaFile.exists()) {
@@ -279,6 +293,8 @@ public class Storage {
         }
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static void rename(File from, File to) throws IOException {
         if (!from.renameTo(to)) {
             throw new IOException("Failed to rename  " + from.getCanonicalPath()
@@ -298,6 +314,13 @@ public class Storage {
         return new File(dir, IMAGE + "." + version);
     }
 
+<<<<<<< HEAD
+=======
+    public static File getChecksumFile(File dir, long version) {
+        return new File(dir, CHECKSUM + "." + version);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public final File getVersionFile() {
         return new File(metaDir, VERSION_FILE);
     }
@@ -305,5 +328,10 @@ public class Storage {
     public final File getRoleFile() {
         return new File(metaDir, ROLE_FILE);
     }
+<<<<<<< HEAD
 }
 
+=======
+
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

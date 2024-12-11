@@ -36,6 +36,10 @@ package com.starrocks.catalog;
 
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.backup.BackupJob;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.cluster.Cluster;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -43,6 +47,10 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.system.Backend;
 import com.starrocks.transaction.TransactionState;
+<<<<<<< HEAD
+=======
+import com.starrocks.transaction.TransactionStateBatch;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Mock;
 import mockit.MockUp;
 
@@ -63,6 +71,17 @@ public class FakeEditLog extends MockUp<EditLog> {
     }
 
     @Mock
+<<<<<<< HEAD
+=======
+    public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {
+        for (TransactionState transactionState : stateBatch.getTransactionStates()) {
+            allTransactionState.put(transactionState.getTransactionId(), transactionState);
+        }
+
+    }
+
+    @Mock
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void logDeleteTransactionState(TransactionState transactionState) {
         allTransactionState.remove(transactionState.getTransactionId());
     }
@@ -103,6 +122,13 @@ public class FakeEditLog extends MockUp<EditLog> {
 
     }
 
+<<<<<<< HEAD
+=======
+    @Mock
+    public void logBackupJob(BackupJob job) {
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public TransactionState getTransaction(long transactionId) {
         return allTransactionState.get(transactionId);
     }

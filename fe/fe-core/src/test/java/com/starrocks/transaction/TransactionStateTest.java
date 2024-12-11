@@ -33,6 +33,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -40,6 +41,9 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+=======
+import java.io.File;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -59,18 +63,23 @@ public class TransactionStateTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSerDe() throws IOException {
         // 1. Write objects to file
         File file = new File(fileName);
         file.createNewFile();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
 
+=======
+    public void testSerDe() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         UUID uuid = UUID.randomUUID();
         TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
                 3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
 
+<<<<<<< HEAD
         transactionState.write(out);
         out.flush();
         out.close();
@@ -82,6 +91,11 @@ public class TransactionStateTest {
 
         Assert.assertEquals(transactionState.getCoordinator().ip, readTransactionState.getCoordinator().ip);
         in.close();
+=======
+        String json = GsonUtils.GSON.toJson(transactionState);
+        TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        Assert.assertEquals(transactionState.getCoordinator().ip, readTransactionState.getCoordinator().ip);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -125,9 +139,13 @@ public class TransactionStateTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSerDeTxnStateNewFinish() throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         DataOutputStream dataOut = new DataOutputStream(out);
+=======
+    public void testSerDeTxnStateNewFinish() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         UUID uuid = UUID.randomUUID();
         TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
                 3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
@@ -140,6 +158,7 @@ public class TransactionStateTest {
         transactionState.clearErrorMsg();
         transactionState.setNewFinish();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
+<<<<<<< HEAD
         transactionState.write(dataOut);
 
         byte[] bytes = out.toByteArray();
@@ -152,6 +171,11 @@ public class TransactionStateTest {
         } catch (Exception e) {
             e.printStackTrace();
         }
+=======
+
+        String json = GsonUtils.GSON.toJson(transactionState);
+        TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(readTransactionState.isNewFinish());
     }
 

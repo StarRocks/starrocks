@@ -30,6 +30,12 @@ int ColumnRef::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     slot_ids->push_back(_column_id);
     return 1;
 }
+<<<<<<< HEAD
+=======
+void ColumnRef::for_each_slot_id(const std::function<void(SlotId)>& cb) const {
+    cb(_column_id);
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 bool ColumnRef::is_bound(const std::vector<TupleId>& tuple_ids) const {
     for (int tuple_id : tuple_ids) {

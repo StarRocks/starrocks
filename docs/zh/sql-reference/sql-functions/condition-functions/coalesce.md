@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # coalesce
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 从左向右返回参数中的第一个非 NULL 表达式。
 

@@ -43,7 +43,11 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
+<<<<<<< HEAD
 import com.starrocks.catalog.LocalTablet.TabletStatus;
+=======
+import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -55,6 +59,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -317,7 +326,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
     private boolean relocateAndBalancePerGroup() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
+<<<<<<< HEAD
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // get all groups
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
@@ -326,7 +339,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
         Set<GroupId> toIgnoreGroupIds = new HashSet<>();
         boolean isAnyGroupChanged = false;
         for (GroupId groupId : groupIds) {
+<<<<<<< HEAD
             Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
+=======
+            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 continue;
             }
@@ -527,7 +544,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
         Set<GroupId> allGroups = colocateIndex.getAllGroupIds();
         if (allGroups.isEmpty()) {
@@ -695,7 +716,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
         return entries.get(lastIdx).getValue() - entries.get(0).getValue() <= 1;
     }
 
+<<<<<<< HEAD
     public static boolean needToForceRepair(TabletStatus st, LocalTablet tablet, Set<Long> backendsSet) {
+=======
+    public static boolean needToForceRepair(TabletHealthStatus st, LocalTablet tablet, Set<Long> backendsSet) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         boolean hasBad = false;
         for (Replica replica : tablet.getImmutableReplicas()) {
             if (!backendsSet.contains(replica.getBackendId())) {
@@ -707,7 +732,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
             }
         }
 
+<<<<<<< HEAD
         return hasBad && st == TabletStatus.COLOCATE_REDUNDANT;
+=======
+        return hasBad && st == TabletHealthStatus.COLOCATE_REDUNDANT;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void logDebugInfoForColocateMismatch(Set<Long> bucketSeq, LocalTablet tablet) {
@@ -724,7 +753,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
         long lockTotalTime = 0;
         long waitTotalTimeMs = 0;
         List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
+<<<<<<< HEAD
         Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
         }
@@ -738,12 +771,21 @@ public class ColocateTableBalancer extends FrontendDaemon {
         // set the config to a local variable to avoid config params changed.
         int partitionBatchNum = Config.tablet_checker_partition_batch_num;
         int partitionChecked = 0;
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         long lockStart = System.nanoTime();
         try {
             TABLE:
             for (Long tableId : tableIds) {
+<<<<<<< HEAD
                 OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
+=======
+                OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (olapTable == null || !colocateIndex.isColocateTable(olapTable.getId())) {
                     continue;
                 }
@@ -752,7 +794,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     continue;
                 }
 
+<<<<<<< HEAD
                 for (Partition partition : globalStateMgr.getPartitionsIncludeRecycleBin(olapTable)) {
+=======
+                for (Partition partition : globalStateMgr.getLocalMetastore().getPartitionsIncludeRecycleBin(olapTable)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     partitionChecked++;
 
                     boolean isPartitionUrgent =
@@ -765,6 +811,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     if (partitionChecked % partitionBatchNum == 0) {
                         lockTotalTime += System.nanoTime() - lockStart;
                         // release lock, so that lock can be acquired by other threads.
+<<<<<<< HEAD
                         db.readUnlock();
                         db.readLock();
                         lockStart = System.nanoTime();
@@ -775,20 +822,45 @@ public class ColocateTableBalancer extends FrontendDaemon {
                             continue TABLE;
                         }
                         if (globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partition.getId()) == null) {
+=======
+                        locker.unLockDatabase(db.getId(), LockType.READ);
+                        locker.lockDatabase(db.getId(), LockType.READ);
+                        lockStart = System.nanoTime();
+                        if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId) == null) {
+                            return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
+                        }
+                        if (globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
+                            continue TABLE;
+                        }
+                        if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partition.getId()) ==
+                                null) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             continue;
                         }
                     }
                     short replicationNum =
+<<<<<<< HEAD
                             globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
+=======
+                            globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     partition.getId());
                     if (replicationNum == (short) -1) {
                         continue;
                     }
 
+<<<<<<< HEAD
                     long visibleVersion = partition.getVisibleVersion();
                     // Here we only get VISIBLE indexes. All other indexes are not queryable.
                     // So it does not matter if tablets of other indexes are not matched.
                     for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+=======
+                    long visibleVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
+                    // Here we only get VISIBLE indexes. All other indexes are not queryable.
+                    // So it does not matter if tablets of other indexes are not matched.
+                    for (MaterializedIndex index :
+                            partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
                                 backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
                         int idx = 0;
@@ -799,9 +871,16 @@ public class ColocateTableBalancer extends FrontendDaemon {
                             if (!tabletScheduler.containsTablet(tablet.getId())) {
                                 Preconditions.checkState(bucketsSeq.size() == replicationNum,
                                         bucketsSeq.size() + " vs. " + replicationNum);
+<<<<<<< HEAD
                                 TabletStatus st = tablet.getColocateHealthStatus(visibleVersion,
                                         replicationNum, bucketsSeq);
                                 if (st != TabletStatus.HEALTHY) {
+=======
+                                TabletHealthStatus
+                                        st = TabletChecker.getColocateTabletHealthStatus(tablet, visibleVersion,
+                                        replicationNum, bucketsSeq);
+                                if (st != TabletHealthStatus.HEALTHY) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     isGroupStable = false;
                                     Priority colocateUnhealthyPrio = Priority.HIGH;
                                     if (isPartitionUrgent) {
@@ -817,8 +896,15 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                                 tablet.getId(), st);
                                         TabletSchedCtx tabletCtx = new TabletSchedCtx(
                                                 TabletSchedCtx.Type.REPAIR,
+<<<<<<< HEAD
                                                 db.getId(), tableId, partition.getId(), index.getId(),
                                                 tablet.getId(),
+=======
+                                                // physical partition id is same as partition id
+                                                // since colocate table should have only one physical partition
+                                                db.getId(), tableId, partition.getId(),
+                                                index.getId(), tablet.getId(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                                 System.currentTimeMillis());
                                         // the tablet status will be checked and set again when being scheduled
                                         tabletCtx.setTabletStatus(st);
@@ -831,20 +917,34 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                         ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
                                         tabletCtx.setRelocationForRepair(info != null
                                                 && info.getRelocationForRepair()
+<<<<<<< HEAD
                                                 && st == TabletStatus.COLOCATE_MISMATCH);
+=======
+                                                && st == TabletHealthStatus.COLOCATE_MISMATCH);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                                         // For bad replica, we ignore the size limit of scheduler queue
                                         Pair<Boolean, Long> result =
                                                 tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx,
                                                         needToForceRepair(st, tablet,
+<<<<<<< HEAD
                                                         bucketsSeq) || isPartitionUrgent /* forcefully add or not */);
                                         if (LOG.isDebugEnabled() && result.first &&
                                                 st == TabletStatus.COLOCATE_MISMATCH) {
+=======
+                                                                bucketsSeq) || isPartitionUrgent /* forcefully add or not */);
+                                        if (LOG.isDebugEnabled() && result.first &&
+                                                st == TabletHealthStatus.COLOCATE_MISMATCH) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                             logDebugInfoForColocateMismatch(bucketsSeq, tablet);
                                         }
 
                                         waitTotalTimeMs += result.second;
+<<<<<<< HEAD
                                         if (result.first && tabletCtx.getRelocationForRepair()) {
+=======
+                                        if (result.first && tabletCtx.isRelocationForRepair()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                             LOG.info("add tablet relocation task to scheduler, tablet id: {}, " +
                                                             "bucket sequence before: {}, bucket sequence now: {}",
                                                     tableId,
@@ -859,8 +959,13 @@ public class ColocateTableBalancer extends FrontendDaemon {
                             } else {
                                 // tablet maybe added to scheduler because of balance between local disks,
                                 // in this case we shouldn't mark the group unstable
+<<<<<<< HEAD
                                 if (tablet.getColocateHealthStatus(visibleVersion, replicationNum, bucketsSeq)
                                         != TabletStatus.HEALTHY) {
+=======
+                                if (TabletChecker.getColocateTabletHealthStatus(
+                                        tablet, visibleVersion, replicationNum, bucketsSeq) != TabletHealthStatus.HEALTHY) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     isGroupStable = false;
                                 }
                             }
@@ -878,7 +983,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
 
         } finally {
             lockTotalTime += System.nanoTime() - lockStart;
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         return new ColocateMatchResult(lockTotalTime - waitTotalTimeMs * 1000000,
@@ -1254,7 +1363,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
     }
 
     public void increaseScheduledTabletNumForBucket(TabletSchedCtx ctx) {
+<<<<<<< HEAD
         if (ctx.getRelocationForRepair()) {
+=======
+        if (ctx.isRelocationForRepair()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ColocateRelocationInfo info = group2ColocateRelocationInfo.get(ctx.getColocateGroupId());
             if (info != null) {
                 info.increaseScheduledTabletNumForBucket(ctx.getTabletOrderIdx());

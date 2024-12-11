@@ -24,6 +24,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -91,6 +95,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             return false;
         }
 
+<<<<<<< HEAD
         DistributionSpec.PropertyInfo leftInfo = leftLocalDistributionSpec.getPropertyInfo();
         DistributionSpec.PropertyInfo rightInfo = rightLocalDistributionSpec.getPropertyInfo();
 
@@ -102,6 +107,19 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         if (leftTableId == rightTableId && !colocateIndex.isColocateTable(leftTableId)) {
             if (!leftInfo.isSinglePartition() || !rightInfo.isSinglePartition() ||
                     !leftInfo.partitionIds.equals(rightInfo.partitionIds)) {
+=======
+        EquivalentDescriptor leftDesc = leftLocalDistributionSpec.getEquivDesc();
+        EquivalentDescriptor rightDesc = rightLocalDistributionSpec.getEquivDesc();
+
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        long leftTableId = leftDesc.getTableId();
+        long rightTableId = rightDesc.getTableId();
+
+        // join self
+        if (leftTableId == rightTableId && !colocateIndex.isColocateTable(leftTableId)) {
+            if (!leftDesc.isSinglePartition() || !rightDesc.isSinglePartition() ||
+                    !leftDesc.getPartitionIds().equals(rightDesc.getPartitionIds())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return false;
             }
         } else {
@@ -129,8 +147,13 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             for (; idx < leftShuffleColumns.size(); idx++) {
                 DistributionCol leftRequiredCol = leftShuffleColumns.get(idx);
                 DistributionCol rightRequiredCol = rightShuffleColumns.get(idx);
+<<<<<<< HEAD
                 if (leftLocalDistributionSpec.getPropertyInfo().isConnected(leftRequiredCol, leftCol)
                         && rightLocalDistributionSpec.getPropertyInfo().isConnected(rightRequiredCol, rightCol)) {
+=======
+                if (leftLocalDistributionSpec.getEquivDesc().isConnected(leftRequiredCol, leftCol)
+                        && rightLocalDistributionSpec.getEquivDesc().isConnected(rightRequiredCol, rightCol)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     break;
                 }
             }
@@ -164,13 +187,21 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                                                 GroupExpression child, PhysicalPropertySet childOutputProperty) {
         List<DistributionCol> newRightShuffleColumns = Lists.newArrayList();
         HashDistributionDesc leftDistributionDesc = leftDistributionSpec.getHashDistributionDesc();
+<<<<<<< HEAD
         DistributionSpec.PropertyInfo leftPropertyInfo = leftDistributionSpec.getPropertyInfo();
+=======
+        EquivalentDescriptor leftEquivDesc = leftDistributionSpec.getEquivDesc();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         for (DistributionCol distributionCol : leftDistributionDesc.getDistributionCols()) {
             int idx = 0;
             for (; idx < leftShuffleColumns.size(); idx++) {
                 DistributionCol leftShuffleCol = leftShuffleColumns.get(idx);
+<<<<<<< HEAD
                 if (leftPropertyInfo.isConnected(leftShuffleCol, distributionCol)) {
+=======
+                if (leftEquivDesc.isConnected(leftShuffleCol, distributionCol)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     break;
                 }
             }
@@ -188,12 +219,20 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                                           List<DistributionCol> rightShuffleColumns) {
         List<DistributionCol> bucketShuffleColumns = Lists.newArrayList();
         HashDistributionDesc leftLocalDistributionDesc = leftLocalDistributionSpec.getHashDistributionDesc();
+<<<<<<< HEAD
         DistributionSpec.PropertyInfo leftPropertyInfo = leftLocalDistributionSpec.getPropertyInfo();
+=======
+        EquivalentDescriptor leftEquivDesc = leftLocalDistributionSpec.getEquivDesc();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (DistributionCol distributionCol : leftLocalDistributionDesc.getDistributionCols()) {
             int idx = 0;
             for (; idx < leftShuffleColumns.size(); idx++) {
                 DistributionCol leftShuffleCol = leftShuffleColumns.get(idx);
+<<<<<<< HEAD
                 if (leftPropertyInfo.isConnected(leftShuffleCol, distributionCol)) {
+=======
+                if (leftEquivDesc.isConnected(leftShuffleCol, distributionCol)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     break;
                 }
             }
@@ -224,7 +263,11 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         double childCosts = child.getCost(childOutputProperty);
         Group childGroup = child.getGroup();
 
+<<<<<<< HEAD
         DistributionProperty newDistributionProperty = new DistributionProperty(distributionSpec);
+=======
+        DistributionProperty newDistributionProperty = DistributionProperty.createProperty(distributionSpec);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         PhysicalPropertySet newOutputProperty = childOutputProperty.copy();
         newOutputProperty.setDistributionProperty(newDistributionProperty);
 
@@ -416,8 +459,13 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                                                          List<DistributionCol> rightShuffleColumns) {
         List<DistributionCol> leftDistributionColumns = leftDistributionSpec.getShuffleColumns();
         List<DistributionCol> rightDistributionColumns = rightDistributionSpec.getShuffleColumns();
+<<<<<<< HEAD
         DistributionSpec.PropertyInfo leftPropertyInfo = leftDistributionSpec.getPropertyInfo();
         DistributionSpec.PropertyInfo rightPropertyInfo = rightDistributionSpec.getPropertyInfo();
+=======
+        EquivalentDescriptor leftEquivDesc = leftDistributionSpec.getEquivDesc();
+        EquivalentDescriptor rightEquivDesc = rightDistributionSpec.getEquivDesc();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         if (leftDistributionColumns.size() != rightDistributionColumns.size()) {
             return false;
@@ -430,8 +478,13 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             for (; idx < leftShuffleColumns.size(); idx++) {
                 DistributionCol leftShuffleCol = leftShuffleColumns.get(idx);
                 DistributionCol rightShuffleCol = rightShuffleColumns.get(idx);
+<<<<<<< HEAD
                 if (leftPropertyInfo.isConnected(leftShuffleCol, leftCol) &&
                         rightPropertyInfo.isConnected(rightShuffleCol, rightCol)) {
+=======
+                if (leftEquivDesc.isConnected(leftShuffleCol, leftCol) &&
+                        rightEquivDesc.isConnected(rightShuffleCol, rightCol)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     break;
                 }
             }

@@ -74,6 +74,10 @@ public:
     int64_t num_rows() { return _num_rows; }
 
     Status get_schema(std::vector<SlotDescriptor>* schema);
+<<<<<<< HEAD
+=======
+    void set_invalid_as_null(bool invalid_as_null) { _invalid_as_null = invalid_as_null; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
@@ -107,6 +111,11 @@ private:
     int64_t _read_size;
 
     std::string _filename;
+<<<<<<< HEAD
+=======
+
+    bool _invalid_as_null{false};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 // Reader of broker parquet file

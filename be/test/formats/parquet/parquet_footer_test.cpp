@@ -53,4 +53,8 @@ TEST_F(ParquetFooterTest, TestEncryptedParquetFile) {
     EXPECT_TRUE(status.is_not_supported());
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::parquet
+=======
+} // namespace starrocks::parquet
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

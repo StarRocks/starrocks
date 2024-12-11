@@ -146,7 +146,11 @@ private:
     int32_t _encode_level = 0;
     // Will set in prepare
     int32_t _be_number = 0;
+<<<<<<< HEAD
     phmap::flat_hash_map<int64_t, std::unique_ptr<Channel>> _instance_id2channel;
+=======
+    phmap::flat_hash_map<int64_t, std::unique_ptr<Channel>, StdHash<int64_t>> _instance_id2channel;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::vector<Channel*> _channels;
     // index list for channels
     // We need a random order of sending channels to avoid rpc blocking at the same time.
@@ -181,6 +185,10 @@ private:
     RuntimeProfile::Counter* _sender_input_bytes_counter = nullptr;
     RuntimeProfile::Counter* _serialized_bytes_counter = nullptr;
     RuntimeProfile::Counter* _compressed_bytes_counter = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::HighWaterMarkCounter* _pass_through_buffer_peak_mem_usage = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::atomic<bool> _is_finished = false;
     std::atomic<bool> _is_cancelled = false;

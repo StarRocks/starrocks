@@ -16,10 +16,15 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
+=======
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.mysql.MysqlCommand;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,6 +51,7 @@ public class ShowDeleteTest {
         Database db = new Database();
         new Expectations(db) {
             {
+<<<<<<< HEAD
                 db.readLock();
                 minTimes = 0;
 
@@ -83,6 +89,10 @@ public class ShowDeleteTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), anyString);
+                minTimes = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 

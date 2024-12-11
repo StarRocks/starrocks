@@ -5,6 +5,10 @@
 #include "gutil/cpu.h"
 
 #include <algorithm>
+<<<<<<< HEAD
+=======
+#include <cstdint>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <cstring>
 #include <fstream>
 #include <sstream>

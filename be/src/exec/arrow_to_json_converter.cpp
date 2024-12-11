@@ -205,7 +205,11 @@ static Status convert_single_arrow_struct(const StructArray* array, int offset, 
     builder->openObject();
     const StructType* struct_type = array->struct_type();
     for (int i = 0; i < array->num_fields(); i++) {
+<<<<<<< HEAD
         auto field = array->field(i);
+=======
+        const auto& field = array->field(i);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         RETURN_IF_ERROR(convert_arrow_to_json_element(field.get(), field->type_id(), offset,
                                                       struct_type->field(i)->name(), builder));
     }
@@ -240,7 +244,11 @@ static StatusOr<std::string> convert_array_element_to_string(const Array* array,
 }
 
 static Status convert_single_arrow_map(const MapArray* array, int offset, vpack::Builder* builder) {
+<<<<<<< HEAD
     auto item_array = array->items();
+=======
+    const auto& item_array = array->items();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     builder->openObject();
     Type::type item_type = item_array->type_id();

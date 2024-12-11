@@ -24,11 +24,18 @@
 
 namespace starrocks::pipeline {
 Status OlapTableSinkOperator::prepare(RuntimeState* state) {
+<<<<<<< HEAD
     Operator::prepare(state);
 
     state->set_per_fragment_instance_idx(_sender_id);
 
     _sink->set_nonblocking_send_chunk(true);
+=======
+    RETURN_IF_ERROR(Operator::prepare(state));
+
+    state->set_per_fragment_instance_idx(_sender_id);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _automatic_partition_chunk.reset();
 
     _sink->set_profile(_unique_metrics.get());
@@ -72,7 +79,11 @@ bool OlapTableSinkOperator::pending_finish() const {
         if (_sink->is_full()) {
             return true;
         }
+<<<<<<< HEAD
         auto st = _sink->send_chunk(_fragment_ctx->runtime_state(), _automatic_partition_chunk.get());
+=======
+        auto st = _sink->send_chunk_nonblocking(_fragment_ctx->runtime_state(), _automatic_partition_chunk.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _automatic_partition_chunk.reset();
         if (!st.ok()) {
             _fragment_ctx->cancel(st);
@@ -106,7 +117,12 @@ Status OlapTableSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+<<<<<<< HEAD
         state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+=======
+        _fragment_ctx->workgroup()->executors()->driver_executor()->report_audit_statistics(state->query_ctx(),
+                                                                                            state->fragment_ctx());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     if (_is_open_done && !_automatic_partition_chunk) {
         // sink's open already finish, we can try_close
@@ -140,7 +156,11 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     // previous push_chunk() trigger automatic partition creation
     if (_automatic_partition_chunk) {
         // resend previous chunk before send new chunk
+<<<<<<< HEAD
         auto st = _sink->send_chunk(state, _automatic_partition_chunk.get());
+=======
+        auto st = _sink->send_chunk_nonblocking(state, _automatic_partition_chunk.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _automatic_partition_chunk.reset();
         if (!st.ok()) {
             return st;
@@ -152,8 +172,13 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
         return Status::OK();
     }
 
+<<<<<<< HEAD
     // send_chunk() will return EAGAIN to avoid block
     auto st = _sink->send_chunk(state, chunk.get());
+=======
+    // send_chunk_nonblocking() will return EAGAIN to avoid block
+    auto st = _sink->send_chunk_nonblocking(state, chunk.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (st.is_eagain()) {
         // temporarily save the chunk, wait for the partition to be created and send again
         _automatic_partition_chunk = chunk;

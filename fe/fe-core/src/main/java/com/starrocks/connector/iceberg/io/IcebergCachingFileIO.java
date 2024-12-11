@@ -52,15 +52,25 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import org.apache.hadoop.conf.Configurable;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.iceberg.exceptions.NotFoundException;
+<<<<<<< HEAD
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
+=======
+import org.apache.iceberg.hadoop.HadoopConfigurable;
+import org.apache.iceberg.hadoop.HadoopInputFile;
+import org.apache.iceberg.hadoop.HadoopOutputFile;
+import org.apache.iceberg.hadoop.SerializableConfiguration;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.iceberg.hadoop.Util;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
@@ -70,6 +80,10 @@ import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.io.SeekableInputStream;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.util.SerializableSupplier;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -88,7 +102,11 @@ import java.util.function.Function;
 /**
  * Implementation of FileIO that adds metadata content caching features.
  */
+<<<<<<< HEAD
 public class IcebergCachingFileIO implements FileIO, Configurable {
+=======
+public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static final Logger LOG = LogManager.getLogger(IcebergCachingFileIO.class);
     private static final int BUFFER_CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
     private static final long CACHE_MAX_ENTRY_SIZE = Config.iceberg_metadata_cache_max_entry_size;
@@ -101,14 +119,24 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
     public static final long DISK_CACHE_CAPACITY = Config.iceberg_metadata_disk_cache_capacity;
     public static final long DISK_CACHE_EXPIRATION_SECONDS = Config.iceberg_metadata_disk_cache_expiration_seconds;
 
+<<<<<<< HEAD
     private ContentCache fileContentCache;
     private FileIO wrappedIO;
     private Configuration conf;
+=======
+    private transient ContentCache fileContentCache;
+    private FileIO wrappedIO;
+    private SerializableSupplier<Configuration> conf;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     @Override
     public void initialize(Map<String, String> properties) {
         ResolvingFileIO resolvingFileIO = new ResolvingFileIO();
+<<<<<<< HEAD
         resolvingFileIO.setConf(conf);
+=======
+        resolvingFileIO.setConf(conf.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         wrappedIO = resolvingFileIO;
         wrappedIO.initialize(properties);
 
@@ -135,12 +163,27 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
 
     @Override
     public Configuration getConf() {
+<<<<<<< HEAD
         return conf;
+=======
+        return conf.get();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public void setConf(Configuration conf) {
+<<<<<<< HEAD
         this.conf = conf;
+=======
+        this.conf = new SerializableConfiguration(conf)::get;
+    }
+
+    @Override
+    public void serializeConfWith(Function<Configuration, SerializableSupplier<Configuration>> confSerializer) {
+        if (wrappedIO instanceof HadoopConfigurable) {
+            ((HadoopConfigurable) wrappedIO).serializeConfWith(confSerializer);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -160,6 +203,13 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
         fileContentCache.invalidate(path);
     }
 
+<<<<<<< HEAD
+=======
+    public FileIO getWrappedIO() {
+        return wrappedIO;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public Map<String, String> properties() {
         return wrappedIO.properties();
@@ -402,7 +452,11 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
                     }
                 } catch (Exception e) {
                     // Ignore, exception would not have affection on Diskcache
+<<<<<<< HEAD
                     LOG.warn("Encountered exception when loading disk metadata " + e.getMessage());
+=======
+                    LOG.warn("Encountered exception when loading disk metadata ", e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             });
             executor.shutdown();
@@ -635,4 +689,8 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
             return location();
         }
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

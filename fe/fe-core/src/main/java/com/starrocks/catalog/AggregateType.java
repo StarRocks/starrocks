@@ -50,7 +50,12 @@ public enum AggregateType {
     HLL_UNION("HLL_UNION"),
     NONE("NONE"),
     BITMAP_UNION("BITMAP_UNION"),
+<<<<<<< HEAD
     PERCENTILE_UNION("PERCENTILE_UNION");
+=======
+    PERCENTILE_UNION("PERCENTILE_UNION"),
+    AGG_STATE_UNION("AGG_STATE_UNION");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private static EnumMap<AggregateType, EnumSet<PrimitiveType>> compatibilityMap;
 
@@ -115,7 +120,10 @@ public enum AggregateType {
         excObject.remove(PrimitiveType.HLL);
         excObject.remove(PrimitiveType.PERCENTILE);
         excObject.remove(PrimitiveType.INVALID_TYPE);
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         compatibilityMap.put(REPLACE_IF_NOT_NULL, EnumSet.copyOf(excObject));
 
         primitiveTypeList.clear();
@@ -126,10 +134,18 @@ public enum AggregateType {
         primitiveTypeList.add(PrimitiveType.BITMAP);
         compatibilityMap.put(BITMAP_UNION, EnumSet.copyOf(primitiveTypeList));
 
+<<<<<<< HEAD
+=======
+        // percentile
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         primitiveTypeList.clear();
         primitiveTypeList.add(PrimitiveType.PERCENTILE);
         compatibilityMap.put(PERCENTILE_UNION, EnumSet.copyOf(primitiveTypeList));
 
+<<<<<<< HEAD
+=======
+        // none
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         compatibilityMap.put(NONE, EnumSet.copyOf(excObject));
     }
 
@@ -140,6 +156,13 @@ public enum AggregateType {
     }
 
     public static boolean checkPrimitiveTypeCompatibility(AggregateType aggType, PrimitiveType priType) {
+<<<<<<< HEAD
+=======
+        // AGG_STATE_UNION can accept all types, we cannot use compatibilityMap to check it.
+        if (aggType == AGG_STATE_UNION) {
+            return true;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return compatibilityMap.get(aggType).contains(priType);
     }
 
@@ -205,6 +228,11 @@ public enum AggregateType {
                 return TAggregationType.BITMAP_UNION;
             case PERCENTILE_UNION:
                 return TAggregationType.PERCENTILE_UNION;
+<<<<<<< HEAD
+=======
+            case AGG_STATE_UNION:
+                return TAggregationType.AGG_STATE_UNION;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             default:
                 return null;
         }

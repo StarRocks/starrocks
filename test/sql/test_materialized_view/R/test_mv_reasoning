@@ -1,0 +1,147 @@
+-- name: test_mv_rewrite_reason
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1(
+    c1 date,
+    c2 int, 
+    c3 int, 
+    c4 string
+) 
+PARTITION BY date_trunc('DAY', c1);
+-- result:
+-- !result
+INSERT INTO t1 VALUES ('1988-07-01', 1, 1, 'a');
+-- result:
+-- !result
+INSERT INTO t1 VALUES ('1988-07-01', 1, 2, 'a');
+-- result:
+-- !result
+INSERT INTO t1 VALUES ('1988-07-02', 1, 1, 'a');
+-- result:
+-- !result
+INSERT INTO t1 VALUES ('1988-07-02', 1, 2, 'a');
+-- result:
+-- !result
+INSERT INTO t1 VALUES ('1988-07-03', 1, 1, 'a');
+-- result:
+-- !result
+INSERT INTO t1 VALUES ('1988-07-03', 1, 2, 'a');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY (c1)
+REFRESH ASYNC
+AS 
+    SELECT c1, c2, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1, c2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+TRACE REASON MV
+    SELECT c1, c2, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1, c2;
+-- result:
+-- !result
+TRACE REASON MV
+    SELECT c1, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1;
+-- result:
+-- !result
+TRACE REASON MV
+    SELECT c1, sum(c3), count(c3)
+    FROM t1
+    WHERE c2 > 1
+    GROUP BY c1;
+-- result:
+-- !result
+TRACE REASON MV
+    SELECT c4, sum(c3), count(c3)
+    FROM t1
+    WHERE c2 > 1
+    GROUP BY c4;
+-- result:
+    MV rewrite fail for mv1: Rewrite group by key failed: 4: c4 
+    MV rewrite fail for mv1: Rewrite rollup aggregate failed, cannot rewrite group by keys: [4: c4] 
+-- !result
+TRACE REASON MV
+    SELECT c1, sum(c3), count(c3)
+    FROM t1
+    WHERE c4 > 'a'
+    GROUP BY c1;
+-- result:
+    MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 > a cannot be rewritten 
+-- !result
+DROP MATERIALIZED VIEW mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1
+REFRESH ASYNC
+PARTITION BY (c1)
+AS 
+    SELECT c1, c2, c3
+    FROM t1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+TRACE REASON MV
+    SELECT c1, c2, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1, c2;
+-- result:
+-- !result
+TRACE REASON MV
+    SELECT c1, c2, c4, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1, c2, c4;
+-- result:
+    MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
+-- !result
+TRACE REASON MV
+    SELECT c1, c2, c4
+    FROM t1;
+-- result:
+    MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
+-- !result
+TRACE REASON MV
+    SELECT c1, c2
+    FROM t1
+    WHERE c4='a';
+-- result:
+    MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 = a cannot be rewritten 
+-- !result
+ALTER MATERIALIZED VIEW mv1 INACTIVE;
+-- result:
+-- !result
+TRACE REASON MV
+    SELECT c1, c2, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1, c2;
+-- result:
+    MV rewrite fail for mv1: is not active 
+-- !result
+DROP MATERIALIZED VIEW mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1
+REFRESH ASYNC
+PARTITION BY (c1)
+AS 
+    SELECT c1, c2, c3
+    FROM t1
+    ORDER BY c1;
+-- result:
+-- !result
+TRACE REASON MV
+    SELECT c1, c2, c3
+    FROM t1
+    ORDER BY c1;
+-- result:
+    MV rewrite fail for mv1: MV contains non-SPJG operators(no view rewrite): LOGICAL_TOPN 
+-- !result

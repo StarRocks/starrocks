@@ -34,7 +34,11 @@ SegmentStreamConverter::SegmentStreamConverter(std::string_view input_file_name,
         : FileStreamConverter(input_file_name, input_file_size, std::move(output_file)),
           _column_unique_id_map(column_unique_id_map) {
     if (_column_unique_id_map != nullptr && !_column_unique_id_map->empty()) {
+<<<<<<< HEAD
         _segment_footer_buffer.reserve(s_segment_footer_buffer_size.load(std::memory_order::memory_order_acquire));
+=======
+        _segment_footer_buffer.reserve(s_segment_footer_buffer_size.load(std::memory_order::acquire));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 
@@ -97,7 +101,11 @@ Status SegmentStreamConverter::close() {
     auto status_or = Segment::parse_segment_footer(memory_file.get(), &segment_footer_pb, &footer_length_hint, nullptr);
     if (!status_or.ok()) {
         if (footer_length_hint > _segment_footer_buffer.size()) {
+<<<<<<< HEAD
             s_segment_footer_buffer_size.store(footer_length_hint, std::memory_order::memory_order_release);
+=======
+            s_segment_footer_buffer_size.store(footer_length_hint, std::memory_order::release);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return status_or.status();
     }

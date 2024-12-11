@@ -78,7 +78,11 @@ public class CastExpr extends Expr {
         try {
             analyze();
         } catch (AnalysisException ex) {
+<<<<<<< HEAD
             LOG.warn(ex);
+=======
+            LOG.warn(ex.getMessage(), ex);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Preconditions.checkState(false,
                     "Implicit casts should never throw analysis exception.");
         }

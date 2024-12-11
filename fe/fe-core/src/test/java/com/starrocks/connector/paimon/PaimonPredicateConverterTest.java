@@ -249,7 +249,11 @@ public class PaimonPredicateConverterTest {
     @Test
     public void testBinaryString() {
         ConstantOperator value = ConstantOperator.createVarchar("ttt");
+<<<<<<< HEAD
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F1, value);;
+=======
+        ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F1, value);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Predicate result = CONVERTER.convert(op);
         Assert.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate = (LeafPredicate) result;

@@ -19,9 +19,17 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.statistic.StatisticUtils;
+=======
+import com.starrocks.qe.DmlType;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.transaction.InsertOverwriteJobStats;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,6 +58,7 @@ public class LoadJobStatsListener implements LoadJobListener {
     }
 
     @Override
+<<<<<<< HEAD
     public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
         StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true);
     }
@@ -57,12 +66,46 @@ public class LoadJobStatsListener implements LoadJobListener {
     @Override
     public void onInsertOverwriteJobCommitFinish(Database db, Table table) {
         // do nothing
+=======
+    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
+                                              DmlType dmlType) {
+        if (dmlType != DmlType.INSERT_OVERWRITE && needTrigger()) {
+            StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true, true);
+        }
+    }
+
+    @Override
+    public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
+        if (needTrigger()) {
+            StatisticUtils.triggerCollectionOnInsertOverwrite(stats, db, table, true, true);
+        }
+    }
+
+    /**
+     * Whether to trigger the statistics collection
+     */
+    private boolean needTrigger() {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return false;
+        }
+        GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
+        if (stateMgr == null || !stateMgr.isLeader() || !stateMgr.isReady()) {
+            return false;
+        }
+        return true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void onTransactionFinish(TransactionState transactionState, boolean sync) {
         if (!Config.enable_statistic_collect_on_first_load) {
             return;
         }
+<<<<<<< HEAD
+=======
+        if (!needTrigger()) {
+            return;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         long dbId = transactionState.getDbId();
         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
@@ -80,12 +123,21 @@ public class LoadJobStatsListener implements LoadJobListener {
             List<Table> tables = transactionState.getIdToTableCommitInfos().values().stream()
                     .map(x -> x.getTableId())
                     .distinct()
+<<<<<<< HEAD
                     .map(db::getTable)
+=======
+                    .map(tableId -> GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .filter(Objects::nonNull)
                     .filter(t -> !t.isMaterializedView()) // skip mvs since its stats will be triggered after refresh
                     .collect(Collectors.toList());
             for (Table table : tables) {
+<<<<<<< HEAD
                 StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, sync);
+=======
+                // stream load and broker load do not need lock
+                StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, sync, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         } catch (Exception t) {
             LOG.warn("refresh mv after publish version failed:", DebugUtil.getStackTrace(t));

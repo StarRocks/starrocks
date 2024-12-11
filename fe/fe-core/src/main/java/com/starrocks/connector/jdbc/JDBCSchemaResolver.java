@@ -22,6 +22,10 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.SchemaConstants;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.exception.StarRocksConnectorException;
 
 import java.sql.Connection;
@@ -89,8 +93,22 @@ public abstract class JDBCSchemaResolver {
                     columnSet.getString("TYPE_NAME"),
                     columnSet.getInt("COLUMN_SIZE"),
                     columnSet.getInt("DECIMAL_DIGITS"));
+<<<<<<< HEAD
             fullSchema.add(new Column(columnSet.getString("COLUMN_NAME"), type,
                     columnSet.getString("IS_NULLABLE").equals("YES")));
+=======
+
+            String comment = "";
+            // Add try-cache to prevent exceptions when the metadata of some databases does not contain REMARKS
+            try {
+                if (columnSet.getString("REMARKS") != null) {
+                    comment = columnSet.getString("REMARKS");
+                }
+            } catch (SQLException ignored) { }
+
+            fullSchema.add(new Column(columnSet.getString("COLUMN_NAME"), type,
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES), comment));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return fullSchema;
     }

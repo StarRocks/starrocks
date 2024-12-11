@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # last_query_id
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回最近一次执行的查询的 ID。
 

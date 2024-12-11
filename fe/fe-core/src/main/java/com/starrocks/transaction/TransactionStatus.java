@@ -17,6 +17,13 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TTransactionStatus;
+
+import java.util.Arrays;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public enum TransactionStatus {
     UNKNOWN(0),
     PREPARE(1),
@@ -27,6 +34,7 @@ public enum TransactionStatus {
 
     private final int flag;
 
+<<<<<<< HEAD
     private TransactionStatus(int flag) {
         this.flag = flag;
     }
@@ -54,12 +62,55 @@ public enum TransactionStatus {
         }
     }
 
+=======
+    TransactionStatus(int flag) {
+        this.flag = flag;
+    }
+
+    public static TransactionStatus valueOf(int flag) {
+        return Arrays.stream(values())
+                .filter(status -> status.getFlag() == flag)
+                .findFirst()
+                .orElse(UNKNOWN);
+    }
+
+    public TTransactionStatus toThrift() {
+        switch (this.getFlag()) {
+            // UNKNOWN
+            case 0:
+                return TTransactionStatus.UNKNOWN;
+            // PREPARE
+            case 1:
+                return TTransactionStatus.PREPARE;
+            // COMMITTED
+            case 2:
+                return TTransactionStatus.COMMITTED;
+            // VISIBLE
+            case 3:
+                return TTransactionStatus.VISIBLE;
+            // ABORTED
+            case 4:
+                return TTransactionStatus.ABORTED;
+            // PREPARED
+            case 5:
+                return TTransactionStatus.PREPARED;
+            default:
+                return TTransactionStatus.UNKNOWN;
+        }
+    }
+
+    public boolean isFailed() {
+        return this == UNKNOWN || this == ABORTED;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isFinalStatus() {
         return this == TransactionStatus.VISIBLE || this == TransactionStatus.ABORTED;
     }
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         switch (this) {
             case UNKNOWN:
                 return "UNKNOWN";
@@ -76,5 +127,12 @@ public enum TransactionStatus {
             default:
                 return "UNKNOWN";
         }
+=======
+        return this.name();
+    }
+
+    public int getFlag() {
+        return flag;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

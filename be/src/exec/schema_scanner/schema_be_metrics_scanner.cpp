@@ -25,10 +25,17 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeMetricsScanner::_s_columns[] = {
+<<<<<<< HEAD
         {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"LABELS", TYPE_VARCHAR, sizeof(StringValue), false},
         {"VALUE", TYPE_BIGINT, sizeof(int64_t), false},
+=======
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LABELS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VALUE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 SchemaBeMetricsScanner::SchemaBeMetricsScanner()

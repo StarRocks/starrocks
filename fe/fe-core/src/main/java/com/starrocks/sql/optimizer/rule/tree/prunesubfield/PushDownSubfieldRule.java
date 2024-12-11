@@ -225,7 +225,11 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             }
 
             // collect push down expression
+<<<<<<< HEAD
             SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
+=======
+            SubfieldExpressionCollector collector = SubfieldExpressionCollector.buildPushdownCollector();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (ScalarOperator value : pushDownProject.values()) {
                 // check repeat put complex column, like that
                 //      project( columnB: structA.b.c.d )
@@ -325,12 +329,18 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 }
             }
 
+<<<<<<< HEAD
             if (!leftContext.pushDownExprRefs.isEmpty()) {
                 visitChild(optExpression, 0, leftContext);
             }
             if (!rightContext.pushDownExprRefs.isEmpty()) {
                 visitChild(optExpression, 1, rightContext);
             }
+=======
+            // recursively visit children no matter this node can push down something
+            visitChild(optExpression, 0, leftContext);
+            visitChild(optExpression, 1, rightContext);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
             if (predicate.isPresent() || onPredicate.isPresent()) {

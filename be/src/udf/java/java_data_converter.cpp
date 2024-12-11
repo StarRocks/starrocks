@@ -338,7 +338,11 @@ Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::
             env->DeleteLocalRef(jval);
         } else {
             int buffers_offset = buffers->size();
+<<<<<<< HEAD
             columns[i]->accept(&vistor);
+=======
+            RETURN_IF_ERROR(columns[i]->accept(&vistor));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             int buffers_sz = buffers->size() - buffers_offset;
             arg = helper.create_boxed_array(types[i], num_rows, columns[i]->is_nullable(), &(*buffers)[buffers_offset],
                                             buffers_sz);

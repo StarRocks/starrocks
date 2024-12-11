@@ -17,11 +17,18 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class RecoverPartitionAnalyzer {
     public static void analyze(RecoverPartitionStmt statement, ConnectContext context) {
         TableName tbl = statement.getDbTblName();
+<<<<<<< HEAD
         MetaUtils.normalizationTableName(context, tbl);
+=======
+        tbl.normalization(context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

@@ -52,7 +52,13 @@ void TableFunctionNodeTest::SetUp() {
         t_desc_table.slotDescriptors.push_back(slot_desc);
     }
 
+<<<<<<< HEAD
     DescriptorTbl::create(&_runtime_state, &_object_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size);
+=======
+    ASSERT_TRUE(
+            DescriptorTbl::create(&_runtime_state, &_object_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size)
+                    .ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _runtime_state.set_desc_tbl(_desc_tbl);
 
     _tnode.node_id = 1;
@@ -60,7 +66,10 @@ void TableFunctionNodeTest::SetUp() {
     _tnode.num_children = 1;
 
     _tnode.row_tuples.push_back(1);
+<<<<<<< HEAD
     _tnode.nullable_tuples.push_back(false);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 TEST_F(TableFunctionNodeTest, close_after_not_init) {

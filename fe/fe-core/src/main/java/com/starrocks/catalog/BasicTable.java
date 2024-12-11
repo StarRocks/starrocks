@@ -31,7 +31,11 @@ public interface BasicTable {
 
     Table.TableType getType();
 
+<<<<<<< HEAD
     boolean isView();
+=======
+    boolean isOlapView();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     boolean isMaterializedView();
 

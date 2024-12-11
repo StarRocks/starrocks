@@ -34,7 +34,11 @@ public class ShowTransactionStmtAnalyzer {
         new ShowTransactionStmtAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class ShowTransactionStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ShowTransactionStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         private static final Logger LOG = LogManager.getLogger(ShowTransactionStmtAnalyzerVisitor.class);
 

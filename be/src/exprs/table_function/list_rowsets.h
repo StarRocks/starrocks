@@ -20,6 +20,7 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 namespace lake {
 class TabletMetadataPB;
 }
@@ -27,6 +28,13 @@ class TabletMetadataPB;
 class ListRowsets final : public TableFunction {
     struct MyState final : public TableFunctionState {
         std::shared_ptr<const lake::TabletMetadataPB> metadata;
+=======
+class TabletMetadataPB;
+
+class ListRowsets final : public TableFunction {
+    struct MyState final : public TableFunctionState {
+        std::shared_ptr<const TabletMetadataPB> metadata;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         ~MyState() override = default;
 

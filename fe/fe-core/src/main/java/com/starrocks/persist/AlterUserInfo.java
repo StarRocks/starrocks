@@ -26,6 +26,10 @@ import com.starrocks.sql.ast.UserIdentity;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class AlterUserInfo implements Writable {
     @SerializedName(value = "u")
@@ -33,11 +37,25 @@ public class AlterUserInfo implements Writable {
     @SerializedName(value = "a")
     UserAuthenticationInfo authenticationInfo;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "p")
+    Map<String, String> properties;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public AlterUserInfo(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo) {
         this.userIdentity = userIdentity;
         this.authenticationInfo = authenticationInfo;
     }
 
+<<<<<<< HEAD
+=======
+    public AlterUserInfo(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo, Map<String, String> properties) {
+        this(userIdentity, authenticationInfo);
+        this.properties = properties;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public UserIdentity getUserIdentity() {
         return userIdentity;
     }
@@ -46,6 +64,13 @@ public class AlterUserInfo implements Writable {
         return authenticationInfo;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));

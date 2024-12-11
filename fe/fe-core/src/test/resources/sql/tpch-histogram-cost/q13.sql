@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_count,
@@ -19,6 +20,8 @@ group by
 order by
     custdist desc,
     c_count desc ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:20: count | 21: count
@@ -95,7 +98,10 @@ rollup: customer
 tabletRatio=10/10
 cardinality=15000000
 avgRowSize=8.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -118,6 +124,9 @@ rollup: orders
 tabletRatio=10/10
 cardinality=112500000
 avgRowSize=95.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [end]
 

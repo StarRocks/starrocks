@@ -22,6 +22,10 @@
 #include "column/type_traits.h"
 #include "exprs/agg/java_udaf_function.h"
 #include "runtime/runtime_state.h"
+<<<<<<< HEAD
+=======
+#include "storage/rowset/bloom_filter.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "types/logical_type_infra.h"
 #include "udf/java/java_udf.h"
 
@@ -71,9 +75,13 @@ FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& ar
     return context;
 }
 
+<<<<<<< HEAD
 FunctionContext::FunctionContext()
         : _state(nullptr), _num_warnings(0), _thread_local_fn_state(nullptr), _fragment_local_fn_state(nullptr) {}
 
+=======
+FunctionContext::FunctionContext() = default;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 FunctionContext::~FunctionContext() = default;
 
 FunctionContext* FunctionContext::clone(MemPool* pool) {
@@ -170,6 +178,13 @@ bool FunctionContext::error_if_overflow() const {
     return _state != nullptr && _state->error_if_overflow();
 }
 
+<<<<<<< HEAD
+=======
+bool FunctionContext::allow_throw_exception() const {
+    return _state != nullptr && _state->query_options().allow_throw_exception;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
     switch (scope) {
     case THREAD_LOCAL:
@@ -193,12 +208,17 @@ bool FunctionContext::add_warning(const char* warning_msg) {
     std::stringstream ss;
     ss << "UDF WARNING: " << warning_msg;
 
+<<<<<<< HEAD
     if (_state != nullptr) {
         return _state->log_error(ss.str());
     } else {
         std::cerr << ss.str() << std::endl;
         return true;
     }
+=======
+    std::cerr << ss.str() << std::endl;
+    return true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) const {

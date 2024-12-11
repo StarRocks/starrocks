@@ -56,16 +56,26 @@ StreamScanOperator::~StreamScanOperator() {
     }
 }
 
+<<<<<<< HEAD
 void StreamScanOperator::_reset_chunk_source(RuntimeState* state, int chunk_source_index) {
+=======
+Status StreamScanOperator::_reset_chunk_source(RuntimeState* state, int chunk_source_index) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     //auto tablet_id = _chunk_sources[chunk_source_index]->get_lane_owner();
     StreamChunkSource* chunk_source = down_cast<StreamChunkSource*>(_chunk_sources[chunk_source_index].get());
     auto tablet_id = chunk_source->get_lane_owner();
     auto binlog_offset = _stream_epoch_manager->get_binlog_offset(state->fragment_instance_id(), _id, tablet_id);
 
     DCHECK(binlog_offset != nullptr);
+<<<<<<< HEAD
     chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn);
     chunk_source->set_epoch_limit(_current_epoch_info.max_scan_rows, _current_epoch_info.max_exec_millis);
     chunk_source->reset_status();
+=======
+    RETURN_IF_ERROR(chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn));
+    chunk_source->set_epoch_limit(_current_epoch_info.max_scan_rows, _current_epoch_info.max_exec_millis);
+    return chunk_source->reset_status();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 // In order to not modify the code of ScanOperator,
@@ -92,12 +102,20 @@ Status StreamScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;
+<<<<<<< HEAD
             set_finishing(state);
+=======
+            static_cast<void>(set_finishing(state));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return status;
         }
         need_detach = false;
         if (_is_stream_pipeline) {
+<<<<<<< HEAD
             _reset_chunk_source(state, chunk_source_index);
+=======
+            RETURN_IF_ERROR(_reset_chunk_source(state, chunk_source_index));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
@@ -105,7 +123,11 @@ Status StreamScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_
         if (!_old_chunk_sources.empty()) {
             _chunk_sources[chunk_source_index] = _old_chunk_sources.front();
             _old_chunk_sources.pop();
+<<<<<<< HEAD
             _reset_chunk_source(state, chunk_source_index);
+=======
+            RETURN_IF_ERROR(_reset_chunk_source(state, chunk_source_index));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             need_detach = false;
             RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
@@ -119,7 +141,12 @@ ChunkSourcePtr StreamScanOperator::create_chunk_source(MorselPtr morsel, int32_t
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<StreamScanOperatorFactory*>(_factory);
     return std::make_shared<StreamChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
+<<<<<<< HEAD
                                                std::move(morsel), scan_node, factory->get_chunk_buffer());
+=======
+                                               std::move(morsel), scan_node, factory->get_chunk_buffer(),
+                                               enable_adaptive_io_tasks());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 bool StreamScanOperator::is_finished() const {
@@ -165,7 +192,10 @@ bool StreamScanOperator::has_output() const {
             _unpluging = false;
         }
         if (chunk_number >= _buffer_unplug_threshold()) {
+<<<<<<< HEAD
             COUNTER_UPDATE(_buffer_unplug_counter, 1);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             _unpluging = true;
             return true;
         }
@@ -212,14 +242,22 @@ Status StreamScanOperator::reset_epoch(RuntimeState* state) {
         _closed_chunk_sources.pop();
         StreamChunkSource* chunk_source = down_cast<StreamChunkSource*>(chunk_source_ptr.get());
 
+<<<<<<< HEAD
         chunk_source->reset_status();
+=======
+        RETURN_IF_ERROR(chunk_source->reset_status());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _old_chunk_sources.push(chunk_source_ptr);
 
         auto tablet_id = chunk_source->get_lane_owner();
         auto binlog_offset = _stream_epoch_manager->get_binlog_offset(state->fragment_instance_id(), _id, tablet_id);
 
         DCHECK(binlog_offset != nullptr);
+<<<<<<< HEAD
         chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn);
+=======
+        RETURN_IF_ERROR(chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         chunk_source->set_epoch_limit(_current_epoch_info.max_scan_rows, _current_epoch_info.max_exec_millis);
     }
 
@@ -263,7 +301,12 @@ Status StreamScanOperator::set_epoch_finished(RuntimeState* state) {
     int chunk_source_size = _closed_chunk_sources.size();
     for (int i = 0; i < chunk_source_size; i++) {
         BinlogOffset binlog_offset{0, 2, 2};
+<<<<<<< HEAD
         _stream_epoch_manager->update_binlog_offset(state->fragment_instance_id(), _id, 0, binlog_offset);
+=======
+        RETURN_IF_ERROR(
+                _stream_epoch_manager->update_binlog_offset(state->fragment_instance_id(), _id, 0, binlog_offset));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return Status::OK();
 }
@@ -334,14 +377,26 @@ void StreamScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int c
 }
 
 StreamChunkSource::StreamChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+<<<<<<< HEAD
                                      ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
         : ConnectorChunkSource(op, runtime_profile, std::move(morsel), scan_node, chunk_buffer) {}
+=======
+                                     ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer,
+                                     bool enable_adaptive_io_tasks)
+        : ConnectorChunkSource(op, runtime_profile, std::move(morsel), scan_node, chunk_buffer,
+                               enable_adaptive_io_tasks) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Status StreamChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ConnectorChunkSource::prepare(state));
     // open data source eagerly rather than delay until to read data so that
     // it can interact with stream pipeline engine normally, such as set_offset()
+<<<<<<< HEAD
     RETURN_IF_ERROR(_open_data_source(state));
+=======
+    [[maybe_unused]] bool mem_alloc_failed = false;
+    RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -354,9 +409,15 @@ void StreamChunkSource::set_epoch_limit(int64_t epoch_rows_limit, int64_t epoch_
     _epoch_time_limit = epoch_time_limit;
 }
 
+<<<<<<< HEAD
 void StreamChunkSource::reset_status() {
     _status = Status::OK();
     _get_stream_data_source()->reset_status();
+=======
+Status StreamChunkSource::reset_status() {
+    _status = Status::OK();
+    return _get_stream_data_source()->reset_status();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 bool StreamChunkSource::_reach_eof() const {

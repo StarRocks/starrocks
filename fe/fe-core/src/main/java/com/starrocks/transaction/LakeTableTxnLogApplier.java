@@ -14,11 +14,19 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+=======
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
@@ -41,8 +49,13 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     @Override
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
+<<<<<<< HEAD
             long partitionId = partitionCommitInfo.getPartitionId();
             Partition partition = table.getPartition(partitionId);
+=======
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (partition == null) {
                 LOG.warn("ignored dropped partition {} when applying commit log", partitionId);
                 continue;
@@ -50,23 +63,43 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
             // The version of a replication transaction may not continuously
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+<<<<<<< HEAD
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
             } else {
                 partition.setNextVersion(partition.getNextVersion() + 1);
+=======
+                long versionDiff = partitionCommitInfo.getVersion() - partition.getNextVersion();
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                partition.setNextDataVersion(partition.getNextDataVersion() + versionDiff + 1);
+            } else {
+                partition.setNextVersion(partition.getNextVersion() + 1);
+                if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                    partition.setNextDataVersion(partition.getNextDataVersion() + 1);
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
+<<<<<<< HEAD
         List<String> validDictCacheColumns = Lists.newArrayList();
+=======
+        List<ColumnId> validDictCacheColumns = Lists.newArrayList();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
         long maxPartitionVersionTime = -1;
         long tableId = table.getId();
         CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
+<<<<<<< HEAD
             long partitionId = partitionCommitInfo.getPartitionId();
             Partition partition = table.getPartition(partitionId);
+=======
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (partition == null) {
                 LOG.warn("ignored dropped partition {} when applying visible log", partitionId);
                 continue;
@@ -74,11 +107,30 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
+<<<<<<< HEAD
             // The version of a replication transaction may not continuously
             Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
                     || version == partition.getVisibleVersion() + 1);
 
             partition.updateVisibleVersion(version, versionTime);
+=======
+
+            // lake rollup will lead to version not continuously,
+            // just ingore check for now
+            // or we can persist a mocked transactionState.
+            // The version of a replication transaction may not continuously
+            //Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+            //        || version == partition.getVisibleVersion() + 1);
+
+            partition.updateVisibleVersion(version, versionTime);
+            if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                if (partitionCommitInfo.getVersionEpoch() > 0) {
+                    partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                }
+                partition.setVersionTxnType(txnState.getTransactionType());
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             PartitionIdentifier partitionIdentifier =
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
@@ -87,9 +139,14 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             } else {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }
+<<<<<<< HEAD
 
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+=======
+            if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
+                for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     IDictManager.getInstance().removeGlobalDict(tableId, column);
                 }
             }
@@ -104,7 +161,11 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
+<<<<<<< HEAD
                 String columnName = validDictCacheColumns.get(i);
+=======
+                ColumnId columnName = validDictCacheColumns.get(i);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
                         .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);

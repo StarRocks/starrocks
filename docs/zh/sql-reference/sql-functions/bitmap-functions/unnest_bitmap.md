@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # unnest_bitmap
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 unnest_bitmap 是一种表函数 (table function)，用于将一个 bitmap 展开成多行。
 

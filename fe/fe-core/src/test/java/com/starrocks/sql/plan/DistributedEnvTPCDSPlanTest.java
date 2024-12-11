@@ -30,6 +30,7 @@ public class DistributedEnvTPCDSPlanTest extends TPCDSPlanTestBase {
         TPCDSPlanTest.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable customerAddress =
+<<<<<<< HEAD
                 (OlapTable) globalStateMgr.getDb("test").getTable("customer_address");
         setTableStatistics(customerAddress, 1000000);
 
@@ -43,6 +44,21 @@ public class DistributedEnvTPCDSPlanTest extends TPCDSPlanTestBase {
         setTableStatistics(dateDim, 73048);
 
         OlapTable item = (OlapTable) globalStateMgr.getDb("test").getTable("item");
+=======
+                (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("customer_address");
+        setTableStatistics(customerAddress, 1000000);
+
+        OlapTable customer = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("customer");
+        setTableStatistics(customer, 2000000);
+
+        OlapTable storeSales = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("store_sales");
+        setTableStatistics(storeSales, 287997024);
+
+        OlapTable dateDim = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("date_dim");
+        setTableStatistics(dateDim, 73048);
+
+        OlapTable item = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("item");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         setTableStatistics(item, 203999);
 
         UtFrameUtils.addMockBackend(10002);

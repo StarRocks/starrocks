@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # host_name
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 获取计算所在节点的主机名。该函数从 2.5 版本开始支持。
 

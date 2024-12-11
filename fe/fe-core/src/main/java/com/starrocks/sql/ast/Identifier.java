@@ -22,6 +22,11 @@ public class Identifier implements ParseNode {
 
     private final NodePosition pos;
 
+<<<<<<< HEAD
+=======
+    private boolean isBackQuoted = false;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Identifier(String value) {
         this(value, NodePosition.ZERO);
     }
@@ -40,6 +45,17 @@ public class Identifier implements ParseNode {
         return pos;
     }
 
+<<<<<<< HEAD
+=======
+    public void setBackQuoted(boolean isBackQuoted) {
+        this.isBackQuoted = isBackQuoted;
+    }
+
+    public boolean isBackQuoted() {
+        return isBackQuoted;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return null;

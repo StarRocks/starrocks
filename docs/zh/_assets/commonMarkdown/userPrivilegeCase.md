@@ -57,7 +57,11 @@
 
 4. 指定外部数据目录（External Catalog）下的写权限
 
+<<<<<<< HEAD
    当前仅支持写入数据到 Iceberg 表 (自 3.1 版本起)。
+=======
+   当前仅支持写入数据到 Iceberg 表 (自 3.1 版本起) 和 Hive 表（自 3.2 版本起）。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
    ```SQL
    -- 创建自定义角色。

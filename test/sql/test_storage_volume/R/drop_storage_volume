@@ -8,7 +8,11 @@ storage_volume_drop
 -- !result
 DROP STORAGE VOLUME storage_volume_drop_1;
 -- result:
+<<<<<<< HEAD
 E: (1064, "Unexpected exception: Storage volume 'storage_volume_drop_1' does not exist")
+=======
+E: (1064, "Storage volume 'storage_volume_drop_1' does not exist")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 DROP STORAGE VOLUME IF EXISTS storage_volume_drop_1;
 -- result:

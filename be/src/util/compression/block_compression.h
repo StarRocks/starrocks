@@ -106,7 +106,12 @@ protected:
 // data. And client doesn't have to release the codec.
 //
 // Return not OK, if error happens.
+<<<<<<< HEAD
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec);
+=======
+Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec,
+                                   int compression_level = -1);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 bool use_compression_pool(CompressionTypePB type);
 

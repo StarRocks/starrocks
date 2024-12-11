@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_days
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the number of days between a date and 0000-01-01.
 

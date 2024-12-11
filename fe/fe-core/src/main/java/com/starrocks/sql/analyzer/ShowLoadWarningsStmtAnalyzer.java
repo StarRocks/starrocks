@@ -39,7 +39,11 @@ public class ShowLoadWarningsStmtAnalyzer {
         new ShowLoadWarningsStmtAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class ShowLoadWarningsStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ShowLoadWarningsStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         private String label;
         private long jobId;

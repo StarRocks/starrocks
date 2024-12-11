@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ifnull
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 If `expr1` is NULL, returns expr2. If `expr1` is not NULL, returns `expr1`.
 

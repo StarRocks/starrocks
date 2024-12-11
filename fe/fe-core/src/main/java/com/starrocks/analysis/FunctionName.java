@@ -18,7 +18,10 @@ import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Function;
 import com.starrocks.cluster.ClusterNamespace;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
@@ -101,6 +104,7 @@ public class FunctionName implements Writable {
         return db_ + "." + fn_;
     }
 
+<<<<<<< HEAD
     public void analyze(String defaultDb) throws AnalysisException {
         if (fn_.length() == 0) {
             throw new AnalysisException("Function name can not be empty.");
@@ -108,17 +112,35 @@ public class FunctionName implements Writable {
         for (int i = 0; i < fn_.length(); ++i) {
             if (!isValidCharacter(fn_.charAt(i))) {
                 throw new AnalysisException(
+=======
+    public void analyze(String defaultDb) {
+        if (fn_.length() == 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Should order by column");
+        }
+        for (int i = 0; i < fn_.length(); ++i) {
+            if (!isValidCharacter(fn_.charAt(i))) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         "Function names must be all alphanumeric or underscore. " +
                                 "Invalid name: " + fn_);
             }
         }
         if (Character.isDigit(fn_.charAt(0))) {
+<<<<<<< HEAD
             throw new AnalysisException("Function cannot start with a digit: " + fn_);
+=======
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "Function cannot start with a digit: " + fn_);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         if (db_ == null) {
             db_ = defaultDb;
             if (Strings.isNullOrEmpty(db_)) {
+<<<<<<< HEAD
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
+=======
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # parse_json
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将字符串类型的数据构造为 JSON 类型的数据。
 

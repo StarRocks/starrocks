@@ -106,11 +106,14 @@ public class StreamAggNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
         List<Expr> conjuncts = normalizer.getConjunctsByPlanNodeId(this);
         normalizer.filterOutPartColRangePredicates(getId(), conjuncts,

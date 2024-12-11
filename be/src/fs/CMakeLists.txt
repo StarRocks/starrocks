@@ -20,16 +20,34 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 set(EXEC_FILES
     fd_cache.cpp
     fs.cpp
+<<<<<<< HEAD
+=======
+    encrypt_file.cpp
+    key_cache.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     fs_posix.cpp
     fs_broker.cpp
     fs_memory.cpp
     fs_s3.cpp
     hdfs/fs_hdfs.cpp
     hdfs/hdfs_fs_cache.cpp
+<<<<<<< HEAD
     fs_util.cpp
     fs_starlet.cpp
     )
 
+=======
+    s3/poco_http_client_factory.cpp
+    s3/poco_http_client.cpp
+    s3/poco_common.cpp
+    fs_util.cpp
+    )
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND EXEC_FILES fs_starlet.cpp)
+endif()
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 add_library(FileSystem STATIC
     ${EXEC_FILES}
 )

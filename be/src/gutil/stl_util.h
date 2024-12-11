@@ -430,9 +430,15 @@ private:
 template <class STLContainer>
 class TemplatedElementDeleter : public BaseDeleter {
 public:
+<<<<<<< HEAD
     explicit TemplatedElementDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
 
     ~TemplatedElementDeleter<STLContainer>() override { STLDeleteElements(container_ptr_); }
+=======
+    explicit TemplatedElementDeleter(STLContainer* ptr) : container_ptr_(ptr) {}
+
+    ~TemplatedElementDeleter() override { STLDeleteElements(container_ptr_); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     STLContainer* container_ptr_;
@@ -464,9 +470,15 @@ private:
 template <class STLContainer>
 class TemplatedValueDeleter : public BaseDeleter {
 public:
+<<<<<<< HEAD
     explicit TemplatedValueDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
 
     ~TemplatedValueDeleter<STLContainer>() override { STLDeleteValues(container_ptr_); }
+=======
+    explicit TemplatedValueDeleter(STLContainer* ptr) : container_ptr_(ptr) {}
+
+    ~TemplatedValueDeleter() override { STLDeleteValues(container_ptr_); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     STLContainer* container_ptr_;
@@ -501,8 +513,13 @@ private:
 template <class STLContainer>
 class STLElementDeleter {
 public:
+<<<<<<< HEAD
     STLElementDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
     ~STLElementDeleter<STLContainer>() { STLDeleteElements(container_ptr_); }
+=======
+    STLElementDeleter(STLContainer* ptr) : container_ptr_(ptr) {}
+    ~STLElementDeleter() { STLDeleteElements(container_ptr_); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     STLContainer* container_ptr_;
@@ -511,8 +528,13 @@ private:
 template <class STLContainer>
 class STLValueDeleter {
 public:
+<<<<<<< HEAD
     STLValueDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
     ~STLValueDeleter<STLContainer>() { STLDeleteValues(container_ptr_); }
+=======
+    STLValueDeleter(STLContainer* ptr) : container_ptr_(ptr) {}
+    ~STLValueDeleter() { STLDeleteValues(container_ptr_); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     STLContainer* container_ptr_;
@@ -756,8 +778,15 @@ BinaryComposeBinary<F, G1, G2> BinaryCompose2(F f, G1 g1, G2 g2) {
 template <typename T, typename Alloc = std::allocator<T> >
 class STLCountingAllocator : public Alloc {
 public:
+<<<<<<< HEAD
     typedef typename Alloc::pointer pointer;
     typedef typename Alloc::size_type size_type;
+=======
+    using AllocatorTraits = std::allocator_traits<Alloc>;
+
+    typedef typename AllocatorTraits::pointer pointer;
+    typedef typename AllocatorTraits::size_type size_type;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     STLCountingAllocator() {}
     STLCountingAllocator(int64* b) : bytes_used_(b) {} // TODO(user): explicit?
@@ -766,10 +795,17 @@ public:
     template <class U>
     STLCountingAllocator(const STLCountingAllocator<U>& x) : Alloc(x), bytes_used_(x.bytes_used()) {}
 
+<<<<<<< HEAD
     pointer allocate(size_type n, std::allocator<void>::const_pointer hint = nullptr) {
         assert(bytes_used_ != NULL);
         *bytes_used_ += n * sizeof(T);
         return Alloc::allocate(n, hint);
+=======
+    pointer allocate(size_type n) {
+        assert(bytes_used_ != NULL);
+        *bytes_used_ += n * sizeof(T);
+        return Alloc::allocate(n);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void deallocate(pointer p, size_type n) {

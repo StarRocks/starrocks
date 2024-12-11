@@ -24,7 +24,12 @@ namespace starrocks::pipeline {
 
 class MetaChunkSource final : public ChunkSource {
 public:
+<<<<<<< HEAD
     MetaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel, MetaScanContextPtr scan_ctx);
+=======
+    MetaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                    const MetaScanContextPtr& scan_ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ~MetaChunkSource() override;
 
@@ -35,8 +40,11 @@ public:
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
+<<<<<<< HEAD
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     MetaScanContextPtr _scan_ctx;
 
     std::shared_ptr<MetaScanner> _scanner;

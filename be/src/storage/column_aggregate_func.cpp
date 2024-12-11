@@ -18,8 +18,18 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+<<<<<<< HEAD
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
+=======
+#include "exprs/agg/agg_state_union.h"
+#include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_state_allocator.h"
+#include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "runtime/exec_env.h"
+#include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/column_aggregator.h"
 #include "util/percentile_value.h"
 
@@ -119,6 +129,7 @@ public:
 };
 
 template <>
+<<<<<<< HEAD
 class ReplaceAggregator<JsonColumn, JsonValue> final : public ValueColumnAggregator<JsonColumn, JsonValue> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
@@ -138,6 +149,8 @@ public:
 };
 
 template <>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class ReplaceAggregator<BinaryColumn, SliceState> final : public ValueColumnAggregator<BinaryColumn, SliceState> {
 public:
     void reset() override { this->data().reset(); }
@@ -171,7 +184,11 @@ struct ColumnRefState {
     }
 };
 
+<<<<<<< HEAD
 // Array/Map/Struct
+=======
+// Array/Map/Struct/Json
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 template <typename ColumnType>
 class ReplaceAggregator<ColumnType, ColumnRefState> final : public ValueColumnAggregator<ColumnType, ColumnRefState> {
 public:
@@ -262,6 +279,7 @@ class AggFuncBasedValueAggregator : public ValueColumnAggregatorBase {
 public:
     AggFuncBasedValueAggregator(const AggregateFunction* agg_func) : _agg_func(agg_func) {
         _state = static_cast<AggDataPtr>(std::aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
+<<<<<<< HEAD
         _agg_func->create(nullptr, _state);
     }
 
@@ -275,6 +293,38 @@ public:
     void reset() override {
         _agg_func->destroy(nullptr, _state);
         _agg_func->create(nullptr, _state);
+=======
+        // TODO: create a new FunctionContext by using specific FunctionContext::create_context
+        _func_ctx = new FunctionContext();
+        _agg_func->create(_func_ctx, _state);
+    }
+
+    AggFuncBasedValueAggregator(AggStateDesc* agg_state_desc, std::unique_ptr<AggregateFunction> agg_state_unoin)
+            : _agg_func(agg_state_unoin.get()) {
+        _agg_state_unoin = std::move(agg_state_unoin);
+        _runtime_state = std::make_unique<RuntimeState>(ExecEnv::GetInstance());
+        _mem_pool = std::make_unique<MemPool>();
+        _func_ctx = FunctionContext::create_context(_runtime_state.get(), _mem_pool.get(),
+                                                    agg_state_desc->get_return_type(), agg_state_desc->get_arg_types());
+        _state = static_cast<AggDataPtr>(std::aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
+        _agg_func->create(_func_ctx, _state);
+    }
+
+    ~AggFuncBasedValueAggregator() override {
+        SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultColumnAggregatorAllocator);
+        if (_state != nullptr) {
+            _agg_func->destroy(_func_ctx, _state);
+            std::free(_state);
+        }
+        if (_func_ctx != nullptr) {
+            delete _func_ctx;
+        }
+    }
+
+    void reset() override {
+        _agg_func->destroy(_func_ctx, _state);
+        _agg_func->create(_func_ctx, _state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void update_aggregate(Column* agg) override {
@@ -282,6 +332,7 @@ public:
         reset();
     }
 
+<<<<<<< HEAD
     void append_data(Column* agg) override { _agg_func->finalize_to_column(nullptr, _state, agg); }
 
     // |data| is readonly.
@@ -290,6 +341,18 @@ public:
     // |data| is readonly.
     void aggregate_batch_impl(int start, int end, const ColumnPtr& input) override {
         _agg_func->merge_batch_single_state(nullptr, _state, input.get(), start, end - start);
+=======
+    void append_data(Column* agg) override { _agg_func->finalize_to_column(_func_ctx, _state, agg); }
+
+    // |data| is readonly.
+    void aggregate_impl(int row, const ColumnPtr& data) override {
+        _agg_func->merge(_func_ctx, data.get(), _state, row);
+    }
+
+    // |data| is readonly.
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& input) override {
+        _agg_func->merge_batch_single_state(_func_ctx, _state, input.get(), start, end - start);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     bool need_deep_copy() const override { return false; };
@@ -323,7 +386,17 @@ public:
 
 private:
     const AggregateFunction* _agg_func;
+<<<<<<< HEAD
     AggDataPtr _state{nullptr};
+=======
+    FunctionContext* _func_ctx = nullptr;
+    AggDataPtr _state{nullptr};
+
+    // used for common aggregate functions
+    std::unique_ptr<AggregateFunction> _agg_state_unoin = nullptr;
+    std::unique_ptr<RuntimeState> _runtime_state = nullptr;
+    std::unique_ptr<MemPool> _mem_pool = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 #define CASE_DEFAULT_WARNING(TYPE)                                             \
@@ -375,7 +448,11 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
             CASE_REPLACE(TYPE_HLL, HyperLogLogColumn, HyperLogLog)
             CASE_REPLACE(TYPE_OBJECT, BitmapColumn, BitmapValue)
             CASE_REPLACE(TYPE_PERCENTILE, PercentileColumn, PercentileValue)
+<<<<<<< HEAD
             CASE_REPLACE(TYPE_JSON, JsonColumn, JsonValue)
+=======
+            CASE_REPLACE(TYPE_JSON, JsonColumn, ColumnRefState)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             CASE_DEFAULT_WARNING(type)
         }
     }
@@ -433,6 +510,24 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(cons
         } else {
             return p;
         }
+<<<<<<< HEAD
+=======
+    } else if (method == STORAGE_AGGREGATE_AGG_STATE_UNION) {
+        if (field->get_agg_state_desc() == nullptr) {
+            CHECK(false) << "Bad agg state union method for column: " << field->name()
+                         << " for its agg state type is null";
+            return nullptr;
+        }
+        auto* agg_state_desc = field->get_agg_state_desc();
+        auto func_name = agg_state_desc->get_func_name();
+        DCHECK_EQ(field->is_nullable(), agg_state_desc->is_result_nullable());
+        auto* agg_func = AggStateDesc::get_agg_state_func(agg_state_desc);
+        CHECK(agg_func != nullptr) << "Unknown aggregate function, name=" << func_name << ", type=" << type
+                                   << ", is_nullable=" << field->is_nullable()
+                                   << ", agg_state_desc=" << agg_state_desc->debug_string();
+        auto agg_state_union = std::make_unique<AggStateUnion>(*agg_state_desc, agg_func);
+        return std::make_unique<AggFuncBasedValueAggregator>(agg_state_desc, std::move(agg_state_union));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     } else {
         auto func_name = get_string_by_aggregation_type(method);
         // TODO(alvin): To keep compatible with old code, when type must not be the legacy type,

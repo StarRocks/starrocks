@@ -19,19 +19,34 @@ import com.starrocks.jni.connector.ScannerHelper;
 
 import java.io.File;
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.List;
+=======
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class PaimonSplitScannerFactory implements ScannerFactory {
     static ClassLoader classLoader;
 
     static {
         String basePath = System.getenv("STARROCKS_HOME");
+<<<<<<< HEAD
         List<File> preloadFiles = new ArrayList();
         preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
         File dir = new File(basePath + "/lib/paimon-reader-lib");
         for (File f : dir.listFiles()) {
             preloadFiles.add(f);
         }
+=======
+        List<File> preloadFiles = new ArrayList<>();
+        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
+        File dir = new File(basePath + "/lib/paimon-reader-lib");
+        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
+        dir = new File(basePath + "/lib/common-runtime-lib");
+        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         classLoader = ScannerHelper.createChildFirstClassLoader(preloadFiles, "paimon scanner");
     }
 
@@ -40,7 +55,11 @@ public class PaimonSplitScannerFactory implements ScannerFactory {
      * due to hadoop version (hadoop-2.x) conflicts with JNI launcher of libhdfs (hadoop-3.x).
      */
     @Override
+<<<<<<< HEAD
     public Class getScannerClass() throws ClassNotFoundException {
+=======
+    public Class getScannerClass(String scannerType) throws ClassNotFoundException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             return classLoader.loadClass("com.starrocks.paimon.reader.PaimonSplitScanner");
         } catch (ClassNotFoundException e) {

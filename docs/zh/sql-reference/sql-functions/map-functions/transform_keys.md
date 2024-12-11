@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # transform_keys
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 对 Map 中的 key 进行 Lambda 转换。有关 Lambda 函数的详细信息，参见 [Lambda expression](../Lambda_expression.md)。
 

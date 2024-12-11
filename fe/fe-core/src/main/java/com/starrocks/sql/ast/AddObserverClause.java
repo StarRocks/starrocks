@@ -27,4 +27,12 @@ public class AddObserverClause extends FrontendClause {
     public AddObserverClause(String hostPort, NodePosition pos) {
         super(hostPort, FrontendNodeType.OBSERVER, pos);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAddObserverClause(this, context);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

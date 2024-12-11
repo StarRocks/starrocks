@@ -43,7 +43,10 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.server.WarehouseManager;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -124,11 +127,14 @@ public abstract class AbstractJob implements Writable {
         this.repoId = repoId;
     }
 
+<<<<<<< HEAD
     public String getCurrentWarehouse() {
         // TODO(lzh): pass the current warehouse.
         return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public JobType getType() {
         return type;
     }

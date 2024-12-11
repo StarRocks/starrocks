@@ -1,0 +1,29 @@
+-- name: test_commit_kafka_offset
+create database test_commit_kafka_offset;
+
+use test_commit_kafka_offset;
+
+create table tbl_csv_file2 (
+	col_0 int not null,
+    col_1 double not null,
+    col_2 string not null,
+    col_3 date not null,
+    col_4 string not null
+) PROPERTIES ( "replication_num" = "1");
+
+CREATE ROUTINE LOAD rl_commit_offset on tbl_csv_file2
+COLUMNS TERMINATED BY '|',
+COLUMNS (col_0, col_1, col_2, col_3, col_4)
+PROPERTIES (
+"format"="csv") 
+FROM KAFKA (
+"kafka_broker_list"="${broker_list}",
+"kafka_topic"="topic-csv-file2",
+"kafka_partitions"="0",
+"kafka_offsets"="OFFSET_BEGINNING"
+);
+
+SELECT sleep(30);
+
+SHOW ROUTINE LOAD FOR rl_commit_offset;
+select state from information_schema.routine_load_jobs where name = "rl_commit_offset" order by id desc limit 1;

@@ -96,15 +96,35 @@ public class SystemId {
 
     public static final long BE_CLOUD_NATIVE_COMPACTIONS = 39L;
 
+<<<<<<< HEAD
     public static final long FE_METRICS_ID = 42L;
 
     public static final long SYS_DB_ID = 100L;
+=======
+    public static final long ROUTINE_LOAD_JOBS_ID = 40L;
+
+    public static final long STREAM_LOADS_ID = 41L;
+
+    public static final long FE_METRICS_ID = 42L;
+
+    public static final long TEMP_TABLES_ID = 43L;
+
+    public static final long SYS_DB_ID = 100L;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final long ROLE_EDGES_ID = 101L;
     public static final long GRANTS_TO_ROLES_ID = 102L;
     public static final long GRANTS_TO_USERS_ID = 103L;
     public static final long OBJECT_DEPENDENCIES = 104L;
     public static final long FE_LOCKS_ID = 105L;
     public static final long MEMORY_USAGE_ID = 106L;
+<<<<<<< HEAD
+=======
+    public static final long PIPE_FILES_ID = 120L;
+    public static final long PIPES_ID = 121L;
+    public static final long BE_DATACACHE_METRICS = 130L;
+    // Remain for other datacache manage table
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static final long PARTITIONS_META_ID = 140L;
 }

@@ -25,6 +25,7 @@
 namespace starrocks::bthreads {
 
 namespace {
+<<<<<<< HEAD
 struct FunctorArg {
     explicit FunctorArg(std::function<void()> f) : func(std::move(f)) {}
 
@@ -34,6 +35,13 @@ struct FunctorArg {
 static void* bthread_func(void* arg) {
     auto func_arg = static_cast<FunctorArg*>(arg);
     func_arg->func();
+=======
+typedef std::function<void()> FunctorArg;
+
+static void* bthread_func(void* arg) {
+    auto func_arg = static_cast<FunctorArg*>(arg);
+    func_arg->operator()();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     delete func_arg;
     return nullptr;
 }

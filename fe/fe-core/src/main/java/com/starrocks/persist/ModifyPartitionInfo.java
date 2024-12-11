@@ -37,9 +37,16 @@ package com.starrocks.persist;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DataProperty;
+<<<<<<< HEAD
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
+=======
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -97,12 +104,15 @@ public class ModifyPartitionInfo implements Writable {
         return isInMemory;
     }
 
+<<<<<<< HEAD
     public static ModifyPartitionInfo read(DataInput in) throws IOException {
         ModifyPartitionInfo info = new ModifyPartitionInfo();
         info.readFields(in);
         return info;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public int hashCode() {
         return Objects.hashCode(dbId, tableId);
@@ -124,6 +134,7 @@ public class ModifyPartitionInfo implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
+<<<<<<< HEAD
         out.writeLong(dbId);
         out.writeLong(tableId);
         out.writeLong(partitionId);
@@ -155,4 +166,8 @@ public class ModifyPartitionInfo implements Writable {
         isInMemory = in.readBoolean();
     }
 
+=======
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

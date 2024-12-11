@@ -15,6 +15,11 @@
 
 package com.starrocks.sql.optimizer.base;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Objects;
 
 /**
@@ -23,16 +28,28 @@ import java.util.Objects;
  */
 public final class ColumnIdentifier {
     private final long tableId;
+<<<<<<< HEAD
     private final String columnName;
 
     private long dbId = -1;
 
     public ColumnIdentifier(long tableId, String columnName) {
+=======
+    private final ColumnId columnName;
+
+    private long dbId = -1;
+
+    public ColumnIdentifier(long tableId, ColumnId columnName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.tableId = tableId;
         this.columnName = columnName;
     }
 
+<<<<<<< HEAD
     public ColumnIdentifier(long dbId, long tableId, String columnName) {
+=======
+    public ColumnIdentifier(long dbId, long tableId, ColumnId columnName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.dbId = dbId;
         this.tableId = tableId;
         this.columnName = columnName;
@@ -42,7 +59,11 @@ public final class ColumnIdentifier {
         return tableId;
     }
 
+<<<<<<< HEAD
     public String getColumnName() {
+=======
+    public ColumnId getColumnName() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return columnName;
     }
 

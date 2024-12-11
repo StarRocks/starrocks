@@ -38,7 +38,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TRoutineLoadTask;
@@ -169,13 +173,22 @@ public class RoutineLoadTaskSchedulerTest {
 
         new MockUp<KafkaTaskInfo>() {
             @Mock
+<<<<<<< HEAD
             public boolean readyToExecute() throws UserException {
+=======
+            public boolean readyToExecute() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return true;
             }
 
             @Mock
+<<<<<<< HEAD
             public TRoutineLoadTask createRoutineLoadTask() throws UserException {
                 throw new UserException("txn does not exist: 1");
+=======
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+                throw new StarRocksException("txn does not exist: 1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 
@@ -186,8 +199,13 @@ public class RoutineLoadTaskSchedulerTest {
             }
 
             @Mock
+<<<<<<< HEAD
             public TRoutineLoadTask createRoutineLoadTask() throws UserException {
                 throw new UserException("txn does not exist: 1");
+=======
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+                throw new StarRocksException("txn does not exist: 1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         };
 
@@ -197,7 +215,11 @@ public class RoutineLoadTaskSchedulerTest {
         try {
             routineLoadTaskScheduler.scheduleOneTask(routineLoadTaskInfo1);
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertTrue(e instanceof UserException);
+=======
+            Assert.assertTrue(e instanceof StarRocksException);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.assertEquals("txn does not exist: 1", e.getMessage());
             Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.state);
         }
@@ -251,12 +273,20 @@ public class RoutineLoadTaskSchedulerTest {
 
         new MockUp<KafkaTaskInfo>() {
             @Mock
+<<<<<<< HEAD
             public boolean readyToExecute() throws UserException {
+=======
+            public boolean readyToExecute() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return true;
             }
 
             @Mock
+<<<<<<< HEAD
             public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+=======
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 throw new MetaNotFoundException("database 1 does not exist");
             }
         };
@@ -268,7 +298,11 @@ public class RoutineLoadTaskSchedulerTest {
             }
 
             @Mock
+<<<<<<< HEAD
             public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+=======
+            public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 throw new MetaNotFoundException("database 1 does not exist");
             }
         };

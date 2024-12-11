@@ -20,13 +20,23 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
+<<<<<<< HEAD
+=======
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class WindowTest extends PlanTestBase {
 
     @Test
     public void testLagWindowFunction() throws Exception {
         String sql = "select lag(id_datetime, 1, '2020-01-01') over(partition by t1c) from test_all_type;";
         String plan = getThriftPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "signature:lag(DATETIME, BIGINT, DATETIME)");
+=======
+        assertContains(plan, "lag");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         sql = "select lag(id_decimal, 1, 10000) over(partition by t1c) from test_all_type;";
         plan = getThriftPlan(sql);
@@ -37,18 +47,30 @@ public class WindowTest extends PlanTestBase {
                 "TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))])], " +
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))]), " +
+<<<<<<< HEAD
                 "has_var_args:false, signature:lag(DECIMAL64(10,2), BIGINT, DECIMAL64(10,2))";
         System.out.println(expectSlice);
+=======
+                "has_var_args:false";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(plan, plan.contains(expectSlice));
 
         sql = "select lag(null, 1,1) OVER () from t0";
         plan = getFragmentPlan(sql);
         assertContains(plan, "functions: [, lag(NULL, 1, 1), ]");
 
+<<<<<<< HEAD
         sql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("The type of the third parameter of LEAD/LAG not match the type DATETIME");
         getThriftPlan(sql);
+=======
+
+        String invalidSql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
+        SemanticException e = assertThrows(SemanticException.class, () -> getThriftPlan(invalidSql));
+        Assert.assertTrue(e.getMessage(),
+                e.getMessage().contains("The type of the third parameter of LEAD/LAG not match the type DATETIME"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -203,6 +225,10 @@ public class WindowTest extends PlanTestBase {
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: <slot 3> 3: k3 ASC\n" +
+<<<<<<< HEAD
+=======
+                "  |  analytic partition by: 3: k3\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "  |  offset: 0");
     }
 
@@ -212,6 +238,10 @@ public class WindowTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: <slot 2> 2: v2 ASC\n" +
+<<<<<<< HEAD
+=======
+                "  |  analytic partition by: 2: v2\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "  |  offset: 0");
 
     }
@@ -262,7 +292,11 @@ public class WindowTest extends PlanTestBase {
                 .analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
 
         sql = "select v1, v2, NTILE(9223372036854775808) over (partition by v1 order by v2) as j1 from t0";
+<<<<<<< HEAD
         starRocksAssert.query(sql).analysisError("Number out of range");
+=======
+        starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         sql = "select v1, v2, NTILE((select v1 from t0)) over (partition by v1 order by v2) as j1 from t0";
         starRocksAssert.query(sql)
@@ -510,6 +544,10 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 3: v3\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:EXCHANGE");
@@ -602,6 +640,10 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 3: v3\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0");
 
             sql = "select * from (\n" +
@@ -613,6 +655,10 @@ public class WindowTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 3: v3\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0");
         }
         {
@@ -626,6 +672,10 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 3: v3\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0");
 
             sql = "select * from (\n" +
@@ -637,6 +687,10 @@ public class WindowTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 3: v3\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0");
         }
         {
@@ -650,6 +704,10 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 3: v3\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:EXCHANGE");
@@ -658,6 +716,221 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testRankingWindowPreAggWithPartitionPredicatePushDown() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // row_number
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v3 order by v2) as rk, " +
+                    " sum(v3) over (partition by v3) as _sum, avg(v3) over (partition by v3) as _avg, " +
+                    "count(v3) over (partition by v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        // rank
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk, " +
+                    " sum(v3) over (partition by v3) as _sum, avg(v3) over (partition by v3) as _avg, " +
+                    "count(v3) over (partition by v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  type: RANK\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        // Support multi partition by.
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk, " +
+                    " sum(v3) over (partition by v2, v3) as _sum, avg(v3) over (partition by v2,v3) as _avg, " +
+                    "count(v3) over (partition by v2, v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        /* if window operators like below , cannot be optimized, because node3 share same sort group with node4
+             5:ANALYTIC
+            |  functions: [, row_number(), ]
+            |  partition by: 2: v2, 3: v3
+            |  order by: 1: v1 ASC
+            |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            |
+            4:ANALYTIC
+            |  functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]
+            |  partition by: 2: v2, 3: v3
+            |
+            3:ANALYTIC
+            |  functions: [, lead(3: v3, 1, 0), ]
+            |  partition by: 2: v2
+            |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING
+        */
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk, " +
+                    " sum(v3) over (partition by v2, v3) as _sum, avg(v3) over (partition by v2, v3) as _avg, " +
+                    "count(v3) over (partition by v2, v3) as _count," +
+                    "lead(v3,1,0) over (partition by v2, v3)" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testRankingWindowPreAggWithPartitionLimitPushDown() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // row_number
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v3 order by v2) as rk, " +
+                    " sum(v3) over (partition by v3) as _sum, avg(v3) over (partition by v3) as _avg, " +
+                    "count(v3) over (partition by v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        // rank
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk, " +
+                    " sum(v3) over (partition by v3) as _sum, avg(v3) over (partition by v3) as _avg, " +
+                    "count(v3) over (partition by v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  type: RANK\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        // Support multi partition by.
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk, " +
+                    " sum(v3) over (partition by v2, v3) as _sum, avg(v3) over (partition by v2,v3) as _avg, " +
+                    "count(v3) over (partition by v2, v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        /* if window operators like below , cannot be optimized, because node3 share same sort group with node4
+             5:ANALYTIC
+            |  functions: [, row_number(), ]
+            |  partition by: 2: v2, 3: v3
+            |  order by: 1: v1 ASC
+            |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            |
+            4:ANALYTIC
+            |  functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]
+            |  partition by: 2: v2, 3: v3
+            |
+            3:ANALYTIC
+            |  functions: [, lead(3: v3, 1, 0), ]
+            |  partition by: 2: v2
+            |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING
+        */
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk, " +
+                    " sum(v3) over (partition by v2, v3) as _sum, avg(v3) over (partition by v2, v3) as _avg, " +
+                    "count(v3) over (partition by v2, v3) as _count," +
+                    "lead(v3,1,0) over (partition by v2, v3)" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    // TODO:support this case later
+    @Test
+    public void testRankingWindowWithoutPartitionCanNotPushDown() throws Exception {
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk, " +
+                    " sum(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _sum, " +
+                    "avg(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _avg, " +
+                    "count(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <=4";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
+
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk, " +
+                    " sum(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _sum, " +
+                    "avg(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _avg, " +
+                    "count(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testCumeWindowFunctionCommon() throws Exception {
         FeConstants.runningUnitTest = true;
         {
@@ -980,15 +1253,25 @@ public class WindowTest extends PlanTestBase {
                 "(select v1 from t0 where v1 = 1) b " +
                 "where a.v1 = b.v1";
         String plan = getVerboseExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: [1, BIGINT, true] ASC, [2, BIGINT, true] DESC\n" +
+=======
+        assertContains(plan, "1:SORT\n" +
+                "  |  order by: [1, BIGINT, true] ASC, [2, BIGINT, true] DESC\n" +
+                "  |  analytic partition by: [1: v1, BIGINT, true]\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "  |  offset: 0\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     table: t0, rollup: t0\n" +
                 "     preAggregation: on\n" +
+<<<<<<< HEAD
                 "     Predicates: 1: v1 IS NOT NULL\n" +
+=======
+                "     Predicates: [1: v1, BIGINT, true] = 1, 1: v1 IS NOT NULL\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     actualRows=0, avgRowSize=2.0\n" +
@@ -1074,6 +1357,10 @@ public class WindowTest extends PlanTestBase {
                     "  |  \n" +
                     "  1:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 3> 3: v3 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +
@@ -1099,6 +1386,10 @@ public class WindowTest extends PlanTestBase {
                     "  |  \n" +
                     "  1:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1, 2: v2\n" +
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +
@@ -1116,10 +1407,15 @@ public class WindowTest extends PlanTestBase {
                 "    select *, " +
                         "        row_number() over (PARTITION BY v1 order by v2) as rk " +
                         "    from t0 where v1 > 1 and v2 > 1 having rk = 1;\n";
+<<<<<<< HEAD
 
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("HAVING clause cannot contain window function");
         getFragmentPlan(sql);
+=======
+        SemanticException e = assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        assertTrue(e.getMessage(), e.getMessage().contains("HAVING clause cannot contain window function"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -1345,6 +1641,7 @@ public class WindowTest extends PlanTestBase {
                 "  |  cardinality: 1");
 
         plan = getDescTbl(sql);
+<<<<<<< HEAD
         assertContains(plan, "TSlotDescriptor(id:11, parent:2, " +
                 "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
                 "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
@@ -1353,6 +1650,16 @@ public class WindowTest extends PlanTestBase {
                 "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
                 "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
                 "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false)");
+=======
+        assertContains(plan, "TSlotDescriptor(id:11, parent:3, " +
+                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
+        assertContains(plan, "TSlotDescriptor(id:11, parent:5, " +
+                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -1360,9 +1667,31 @@ public class WindowTest extends PlanTestBase {
         String sql = "select array_length(v3) from (select v3, row_number() over (order by v2) row_num from tarray) t " +
                 "where row_num = 1";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "4:ANALYTIC\n" +
                 "  |  functions: [, row_number(), ]\n" +
                 "  |  order by: 2: v2 ASC\n" +
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n");
+=======
+        assertContains(plan, "  4:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  3:MERGING-EXCHANGE");
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 6> : array_length(3: v3)");
+    }
+
+    @Test
+    public void testOrderByConstant() throws Exception {
+        String sql = "with cc as (select *, 1 as a from t0) select v1, row_number() over (order by a) from cc";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  order by: 9: a ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

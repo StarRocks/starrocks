@@ -27,16 +27,28 @@ class CacheKey;
 class DelVector;
 class Segment;
 class TabletSchema;
+<<<<<<< HEAD
+=======
+class TabletMetadataPB;
+class TxnLogPB;
+class CombinedTxnLogPB;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks
 
 namespace starrocks::lake {
 
+<<<<<<< HEAD
 class TabletMetadataPB;
 class TxnLogPB;
 
 using CacheValue =
         std::variant<std::shared_ptr<const TabletMetadataPB>, std::shared_ptr<const TxnLogPB>,
                      std::shared_ptr<const TabletSchema>, std::shared_ptr<const DelVector>, std::shared_ptr<Segment>>;
+=======
+using CacheValue = std::variant<std::shared_ptr<const TabletMetadataPB>, std::shared_ptr<const TxnLogPB>,
+                                std::shared_ptr<const TabletSchema>, std::shared_ptr<const DelVector>,
+                                std::shared_ptr<Segment>, std::shared_ptr<const CombinedTxnLogPB>>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 class Metacache {
 public:
@@ -50,6 +62,11 @@ public:
 
     std::shared_ptr<const TxnLogPB> lookup_txn_log(std::string_view key);
 
+<<<<<<< HEAD
+=======
+    std::shared_ptr<const CombinedTxnLogPB> lookup_combined_txn_log(std::string_view key);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::shared_ptr<const TabletSchema> lookup_tablet_schema(std::string_view key);
 
     std::shared_ptr<Segment> lookup_segment(std::string_view key);
@@ -62,6 +79,11 @@ public:
 
     void cache_txn_log(std::string_view key, std::shared_ptr<const TxnLogPB> log);
 
+<<<<<<< HEAD
+=======
+    void cache_combined_txn_log(std::string_view key, std::shared_ptr<const CombinedTxnLogPB> log);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void cache_segment(std::string_view key, std::shared_ptr<Segment> segment);
 
     // cache the segment if the given key not exists in the cache, returns the segment shared_ptr stored in the cache.

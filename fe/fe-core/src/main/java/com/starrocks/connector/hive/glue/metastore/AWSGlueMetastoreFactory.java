@@ -15,15 +15,26 @@
 
 package com.starrocks.connector.hive.glue.metastore;
 
+<<<<<<< HEAD
 import com.amazonaws.services.glue.AWSGlue;
 import com.starrocks.connector.hive.glue.util.AWSGlueConfig;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.MetaException;
+=======
+import com.starrocks.connector.hive.glue.util.AWSGlueConfig;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.api.MetaException;
+import software.amazon.awssdk.services.glue.GlueClient;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class AWSGlueMetastoreFactory {
 
     public AWSGlueMetastore newMetastore(HiveConf conf) throws MetaException {
+<<<<<<< HEAD
         AWSGlue glueClient = new AWSGlueClientFactory(conf).newClient();
+=======
+        GlueClient glueClient = new AWSGlueClientFactory(conf).newClient();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         AWSGlueMetastore defaultMetastore = new DefaultAWSGlueMetastore(conf, glueClient);
         if (isCacheEnabled(conf)) {
             return new AWSGlueMetastoreCacheDecorator(conf, defaultMetastore);

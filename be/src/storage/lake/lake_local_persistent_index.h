@@ -25,6 +25,7 @@ namespace starrocks::lake {
 
 class MetaFileBuilder;
 class LakePrimaryIndex;
+<<<<<<< HEAD
 
 class LakeLocalPersistentIndex : public PersistentIndex {
 public:
@@ -37,6 +38,25 @@ public:
 
 private:
     std::string _path;
+=======
+class TabletManager;
+
+class LakeLocalPersistentIndex : public PersistentIndex {
+public:
+    explicit LakeLocalPersistentIndex(std::string path) : PersistentIndex(std::move(path)) {}
+
+    ~LakeLocalPersistentIndex() override = default;
+
+    Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
+                                 const MetaFileBuilder* builder);
+
+    double get_write_amp_score() const { return _write_amp_score.load(); }
+
+    void set_write_amp_score(double score) { _write_amp_score.store(score); }
+
+private:
+    std::atomic<double> _write_amp_score{0.0};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks::lake

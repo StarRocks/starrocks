@@ -46,7 +46,11 @@ Status SortExecExprs::init(const TSortInfo& sort_info, ObjectPool* pool, Runtime
 Status SortExecExprs::init(const std::vector<TExpr>& ordering_exprs, const std::vector<TExpr>* sort_tuple_slot_exprs,
                            ObjectPool* pool, RuntimeState* state) {
     _pool = pool;
+<<<<<<< HEAD
     RETURN_IF_ERROR(Expr::create_expr_trees(pool, ordering_exprs, &_lhs_ordering_expr_ctxs, state));
+=======
+    RETURN_IF_ERROR(Expr::create_expr_trees(pool, ordering_exprs, &_lhs_ordering_expr_ctxs, state, true));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (auto& expr : _lhs_ordering_expr_ctxs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_orderby()) {
@@ -56,7 +60,12 @@ Status SortExecExprs::init(const std::vector<TExpr>& ordering_exprs, const std::
 
     if (sort_tuple_slot_exprs != nullptr) {
         _materialize_tuple = true;
+<<<<<<< HEAD
         RETURN_IF_ERROR(Expr::create_expr_trees(pool, *sort_tuple_slot_exprs, &_sort_tuple_slot_expr_ctxs, state));
+=======
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(pool, *sort_tuple_slot_exprs, &_sort_tuple_slot_expr_ctxs, state, true));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     } else {
         _materialize_tuple = false;
     }
@@ -107,4 +116,16 @@ SortExecExprs::~SortExecExprs() {
     }
 }
 
+<<<<<<< HEAD
+=======
+bool SortExecExprs::is_constant_lhs_ordering() const {
+    for (const auto& expr : _lhs_ordering_expr_ctxs) {
+        if (!expr->root()->is_constant()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } //namespace starrocks

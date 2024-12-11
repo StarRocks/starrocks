@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # conv
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts the number `x` from one numeric base system to another, and returns the result as a string value.
 

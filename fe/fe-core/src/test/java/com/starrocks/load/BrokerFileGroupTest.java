@@ -15,6 +15,10 @@
 
 package com.starrocks.load;
 
+<<<<<<< HEAD
+=======
+import com.google.api.client.util.Sets;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BinaryPredicate;
@@ -27,14 +31,27 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.CsvFormat;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.server.LocalMetastore;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+<<<<<<< HEAD
+=======
+import mockit.Mock;
+import mockit.MockUp;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -42,7 +59,13 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+<<<<<<< HEAD
 import java.util.List;
+=======
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class BrokerFileGroupTest {
     @Mocked
@@ -75,7 +98,11 @@ public class BrokerFileGroupTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCSVParams() throws UserException {
+=======
+    public void testCSVParams() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         CsvFormat csvFormat = new CsvFormat((byte) '\'', (byte) '|', 3, true);
         List<String> filePaths = new ArrayList<>();
         filePaths.add("/a/b/c/file");
@@ -94,7 +121,11 @@ public class BrokerFileGroupTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCSVParamsWithSpecialCharacter() throws UserException {
+=======
+    public void testCSVParamsWithSpecialCharacter() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         CsvFormat csvFormat = new CsvFormat((byte) '\t', (byte) '\\', 3, true);
         List<String> filePaths = new ArrayList<>();
         filePaths.add("/a/b/c/file");
@@ -113,7 +144,11 @@ public class BrokerFileGroupTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testParseHiveTable() throws UserException {
+=======
+    public void testParseHiveTable() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // k1 = bitmap_dict(k1)
         SlotRef slotRef1 = new SlotRef(null, "k1");
         List<Expr> params1 = Lists.newArrayList(slotRef1);
@@ -151,9 +186,37 @@ public class BrokerFileGroupTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+        };
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
         fileGroup.parse(db, desc);
         Assert.assertEquals(Lists.newArrayList("k1", "k2"), fileGroup.getFileFieldNames());
         Assert.assertEquals(10, fileGroup.getSrcTableId());
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testTableFunctionTableCSVDelimiter() throws StarRocksException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "fake://some_bucket/some_path/*");
+        properties.put("format", "CSV");
+        properties.put("csv.column_separator", "\\x01");
+        properties.put("csv.row_delimiter", "\\x02");
+
+        TableFunctionTable table = new TableFunctionTable(properties);
+        BrokerFileGroup fileGroup = new BrokerFileGroup(table, Sets.newHashSet());
+        Assert.assertEquals("\1", fileGroup.getColumnSeparator());
+        Assert.assertEquals("\2", fileGroup.getRowDelimiter());
+    }
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

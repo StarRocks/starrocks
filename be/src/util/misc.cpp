@@ -24,7 +24,11 @@ static constexpr int sleep_interval = 100 * 1000; // 100ms
 static constexpr int sleep_interval = 1 * 1000 * 1000; // 1 seconds
 #endif
 
+<<<<<<< HEAD
 void nap_sleep(int32_t sleep_secs, std::function<bool()> stop_condition) {
+=======
+void nap_sleep(int32_t sleep_secs, const std::function<bool()>& stop_condition) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Awaitility await;
     await.timeout(sleep_secs * 1000LL * 1000LL).interval(sleep_interval);
     await.until(stop_condition);

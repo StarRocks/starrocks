@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_name,
@@ -38,6 +39,8 @@ group by
 order by
     numwait desc,
     s_name limit 100;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:2: S_NAME | 77: count
@@ -99,7 +102,10 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=600000000
 avgRowSize=12.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -135,7 +141,10 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=300000000
 avgRowSize=20.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -169,7 +178,10 @@ rollup: orders
 tabletRatio=10/10
 cardinality=50000000
 avgRowSize=9.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 5
 OUTPUT EXPRS:
@@ -204,7 +216,10 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=300000000
 avgRowSize=20.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 6
 OUTPUT EXPRS:
@@ -233,7 +248,10 @@ rollup: supplier
 tabletRatio=1/1
 cardinality=1000000
 avgRowSize=33.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 7
 OUTPUT EXPRS:
@@ -255,6 +273,9 @@ rollup: nation
 tabletRatio=1/1
 cardinality=1
 avgRowSize=29.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [end]
 

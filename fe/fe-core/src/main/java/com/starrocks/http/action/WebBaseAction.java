@@ -272,6 +272,11 @@ public class WebBaseAction extends BaseAction {
         String key = UUID.randomUUID().toString();
         DefaultCookie cookie = new DefaultCookie(STARROCKS_SESSION_ID, key);
         cookie.setMaxAge(STARROCKS_SESSION_EXPIRED_TIME);
+<<<<<<< HEAD
+=======
+        cookie.setPath("/");
+        cookie.setHttpOnly(true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         response.addCookie(cookie);
         HttpAuthManager.getInstance().addSessionValue(key, value);
     }
@@ -307,9 +312,12 @@ public class WebBaseAction extends BaseAction {
                     .append("ha")
                     .append("</a></li>");
         }
+<<<<<<< HEAD
         sb.append("<li id=\"nav_help\"><a href=\"/help\">")
                 .append("help")
                 .append("</a></li></tr>");
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         sb.append(NAVIGATION_BAR_SUFFIX);
     }
@@ -357,7 +365,11 @@ public class WebBaseAction extends BaseAction {
                 node = instance.open(path);
             }
         } catch (AnalysisException e) {
+<<<<<<< HEAD
             LOG.warn(e.getMessage());
+=======
+            LOG.warn(e.getMessage(), e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return null;
         }
         return node;

@@ -27,4 +27,12 @@ public class AddFollowerClause extends FrontendClause {
     public AddFollowerClause(String hostPort, NodePosition pos) {
         super(hostPort, FrontendNodeType.FOLLOWER, pos);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAddFollowerClause(this, context);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

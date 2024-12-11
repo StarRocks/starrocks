@@ -16,8 +16,13 @@ package com.starrocks.credential.aliyun;
 
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.CloudConfiguration;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
@@ -38,12 +43,21 @@ public class AliyunCloudConfiguration extends CloudConfiguration {
         return aliyunCloudCredential;
     }
 
+<<<<<<< HEAD
     // reuse aws client logic of BE
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
         Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
+=======
+    @Override
+    public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        super.toThrift(tCloudConfiguration);
+        // reuse aws client logic of BE
+        tCloudConfiguration.setCloud_type(TCloudType.AWS);
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(true));
         aliyunCloudCredential.toThrift(properties);
     }

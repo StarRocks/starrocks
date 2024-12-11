@@ -118,7 +118,11 @@ public class ScalarOperatorsReuseTest {
         List<ScalarOperator> oldOperators = Lists.newArrayList(add1, add3, multi);
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
+<<<<<<< HEAD
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory, false);
+=======
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // FixMe(kks): This case could improve
         assertEquals(commonSubScalarOperators.size(), 3);
@@ -146,7 +150,11 @@ public class ScalarOperatorsReuseTest {
         List<ScalarOperator> oldOperators = Lists.newArrayList(addABC, addBCD);
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
+<<<<<<< HEAD
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory, false);
+=======
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // FixMe(kks): could we improve this case?
         assertTrue(commonSubScalarOperators.isEmpty());
@@ -172,7 +180,11 @@ public class ScalarOperatorsReuseTest {
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, ImmutableList.of(add1, add2, add3, add4),
+<<<<<<< HEAD
                         columnRefFactory, false);
+=======
+                        columnRefFactory);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertFalse(commonSubScalarOperators.isEmpty());
     }
 
@@ -196,7 +208,11 @@ public class ScalarOperatorsReuseTest {
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, ImmutableList.of(add1, add2, add3, add4),
+<<<<<<< HEAD
                         columnRefFactory, false);
+=======
+                        columnRefFactory);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertEquals(3, commonSubScalarOperators.size());
     }
 
@@ -222,7 +238,11 @@ public class ScalarOperatorsReuseTest {
 
         // reuse lambda argument non-related sub expressions : t1*2
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
+<<<<<<< HEAD
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory, false);
+=======
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertEquals(commonSubScalarOperators.size(), 1);
     }
 
@@ -248,7 +268,11 @@ public class ScalarOperatorsReuseTest {
 
         // reuse lambda argument related sub expressions : x*2
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
+<<<<<<< HEAD
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory, true);
+=======
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         assertEquals(commonSubScalarOperators.size(), 1);
 
     }

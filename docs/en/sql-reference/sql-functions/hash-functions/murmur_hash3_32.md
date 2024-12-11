@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # murmur_hash3_32
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the 32-bit murmur3 hash value of the input string.
 

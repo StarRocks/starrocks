@@ -14,7 +14,10 @@
 package com.starrocks.connector.partitiontraits;
 
 import com.starrocks.catalog.BaseTableInfo;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.HudiPartitionKey;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
@@ -23,12 +26,15 @@ import java.util.List;
 import java.util.Set;
 
 public class HudiPartitionTraits extends DefaultTraits {
+<<<<<<< HEAD
 
     @Override
     public String getDbName() {
         return ((HiveMetaStoreTable) table).getDbName();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public PartitionKey createEmptyKey() {
         return new HudiPartitionKey();
@@ -40,6 +46,14 @@ public class HudiPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public String getTableName() {
+        return table.getCatalogTableName();
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                 MaterializedView.AsyncRefreshContext context) {
         // TODO: implement

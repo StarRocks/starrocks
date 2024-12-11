@@ -39,8 +39,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -53,6 +57,10 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.QueryDebugOptions;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.parser.NodePosition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import mockit.Mocked;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.Assert;
@@ -66,25 +74,41 @@ import java.util.List;
 public class SetStmtTest {
 
     @Mocked
+<<<<<<< HEAD
     private Auth auth;
     @Mocked
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private ConnectContext ctx;
 
     @Before
     public void setUp() {
+<<<<<<< HEAD
         MockedAuth.mockedAuth(auth);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException {
         List<SetListItem> vars = Lists.newArrayList(new UserVariable("times", new IntLiteral(100L)),
+=======
+    public void testNormal() throws StarRocksException {
+        List<SetListItem> vars = Lists.newArrayList(new UserVariable("times", new IntLiteral(100L),
+                        NodePosition.ZERO),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 new SetNamesVar("utf8"));
         SetStmt stmt = new SetStmt(vars);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         Assert.assertEquals("times", ((UserVariable) stmt.getSetListItems().get(0)).getVariable());
+<<<<<<< HEAD
         Assert.assertEquals("100", ((UserVariable) stmt.getSetListItems().get(0)).getEvaluatedExpression().getStringValue());
+=======
+        Assert.assertEquals("100", ((UserVariable) stmt.getSetListItems().get(0)).getEvaluatedExpression().toSqlImpl());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertTrue(stmt.getSetListItems().get(1) instanceof SetNamesVar);
         Assert.assertEquals("utf8", ((SetNamesVar) stmt.getSetListItems().get(1)).getCharset());
     }
@@ -100,7 +124,11 @@ public class SetStmtTest {
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
+<<<<<<< HEAD
     public void testNonConstantExpr() throws UserException {
+=======
+    public void testNonConstantExpr() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         SlotDescriptor descriptor = new SlotDescriptor(new SlotId(1), "x",
                 Type.INT, false);
         Expr lhsExpr = new SlotRef(descriptor);
@@ -129,7 +157,11 @@ public class SetStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSetNonNegativeLongVariable() throws UserException {
+=======
+    public void testSetNonNegativeLongVariable() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<String> fields = Lists.newArrayList(
                 SessionVariable.LOAD_MEM_LIMIT,
                 SessionVariable.QUERY_MEM_LIMIT,
@@ -169,6 +201,56 @@ public class SetStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testMaterializedViewRewriteMode() throws AnalysisException {
+        // normal
+        {
+            for (SessionVariable.MaterializedViewRewriteMode mode :
+                    EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class)) {
+                try {
+                    SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE,
+                            new StringLiteral(mode.toString()));
+                    SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                } catch (Exception e) {
+                    Assert.fail();;
+                }
+            }
+
+        }
+
+        // empty
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE,
+                    new StringLiteral(""));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assert.fail();
+            } catch (Exception e) {
+                e.printStackTrace();
+                Assert.assertEquals("Getting analyzing error. Detail message: Unsupported materialized view " +
+                        "rewrite mode: , supported list is DISABLE,DEFAULT,DEFAULT_OR_ERROR,FORCE,FORCE_OR_ERROR.",
+                        e.getMessage());
+            }
+        }
+
+        // bad case
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE,
+                    new StringLiteral("bad_case"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assert.fail("should fail");
+            } catch (SemanticException e) {
+                Assert.assertEquals("Getting analyzing error. Detail message: Unsupported " +
+                        "materialized view rewrite mode: bad_case, " +
+                        "supported list is DISABLE,DEFAULT,DEFAULT_OR_ERROR,FORCE,FORCE_OR_ERROR.", e.getMessage());;
+            }
+        }
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testFollowerQueryForwardMode() throws AnalysisException {
         // normal
         {
@@ -319,4 +401,29 @@ public class SetStmtTest {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testSetCatalog() {
+        // good
+        try {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, "catalog",
+                    new StringLiteral("default_catalog"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+        // bad
+        try {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, "catalog",
+                    new StringLiteral("non_existent_catalog"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Getting analyzing error. Detail message: Unknown catalog non_existent_catalog.", e.getMessage());;
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

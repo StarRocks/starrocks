@@ -1,13 +1,41 @@
 comment: false
 codecov:
   allow_coverage_offsets: true
+<<<<<<< HEAD
+=======
+  max_report_age: off
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 github_checks:
   annotations: false
 coverage:
   status:
     project:
+<<<<<<< HEAD
       fe-ut:
         target: 60%
         threshold: 5%
         only_pulls: true
     patch: false
+=======
+      default: off
+      fe-total:
+        target: 60%
+        threshold: 5%
+        only_pulls: true
+        flags:
+          - fe-total
+      be-total:
+        target: 60%
+        threshold: 5%
+        only_pulls: true
+        flags:
+          - be-total
+    patch: false
+flags:
+  fe-total:
+    paths:
+      - fe/
+  be-total:
+    paths:
+      - be/
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

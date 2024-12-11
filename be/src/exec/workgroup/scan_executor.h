@@ -36,6 +36,15 @@ public:
 
     bool submit(ScanTask task);
 
+<<<<<<< HEAD
+=======
+    void force_submit(ScanTask task);
+
+    void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids);
+
+    int64_t num_tasks() const;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     void worker_thread();
 

@@ -199,6 +199,11 @@ public:
     // For benchmark, we need to separate io from parsing.
     Status init_buff() { return _fill_buffer(); }
 
+<<<<<<< HEAD
+=======
+    size_t buff_capacity() const;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 protected:
     CSVParseOptions _parse_options;
     size_t _row_delimiter_length;
@@ -207,6 +212,10 @@ protected:
     CSVBuffer _buff;
     raw::RawVector<char> _escape_data;
     virtual Status _fill_buffer() { return Status::InternalError("unsupported csv reader!"); }
+<<<<<<< HEAD
+=======
+    virtual char* _find_line_delimiter(CSVBuffer& buffer, size_t pos) = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::queue<CSVRow> _csv_buff;
     std::unordered_set<size_t> _escape_pos;
     std::vector<CSVColumn> _columns;

@@ -178,6 +178,11 @@ public:
     template <typename T>
     bool get_bytes(int num_bytes, T* v);
 
+<<<<<<< HEAD
+=======
+    bool skip_bytes(int num_bytes);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Gets up to 'num_values' bit-packed values, starting from the current byte in the
     // buffer and advance the read position. 'bit_width' must be <= 64.
     // If 'bit_width' * 'num_values' is not a multiple of 8, the trailing bytes are

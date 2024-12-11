@@ -229,11 +229,19 @@ public class Analyzer {
     }
 
     public Table getTable(TableName tblName) {
+<<<<<<< HEAD
         Database db = globalState.globalStateMgr.getDb(tblName.getDb());
         if (db == null) {
             return null;
         }
         return db.getTable(tblName.getTbl());
+=======
+        Database db = globalState.globalStateMgr.getLocalMetastore().getDb(tblName.getDb());
+        if (db == null) {
+            return null;
+        }
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public TupleDescriptor getTupleDesc(TupleId id) {

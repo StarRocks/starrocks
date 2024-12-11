@@ -14,7 +14,11 @@
 
 package com.starrocks.pseudocluster;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TTabletVersionPair;
@@ -55,7 +59,12 @@ public class BeTxnManager {
         this.backend = backend;
     }
 
+<<<<<<< HEAD
     public synchronized void commit(long txnId, long partitionId, Tablet tablet, Rowset rowset) throws UserException {
+=======
+    public synchronized void commit(long txnId, long partitionId, Tablet tablet, Rowset rowset) throws
+            StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TxnInfo tinfo = txns.computeIfAbsent(txnId, k -> new TxnInfo(k));
         Map<Long, TxnTabletInfo> tablets = tinfo.partitions.computeIfAbsent(partitionId, k -> new HashMap<>());
         TxnTabletInfo tabletInfo = tablets.get(tablet.id);
@@ -96,7 +105,11 @@ public class BeTxnManager {
                 if (tablet == null) {
                     errorTabletIds.add(tabletInfo.tabletId);
                     if (e == null) {
+<<<<<<< HEAD
                         e = new UserException(
+=======
+                        e = new StarRocksException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                 "publish version failed txn:" + txnId + " partition:" + pInfo.partition_id + " tablet:" +
                                         tabletInfo.tabletId + " not found");
                     }

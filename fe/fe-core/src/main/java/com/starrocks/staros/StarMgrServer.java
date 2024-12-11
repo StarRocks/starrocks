@@ -21,10 +21,19 @@ import com.staros.metrics.MetricsSystem;
 import com.starrocks.common.Config;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecution;
+<<<<<<< HEAD
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.leader.Checkpoint;
+=======
+import com.starrocks.journal.CheckpointWorker;
+import com.starrocks.journal.StarMgrCheckpointWorker;
+import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.journal.bdbje.BDBJEJournal;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.leader.CheckpointController;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusRegistryHelper;
 import com.starrocks.persist.Storage;
@@ -48,7 +57,13 @@ public class StarMgrServer {
     private static final Logger LOG = LogManager.getLogger(StarMgrServer.class);
 
     private static StarMgrServer CHECKPOINT = null;
+<<<<<<< HEAD
     private Checkpoint checkpointer = null;
+=======
+    private CheckpointController checkpointController = null;
+    private CheckpointWorker checkpointWorker = null;
+    private boolean checkpointWorkerStarted = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static long checkpointThreadId = -1;
     private String imageDir;
     private StateChangeExecution execution;
@@ -80,8 +95,17 @@ public class StarMgrServer {
         }
     }
 
+<<<<<<< HEAD
     private StarManagerServer starMgrServer;
     private BDBJEJournalSystem journalSystem;
+=======
+    public static StarMgrServer getServingState() {
+        return SingletonHolder.INSTANCE;
+    }
+
+    private StarManagerServer starMgrServer;
+    private StarOSBDBJEJournalSystem journalSystem;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public StarMgrServer() {
         execution = new StateChangeExecution() {
@@ -99,7 +123,11 @@ public class StarMgrServer {
 
     // for checkpoint thread only
     public StarMgrServer(BDBJEJournal journal) {
+<<<<<<< HEAD
         journalSystem = new BDBJEJournalSystem(journal);
+=======
+        journalSystem = new StarOSBDBJEJournalSystem(journal);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starMgrServer = new StarManagerServer(journalSystem);
     }
 
@@ -107,7 +135,11 @@ public class StarMgrServer {
         return starMgrServer.getStarManager();
     }
 
+<<<<<<< HEAD
     public BDBJEJournalSystem getJournalSystem() {
+=======
+    public StarOSBDBJEJournalSystem getJournalSystem() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return journalSystem;
     }
 
@@ -116,7 +148,11 @@ public class StarMgrServer {
     }
 
     public void initialize(BDBEnvironment environment, String baseImageDir) throws IOException {
+<<<<<<< HEAD
         journalSystem = new BDBJEJournalSystem(environment);
+=======
+        journalSystem = new StarOSBDBJEJournalSystem(environment);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         imageDir = baseImageDir + IMAGE_SUBDIR;
 
         // TODO: remove separate deployment capability for now
@@ -134,12 +170,24 @@ public class StarMgrServer {
         // set the same heartbeat configuration to starmgr, but not able to change in runtime.
         com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
         com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
+<<<<<<< HEAD
+=======
+        com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
+        com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
+        com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // sync the mutable configVar to StarMgr in case any changes
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
             com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
             com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
             com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
+<<<<<<< HEAD
+=======
+            com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
+            com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
+            com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         });
         // set the following config, in order to provide a customized worker group definition
         // com.staros.util.Config.RESOURCE_MANAGER_WORKER_GROUP_SPEC_RESOURCE_FILE = "";
@@ -170,6 +218,7 @@ public class StarMgrServer {
 
     private void becomeLeader() {
         getStarMgr().becomeLeader();
+<<<<<<< HEAD
 
         // start checkpoint thread after everything is ready
         checkpointer = new Checkpoint("star mgr LeaderCheckpointer", getJournalSystem().getJournal(), IMAGE_SUBDIR,
@@ -177,12 +226,34 @@ public class StarMgrServer {
         checkpointThreadId = checkpointer.getId();
         checkpointer.start();
         LOG.info("star mgr checkpointer thread started. thread id is {}.", checkpointThreadId);
+=======
+    }
+
+    public void startCheckpointController() {
+        // start checkpoint thread after everything is ready
+        checkpointController = new CheckpointController(
+                "star_os_checkpoint_controller", getJournalSystem().getJournal(), IMAGE_SUBDIR);
+        checkpointController.start();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void becomeFollower() {
         getStarMgr().becomeFollower();
     }
 
+<<<<<<< HEAD
+=======
+    public void startCheckpointWorker() {
+        if (!checkpointWorkerStarted) {
+            checkpointWorker = new StarMgrCheckpointWorker(getJournalSystem().getJournal());
+            checkpointThreadId = checkpointWorker.getId();
+            checkpointWorker.start();
+            checkpointWorkerStarted = true;
+            LOG.info("star mgr checkpoint worker thread started. thread id is {}.", checkpointThreadId);
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private void loadImage(String imageDir) throws IOException {
         Storage storage = new Storage(imageDir);
         File curFile = storage.getCurrentImageFile();
@@ -201,16 +272,25 @@ public class StarMgrServer {
         }
     }
 
+<<<<<<< HEAD
     public boolean replayAndGenerateImage(String imageDir, long checkPointVersion) throws IOException {
+=======
+    public void replayAndGenerateImage(String imageDir, long checkPointVersion) throws IOException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // 1. load base image
         loadImage(imageDir);
 
         // 2. replay incremental journal
         getJournalSystem().replayTo(checkPointVersion);
         if (getJournalSystem().getReplayId() != checkPointVersion) {
+<<<<<<< HEAD
             LOG.error("star mgr checkpoint version should be {}, actual replayed journal id is {}",
                     checkPointVersion, getJournalSystem().getReplayId());
             return false;
+=======
+            throw new IOException(String.format("star mgr checkpoint version should be %d, actual replayed journal id is %d",
+                    checkPointVersion, getJournalSystem().getReplayId()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // 3. write new image
@@ -222,8 +302,15 @@ public class StarMgrServer {
             if (!ckpt.getParentFile().exists()) {
                 LOG.info("create image dir for star mgr, {}.", ckpt.getParentFile().getAbsolutePath());
                 if (!ckpt.getParentFile().mkdir()) {
+<<<<<<< HEAD
                     LOG.warn("fail to create image dir {} for star mgr." + ckpt.getAbsolutePath());
                     throw new IOException();
+=======
+                    String errorMessage = String.format("fail to create image dir %s for star mgr.",
+                            ckpt.getAbsolutePath());
+                    LOG.warn(errorMessage);
+                    throw new IOException(errorMessage);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
             if (!ckpt.createNewFile()) {
@@ -236,6 +323,7 @@ public class StarMgrServer {
         // Move image.ckpt to image.dataVersion
         LOG.info("move star mgr " + ckpt.getAbsolutePath() + " to " + imageFile.getAbsolutePath());
         if (!ckpt.renameTo(imageFile)) {
+<<<<<<< HEAD
             if (ckpt.delete()) {
                 LOG.warn("rename failed, fail to delete middle star mgr image " + ckpt.getAbsolutePath() + ".");
             }
@@ -243,6 +331,14 @@ public class StarMgrServer {
         }
 
         return true;
+=======
+            if (!ckpt.delete()) {
+                LOG.warn("rename failed, fail to delete middle star mgr image " + ckpt.getAbsolutePath() + ".");
+            }
+            throw new IOException(String.format("failed to remove file %s to %s",
+                    ckpt.getAbsolutePath(), imageFile.getAbsolutePath()));
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void visitMetrics(MetricVisitor visitor) {
@@ -259,4 +355,15 @@ public class StarMgrServer {
     public long getReplayId() {
         return getJournalSystem().getReplayId();
     }
+<<<<<<< HEAD
+=======
+
+    public CheckpointController getCheckpointController() {
+        return checkpointController;
+    }
+
+    public CheckpointWorker getCheckpointWorker() {
+        return checkpointWorker;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

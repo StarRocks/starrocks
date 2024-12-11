@@ -43,6 +43,10 @@
 #include <list>
 #include <map>
 #include <mutex>
+<<<<<<< HEAD
+=======
+#include <queue>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <set>
 #include <string>
 #include <thread>
@@ -50,6 +54,10 @@
 #include <vector>
 
 #include "agent/status.h"
+<<<<<<< HEAD
+=======
+#include "column/chunk.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
@@ -67,6 +75,13 @@ namespace bthread {
 class Executor;
 }
 
+<<<<<<< HEAD
+=======
+namespace starrocks::lake {
+class LocalPkIndexManager;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 namespace starrocks {
 
 class DataDir;
@@ -77,6 +92,10 @@ class ReplicationTxnManager;
 class UpdateManager;
 class CompactionManager;
 class PublishVersionManager;
+<<<<<<< HEAD
+=======
+class DictionaryCacheManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
@@ -147,7 +166,11 @@ public:
 
     size_t get_store_num() { return _store_map.size(); }
 
+<<<<<<< HEAD
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
+=======
+    void get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::vector<string> get_store_paths();
     // Get root path vector for creating tablet. The returned vector is sorted by the disk usage in asc order,
@@ -224,6 +247,11 @@ public:
 
     PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
 
+<<<<<<< HEAD
+=======
+    DictionaryCacheManager* dictionary_cache_manager() { return _dictionary_cache_manager.get(); }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
@@ -236,6 +264,13 @@ public:
 
     UpdateManager* update_manager() { return _update_manager.get(); }
 
+<<<<<<< HEAD
+=======
+#ifdef USE_STAROS
+    lake::LocalPkIndexManager* local_pk_index_manager() { return _local_pk_index_manager.get(); }
+#endif
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id);
 
     RowsetId next_rowset_id() { return _rowset_id_generator->next_id(); };
@@ -292,6 +327,18 @@ public:
         _finish_publish_version_cv.notify_one();
     }
 
+<<<<<<< HEAD
+=======
+    void add_schedule_apply_task(int64_t tablet_id, std::chrono::steady_clock::time_point time_point);
+
+    void wake_schedule_apply_thread() {
+        std::unique_lock<std::mutex> wl(_schedule_apply_mutex);
+        _apply_tablet_changed_cv.notify_one();
+    }
+
+    void start_schedule_apply_thread();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool is_as_cn() { return !_options.need_write_cluster_id; }
 
     bool enable_light_pk_compaction_publish();
@@ -382,6 +429,11 @@ private:
 
     void* _adjust_pagecache_callback(void* arg);
 
+<<<<<<< HEAD
+=======
+    void* _schedule_apply_thread_callback(void* arg);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void _start_clean_fd_cache();
     Status _perform_cumulative_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
     Status _perform_base_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
@@ -394,7 +446,11 @@ private:
 private:
     EngineOptions _options;
     std::mutex _store_lock;
+<<<<<<< HEAD
     std::map<std::string, DataDir*> _store_map;
+=======
+    std::map<std::string, std::unique_ptr<DataDir>> _store_map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     uint32_t _available_storage_medium_type_count;
     bool _is_all_cluster_id_exist;
 
@@ -482,6 +538,11 @@ private:
 
     std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
+<<<<<<< HEAD
+=======
+    std::unique_ptr<DictionaryCacheManager> _dictionary_cache_manager;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
     std::mutex _auto_increment_mutex;
@@ -493,6 +554,20 @@ private:
     std::mutex _delta_column_group_cache_lock;
     std::map<DeltaColumnGroupKey, DeltaColumnGroupList> _delta_column_group_cache;
     std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
+<<<<<<< HEAD
+=======
+
+    mutable std::mutex _schedule_apply_mutex;
+    std::condition_variable _apply_tablet_changed_cv;
+    std::thread _schedule_apply_thread;
+    std::priority_queue<std::pair<std::chrono::steady_clock::time_point, int64_t>,
+                        std::vector<std::pair<std::chrono::steady_clock::time_point, int64_t>>, std::greater<>>
+            _schedule_apply_tasks;
+
+#ifdef USE_STAROS
+    std::unique_ptr<lake::LocalPkIndexManager> _local_pk_index_manager;
+#endif
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,

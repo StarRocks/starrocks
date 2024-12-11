@@ -31,6 +31,11 @@ public:
 
     bool is_finished() const override { return (_is_finished || _limit == 0) && _cur_chunk == nullptr; }
 
+<<<<<<< HEAD
+=======
+    bool ignore_empty_eos() const override { return false; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
         return Status::OK();
@@ -40,6 +45,11 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     bool _is_finished = false;
     std::atomic<int64_t>& _limit;
@@ -57,6 +67,11 @@ public:
         return std::make_shared<LimitOperator>(this, _id, _plan_node_id, driver_sequence, _limit);
     }
 
+<<<<<<< HEAD
+=======
+    int64_t limit() const { return _limit; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     std::atomic<int64_t> _limit;
 };

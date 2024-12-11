@@ -15,7 +15,11 @@
 
 package com.starrocks.connector.hive.events;
 
+<<<<<<< HEAD
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+=======
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 
 import java.util.List;
@@ -34,6 +38,10 @@ public interface EventFactory {
      * @throws MetastoreNotificationException If the hmsEvent information cannot be parsed.
      */
     List<MetastoreEvent> get(NotificationEvent hmsEvent,
+<<<<<<< HEAD
                              CacheUpdateProcessor cacheProcessor,
+=======
+                             HiveCacheUpdateProcessor cacheProcessor,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                              String catalogName) throws MetastoreNotificationException;
 }

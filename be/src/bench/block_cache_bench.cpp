@@ -32,9 +32,12 @@
 #include "util/logging.h"
 #include "util/random.h"
 #include "util/time.h"
+<<<<<<< HEAD
 #ifdef WITH_CACHELIB
 #include "block_cache/cachelib_wrapper.h"
 #endif
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -50,12 +53,18 @@ void delete_dir_content(const std::string& dir_path) {
     }
 }
 
+<<<<<<< HEAD
 enum class CacheEngine { CACHELIB, STARCACHE };
 
 class BlockCacheBenchSuite {
 public:
     struct BenchParams {
         CacheEngine cache_engine;
+=======
+class BlockCacheBenchSuite {
+public:
+    struct BenchParams {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         size_t obj_count = 0;
         size_t obj_key_size = 0;
         size_t obj_value_size = 0;
@@ -115,6 +124,7 @@ public:
 
     BlockCacheBenchSuite(const CacheOptions& options, const BenchParams& params) {
         _params = new BlockCacheBenchSuite::BenchParams(params);
+<<<<<<< HEAD
         if (params.cache_engine == CacheEngine::STARCACHE) {
             _cache = new StarCacheWrapper;
 #ifdef WITH_CACHELIB
@@ -127,6 +137,11 @@ public:
         }
         Status st = _cache->init(options);
         DCHECK(st.ok()) << st.get_error_msg();
+=======
+        _cache = new StarCacheWrapper;
+        Status st = _cache->init(options);
+        DCHECK(st.ok()) << st.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _ctx = new BenchContext();
     }
 
@@ -207,7 +222,11 @@ public:
                 std::string v = gen_obj_value(index, obj_value_size, _ctx);
                 start_us = MonotonicMicros();
                 Status st = _cache->write_cache(_ctx->obj_keys[index], v.data(), obj_value_size, 0);
+<<<<<<< HEAD
                 ASSERT_TRUE(st.ok()) << "write cache failed: " << st.get_error_msg();
+=======
+                ASSERT_TRUE(st.ok()) << "write cache failed: " << st.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 *(_ctx->write_latency) << MonotonicMicros() - start_us;
                 *(_ctx->write_bytes) << v.size();
                 *(_ctx->write_op_count) << 1;
@@ -216,7 +235,11 @@ public:
                 auto res = _cache->read_cache(_ctx->obj_keys[index], read_value, 0, _params->read_size);
                 delete[] read_value;
             } else {
+<<<<<<< HEAD
                 ASSERT_TRUE(false) << "read cache failed: " << res.status().get_error_msg();
+=======
+                ASSERT_TRUE(false) << "read cache failed: " << res.status().message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             delete[] value;
         }
@@ -284,6 +307,7 @@ static void do_bench_cache(benchmark::State& state, const CacheOptions& options,
 }
 
 template <class... Args>
+<<<<<<< HEAD
 static void BM_bench_cachelib(benchmark::State& state, Args&&... args) {
     auto args_tuple = std::make_tuple(std::move(args)...);
     std::get<0>(args_tuple).second.cache_engine = CacheEngine::CACHELIB;
@@ -294,6 +318,10 @@ template <class... Args>
 static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     auto args_tuple = std::make_tuple(std::move(args)...);
     std::get<0>(args_tuple).second.cache_engine = CacheEngine::STARCACHE;
+=======
+static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
+    auto args_tuple = std::make_tuple(std::move(args)...);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     do_bench_cache(state, std::get<0>(args_tuple).first, std::get<0>(args_tuple).second);
 }
 
@@ -391,6 +419,7 @@ BENCHMARK_CAPTURE(BM_bench_starcache, bench_read_write_remove_disk, read_write_r
 // Random offset for Read+Write+Remove Disk
 BENCHMARK_CAPTURE(BM_bench_starcache, bench_random_offset_read, random_offset_read_suite())->Threads(16);
 
+<<<<<<< HEAD
 #ifdef WITH_CACHELIB
 BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_mem, read_mem_suite())->Threads(16);
 BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_disk, read_disk_suite())->Threads(16);
@@ -398,6 +427,8 @@ BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_write_remove_disk, read_write_re
 BENCHMARK_CAPTURE(BM_bench_cachelib, bench_random_offset_read, random_offset_read_suite())->Threads(16);
 #endif
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks
 
 //BENCHMARK_MAIN();

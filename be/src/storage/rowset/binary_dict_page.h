@@ -131,7 +131,11 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override;
 
+<<<<<<< HEAD
     Status next_batch(const SparseRange& range, Column* dst) override;
+=======
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     uint32_t count() const override { return _data_page_decoder->count(); }
 
@@ -143,7 +147,11 @@ public:
 
     Status next_dict_codes(size_t* n, Column* dst) override;
 
+<<<<<<< HEAD
     Status next_dict_codes(const SparseRange& range, Column* dst) override;
+=======
+    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     Slice _data;

@@ -34,6 +34,10 @@
 
 package com.starrocks.mysql;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.NetUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.mysql.ssl.SSLChannel;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -92,7 +96,12 @@ public class MysqlChannel {
                 if (channel.getRemoteAddress() instanceof InetSocketAddress) {
                     InetSocketAddress address = (InetSocketAddress) channel.getRemoteAddress();
                     // avoid calling getHostName() which may trigger a name service reverse lookup
+<<<<<<< HEAD
                     remoteHostPortString = address.getHostString() + ":" + address.getPort();
+=======
+                    remoteHostPortString = NetUtils.getHostPortInAccessibleFormat(address.getHostString(), 
+                            address.getPort());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     remoteIp = address.getAddress().getHostAddress();
                 } else {
                     // Reach here, what's it?

@@ -45,7 +45,10 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TIndexState;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -108,13 +111,23 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     // this is for keeping tablet order
     private List<Tablet> tablets;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "shardGroupId")
+    private long shardGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // If this is an index of LakeTable and the index state is SHADOW, all transactions
     // whose txn id is less than 'visibleTxnId' will ignore this index when sending
     // PublishVersionRequest requests to BE nodes.
     private long visibleTxnId;
 
     public MaterializedIndex() {
+<<<<<<< HEAD
         this(0, IndexState.NORMAL);
+=======
+        this(0, IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public MaterializedIndex(long id) {
@@ -122,7 +135,15 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public MaterializedIndex(long id, @Nullable IndexState state) {
+<<<<<<< HEAD
         this(id, state, 0);
+=======
+        this(id, state, 0, PhysicalPartition.INVALID_SHARD_GROUP_ID);
+    }
+
+    public MaterializedIndex(long id, @Nullable IndexState state, long shardGroupId) {
+        this(id, state, 0, shardGroupId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     /**
@@ -134,13 +155,21 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
      * @param state        the state of the index
      * @param visibleTxnId the minimum transaction id that can see this index.
      */
+<<<<<<< HEAD
     public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId) {
+=======
+    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.id = id;
         this.state = state == null ? IndexState.NORMAL : state;
         this.idToTablets = new HashMap<>();
         this.tablets = new ArrayList<>();
         this.rowCount = 0;
         this.visibleTxnId = (this.state == IndexState.SHADOW) ? visibleTxnId : 0;
+<<<<<<< HEAD
+=======
+        this.shardGroupId = shardGroupId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     /**
@@ -169,12 +198,27 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         this.visibleTxnId = visibleTxnId;
     }
 
+<<<<<<< HEAD
+=======
+    public void setShardGroupId(long shardGroupId) {
+        this.shardGroupId = shardGroupId;
+    }
+
+    public long getShardGroupId() {
+        return shardGroupId;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<Tablet> getTablets() {
         return tablets;
     }
 
     public List<Long> getTabletIdsInOrder() {
+<<<<<<< HEAD
         List<Long> tabletIds = Lists.newArrayList();
+=======
+        List<Long> tabletIds = Lists.newArrayListWithCapacity(tablets.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (Tablet tablet : tablets) {
             tabletIds.add(tablet.getId());
         }
@@ -198,7 +242,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         idToTablets.put(tablet.getId(), tablet);
         tablets.add(tablet);
         if (updateInvertedIndex) {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentInvertedIndex().addTablet(tablet.getId(), tabletMeta);
+=======
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tablet.getId(), tabletMeta);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -238,6 +286,17 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return dataSize;
     }
 
+<<<<<<< HEAD
+=======
+    public long getTabletMaxDataSize() {
+        long maxDataSize = 0;
+        for (Tablet tablet : getTablets()) {
+            maxDataSize = Math.max(maxDataSize, tablet.getDataSize(true));
+        }
+        return maxDataSize;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public long getReplicaCount() {
         if (tablets.isEmpty()) {
             return 0L;
@@ -287,6 +346,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         out.writeLong(-1L); // For rollback compatibility of field rollupFinishedVersion
     }
 
+<<<<<<< HEAD
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
@@ -313,6 +373,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return materializedIndex;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public int hashCode() {
         return Objects.hashCode(idToTablets);
@@ -336,7 +398,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         StringBuilder buffer = new StringBuilder();
         buffer.append("index id: ").append(id).append("; ");
         buffer.append("index state: ").append(state.name()).append("; ");
+<<<<<<< HEAD
 
+=======
+        buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         buffer.append("row count: ").append(rowCount).append("; ");
         buffer.append("tablets size: ").append(tablets.size()).append("; ");
         buffer.append("visibleTxnId: ").append(visibleTxnId).append("; ");

@@ -21,6 +21,10 @@
 #include "exec/orc_scanner.h"
 #include "exec/parquet_scanner.h"
 #include "exprs/expr.h"
+<<<<<<< HEAD
+=======
+#include "file_chunk_sink.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::connector {
 
@@ -29,6 +33,13 @@ DataSourceProviderPtr FileConnector::create_data_source_provider(ConnectorScanNo
     return std::make_unique<FileDataSourceProvider>(scan_node, plan_node);
 }
 
+<<<<<<< HEAD
+=======
+std::unique_ptr<ConnectorChunkSinkProvider> FileConnector::create_data_sink_provider() const {
+    return std::make_unique<FileChunkSinkProvider>();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // ================================
 
 FileDataSourceProvider::FileDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
@@ -174,7 +185,11 @@ void FileDataSource::_init_counter() {
     _scanner_total_timer = ADD_TIMER(_runtime_profile, "ScannerTotalTime");
     {
         static const char* prefix = "FileScanner";
+<<<<<<< HEAD
         ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+=======
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         RuntimeProfile* p = _runtime_profile;
         _scanner_fill_timer = ADD_CHILD_TIMER(p, "FillTime", prefix);
         _scanner_read_timer = ADD_CHILD_TIMER(p, "ReadTime", prefix);

@@ -18,33 +18,84 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.iceberg.IcebergDeleteSchema;
+import com.starrocks.connector.iceberg.IcebergMORParams;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+<<<<<<< HEAD
 import java.util.Map;
+=======
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 
 public class LogicalIcebergScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
     private boolean hasUnknownColumn = true;
+<<<<<<< HEAD
+=======
+
+    // record if this scan is derived from IcebergEqualityDeleteRewriteRule.
+    private boolean fromEqDeleteRewriteRule;
+
+    private Set<IcebergDeleteSchema> deleteSchemas = new HashSet<>();
+
+    // Mainly used for table with iceberg equality delete files. Record full iceberg mor params in the table,
+    // used for the first build to associate multiple scan nodes RemoteFileInfoSource.
+    private List<IcebergMORParams> tableFullMORParams = new ArrayList<>();
+
+    // Mainly used for table with iceberg equality delete files.
+    // Marking this split scan node type after IcebergEqualityDeleteRewriteRule rewriting.
+    private IcebergMORParams morParam = IcebergMORParams.EMPTY;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public LogicalIcebergScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                       long limit,
                                       ScalarOperator predicate) {
+<<<<<<< HEAD
+=======
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TableVersionRange.empty());
+    }
+
+    public LogicalIcebergScanOperator(Table table,
+                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                      long limit,
+                                      ScalarOperator predicate,
+                                      TableVersionRange versionRange) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(OperatorType.LOGICAL_ICEBERG_SCAN,
                 table,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
                 limit,
+<<<<<<< HEAD
                 predicate, null);
 
         Preconditions.checkState(table instanceof IcebergTable);
         IcebergTable icebergTable = (IcebergTable) table;
         partitionColumns.addAll(icebergTable.getPartitionColumns().stream().map(x -> x.getName()).collect(Collectors.toList()));
+=======
+                predicate, null, versionRange);
+
+        Preconditions.checkState(table instanceof IcebergTable);
+        IcebergTable icebergTable = (IcebergTable) table;
+        partitionColumns.addAll(icebergTable.getPartitionColumns().stream().map(Column::getName).collect(Collectors.toList()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private LogicalIcebergScanOperator() {
@@ -61,6 +112,41 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isFromEqDeleteRewriteRule() {
+        return fromEqDeleteRewriteRule;
+    }
+
+    public void setFromEqDeleteRewriteRule(boolean fromEqDeleteRewriteRule) {
+        this.fromEqDeleteRewriteRule = fromEqDeleteRewriteRule;
+    }
+
+    public Set<IcebergDeleteSchema> getDeleteSchemas() {
+        return deleteSchemas;
+    }
+
+    public void setDeleteSchemas(Set<IcebergDeleteSchema> deleteSchemas) {
+        this.deleteSchemas = deleteSchemas;
+    }
+
+    public List<IcebergMORParams> getTableFullMORParams() {
+        return tableFullMORParams;
+    }
+
+    public void setTableFullMORParams(List<IcebergMORParams> tableFullMORParams) {
+        this.tableFullMORParams = tableFullMORParams;
+    }
+
+    public IcebergMORParams getMORParam() {
+        return morParam;
+    }
+
+    public void setMORParam(IcebergMORParams morParam) {
+        this.morParam = morParam;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean hasUnknownColumn() {
         return hasUnknownColumn;
     }
@@ -68,6 +154,10 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
     public void setHasUnknownColumn(boolean hasUnknownColumn) {
         this.hasUnknownColumn = hasUnknownColumn;
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalIcebergScan(this, context);
@@ -84,8 +174,14 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         @Override
         public LogicalIcebergScanOperator.Builder withOperator(LogicalIcebergScanOperator scanOperator) {
             super.withOperator(scanOperator);
+<<<<<<< HEAD
 
             builder.predicates = scanOperator.predicates.clone();
+=======
+            builder.predicates = scanOperator.predicates.clone();
+            builder.morParam = scanOperator.morParam;
+            builder.tableFullMORParams = scanOperator.tableFullMORParams;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return this;
         }
     }

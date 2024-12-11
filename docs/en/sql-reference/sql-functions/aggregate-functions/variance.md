@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # variance,var_pop,variance_pop
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the population variance of an expression. Since v2.5.10, this function can also be used as a window function.
 

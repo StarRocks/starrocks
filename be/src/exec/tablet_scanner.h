@@ -60,7 +60,11 @@ public:
     Status init(RuntimeState* runtime_state, const TabletScannerParams& params);
     Status open([[maybe_unused]] RuntimeState* runtime_state);
     Status get_chunk([[maybe_unused]] RuntimeState* state, Chunk* chunk);
+<<<<<<< HEAD
     Status close(RuntimeState* state);
+=======
+    void close(RuntimeState* state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     RuntimeState* runtime_state() { return _runtime_state; }
     int64_t raw_rows_read() const { return _raw_rows_read; }
@@ -84,6 +88,7 @@ private:
     RuntimeState* _runtime_state = nullptr;
     OlapScanNode* _parent = nullptr;
 
+<<<<<<< HEAD
     using PredicatePtr = std::unique_ptr<ColumnPredicate>;
     ObjectPool _pool;
     std::vector<ExprContext*> _conjunct_ctxs;
@@ -91,6 +96,15 @@ private:
     std::vector<uint8_t> _selection;
 
     // for release memory.
+=======
+    ObjectPool _pool;
+    std::vector<ExprContext*> _conjunct_ctxs;
+    PredicateTree _pred_tree;
+    Filter _selection;
+
+    // for release memory.
+    using PredicatePtr = std::unique_ptr<ColumnPredicate>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::vector<PredicatePtr> _predicate_free_pool;
 
     bool _is_open = false;
@@ -104,6 +118,10 @@ private:
     std::shared_ptr<TabletReader> _reader;
 
     TabletSharedPtr _tablet;
+<<<<<<< HEAD
+=======
+    TabletSchemaCSPtr _tablet_schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t _version = 0;
 
     // output columns of `this` TabletScanner, i.e, the final output columns of `get_chunk`.

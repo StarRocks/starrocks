@@ -58,7 +58,11 @@ static void BM_GetDictCodesWithMap(benchmark::State& state) {
     std::uniform_int_distribution<int> dist(0, 999);
 
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
+<<<<<<< HEAD
     column->append_strings_overflow(dict_values, kDictLength);
+=======
+    (void)column->append_strings_overflow(dict_values, kDictLength);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     column->append_default();
     for (int i = 0; i < kDictSize + 1; i++) {
         int random_number = dist(rng);

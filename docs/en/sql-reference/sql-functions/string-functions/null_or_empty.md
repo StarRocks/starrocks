@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # null_or_empty
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This function returns true when the string is empty or NULL. Otherwise, it returns false.
 

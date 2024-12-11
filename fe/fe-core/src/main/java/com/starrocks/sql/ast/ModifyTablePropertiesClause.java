@@ -38,11 +38,14 @@ public class ModifyTablePropertiesClause extends AlterTableClause {
         this.opType = opType;
     }
 
+<<<<<<< HEAD
     public void setNeedTableStable(boolean needTableStable) {
         this.needTableStable = needTableStable;
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Nonnull
     public Map<String, String> getProperties() {
         return this.properties;

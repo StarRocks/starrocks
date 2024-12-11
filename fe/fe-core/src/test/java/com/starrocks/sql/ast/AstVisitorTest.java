@@ -29,9 +29,15 @@ public class AstVisitorTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testVisitModifyBackendHostClause() {
         AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
         Object ret = visitor.visitModifyBackendHostClause(null, null);
+=======
+    public void testVisitModifyBackendClause() {
+        AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
+        Object ret = visitor.visitModifyBackendClause(null, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertNull(ret);
     }
 }

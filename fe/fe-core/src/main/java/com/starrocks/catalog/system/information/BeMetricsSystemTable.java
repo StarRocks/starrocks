@@ -24,9 +24,17 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class BeMetricsSystemTable {
+<<<<<<< HEAD
     public static SystemTable create() {
         return new SystemTable(SystemId.BE_METRICS_ID,
                 "be_metrics",
+=======
+    private static final String NAME = "be_metrics";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.BE_METRICS_ID,
+                NAME,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))

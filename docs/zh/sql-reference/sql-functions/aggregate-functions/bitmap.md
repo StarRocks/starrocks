@@ -8,7 +8,11 @@ displayed_sidebar: docs
 
 ## 建表
 
+<<<<<<< HEAD
 建表时需要使用聚合模型，数据类型是 bitmap，聚合函数为 bitmap_union。
+=======
+建表时需要使用聚合表，数据类型是 bitmap，聚合函数为 bitmap_union。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```SQL
 CREATE TABLE `pv_bitmap` (

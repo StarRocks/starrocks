@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # time_to_sec
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a time value into the number of seconds. The formula used for the conversion is as follows:
 

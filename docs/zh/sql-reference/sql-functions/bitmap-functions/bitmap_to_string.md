@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_to_string
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将一个 bitmap 转化成一个逗号分隔的字符串。字符串中包含 bitmap 中所有 bit 位。输入是 null 的话会返回 null。
 

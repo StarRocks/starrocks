@@ -41,11 +41,22 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TStorageType;
 import io.netty.handler.codec.http.HttpMethod;
@@ -65,7 +76,11 @@ public class StorageTypeCheckAction extends RestBaseAction {
     }
 
     @Override
+<<<<<<< HEAD
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+=======
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
         checkUserOwnsAdminRole(currentUser);
 
@@ -74,15 +89,26 @@ public class StorageTypeCheckAction extends RestBaseAction {
             throw new DdlException("Parameter db is missing");
         }
 
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(dbName);
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
 
         JSONObject root = new JSONObject();
+<<<<<<< HEAD
         db.readLock();
         try {
             List<Table> tbls = db.getTables();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            List<Table> tbls = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (Table tbl : tbls) {
                 if (tbl.getType() != TableType.OLAP) {
                     continue;
@@ -99,7 +125,11 @@ public class StorageTypeCheckAction extends RestBaseAction {
                 root.put(tbl.getName(), indexObj);
             }
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // to json response

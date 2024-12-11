@@ -14,6 +14,7 @@
 
 #include "formats/parquet/column_chunk_reader.h"
 
+<<<<<<< HEAD
 #include <memory>
 
 #include "common/status.h"
@@ -25,6 +26,26 @@
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+=======
+#include <glog/logging.h>
+
+#include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
+
+#include "common/compiler_util.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "formats/parquet/encoding.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
+#include "fs/fs.h"
+#include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
+#include "util/compression/block_compression.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::parquet {
 
@@ -34,7 +55,18 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
           _max_rep_level(max_rep_level),
           _type_length(type_length),
           _chunk_metadata(column_chunk),
+<<<<<<< HEAD
           _opts(opts) {}
+=======
+          _opts(opts),
+          _def_level_decoder(&opts.stats->level_decode_ns),
+          _rep_level_decoder(&opts.stats->level_decode_ns) {
+    if (_chunk_metadata->meta_data.__isset.statistics && _chunk_metadata->meta_data.statistics.__isset.null_count &&
+        _chunk_metadata->meta_data.statistics.null_count == 0) {
+        _current_row_group_no_null = true;
+    }
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ColumnChunkReader::~ColumnChunkReader() = default;
 
@@ -53,7 +85,11 @@ Status ColumnChunkReader::init(int chunk_size) {
     // seek to the first page
     RETURN_IF_ERROR(_page_reader->seek_to_offset(start_offset));
 
+<<<<<<< HEAD
     auto compress_type = convert_compression_codec(metadata().codec);
+=======
+    auto compress_type = ParquetUtils::convert_compression_codec(metadata().codec);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
 
     _chunk_size = chunk_size;
@@ -82,18 +118,36 @@ Status ColumnChunkReader::skip_page() {
     if (_page_parse_state != PAGE_HEADER_PARSED) {
         return Status::InternalError("Page header has not been parsed before skiping page data");
     }
+<<<<<<< HEAD
     const auto& header = *_page_reader->current_header();
     uint32_t compressed_size = header.compressed_page_size;
     uint32_t uncompressed_size = header.uncompressed_page_size;
     size_t size = _compress_codec != nullptr ? compressed_size : uncompressed_size;
     RETURN_IF_ERROR(_page_reader->skip_bytes(size));
+=======
+    uint64_t next_header_pos = _page_reader->get_next_header_pos();
+    RETURN_IF_ERROR(_page_reader->seek_to_offset(next_header_pos));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _opts.stats->page_skip += 1;
 
     _page_parse_state = PAGE_DATA_PARSED;
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status ColumnChunkReader::_parse_page_header() {
+=======
+Status ColumnChunkReader::next_page() {
+    if (_page_parse_state != PAGE_DATA_PARSED && _page_parse_state == PAGE_HEADER_PARSED) {
+        _opts.stats->page_skip += 1;
+    }
+    _page_parse_state = PAGE_DATA_PARSED;
+    return _page_reader->next_page();
+}
+
+Status ColumnChunkReader::_parse_page_header() {
+    SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DCHECK(_page_parse_state == INITIALIZED || _page_parse_state == PAGE_DATA_PARSED);
     size_t off = _page_reader->get_offset();
     RETURN_IF_ERROR(_page_reader->next_header());
@@ -109,6 +163,14 @@ Status ColumnChunkReader::_parse_page_header() {
         _opts.stats->has_page_statistics |=
                 (header.data_page_header.__isset.statistics && (header.data_page_header.statistics.__isset.min_value ||
                                                                 header.data_page_header.statistics.__isset.min));
+<<<<<<< HEAD
+=======
+        _current_page_no_null =
+                (header.data_page_header.__isset.statistics && header.data_page_header.statistics.__isset.null_count &&
+                 header.data_page_header.statistics.null_count == 0)
+                        ? true
+                        : false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     _page_parse_state = PAGE_HEADER_PARSED;
@@ -116,6 +178,10 @@ Status ColumnChunkReader::_parse_page_header() {
 }
 
 Status ColumnChunkReader::_parse_page_data() {
+<<<<<<< HEAD
+=======
+    SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     switch (_page_reader->current_header()->type) {
     case tparquet::PageType::DATA_PAGE:
         RETURN_IF_ERROR(_parse_data_page());
@@ -273,6 +339,21 @@ Status ColumnChunkReader::_try_load_dictionary() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status ColumnChunkReader::load_dictionary_page() {
+    if (_dict_page_parsed) {
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(_parse_page_header());
+    if (UNLIKELY(!current_page_is_dict())) {
+        return Status::InternalError("Not a dictionary page in dictionary page offset");
+    }
+    return _parse_dict_page();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 bool ColumnChunkReader::current_page_is_dict() {
     const auto header = _page_reader->current_header();
     return header->type == tparquet::PageType::DICTIONARY_PAGE;

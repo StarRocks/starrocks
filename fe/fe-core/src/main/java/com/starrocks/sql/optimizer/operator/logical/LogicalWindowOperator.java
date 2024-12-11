@@ -30,6 +30,11 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -54,6 +59,13 @@ public class LogicalWindowOperator extends LogicalOperator {
     private boolean useHashBasedPartition;
     private boolean isSkewed;
 
+<<<<<<< HEAD
+=======
+    // only true when rank <=1 with preAgg optimization is triggered, imply this window should merge input instead of update
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
+    private boolean inputIsBinary;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private LogicalWindowOperator() {
         super(OperatorType.LOGICAL_WINDOW);
         this.partitionExpressions = ImmutableList.of();
@@ -91,6 +103,13 @@ public class LogicalWindowOperator extends LogicalOperator {
         return isSkewed;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isInputIsBinary() {
+        return inputIsBinary;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {
@@ -116,6 +135,17 @@ public class LogicalWindowOperator extends LogicalOperator {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        return inputs.get(0).getDomainProperty();
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalAnalytic(this, context);
     }
@@ -141,13 +171,22 @@ public class LogicalWindowOperator extends LogicalOperator {
                 && Objects.equals(orderByElements, that.orderByElements)
                 && Objects.equals(analyticWindow, that.analyticWindow)
                 && Objects.equals(useHashBasedPartition, that.useHashBasedPartition)
+<<<<<<< HEAD
                 && Objects.equals(isSkewed, that.isSkewed);
+=======
+                && Objects.equals(isSkewed, that.isSkewed)
+                && Objects.equals(inputIsBinary, that.inputIsBinary);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow,
+<<<<<<< HEAD
                 useHashBasedPartition, isSkewed);
+=======
+                useHashBasedPartition, isSkewed, inputIsBinary);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static Builder builder() {
@@ -208,5 +247,13 @@ public class LogicalWindowOperator extends LogicalOperator {
             builder.isSkewed = isSkewed;
             return this;
         }
+<<<<<<< HEAD
+=======
+
+        public  Builder setInputIsBinary(boolean isBinary) {
+            builder.inputIsBinary = isBinary;
+            return this;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

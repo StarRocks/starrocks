@@ -15,34 +15,86 @@
 package com.starrocks.service;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+=======
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.ha.FrontendNodeType;
+=======
+import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.load.batchwrite.BatchWriteMgr;
+import com.starrocks.load.batchwrite.RequestLoadResult;
+import com.starrocks.load.batchwrite.TableId;
+import com.starrocks.load.streamload.StreamLoadKvParams;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TFileType;
+=======
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TColumnDef;
+import com.starrocks.thrift.TCreatePartitionRequest;
+import com.starrocks.thrift.TCreatePartitionResult;
+import com.starrocks.thrift.TDescribeTableParams;
+import com.starrocks.thrift.TDescribeTableResult;
+import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.TGetDictQueryParamRequest;
+import com.starrocks.thrift.TGetDictQueryParamResponse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+<<<<<<< HEAD
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
+=======
+import com.starrocks.thrift.TImmutablePartitionRequest;
+import com.starrocks.thrift.TImmutablePartitionResult;
+import com.starrocks.thrift.TListMaterializedViewStatusResult;
+import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TLoadTxnBeginRequest;
+import com.starrocks.thrift.TLoadTxnBeginResult;
+import com.starrocks.thrift.TLoadTxnCommitRequest;
+import com.starrocks.thrift.TLoadTxnCommitResult;
+import com.starrocks.thrift.TMergeCommitRequest;
+import com.starrocks.thrift.TMergeCommitResult;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -57,6 +109,10 @@ import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
+<<<<<<< HEAD
+=======
+import com.starrocks.transaction.CommitRateExceededException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -71,19 +127,41 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+<<<<<<< HEAD
 
+=======
+import org.mockito.internal.util.collections.Sets;
+
+import java.util.ArrayList;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
+import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class FrontendServiceImplTest {
 
     @Mocked
     ExecuteEnv exeEnv;
 
     private TUpdateResourceUsageRequest genUpdateResourceUsageRequest(
+<<<<<<< HEAD
             long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes, int cpuUsedPermille) {
+=======
+                long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes, int cpuUsedPermille) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TResourceUsage usage = new TResourceUsage();
         usage.setNum_running_queries(numRunningQueries);
         usage.setMem_limit_bytes(memLimitBytes);
@@ -97,6 +175,25 @@ public class FrontendServiceImplTest {
         return request;
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testUpdateImmutablePartitionException() throws TException {
+        new MockUp<FrontendServiceImpl>() {
+            @Mock
+            public synchronized TImmutablePartitionResult updateImmutablePartitionInternal(
+                        TImmutablePartitionRequest request) {
+                throw new RuntimeException("test");
+            }
+        };
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
@@ -107,12 +204,17 @@ public class FrontendServiceImplTest {
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_strict_storage_medium_check = false;
+<<<<<<< HEAD
+=======
+        Config.stream_load_max_txn_num_per_be = 5;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
+<<<<<<< HEAD
                 .withTable("CREATE TABLE site_access_empty (\n" +
                         "    event_day DATETIME NOT NULL,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -199,6 +301,134 @@ public class FrontendServiceImplTest {
                 .withView("create view v4 as select user()")
                 .withView("create view v5 as select CONNECTION_ID()")
                 .withView("create view v6 as select CATALOG()");
+=======
+                    .withTable("CREATE TABLE site_access_auto (\n" +
+                                "    event_day DATETIME NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "DISTRIBUTED BY RANDOM\n" +
+                                "PROPERTIES(\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_exception (\n" +
+                                "    event_day DATETIME NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "DISTRIBUTED BY RANDOM\n" +
+                                "PROPERTIES(\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_empty (\n" +
+                                "    event_day DATETIME NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('day', event_day)\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                                "PROPERTIES(\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_border (\n" +
+                                "    event_day DATETIME NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('day', event_day)\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                                "PROPERTIES(\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_hour (\n" +
+                                "    event_day DATETIME,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('hour', event_day)\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_day (\n" +
+                                "    event_day DATE,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('day', event_day) (\n" +
+                                "START (\"2020-06-01\") END (\"2022-06-05\") EVERY (INTERVAL 1 day)\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_month (\n" +
+                                "    event_day DATE,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('month', event_day) (\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_slice (\n" +
+                                "    event_day datetime,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY time_slice(event_day, interval 5 day)\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");")
+                    .withTable("CREATE TABLE site_access_list (\n" +
+                                "    event_day DATE not null,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY (event_day) (\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withView("create view v as select * from site_access_empty")
+                    .withView("create view v1 as select current_role()")
+                    .withView("create view v2 as select current_user()")
+                    .withView("create view v3 as select database()")
+                    .withView("create view v4 as select user()")
+                    .withView("create view v5 as select CONNECTION_ID()")
+                    .withView("create view v6 as select CATALOG()")
+
+                    .withMaterializedView("create materialized view mv refresh async as select * from site_access_empty");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @AfterClass
@@ -208,15 +438,94 @@ public class FrontendServiceImplTest {
         String dropSQL2 = "drop table if exists site_access_2";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
             DropTableStmt dropTableStmt2 = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL2, ctx);
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt2);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+            DropTableStmt dropTableStmt2 = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL2, ctx);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt2);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } catch (Exception ex) {
 
         }
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testImmutablePartitionException() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "site_access_exception");
+        List<Long> partitionIds = Lists.newArrayList();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
+        Table t = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "v");
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setDb_id(db.getId());
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setTable_id(t.getId());
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setTable_id(table.getId());
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+
+        partitionIds.add(1L);
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+
+        partitionIds = table.getPhysicalPartitions().stream()
+                    .map(PhysicalPartition::getId).collect(Collectors.toList());
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+    }
+
+    @Test
+    public void testImmutablePartitionApi() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "site_access_auto");
+        List<Long> partitionIds = table.getPhysicalPartitions().stream()
+                    .map(PhysicalPartition::getId).collect(Collectors.toList());
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_ids(partitionIds);
+        TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assert.assertEquals(2, table.getPhysicalPartitions().size());
+
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assert.assertEquals(2, table.getPhysicalPartitions().size());
+
+        partitionIds = table.getPhysicalPartitions().stream()
+                    .map(PhysicalPartition::getId).collect(Collectors.toList());
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assert.assertEquals(3, table.getPhysicalPartitions().size());
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testCreatePartitionApi() throws TException {
         new MockUp<GlobalTransactionMgr>() {
             @Mock
@@ -225,8 +534,13 @@ public class FrontendServiceImplTest {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -256,8 +570,13 @@ public class FrontendServiceImplTest {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ((OlapTable) table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -285,8 +604,13 @@ public class FrontendServiceImplTest {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ((OlapTable) table).setState(OlapTable.OlapTableState.ROLLUP);
 
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -305,12 +629,19 @@ public class FrontendServiceImplTest {
         ((OlapTable) table).setState(OlapTable.OlapTableState.NORMAL);
     }
 
+<<<<<<< HEAD
 
 
     @Test
     public void testCreatePartitionExceedLimit() throws TException {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
+=======
+    @Test
+    public void testCreatePartitionExceedLimit() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -335,7 +666,11 @@ public class FrontendServiceImplTest {
         TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
         request.setLabel("test_label");
         request.setDb("test");
+<<<<<<< HEAD
         request.setTbl("site_access_empty");
+=======
+        request.setTbl("site_access_auto");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         request.setUser("root");
         request.setPasswd("");
 
@@ -359,8 +694,13 @@ public class FrontendServiceImplTest {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_slice");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_slice");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -390,8 +730,13 @@ public class FrontendServiceImplTest {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -427,8 +772,13 @@ public class FrontendServiceImplTest {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_month");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_month");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -470,8 +820,13 @@ public class FrontendServiceImplTest {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_border");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_border");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("NULL");
@@ -501,9 +856,15 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testAutomaticPartitionLimitExceed() throws TException {
+<<<<<<< HEAD
         Config.max_automatic_partition_number = 1;
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_slice");
+=======
+        Config.max_partition_number_per_table = 1;
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_slice");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1991-04-24");
@@ -519,8 +880,49 @@ public class FrontendServiceImplTest {
         TCreatePartitionResult partition = impl.createPartition(request);
 
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+<<<<<<< HEAD
         Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_automatic_partition_number"));
         Config.max_automatic_partition_number = 4096;
+=======
+        Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_partition_number_per_table"));
+        Config.max_partition_number_per_table = 100000;
+    }
+
+    @Test
+    public void testAutomaticPartitionPerLoadLimitExceed() throws TException {
+        TransactionState state = new TransactionState();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return state;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_month");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1999-04-29");
+        partitionValues.add(values);
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1999-03-28");
+        partitionValues.add(values2);
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+        Assert.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
+
+        Config.max_partitions_in_one_batch = 1;
+
+        partition = impl.createPartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_partitions_in_one_batch"));
+
+        Config.max_partitions_in_one_batch = 4096;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private TGetTablesParams buildListTableStatusParam() {
@@ -537,6 +939,25 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testGetTableNames() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams params = new TGetTablesParams();
+        params.setCatalog_name("default_catalog");
+        params.setDb("test");
+        TUserIdentity tUserIdentity = new TUserIdentity();
+        tUserIdentity.setUsername("root");
+        tUserIdentity.setHost("%");
+        tUserIdentity.setIs_domain(false);
+        params.setCurrent_user_ident(tUserIdentity);
+
+        TGetTablesResult result = impl.getTableNames(params);
+        Assert.assertEquals(17, result.tables.size());
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testListTableStatus() throws TException {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TListTableStatusResult result = impl.listTableStatus(buildListTableStatusParam());
@@ -546,6 +967,7 @@ public class FrontendServiceImplTest {
     @Test
     public void testListViewStatusWithBaseTableDropped() throws Exception {
         starRocksAssert.useDatabase("test")
+<<<<<<< HEAD
                 .withTable("CREATE TABLE site_access_empty_for_view (\n" +
                         "    event_day DATETIME NOT NULL,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -559,6 +981,21 @@ public class FrontendServiceImplTest {
                         "PROPERTIES(\n" +
                         "    \"replication_num\" = \"1\"\n" +
                         ");");
+=======
+                    .withTable("CREATE TABLE site_access_empty_for_view (\n" +
+                                "    event_day DATETIME NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('day', event_day)\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                                "PROPERTIES(\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         starRocksAssert.withView("create view test.view11 as select * from test.site_access_empty_for_view");
         // drop the base table referenced by test.view11
         starRocksAssert.dropTable("test.site_access_empty_for_view");
@@ -578,8 +1015,13 @@ public class FrontendServiceImplTest {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_hour");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_hour");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24 12:34:56");
@@ -602,8 +1044,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreateEmptyPartition() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_empty");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_empty");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Collection<Partition> partitions = table.getPartitions();
         Assert.assertEquals(1, partitions.size());
         String name = partitions.iterator().next().getName();
@@ -614,6 +1061,7 @@ public class FrontendServiceImplTest {
     @Test(expected = AnalysisException.class)
     public void testCreateCeilForbidAutomaticTable() throws Exception {
         starRocksAssert.withDatabase("test2").useDatabase("test2")
+<<<<<<< HEAD
                 .withTable("CREATE TABLE site_access_ceil (\n" +
                         "    event_day datetime,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -625,11 +1073,25 @@ public class FrontendServiceImplTest {
                         "PARTITION BY time_slice(event_day, interval 1 day, CEIL) \n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES(\"replication_num\" = \"1\");");
+=======
+                    .withTable("CREATE TABLE site_access_ceil (\n" +
+                                "    event_day datetime,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY time_slice(event_day, interval 1 day, CEIL) \n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test(expected = AnalysisException.class)
     public void testCreateTimeSliceForbidAutomaticTable() throws Exception {
         starRocksAssert.withDatabase("test2").useDatabase("test2")
+<<<<<<< HEAD
                 .withTable("CREATE TABLE site_access_time_slice_hour_date (\n" +
                         "    event_day date,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -641,11 +1103,25 @@ public class FrontendServiceImplTest {
                         "PARTITION BY time_slice(event_day, interval 1 hour) \n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES(\"replication_num\" = \"1\");");
+=======
+                    .withTable("CREATE TABLE site_access_time_slice_hour_date (\n" +
+                                "    event_day date,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY time_slice(event_day, interval 1 hour) \n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test(expected = AnalysisException.class)
     public void testCreateDateTruncForbidAutomaticTable() throws Exception {
         starRocksAssert.withDatabase("test2").useDatabase("test2")
+<<<<<<< HEAD
                 .withTable("CREATE TABLE site_access_date_trunc_hour_date (\n" +
                         "    event_day DATE,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -657,11 +1133,25 @@ public class FrontendServiceImplTest {
                         "PARTITION BY date_trunc('hour', event_day)\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES(\"replication_num\" = \"1\");");
+=======
+                    .withTable("CREATE TABLE site_access_date_trunc_hour_date (\n" +
+                                "    event_day DATE,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('hour', event_day)\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test(expected = AnalysisException.class)
     public void testUnsupportedAutomaticTableGranularityDoesNotMatch() throws Exception {
         starRocksAssert.withDatabase("test2").useDatabase("test2")
+<<<<<<< HEAD
                 .withTable("CREATE TABLE site_access_granularity_does_not_match(\n" +
                         "    event_day DATE NOT NULL,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -678,11 +1168,30 @@ public class FrontendServiceImplTest {
                         "    \"partition_live_number\" = \"3\",\n" +
                         "    \"replication_num\" = \"1\"\n" +
                         ");");
+=======
+                    .withTable("CREATE TABLE site_access_granularity_does_not_match(\n" +
+                                "    event_day DATE NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ") \n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('month', event_day)(\n" +
+                                "    START (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 day)\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES(\n" +
+                                "    \"partition_live_number\" = \"3\",\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test(expected = AnalysisException.class)
     public void testUnsupportedAutomaticTableGranularityDoesNotMatch2() throws Exception {
         starRocksAssert.withDatabase("test2").useDatabase("test2")
+<<<<<<< HEAD
                 .withTable("CREATE TABLE site_access_granularity_does_not_match2(\n" +
                         "    event_day DATE NOT NULL,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -700,11 +1209,31 @@ public class FrontendServiceImplTest {
                         "    \"partition_live_number\" = \"3\",\n" +
                         "    \"replication_num\" = \"1\"\n" +
                         ");");
+=======
+                    .withTable("CREATE TABLE site_access_granularity_does_not_match2(\n" +
+                                "    event_day DATE NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ") \n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('month', event_day)(\n" +
+                                "   START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 1 day),\n" +
+                                "    START (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 day)\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES(\n" +
+                                "    \"partition_live_number\" = \"3\",\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testGetTablesInfo() throws Exception {
         starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+<<<<<<< HEAD
                 .withTable("CREATE TABLE `t1` (\n" +
                         "  `k1` date NULL COMMENT \"\",\n" +
                         "  `v1` int(11) NULL COMMENT \"\",\n" +
@@ -733,6 +1262,36 @@ public class FrontendServiceImplTest {
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
                         ")");
+=======
+                    .withTable("CREATE TABLE `t1` (\n" +
+                                "  `k1` date NULL COMMENT \"\",\n" +
+                                "  `v1` int(11) NULL COMMENT \"\",\n" +
+                                "  `v2` int(11) NULL COMMENT \"\"\n" +
+                                ") ENGINE=OLAP \n" +
+                                "DUPLICATE KEY(`k1`)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"in_memory\" = \"false\",\n" +
+                                "\"enable_persistent_index\" = \"false\",\n" +
+                                "\"replicated_storage\" = \"true\",\n" +
+                                "\"compression\" = \"LZ4\"\n" +
+                                ")")
+                    .withTable("CREATE TABLE `t2` (\n" +
+                                "  `k1` date NULL COMMENT \"\",\n" +
+                                "  `v1` int(11) NULL COMMENT \"\",\n" +
+                                "  `v2` int(11) NULL COMMENT \"\"\n" +
+                                ") ENGINE=OLAP \n" +
+                                "DUPLICATE KEY(`k1`)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"in_memory\" = \"false\",\n" +
+                                "\"enable_persistent_index\" = \"false\",\n" +
+                                "\"replicated_storage\" = \"true\",\n" +
+                                "\"compression\" = \"LZ4\"\n" +
+                                ")");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String createUserSql = "create user test1";
@@ -757,6 +1316,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetSpecialColumn() throws Exception {
         starRocksAssert.withDatabase("test_table").useDatabase("test_table")
                 .withTable("CREATE TABLE `ye$test` (\n" +
@@ -771,6 +1331,62 @@ public class FrontendServiceImplTest {
                         "\"storage_format\" = \"DEFAULT\",\n" +
                         "\"enable_persistent_index\" = \"false\"\n" +
                         ");");
+=======
+    public void testDefaultValueMeta() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                    .withTable("CREATE TABLE `test_default_value` (\n" +
+                                "  `id` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT \"\",\n" +
+                                "  `value` int(11) NULL DEFAULT \"2\" COMMENT \"\"\n" +
+                                ") ENGINE=OLAP \n" +
+                                "DUPLICATE KEY(`id`, `value`)\n" +
+                                "DISTRIBUTED BY RANDOM\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"in_memory\" = \"false\",\n" +
+                                "\"enable_persistent_index\" = \"false\",\n" +
+                                "\"replicated_storage\" = \"true\",\n" +
+                                "\"compression\" = \"LZ4\"\n" +
+                                ");");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createUserSql = "create user test2";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
+        String grantSql = "GRANT SELECT ON TABLE test_table.test_default_value TO USER `test2`@`%`;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TDescribeTableParams request = new TDescribeTableParams();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test2");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+        TDescribeTableResult response = impl.describeTable(request);
+        List<TColumnDef> columnDefList = response.getColumns();
+        List<TColumnDef> testDefaultValue = columnDefList.stream()
+                    .filter(u -> u.getColumnDesc().getTableName().equalsIgnoreCase("test_default_value"))
+                    .collect(Collectors.toList());
+        Assert.assertEquals(2, testDefaultValue.size());
+        Assert.assertEquals("CURRENT_TIMESTAMP", testDefaultValue.get(0).getColumnDesc().getColumnDefault());
+        Assert.assertEquals("2", testDefaultValue.get(1).getColumnDesc().getColumnDefault());
+    }
+
+    @Test
+    public void testGetSpecialColumn() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                    .withTable("CREATE TABLE `ye$test` (\n" +
+                                "event_day DATE,\n" +
+                                "department_id int(11) NOT NULL COMMENT \"\"\n" +
+                                ") ENGINE=OLAP\n" +
+                                "PRIMARY KEY(event_day, department_id)\n" +
+                                "DISTRIBUTED BY HASH(department_id) BUCKETS 1\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"in_memory\" = \"false\",\n" +
+                                "\"storage_format\" = \"DEFAULT\",\n" +
+                                "\"enable_persistent_index\" = \"false\"\n" +
+                                ");");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String createUserSql = "create user test3";
@@ -792,6 +1408,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testStreamLoadPutColumnMapException() throws TException {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_hour");
@@ -819,10 +1436,47 @@ public class FrontendServiceImplTest {
                 "Expr 'str_to_date(`col1`)' analyze error: No matching function with signature: str_to_date(varchar), " +
                         "derived column is 'event_day'",
                 errMsg.get(0));
+=======
+    public void testGetSpecialColumnForSyncMv() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                    .withTable("CREATE TABLE `base1` (\n" +
+                                "event_day DATE,\n" +
+                                "department_id int(11) NOT NULL COMMENT \"\"\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(event_day, department_id)\n" +
+                                "DISTRIBUTED BY HASH(department_id) BUCKETS 1\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"in_memory\" = \"false\",\n" +
+                                "\"storage_format\" = \"DEFAULT\",\n" +
+                                "\"enable_persistent_index\" = \"false\"\n" +
+                                ");")
+                    .withMaterializedView("create materialized view test_table.mv$test as select event_day from base1");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createUserSql = "create user test4";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
+        String grantSql = "GRANT SELECT ON TABLE test_table.base1 TO USER `test4`@`%`;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams request = new TGetTablesParams();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test4");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+        request.setPattern("mv$test");
+        request.setDb("test_table");
+        request.setType(TTableType.MATERIALIZED_VIEW);
+        TListMaterializedViewStatusResult response = impl.listMaterializedViewStatus(request);
+        Assert.assertEquals(1, response.materialized_views.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
     public void testGetLoadTxnStatus() throws Exception {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
         UUID uuid = UUID.randomUUID();
@@ -831,6 +1485,16 @@ public class FrontendServiceImplTest {
                              Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
                              new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
                              TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+        UUID uuid = UUID.randomUUID();
+        TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
+                    Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
+                    new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
+                    TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetLoadTxnStatusRequest request = new TGetLoadTxnStatusRequest();
         request.setDb("non-exist-db");
@@ -851,7 +1515,38 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSetFrontendConfig() throws TException {
+=======
+    public void testStreamLoadPutColumnMapException() {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setDb("test");
+        request.setTbl("site_access_hour");
+        request.setUser("root");
+        request.setTxnId(1024);
+        request.setColumnSeparator(",");
+        request.setSkipHeader(1);
+        request.setFileType(TFileType.FILE_STREAM);
+
+        // wrong format of str_to_date()
+        request.setColumns("col1,event_day=str_to_date(col1)");
+
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        TStatus status = result.getStatus();
+        request.setFileType(TFileType.FILE_STREAM);
+        Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, status.getStatus_code());
+        List<String> errMsg = status.getError_msgs();
+        Assert.assertEquals(1, errMsg.size());
+        Assert.assertEquals(
+                    "Expr 'str_to_date(`col1`)' analyze error: No matching function with signature: str_to_date(varchar), " +
+                                "derived column is 'event_day'",
+                    errMsg.get(0));
+    }
+
+    @Test
+    public void testSetFrontendConfig() throws Exception {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TSetConfigRequest request = new TSetConfigRequest();
         request.keys = Lists.newArrayList("mysql_server_version");
@@ -859,5 +1554,198 @@ public class FrontendServiceImplTest {
 
         TSetConfigResponse result = impl.setConfig(request);
         Assert.assertEquals("5.1.1", GlobalVariable.version);
+<<<<<<< HEAD
+=======
+
+        request.keys = Lists.newArrayList("adaptive_choose_instances_threshold");
+        request.values = Lists.newArrayList("98");
+        impl.setConfig(request);
+
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
+        List<List<String>> configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("98", configs.get(0).get(2));
+        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
+    }
+
+    @Test
+    public void testLoadTxnCommitRateLimitExceeded() throws StarRocksException, TException, LockTimeoutException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        doThrow(new CommitRateExceededException(1001, now + 100)).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.SR_EAGAIN, result.status.status_code);
+        Assert.assertTrue(result.retry_interval_ms >= (now + 100 - System.currentTimeMillis()));
+    }
+
+    @Test
+    public void testLoadTxnCommitTimeout() throws StarRocksException, TException, LockTimeoutException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        doThrow(new LockTimeoutException("get database write lock timeout")).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
+    public void testLoadTxnCommitFailed() throws StarRocksException, TException, LockTimeoutException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        doThrow(new StarRocksException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, result.status.status_code);
+    }
+
+    @Test
+    public void testStreamLoadPutTimeout() throws StarRocksException, TException, LockTimeoutException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any());
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
+    public void testRequestBatchWrite() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TMergeCommitRequest request = new TMergeCommitRequest();
+        request.setDb("test");
+        request.setTbl("site_access_hour");
+        request.setUser("root");
+        request.setPasswd("");
+        request.setBackend_id(10001);
+        request.setBackend_host("127.0.0.1");
+        request.putToParams(HTTP_ENABLE_BATCH_WRITE, "true");
+        request.putToParams(HTTP_BATCH_WRITE_ASYNC, "true");
+        request.putToParams(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+        request.putToParams(HTTP_BATCH_WRITE_PARALLEL, "4");
+
+        new MockUp<BatchWriteMgr>() {
+
+            @Mock
+            public RequestLoadResult requestLoad(
+                    TableId tableId, StreamLoadKvParams params, long backendId, String backendHost) {
+                return new RequestLoadResult(new TStatus(TStatusCode.OK), "test_label");
+            }
+        };
+
+        // test success request
+        {
+            TMergeCommitResult result = impl.requestMergeCommit(request);
+            assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            assertEquals("test_label", result.getLabel());
+        }
+
+        // test authentication failure
+        {
+            request.setUser("fake_user");
+            TMergeCommitResult result = impl.requestMergeCommit(request);
+            assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testMetaNotFound() throws StarRocksException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.db = "test";
+        request.tbl = "foo";
+        request.txnId = 1001L;
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setLoadId(new TUniqueId(1, 2));
+
+        Exception e = Assert.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("unknown table"));
+
+        request.tbl = "v";
+        e = Assert.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("load table type is not OlapTable"));
+
+        request.tbl = "mv";
+        e = Assert.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("is a materialized view"));
+    }
+
+    @Test
+    public void testAddListPartitionConcurrency() throws StarRocksException, TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_list");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1990-04-25");
+        partitionValues.add(values2);
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        Database testDb = currentState.getLocalMetastore().getDb("test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "site_access_list");
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();
+        List<PartitionDesc> partitionDescs = Lists.newArrayList();
+        Partition p19910425 = olapTable.getPartition("p19900425");
+
+        partitionDescs.add(new ListPartitionDesc(Lists.newArrayList("p19900425"),
+                    Lists.newArrayList(new SingleItemListPartitionDesc(true, "p19900425",
+                                Lists.newArrayList("1990-04-25"), Maps.newHashMap()))));
+
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDescs.get(0),
+                    defaultDistributionInfo.toDistributionDesc(table.getIdToColumn()), Maps.newHashMap(), false);
+
+        List<Partition> partitionList = Lists.newArrayList();
+        partitionList.add(p19910425);
+
+        currentState.getLocalMetastore().addListPartitionLog(testDb, olapTable, partitionDescs,
+                    addPartitionClause.isTempPartition(), partitionInfo, partitionList, Sets.newSet("p19900425"));
+
+    }
+
+    @Test
+    public void testgetDictQueryParam() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetDictQueryParamRequest request = new TGetDictQueryParamRequest();
+        request.setDb_name("test");
+        request.setTable_name("site_access_auto");
+
+        TGetDictQueryParamResponse result = impl.getDictQueryParam(request);
+
+        System.out.println(result);
+
+        Assert.assertNotEquals(0, result.getLocation().getTabletsSize());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

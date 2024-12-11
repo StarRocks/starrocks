@@ -23,11 +23,16 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 namespace lake {
 class UploadSnapshotsRequest;
 class RestoreSnapshotsRequest;
 } // namespace lake
 
+=======
+class UploadSnapshotsRequest;
+class RestoreSnapshotsRequest;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class ExecEnv;
 struct FileStat;
 
@@ -39,9 +44,15 @@ public:
 
     DISALLOW_COPY_AND_MOVE(LakeSnapshotLoader);
 
+<<<<<<< HEAD
     Status upload(const ::starrocks::lake::UploadSnapshotsRequest* request);
 
     Status restore(const ::starrocks::lake::RestoreSnapshotsRequest* request);
+=======
+    Status upload(const ::starrocks::UploadSnapshotsRequest* request);
+
+    Status restore(const ::starrocks::RestoreSnapshotsRequest* request);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     Status _get_existing_files_from_remote(BrokerServiceConnection& client, const std::string& remote_path,
@@ -51,7 +62,11 @@ private:
     Status _rename_remote_file(BrokerServiceConnection& client, const std::string& orig_name,
                                const std::string& new_name, const std::map<std::string, std::string>& broker_prop);
 
+<<<<<<< HEAD
     Status _check_snapshot_paths(const ::starrocks::lake::UploadSnapshotsRequest* request);
+=======
+    Status _check_snapshot_paths(const ::starrocks::UploadSnapshotsRequest* request);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     ExecEnv* _env;

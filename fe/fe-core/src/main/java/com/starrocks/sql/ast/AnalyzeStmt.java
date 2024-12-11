@@ -12,15 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+=======
+package com.starrocks.sql.ast;
+
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Type;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 
 public class AnalyzeStmt extends StatementBase {
     private final TableName tbl;
@@ -38,17 +49,50 @@ public class AnalyzeStmt extends StatementBase {
     }
 
     public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties,
+=======
+import java.util.stream.Collectors;
+
+public class AnalyzeStmt extends StatementBase {
+    private final TableName tbl;
+    private List<Expr> columns;
+    private List<String> columnNames = Lists.newArrayList();
+    private final boolean isSample;
+    private boolean isAsync;
+    private boolean isExternal = false;
+    private PartitionNames partitionNames;
+    private List<Long> partitionIds = null;
+    private Map<String, String> properties;
+    private final AnalyzeTypeDesc analyzeTypeDesc;
+
+    public AnalyzeStmt(TableName tbl, List<Expr> columns, PartitionNames partitionNames, Map<String, String> properties,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                        boolean isSample, boolean isAsync,
                        AnalyzeTypeDesc analyzeTypeDesc, NodePosition pos) {
         super(pos);
         this.tbl = tbl;
+<<<<<<< HEAD
         this.columnNames = columns;
+=======
+        this.columns = columns;
+        this.partitionNames = partitionNames;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.isSample = isSample;
         this.isAsync = isAsync;
         this.properties = properties;
         this.analyzeTypeDesc = analyzeTypeDesc;
     }
 
+<<<<<<< HEAD
+=======
+    public List<Expr> getColumns() {
+        return columns;
+    }
+
+    public List<Type> getColumnTypes() {
+        return columns.stream().map(Expr::getType).collect(Collectors.toList());
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<String> getColumnNames() {
         return columnNames;
     }
@@ -69,6 +113,13 @@ public class AnalyzeStmt extends StatementBase {
         return isAsync;
     }
 
+<<<<<<< HEAD
+=======
+    public void setIsAsync(boolean value) {
+        this.isAsync = value;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Map<String, String> getProperties() {
         return properties;
     }
@@ -89,6 +140,21 @@ public class AnalyzeStmt extends StatementBase {
         this.isExternal = isExternal;
     }
 
+<<<<<<< HEAD
+=======
+    public PartitionNames getPartitionNames() {
+        return partitionNames;
+    }
+
+    public void setPartitionIds(List<Long> partitionIds) {
+        this.partitionIds = partitionIds;
+    }
+
+    public List<Long> getPartitionIds() {
+        return partitionIds;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;

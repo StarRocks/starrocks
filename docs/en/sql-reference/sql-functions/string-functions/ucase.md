@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ucase
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This function converts a string to upper-case. It is analogous to the function upper.
 

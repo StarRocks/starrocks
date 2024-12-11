@@ -76,7 +76,11 @@ public class BackendAction extends WebBaseAction {
     }
 
     private void appendKnownBackendsInfo(StringBuilder buffer) {
+<<<<<<< HEAD
         ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+=======
+        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         List<List<Comparable>> backendInfos = new ArrayList<List<Comparable>>();
         for (Backend backend : backendMap.values()) {

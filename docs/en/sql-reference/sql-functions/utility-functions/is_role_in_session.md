@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # is_role_in_session
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Verifies whether a role (or a nested role) is active in the current session.
 

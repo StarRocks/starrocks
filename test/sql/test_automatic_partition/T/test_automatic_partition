@@ -20,6 +20,7 @@ show partitions from ss;
 insert into ss select * from ss;
 select count(*) from ss;
 show partitions from ss;
+<<<<<<< HEAD
 -- name: test_automatic_partition_table_non_pipeline
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 set enable_pipeline=false;
@@ -38,6 +39,8 @@ show partitions from ss;
 insert into ss select * from ss;
 select count(*) from ss;
 show partitions from ss;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- name: test_single_replica
 CREATE TABLE site_access ( event_day DATETIME NOT NULL, site_id INT DEFAULT '10', city_code VARCHAR(100), user_name VARCHAR(32) DEFAULT '', pv BIGINT DEFAULT '0') DUPLICATE KEY(event_day, site_id, city_code, user_name) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day, site_id) PROPERTIES( "replication_num" = "1");
 insert into site_access values('2015-06-02 00:00:00', 1, 1, 'a', 1);
@@ -117,7 +120,11 @@ show partitions from ss_year;
 -- show partitions from ss_hour;
 -- insert into ss_hour values('2023-02-14 14:31:08', 2);
 -- show partitions from ss_hour;
+<<<<<<< HEAD
 -- name: test_automatic_partition_in_new_node
+=======
+-- name: test_automatic_partition_in_new_node @sequential
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 insert into dt_month values('2023-02-14 12:31:07', 2);
 insert into dt_month values('2023-03-14 12:31:07', 2);
@@ -128,7 +135,11 @@ create table p(c1 int null, c2 date null)engine=olap duplicate key(c1,c2) partit
 insert into p values(1,'2021-01-01');
 show partitions from p;
 select * from p;
+<<<<<<< HEAD
 -- name: test_multi_fragment_open_new_node_channel
+=======
+-- name: test_multi_fragment_open_new_node_channel @sequential
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss values('2023-02-14', 2),('2033-03-01',2);
 insert into ss select date(add_months(event_day, 1)),pv from ss;
@@ -218,3 +229,12 @@ insert into ss values('2002-01-08', 1, 2);
 select sleep(3);
 function: wait_alter_table_not_pending()
 select * from ss;
+<<<<<<< HEAD
+=======
+
+
+-- name: test_time_slice_with_minute_granularity
+create table tt(k datetime) partition by time_slice(k, interval 10 minute);
+insert into tt values(now());
+select count(*) from tt;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -59,6 +59,10 @@ Example 4: modifies the resource limits of the resource group `rg1`.
 
 ```SQL
 ALTER RESOURCE GROUP rg1 WITH (
+<<<<<<< HEAD
     'cpu_core_limit' = '20'
+=======
+    'cpu_weight' = '10'
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 );
 ```

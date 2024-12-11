@@ -79,6 +79,13 @@ public class ProfileManager implements MemoryTrackable {
     public static final String DEFAULT_DB = "Default Db";
     public static final String VARIABLES = "Variables";
     public static final String PROFILE_COLLECT_TIME = "Collect Profile Time";
+<<<<<<< HEAD
+=======
+    public static final String LOAD_TYPE = "Load Type";
+
+    public static final String LOAD_TYPE_STREAM_LOAD = "STREAM_LOAD";
+    public static final String LOAD_TYPE_ROUTINE_LOAD = "ROUTINE_LOAD";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private static final int MEMORY_PROFILE_SAMPLES = 10;
 
@@ -86,7 +93,10 @@ public class ProfileManager implements MemoryTrackable {
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
                     START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE));
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
         public byte[] profileContent;
@@ -110,8 +120,13 @@ public class ProfileManager implements MemoryTrackable {
     private final ReadLock readLock;
     private final WriteLock writeLock;
 
+<<<<<<< HEAD
     private final LinkedHashMap<String, ProfileElement> profileMap; // from QueryId to RuntimeProfile
     private final LinkedHashMap<String, ProfileElement> loadProfileMap; // from LoadId to RuntimeProfile
+=======
+    // from QueryId to RuntimeProfile
+    private final LinkedHashMap<String, ProfileElement> profileMap;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static ProfileManager getInstance() {
         if (INSTANCE == null) {
@@ -125,7 +140,10 @@ public class ProfileManager implements MemoryTrackable {
         readLock = lock.readLock();
         writeLock = lock.writeLock();
         profileMap = new LinkedHashMap<>();
+<<<<<<< HEAD
         loadProfileMap = new LinkedHashMap<>();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public ProfileElement createElement(RuntimeProfile summaryProfile, String profileString) {
@@ -168,7 +186,10 @@ public class ProfileManager implements MemoryTrackable {
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
         element.plan = plan;
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
+<<<<<<< HEAD
         String queryType = element.infoStrings.get(ProfileManager.QUERY_TYPE);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // check when push in, which can ensure every element in the list has QUERY_ID column,
         // so there is no need to check when remove element from list.
         if (Strings.isNullOrEmpty(queryId)) {
@@ -178,6 +199,7 @@ public class ProfileManager implements MemoryTrackable {
 
         writeLock.lock();
         try {
+<<<<<<< HEAD
             if (queryType != null && queryType.equals("Load")) {
                 loadProfileMap.put(queryId, element);
                 if (loadProfileMap.size() > Config.load_profile_info_reserved_num) {
@@ -188,6 +210,11 @@ public class ProfileManager implements MemoryTrackable {
                 if (profileMap.size() > Config.profile_info_reserved_num) {
                     profileMap.remove(profileMap.keySet().iterator().next());
                 }
+=======
+            profileMap.put(queryId, element);
+            if (profileMap.size() > Config.profile_info_reserved_num) {
+                profileMap.remove(profileMap.keySet().iterator().next());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         } finally {
             writeLock.unlock();
@@ -199,7 +226,11 @@ public class ProfileManager implements MemoryTrackable {
     public boolean hasProfile(String queryId) {
         readLock.lock();
         try {
+<<<<<<< HEAD
             return profileMap.containsKey(queryId) || loadProfileMap.containsKey(queryId);
+=======
+            return profileMap.containsKey(queryId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             readLock.unlock();
         }
@@ -217,6 +248,7 @@ public class ProfileManager implements MemoryTrackable {
                 }
                 result.add(0, row);
             }
+<<<<<<< HEAD
             for (ProfileElement element : loadProfileMap.values()) {
                 Map<String, String> infoStrings = element.infoStrings;
                 List<String> row = Lists.newArrayList();
@@ -225,6 +257,8 @@ public class ProfileManager implements MemoryTrackable {
                 }
                 result.add(0, row);
             }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             readLock.unlock();
         }
@@ -234,7 +268,10 @@ public class ProfileManager implements MemoryTrackable {
     public void removeProfile(String queryId) {
         writeLock.lock();
         try {
+<<<<<<< HEAD
             loadProfileMap.remove(queryId);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             profileMap.remove(queryId);
         } finally {
             writeLock.unlock();
@@ -244,7 +281,10 @@ public class ProfileManager implements MemoryTrackable {
     public void clearProfiles() {
         writeLock.lock();
         try {
+<<<<<<< HEAD
             loadProfileMap.clear();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             profileMap.clear();
         } finally {
             writeLock.unlock();
@@ -255,7 +295,11 @@ public class ProfileManager implements MemoryTrackable {
         ProfileElement element = new ProfileElement();
         readLock.lock();
         try {
+<<<<<<< HEAD
             element = profileMap.get(queryId) == null ? loadProfileMap.get(queryId) : profileMap.get(queryId);
+=======
+            element = profileMap.get(queryId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (element == null) {
                 return null;
             }
@@ -273,7 +317,11 @@ public class ProfileManager implements MemoryTrackable {
     public ProfileElement getProfileElement(String queryId) {
         readLock.lock();
         try {
+<<<<<<< HEAD
             return profileMap.get(queryId) == null ? loadProfileMap.get(queryId) : profileMap.get(queryId);
+=======
+            return profileMap.get(queryId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             readLock.unlock();
         }
@@ -284,13 +332,17 @@ public class ProfileManager implements MemoryTrackable {
         readLock.lock();
         try {
             result.addAll(profileMap.values());
+<<<<<<< HEAD
             result.addAll(loadProfileMap.values());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             readLock.unlock();
         }
         return result;
     }
 
+<<<<<<< HEAD
 
     public long getQueryProfileCount() {
         readLock.lock();
@@ -314,6 +366,11 @@ public class ProfileManager implements MemoryTrackable {
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("QueryProfile", (long) profileMap.size(),
                 "LoadProfile", (long) loadProfileMap.size());
+=======
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("QueryProfile", (long) profileMap.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -324,6 +381,7 @@ public class ProfileManager implements MemoryTrackable {
                     .stream()
                     .limit(MEMORY_PROFILE_SAMPLES)
                     .collect(Collectors.toList());
+<<<<<<< HEAD
             List<Object> loadProfileSamples = loadProfileMap.values()
                     .stream()
                     .limit(MEMORY_PROFILE_SAMPLES)
@@ -331,6 +389,10 @@ public class ProfileManager implements MemoryTrackable {
 
             return Lists.newArrayList(Pair.create(profileSamples, (long) profileMap.size()),
                     Pair.create(loadProfileSamples, (long) loadProfileMap.size()));
+=======
+
+            return Lists.newArrayList(Pair.create(profileSamples, (long) profileMap.size()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             readLock.unlock();
         }

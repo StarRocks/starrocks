@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     ps_partkey,
@@ -26,6 +27,8 @@ group by
     )
 order by
     value desc ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [planCount]
 16
 [plan-1]

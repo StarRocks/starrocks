@@ -55,7 +55,11 @@ public:
         static int64_t id = 0;
         std::srand(std::time(nullptr));
         std::vector<std::string> test_data;
+<<<<<<< HEAD
         auto schema = ChunkHelper::convert_schema(*_tablet_schema);
+=======
+        auto schema = ChunkHelper::convert_schema(_tablet_schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1500 * pow(config::size_tiered_level_multiple + 3, level - 2); ++i) {
             test_data.push_back("well" + std::to_string(id++));
@@ -161,7 +165,11 @@ public:
         rowset_writer_context->partition_id = 10;
         rowset_writer_context->rowset_path_prefix = config::storage_root_path + "/data/0/12345/1111";
         rowset_writer_context->rowset_state = VISIBLE;
+<<<<<<< HEAD
         rowset_writer_context->tablet_schema = _tablet_schema.get();
+=======
+        rowset_writer_context->tablet_schema = _tablet_schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         rowset_writer_context->version.first = version;
         rowset_writer_context->version.second = version;
     }
@@ -328,7 +336,11 @@ public:
 
 protected:
     StorageEngine* _engine = nullptr;
+<<<<<<< HEAD
     std::unique_ptr<TabletSchema> _tablet_schema;
+=======
+    std::shared_ptr<TabletSchema> _tablet_schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string _schema_hash_path;
     std::unique_ptr<MemTracker> _metadata_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;

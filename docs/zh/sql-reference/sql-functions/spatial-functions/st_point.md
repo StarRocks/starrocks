@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Point
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 通过给定的 X 坐标值、Y 坐标值返回对应的 Point，当前这个值只在球面集合上有意义，X/Y 对应的是经度/纬度(longitude/latitude)。
 

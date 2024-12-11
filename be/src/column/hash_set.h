@@ -17,6 +17,10 @@
 #include <cstdint>
 
 #include "column/column_hash.h"
+<<<<<<< HEAD
+=======
+#include "runtime/memory/counting_allocator.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
@@ -50,7 +54,11 @@ public:
     bool operator()(const SliceWithHash& x, const SliceWithHash& y) const {
         // by comparing hash value first, we can avoid comparing real data
         // which may touch another memory area and has bad cache locality.
+<<<<<<< HEAD
         return x.hash == y.hash && memequal(x.data, x.size, y.data, y.size);
+=======
+        return x.hash == y.hash && memequal_padded(x.data, x.size, y.data, y.size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 };
 
@@ -74,7 +82,11 @@ public:
     bool operator()(const TSliceWithHash<seed>& x, const TSliceWithHash<seed>& y) const {
         // by comparing hash value first, we can avoid comparing real data
         // which may touch another memory area and has bad cache locality.
+<<<<<<< HEAD
         return x.hash == y.hash && memequal(x.data, x.size, y.data, y.size);
+=======
+        return x.hash == y.hash && memequal_padded(x.data, x.size, y.data, y.size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 };
 

@@ -20,11 +20,17 @@ import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
+<<<<<<< HEAD
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+=======
+
+import java.util.HashSet;
+import java.util.List;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Set;
 
 public class ModifyBrokerClause extends AlterClause {
@@ -87,9 +93,12 @@ public class ModifyBrokerClause extends AlterClause {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitModifyBrokerClause(this, context);
     }
+<<<<<<< HEAD
 
     @Override
     public Map<String, String> getProperties() {
         throw new NotImplementedException();
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

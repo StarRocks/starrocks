@@ -40,7 +40,10 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TBrokerTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -48,9 +51,12 @@ import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.List;
@@ -233,6 +239,7 @@ public class BrokerTable extends Table {
         tTableDescriptor.setBrokerTable(tBrokerTable);
         return tTableDescriptor;
     }
+<<<<<<< HEAD
 
     @Override
     public void write(DataOutput out) throws IOException {
@@ -271,4 +278,6 @@ public class BrokerTable extends Table {
             brokerProperties.put(key, val);
         }
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

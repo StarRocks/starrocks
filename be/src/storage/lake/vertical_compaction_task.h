@@ -24,7 +24,11 @@ class Chunk;
 class ChunkIterator;
 class TabletSchema;
 class RowSourceMaskBuffer;
+<<<<<<< HEAD
 class RowSourceMask;
+=======
+struct RowSourceMask;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -33,12 +37,22 @@ class TabletWriter;
 
 class VerticalCompactionTask : public CompactionTask {
 public:
+<<<<<<< HEAD
     explicit VerticalCompactionTask(int64_t txn_id, int64_t version, std::shared_ptr<Tablet> tablet,
                                     std::vector<std::shared_ptr<Rowset>> input_rowsets)
             : CompactionTask(txn_id, version, std::move(tablet), std::move(input_rowsets)) {}
     ~VerticalCompactionTask() override = default;
 
     Status execute(Progress* progress, CancelFunc cancel_func) override;
+=======
+    explicit VerticalCompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+                                    CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema)
+            : CompactionTask(std::move(tablet), std::move(input_rowsets), context, std::move(tablet_schema)) {}
+
+    ~VerticalCompactionTask() override = default;
+
+    Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     StatusOr<int32_t> calculate_chunk_size_for_column_group(const std::vector<uint32_t>& column_group);
@@ -46,9 +60,13 @@ private:
     Status compact_column_group(bool is_key, int column_group_index, size_t num_column_groups,
                                 const std::vector<uint32_t>& column_group, std::unique_ptr<TabletWriter>& writer,
                                 RowSourceMaskBuffer* mask_buffer, std::vector<RowSourceMask>* source_masks,
+<<<<<<< HEAD
                                 Progress* progress, const CancelFunc& cancel_func);
 
     std::shared_ptr<const TabletSchema> _tablet_schema;
+=======
+                                const CancelFunc& cancel_func);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t _total_num_rows = 0;
     int64_t _total_data_size = 0;
     int64_t _total_input_segs = 0;

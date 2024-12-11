@@ -1,4 +1,10 @@
 -- name: test_sync_materialized_view_rewrite
+<<<<<<< HEAD
+=======
+admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+-- result:
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 CREATE TABLE `duplicate_tbl` (
     `k1` date NULL COMMENT "",   
     `k2` datetime NULL COMMENT "",   
@@ -19,7 +25,10 @@ ENGINE=OLAP DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
 DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
 PROPERTIES ( 
     "replication_num" = "1", 
+<<<<<<< HEAD
     "in_memory" = "false", 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     "enable_persistent_index" = "false", 
     "replicated_storage" = "true", 
     "compression" = "LZ4" 
@@ -91,27 +100,47 @@ function: check_hit_materialized_view("SELECT k1, MIN(k6+k7) as min1, SUM(k9) as
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 select k1, sum(k6) as k6, max(k7) as k7 from duplicate_tbl group by 1 order by 1;
+=======
+select k1, sum(k6) as k6, max(k7) as k7 from duplicate_tbl group by 1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 2023-06-15	3	1
 2023-06-16	1	1
 -- !result
+<<<<<<< HEAD
 select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1 order by 1;
+=======
+select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 2023-06-15	6	10
 2023-06-16	2	10
 -- !result
+<<<<<<< HEAD
 select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1 order by 1;
+=======
+select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 2023-06-15	3	10
 2023-06-16	1	10
 -- !result
+<<<<<<< HEAD
 SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1 order by 1;
+=======
+SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 2023-06-15	1	1	1	3	1	1.0	1.0	3.000000000
 2023-06-16	1	1	1	1	1	1.0	1.0	1.000000000
 -- !result
+<<<<<<< HEAD
 SELECT k1, MIN(k6+k7) as min1, SUM(k9) as sum1, MAX(k10 + 2 * k11) as max1, SUM(2 * k13) FROM duplicate_tbl GROUP BY k1 order by 1;
+=======
+SELECT k1, MIN(k6+k7) as min1, SUM(k9) as sum1, MAX(k10 + 2 * k11) as max1, SUM(2 * k13) FROM duplicate_tbl GROUP BY k1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 2023-06-15	2	3	3.0	6.000000000
 2023-06-16	2	1	3.0	2.000000000
@@ -144,27 +173,47 @@ function: check_hit_materialized_view("SELECT k1, MIN(k6+k7) as min1, SUM(k9) as
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 select k1, sum(k6) as k6, max(k7) as k7 from duplicate_tbl group by 1 order by 1;
+=======
+select k1, sum(k6) as k6, max(k7) as k7 from duplicate_tbl group by 1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 2023-06-15	6	1
 2023-06-16	2	1
 -- !result
+<<<<<<< HEAD
 select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1 order by 1;
+=======
+select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 2023-06-15	12	10
 2023-06-16	4	10
 -- !result
+<<<<<<< HEAD
 select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1 order by 1;
+=======
+select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 2023-06-15	6	10
 2023-06-16	2	10
 -- !result
+<<<<<<< HEAD
 SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1 order by 1;
+=======
+SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 2023-06-15	1	1	1	6	1	1.0	1.0	6.000000000
 2023-06-16	1	1	1	2	1	1.0	1.0	2.000000000
 -- !result
+<<<<<<< HEAD
 SELECT k1, MIN(k6+k7) as min1, SUM(k9) as sum1, MAX(k10 + 2 * k11) as max1, SUM(2 * k13) FROM duplicate_tbl GROUP BY k1 order by 1;
+=======
+SELECT k1, MIN(k6+k7) as min1, SUM(k9) as sum1, MAX(k10 + 2 * k11) as max1, SUM(2 * k13) FROM duplicate_tbl GROUP BY k1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 2023-06-15	2	6	3.0	12.000000000
 2023-06-16	2	2	3.0	4.000000000
@@ -225,7 +274,11 @@ SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city 
 2	bigcity
 3	smallcity
 -- !result
+<<<<<<< HEAD
 SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 'smallcity') END) as city FROM case_when_tbl1 order by 1, 2;
+=======
+SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 'smallcity') END) as city FROM case_when_tbl1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 1	1smallcity
 2	2bigcity
@@ -247,6 +300,7 @@ function: check_hit_materialized_view(" SELECT k1, (CASE k2 WHEN 'beijing' THEN 
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1;
 -- result:
 3	smallcity
@@ -254,6 +308,15 @@ SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city 
 2	bigcity
 -- !result
 SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 'smallcity') END) as city FROM case_when_tbl1;
+=======
+SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1 order by 1,2;
+-- result:
+1	smallcity
+2	bigcity
+3	smallcity
+-- !result
+SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 'smallcity') END) as city FROM case_when_tbl1 order by 1,2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 1	1smallcity
 2	2bigcity
@@ -297,7 +360,11 @@ SELECT col2,col3,col0,id,col1 FROM test_base_table1 ORDER BY col2,col3,col0;
 -- !result
 analyze full table test_base_table1 with sync mode;
 -- result:
+<<<<<<< HEAD
 test_db_203d31544dc545bd8dfaf2c79377f2b2.test_base_table1	analyze	status	OK
+=======
+test_db_f3ff2226c33811eea0bfdbbedfe51b53.test_base_table1	analyze	status	OK
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 function: wait_materialized_view_finish()
 -- result:
@@ -311,7 +378,11 @@ function: check_hit_materialized_view("select col3, min(col1) startTime, max(col
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 select col3, min(col1) startTime, max(col1) endTime from test_base_table1 where col2 BETWEEN '2022-04-29 00:00:00' and '2022-04-30 23:00:00' group by col3 order by 1, 2;
+=======
+select col3, min(col1) startTime, max(col1) endTime from test_base_table1 where col2 BETWEEN '2022-04-29 00:00:00' and '2022-04-30 23:00:00' group by col3 order by 1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 Fujian	None	None
 Guangdong	10001	10001
@@ -320,7 +391,11 @@ function: check_hit_materialized_view("select * from test_base_table1 where col0
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 select * from test_base_table1 where col0=123456789 order by 1, 2;
+=======
+select * from test_base_table1 where col0=123456789 order by 1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 123456789	2022-04-30 12:00:00	Guangdong	1	10001
 -- !result
@@ -328,7 +403,11 @@ function: check_hit_materialized_view("select * from test_base_table1 where col2
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 select * from test_base_table1 where col2 >='2022-04-30 12:00:00' order by 1, 2;
+=======
+select * from test_base_table1 where col2 >='2022-04-30 12:00:00' order by 1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 123456789	2022-04-30 12:00:00	Guangdong	1	10001
 987654321	2022-04-30 13:00:00	Fujian	None	None
@@ -337,11 +416,69 @@ function: check_hit_materialized_view("select * from (select col0, col2, col3, i
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from test_base_table1 where col2 >='2022-04-30 12:00:00') t order by 1, 2;
+=======
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from test_base_table1 where col2 >='2022-04-30 12:00:00') t order by 1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 123456789	2022-04-30 12:00:00	Guangdong	1	10001
 987654321	2022-04-30 13:00:00	Fujian	None	None
 -- !result
+<<<<<<< HEAD
+=======
+set select_ratio_threshold = 0.15;
+-- result:
+-- !result
+function: check_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 >='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 >='2022-04-30 12:00:00') t;", "rollup: test_base_table1")
+-- result:
+None
+-- !result
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 >='2022-04-30 12:00:00') t;
+-- result:
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+987654321	2022-04-30 13:00:00	Fujian	None	None
+-- !result
+function: check_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t", "rollup: test_base_table1")
+-- result:
+None
+-- !result
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t;
+-- result:
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+-- !result
+set select_ratio_threshold=-1;
+-- result:
+-- !result
+function: check_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 >='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1",  "rollup: test_base_table1")
+-- result:
+None
+-- !result
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 >='2022-04-30 12:00:00') t;
+-- result:
+987654321	2022-04-30 13:00:00	Fujian	None	None
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+-- !result
+function: check_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1",  "rollup: test_base_table1")
+-- result:
+None
+-- !result
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t;
+-- result:
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+-- !result
+set select_ratio_threshold = 0.15;
+-- result:
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 set enable_sync_materialized_view_rewrite=false;
 -- result:
 -- !result
@@ -349,7 +486,11 @@ function: check_hit_materialized_view("select * from (select col0, col2, col3, i
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from mv_test_base_table1 [_SYNC_MV_] where col2 >='2022-04-30 12:00:00') t order by 1, 2;
+=======
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from mv_test_base_table1 [_SYNC_MV_] where col2 >='2022-04-30 12:00:00') t order by 1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- result:
 123456789	2022-04-30 12:00:00	Guangdong	1	10001
 987654321	2022-04-30 13:00:00	Fujian	None	None
@@ -359,4 +500,8 @@ set enable_sync_materialized_view_rewrite=true;
 -- !result
 drop table test_base_table1;
 -- result:
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -41,6 +41,15 @@ select * from test_csv_snappy_format where a = 'Bob';
 select * from test_csv_snappy_format where a = 'CharlieX';
 select * from test_csv_snappy_format where a = '99999';
 
+<<<<<<< HEAD
+=======
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+select count(*) from test_csv_snappy_format;
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+select count(*) from test_csv_snappy_format;
+
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 shell: ossutil64 rm -rf ${snappy_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 
 ------------------------------------
@@ -72,4 +81,13 @@ select * from test_csv_lzo_format where a = 'Bob';
 select * from test_csv_lzo_format where a = 'CharlieX';
 select * from test_csv_lzo_format where a = '99999';
 
+<<<<<<< HEAD
+=======
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+select count(*) from test_csv_lzo_format;
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+select count(*) from test_csv_lzo_format;
+
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 shell: ossutil64 rm -rf ${lzo_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null

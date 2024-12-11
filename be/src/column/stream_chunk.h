@@ -108,7 +108,11 @@ struct EpochInfo {
  */
 class StreamChunkConverter {
 public:
+<<<<<<< HEAD
     static StreamChunkPtr make_stream_chunk(ChunkPtr chunk, Int8ColumnPtr ops);
+=======
+    static StreamChunkPtr make_stream_chunk(ChunkPtr chunk, const Int8ColumnPtr& ops);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     static bool has_ops_column(const StreamChunk& chunk);
     static bool has_ops_column(const StreamChunkPtr& chunk_ptr);

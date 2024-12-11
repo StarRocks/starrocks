@@ -62,6 +62,11 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override {}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     bool _is_finished = false;
     const std::shared_ptr<LocalExchanger>& _exchanger;

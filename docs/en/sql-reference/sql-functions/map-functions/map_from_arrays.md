@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # map_from_arrays
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Creates a MAP value from the given pair of key item array and value item array.
 

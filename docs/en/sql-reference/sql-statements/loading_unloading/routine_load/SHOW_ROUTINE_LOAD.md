@@ -63,7 +63,11 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD FOR <jo
 | ErrorLogUrls         | The URL of error logs. You can use the `curl` or `wget` command to  access the URL. |
 | TrackingSQL          | The SQL command that you can directly run to query the error log information recorded in the `information_schema` database. |
 | OtherMsg             | The information about all failed load tasks of the Routine Load job. |
+<<<<<<< HEAD
 | LatestSourcePosition | The latest consumer position of messages in partitions of the topic. |
+=======
+| LatestSourcePosition | The position of latest message in each partition of the topic, which helps check the latencies of data loading. |
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## Examples
 

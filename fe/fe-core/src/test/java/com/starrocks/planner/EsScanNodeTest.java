@@ -53,7 +53,11 @@ public class EsScanNodeTest extends EsTestCase {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getCurrentSystemInfo();
+=======
+                globalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 result = systemInfoService;
                 minTimes = 0;
 

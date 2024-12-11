@@ -27,7 +27,11 @@ import java.util.List;
 public class ExternalSchemaProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Field").add("Type").add("Null").add("Key")
+<<<<<<< HEAD
             .add("Default").add("Extra")
+=======
+            .add("Default").add("Extra").add("Comment")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .build();
 
     private Table table;
@@ -56,7 +60,12 @@ public class ExternalSchemaProcNode implements ProcNodeInterface {
                     column.isAllowNull() ? "Yes" : "No",
                     ((Boolean) column.isKey()).toString(),
                     DEFAULT_STR,
+<<<<<<< HEAD
                     extraStr);
+=======
+                    extraStr,
+                    column.getComment());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             result.addRow(rowList);
         }
         return result;

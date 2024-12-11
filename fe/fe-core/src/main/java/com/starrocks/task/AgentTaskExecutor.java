@@ -24,7 +24,11 @@ import java.util.concurrent.ExecutorService;
 
 public class AgentTaskExecutor {
 
+<<<<<<< HEAD
     private static final ExecutorService EXECUTOR =
+=======
+    public static final ExecutorService EXECUTOR =
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ThreadPoolManager.newDaemonCacheThreadPool(Config.max_agent_task_threads_num, "agent-task-pool", true);
 
     public AgentTaskExecutor() {

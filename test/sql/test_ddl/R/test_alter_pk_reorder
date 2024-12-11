@@ -33,6 +33,13 @@ insert into tab1 values (500,500,500,500,500);
 insert into tab1 values (600,600,600,600,600);
 -- result:
 -- !result
+<<<<<<< HEAD
+=======
+select * from tab1 where k1 = 100;
+-- result:
+100	100	100	100	100
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 alter table tab1 order by (k2,k1);
 -- result:
 -- !result
@@ -53,6 +60,14 @@ select * from tab1;
 600	600	600	600	600
 700	700	700	700	700
 -- !result
+<<<<<<< HEAD
+=======
+select * from tab1 where k2 = 100;
+-- result:
+100	100	100	100	100
+-- !result
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 -- name: test_alter_pk_reorder_column_type
 CREATE TABLE `test_alter_pk_reorder_column_type` (
@@ -74,11 +89,19 @@ PROPERTIES (
 -- !result
 ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3, v4);
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Unexpected exception: Sort key column[v4] type not supported: DOUBLE')
 -- !result
 ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3, v5);
 -- result:
 E: (1064, 'Unexpected exception: Sort key column[v5] type not supported: FLOAT')
+=======
+E: (1064, 'Sort key column[v4] type not supported: DOUBLE in PrimaryKey table')
+-- !result
+ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3, v5);
+-- result:
+E: (1064, 'Sort key column[v5] type not supported: FLOAT in PrimaryKey table')
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3);
 -- result:

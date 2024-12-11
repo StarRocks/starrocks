@@ -23,9 +23,16 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
+=======
+import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
+import com.starrocks.sql.optimizer.base.EmptySortProperty;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
@@ -83,7 +90,12 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             for (PhysicalPropertySet propertySet : requiredProperties.get(0)) {
                 PhysicalPropertySet newProperty = propertySet.copy();
                 DistributionProperty oldDistribution = newProperty.getDistributionProperty();
+<<<<<<< HEAD
                 newProperty.setDistributionProperty(new DistributionProperty(oldDistribution.getSpec(), true));
+=======
+                newProperty.setDistributionProperty(DistributionProperty.createProperty(
+                        oldDistribution.getSpec(), true));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Set<Integer> cteIds = Sets.newHashSet(requirementsFromParent.getCteProperty().getCteIds());
                 if (idx == 0) {
                     cteIds.retainAll(groupExpression.inputAt(0).getLogicalProperty().getUsedCTEs().getCteIds());
@@ -91,15 +103,26 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
                     cteIds.retainAll(groupExpression.inputAt(1).getLogicalProperty().getUsedCTEs().getCteIds());
                     cteIds.add(operator.getCteId());
                 }
+<<<<<<< HEAD
                 newProperty.setCteProperty(new CTEProperty(cteIds));
+=======
+                newProperty.setCteProperty(CTEProperty.createProperty(cteIds));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 requiredProperties.get(0).set(idx++, newProperty);
             }
         } else if (operatorType == OperatorType.PHYSICAL_NO_CTE) {
             Set<Integer> cteIds = Sets.newHashSet(requirementsFromParent.getCteProperty().getCteIds());
+<<<<<<< HEAD
             CTEProperty cteProperty = new CTEProperty(cteIds);
             PhysicalPropertySet newProperty = requiredProperties.get(0).get(0).copy();
             DistributionProperty oldDistribution = newProperty.getDistributionProperty();
             newProperty.setDistributionProperty(new DistributionProperty(oldDistribution.getSpec(), true));
+=======
+            CTEProperty cteProperty = CTEProperty.createProperty(cteIds);
+            PhysicalPropertySet newProperty = requiredProperties.get(0).get(0).copy();
+            DistributionProperty oldDistribution = newProperty.getDistributionProperty();
+            newProperty.setDistributionProperty(DistributionProperty.createProperty(oldDistribution.getSpec(), true));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             newProperty.setCteProperty(cteProperty);
 
             requiredProperties.get(0).set(0, newProperty);
@@ -113,7 +136,11 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
                     PhysicalPropertySet property = requiredProperty.get(i).copy();
                     Set<Integer> remainCteIds = Sets.newHashSet(requirementsFromParent.getCteProperty().getCteIds());
                     remainCteIds.retainAll(groupExpression.inputAt(i).getLogicalProperty().getUsedCTEs().getCteIds());
+<<<<<<< HEAD
                     CTEProperty cteProperty = new CTEProperty(remainCteIds);
+=======
+                    CTEProperty cteProperty = CTEProperty.createProperty(remainCteIds);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     property.setCteProperty(cteProperty);
                     requiredProperty.set(i, property);
                 }
@@ -135,7 +162,11 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     public Void visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
         // 1 For broadcast join
         PhysicalPropertySet rightBroadcastProperty =
+<<<<<<< HEAD
                 new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
+=======
+                new PhysicalPropertySet(DistributionProperty.createProperty(DistributionSpec.createReplicatedDistributionSpec()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
 
         JoinHelper joinHelper = JoinHelper.of(node, context.getChildOutputColumns(0), context.getChildOutputColumns(1));
@@ -178,13 +209,22 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
                 .map(l -> new Ordering(columnRefFactory.getColumnRef(l.getColId()), true, true))
                 .collect(Collectors.toList());
 
+<<<<<<< HEAD
         SortProperty leftSortProperty = new SortProperty(new OrderSpec(leftOrderings));
         SortProperty rightSortProperty = new SortProperty(new OrderSpec(rightOrderings));
+=======
+        SortProperty leftSortProperty = SortProperty.createProperty(leftOrderings);
+        SortProperty rightSortProperty = SortProperty.createProperty(rightOrderings);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // 1 For broadcast join
         PhysicalPropertySet leftBroadcastProperty = new PhysicalPropertySet(leftSortProperty);
         PhysicalPropertySet rightBroadcastProperty =
+<<<<<<< HEAD
                 new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()),
+=======
+                new PhysicalPropertySet(DistributionProperty.createProperty(DistributionSpec.createReplicatedDistributionSpec()),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         rightSortProperty);
         requiredProperties.add(Lists.newArrayList(leftBroadcastProperty, rightBroadcastProperty));
 
@@ -213,12 +253,20 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             // Right join needs to maintain build_match_flag for right table, which could not be maintained on multiple nodes,
             // instead it should be gathered to one node
             PhysicalPropertySet gather =
+<<<<<<< HEAD
                     new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createGatherDistributionSpec()));
+=======
+                    new PhysicalPropertySet(DistributionProperty.createProperty(DistributionSpec.createGatherDistributionSpec()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             requiredProperties.add(Lists.newArrayList(gather, gather));
         } else {
             PhysicalPropertySet rightBroadcastProperty =
                     new PhysicalPropertySet(
+<<<<<<< HEAD
                             new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
+=======
+                            DistributionProperty.createProperty(DistributionSpec.createReplicatedDistributionSpec()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
         }
         return null;
@@ -273,6 +321,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
         node.getPartitionExpressions().forEach(e -> partitionColumnRefSet
                 .addAll(Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList())));
+<<<<<<< HEAD
 
         SortProperty sortProperty = new SortProperty(new OrderSpec(node.getEnforceOrderBy()));
 
@@ -283,6 +332,17 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             // If scan tablet sum less than 1, no distribution property is required
             if (context.getRootProperty().oneTabletProperty().supportOneTabletOpt) {
                 distributionProperty = DistributionProperty.EMPTY;
+=======
+        SortProperty sortProperty = SortProperty.createProperty(node.getEnforceOrderBy());
+
+        DistributionProperty distributionProperty;
+        if (partitionColumnRefSet.isEmpty()) {
+            distributionProperty = DistributionProperty.createProperty(DistributionSpec.createGatherDistributionSpec());
+        } else {
+            // If scan tablet sum less than 1, no distribution property is required
+            if (context.getRootProperty().oneTabletProperty().supportOneTabletOpt) {
+                distributionProperty = EmptyDistributionProperty.INSTANCE;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 List<DistributionCol> distributionCols = partitionColumnRefSet.stream()
                         .map(e -> new DistributionCol(e, true)).collect(
@@ -334,7 +394,11 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         // }
 
         // limit node in Memo means that the limit cannot be merged into other nodes.
+<<<<<<< HEAD
         requiredProperties.add(Lists.newArrayList(createLimitGatherProperty(node.getLimit())));
+=======
+        requiredProperties.add(Lists.newArrayList(createGatherPropertySet()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return null;
     }
 
@@ -365,7 +429,11 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             List<Ordering> orderingList = requirementsFromParent.getSortProperty().getSpec().getOrderDescs();
             for (Ordering ordering : orderingList) {
                 if (!colIds.contains(ordering.getColumnRef().getId())) {
+<<<<<<< HEAD
                     sortProperty = SortProperty.EMPTY;
+=======
+                    sortProperty = EmptySortProperty.INSTANCE;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     break;
                 }
             }
@@ -374,7 +442,11 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
                 HashDistributionSpec spec = (HashDistributionSpec) distributionProperty.getSpec();
                 for (DistributionCol distributionCol : spec.getShuffleColumns()) {
                     if (!colIds.contains(distributionCol.getColId())) {
+<<<<<<< HEAD
                         distributionProperty = DistributionProperty.EMPTY;
+=======
+                        distributionProperty = EmptyDistributionProperty.INSTANCE;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         break;
                     }
                 }

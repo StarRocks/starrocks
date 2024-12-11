@@ -10,7 +10,13 @@ Customizes an automatic collection task for collecting CBO statistics.
 
 By default, StarRocks automatically collects full statistics of a table. It checks for any data updates every 5 minutes. If data change is detected, data collection will be automatically triggered. If you do not want to use automatic full collection, you can set the FE configuration item `enable_collect_full_statistic` to `false` and customize a collection task.
 
+<<<<<<< HEAD
 Before creating a custom automatic collection task, you must disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
+=======
+Behaviour difference:
+- Before 3.2.12 and 3.3.4, to create a custom automatic collection task, you must disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
+- Since these version, you can create analyze job and keep system tasks. The user-created tasks would overwrite the system tasks if they have conflicts.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This statement is supported from v2.4.
 
@@ -34,7 +40,11 @@ PROPERTIES (property [,property])
 - Collection type
   - FULL: indicates full collection.
   - SAMPLE: indicates sampled collection.
+<<<<<<< HEAD
   - If no collection type is specified, full collection is used by default.
+=======
+  - If no collection type is specified, sampled collection is used by default.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 - `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
 

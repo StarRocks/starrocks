@@ -23,17 +23,29 @@ namespace starrocks {
 struct EditVersion {
     unsigned __int128 value = 0;
     EditVersion() = default;
+<<<<<<< HEAD
     EditVersion(const EditVersionPB& pb) : EditVersion(pb.major(), pb.minor()) {}
     EditVersion(int64_t major, int64_t minor) { value = (((unsigned __int128)major) << 64) | minor; }
     int64_t major() const { return (int64_t)(value >> 64); }
     int64_t minor() const { return (int64_t)(value & 0xffffffffUL); }
+=======
+    EditVersion(const EditVersionPB& pb) : EditVersion(pb.major_number(), pb.minor_number()) {}
+    EditVersion(int64_t major, int64_t minor) { value = (((unsigned __int128)major) << 64) | minor; }
+    int64_t major_number() const { return (int64_t)(value >> 64); }
+    int64_t minor_number() const { return (int64_t)(value & 0xffffffffUL); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string to_string() const;
     bool operator<(const EditVersion& rhs) const { return value < rhs.value; }
     bool operator==(const EditVersion& rhs) const { return value == rhs.value; }
 
     void to_pb(EditVersionPB* pb) const {
+<<<<<<< HEAD
         pb->set_major(major());
         pb->set_minor(minor());
+=======
+        pb->set_major_number(major_number());
+        pb->set_minor_number(minor_number());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 };
 

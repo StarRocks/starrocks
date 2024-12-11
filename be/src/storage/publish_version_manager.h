@@ -31,9 +31,15 @@ class PublishVersionManager {
 public:
     Status init();
     ~PublishVersionManager();
+<<<<<<< HEAD
     Status wait_publish_task_apply_finish(std::vector<TFinishTaskRequest> finish_task_requests);
     bool has_pending_task() { return !_finish_task_requests.empty() || !_waitting_finish_task_requests.empty(); }
     Status finish_publish_version_task();
+=======
+    void wait_publish_task_apply_finish(std::vector<TFinishTaskRequest> finish_task_requests);
+    bool has_pending_task() { return !_finish_task_requests.empty() || !_waitting_finish_task_requests.empty(); }
+    void finish_publish_version_task();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void update_tablet_version(TFinishTaskRequest& finish_task_request);
 
     size_t finish_task_requests_size() { return _finish_task_requests.size(); }

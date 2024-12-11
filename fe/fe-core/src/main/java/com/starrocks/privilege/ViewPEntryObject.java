@@ -53,7 +53,11 @@ public class ViewPEntryObject extends TablePEntryObject {
             } else {
                 Table table = mgr.getMetadataMgr().getTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         database.getFullName(), tokens.get(1));
+<<<<<<< HEAD
                 if (table == null || !table.isView()) {
+=======
+                if (table == null || !table.isOlapView()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     throw new PrivObjNotFoundException("cannot find view " + tokens.get(1) + " in db " + tokens.get(0));
                 }
                 tblUUID = table.getUUID();

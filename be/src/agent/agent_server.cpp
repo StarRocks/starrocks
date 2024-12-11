@@ -69,6 +69,10 @@ const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 const uint32_t REPORT_RESOURCE_USAGE_WORKER_COUNT = 1;
+<<<<<<< HEAD
+=======
+const uint32_t REPORT_DATACACHE_METRICS_WORKER_COUNT = 1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 /* calculate real num threads
  * if num_threads > 0, return num_threads
@@ -111,6 +115,11 @@ public:
 
     ThreadPool* get_thread_pool(int type) const;
 
+<<<<<<< HEAD
+=======
+    void stop_task_worker_pool(TaskWorkerType type) const;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DISALLOW_COPY_AND_MOVE(Impl);
 
 private:
@@ -125,6 +134,11 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_storage_medium_migrate;
     std::unique_ptr<ThreadPool> _thread_pool_check_consistency;
     std::unique_ptr<ThreadPool> _thread_pool_compaction;
+<<<<<<< HEAD
+=======
+    std::unique_ptr<ThreadPool> _thread_pool_compaction_control;
+    std::unique_ptr<ThreadPool> _thread_pool_update_schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::unique_ptr<ThreadPool> _thread_pool_upload;
     std::unique_ptr<ThreadPool> _thread_pool_download;
@@ -147,8 +161,14 @@ private:
     std::unique_ptr<ReportOlapTableTaskWorkerPool> _report_tablet_workers;
     std::unique_ptr<ReportWorkgroupTaskWorkerPool> _report_workgroup_workers;
     std::unique_ptr<ReportResourceUsageTaskWorkerPool> _report_resource_usage_workers;
+<<<<<<< HEAD
 
     // Compute node only need _report_resource_usage_workers.
+=======
+    std::unique_ptr<ReportDataCacheMetricsTaskWorkerPool> _report_datacache_metrics_workers;
+
+    // Compute node only need _report_resource_usage_workers and _report_task_workers
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     const bool _is_compute_node;
 };
 
@@ -168,19 +188,31 @@ void AgentServer::Impl::init_or_die() {
 
 #define BUILD_DYNAMIC_TASK_THREAD_POOL(name, min_threads, max_threads, queue_size, pool) \
     do {                                                                                 \
+<<<<<<< HEAD
         auto st = ThreadPoolBuilder(name)                                                \
+=======
+        auto st = ThreadPoolBuilder(#name)                                               \
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                           .set_min_threads(min_threads)                                  \
                           .set_max_threads(max_threads)                                  \
                           .set_max_queue_size(queue_size)                                \
                           .build(&(pool));                                               \
         CHECK(st.ok()) << st;                                                            \
+<<<<<<< HEAD
+=======
+        REGISTER_THREAD_POOL_METRICS(name, pool);                                        \
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     } while (false)
 
 // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
 // But it seems that there's no limit for the number of tablets of a partition.
 // Since a large queue size brings a little overhead, a big one is chosen here.
 #ifdef BE_TEST
+<<<<<<< HEAD
         BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", 1, 3, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+=======
+        BUILD_DYNAMIC_TASK_THREAD_POOL(publish_version, 1, 3, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                        _thread_pool_publish_version);
 #else
         int max_publish_version_worker_count = calc_real_num_threads(config::transaction_publish_version_worker_count);
@@ -188,6 +220,7 @@ void AgentServer::Impl::init_or_die() {
                 std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
         int min_publish_version_worker_count =
                 std::max(config::transaction_publish_version_thread_pool_num_min, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
+<<<<<<< HEAD
         BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", min_publish_version_worker_count,
                                        max_publish_version_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_publish_version);
@@ -234,6 +267,61 @@ void AgentServer::Impl::init_or_die() {
                                        _thread_pool_update_tablet_meta_info);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("drop_auto_increment_map_dir", 0, 1, std::numeric_limits<int>::max(),
+=======
+        BUILD_DYNAMIC_TASK_THREAD_POOL(publish_version, min_publish_version_worker_count,
+                                       max_publish_version_worker_count, std::numeric_limits<int>::max(),
+                                       _thread_pool_publish_version);
+#endif
+        int real_drop_tablet_worker_count = (config::drop_tablet_worker_count > 0)
+                                                    ? config::drop_tablet_worker_count
+                                                    : std::max((int)(CpuInfo::num_cores() / 2), (int)1);
+        BUILD_DYNAMIC_TASK_THREAD_POOL(drop, 1, real_drop_tablet_worker_count, std::numeric_limits<int>::max(),
+                                       _thread_pool_drop);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(create_tablet, 1, config::create_tablet_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_create_tablet);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(alter_tablet, 0, config::alter_tablet_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_alter_tablet);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(clear_transaction, 0, config::clear_transaction_task_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_clear_transaction);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(storage_medium_migrate, 0, config::storage_medium_migrate_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_storage_medium_migrate);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(check_consistency, 0, config::check_consistency_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_check_consistency);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(manual_compaction, 0, 1, std::numeric_limits<int>::max(),
+                                       _thread_pool_compaction);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(compaction_control, 0, 1, std::numeric_limits<int>::max(),
+                                       _thread_pool_compaction_control);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(update_schema, 0, config::update_schema_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_update_schema);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(upload, 0, calc_real_num_threads(config::upload_worker_count),
+                                       std::numeric_limits<int>::max(), _thread_pool_upload);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(download, 0, calc_real_num_threads(config::download_worker_count),
+                                       std::numeric_limits<int>::max(), _thread_pool_download);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(make_snapshot, 0, config::make_snapshot_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_make_snapshot);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(release_snapshot, 0, config::release_snapshot_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_release_snapshot);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(move_dir, 0, calc_real_num_threads(config::download_worker_count),
+                                       std::numeric_limits<int>::max(), _thread_pool_move_dir);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(update_tablet_meta_info, 0, 1, std::numeric_limits<int>::max(),
+                                       _thread_pool_update_tablet_meta_info);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL(drop_auto_increment_map_dir, 0, 1, std::numeric_limits<int>::max(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                        _thread_pool_drop_auto_increment_map);
 
         // Currently FE can have at most num_of_storage_path * schedule_slot_num_per_path(default 2) clone tasks
@@ -245,18 +333,30 @@ void AgentServer::Impl::init_or_die() {
         // need to modify many interfaces. So for now we still use TaskThreadPool to submit clone tasks, but with
         // only a single worker thread, then we use dynamic thread pool to handle the task concurrently in clone task
         // callback, so that we can match the dop of FE clone task scheduling.
+<<<<<<< HEAD
         BUILD_DYNAMIC_TASK_THREAD_POOL("clone", 0,
+=======
+        BUILD_DYNAMIC_TASK_THREAD_POOL(clone, 0,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                        std::max(_exec_env->store_paths().size() * config::parallel_clone_task_per_path,
                                                 MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(
+<<<<<<< HEAD
                 "remote_snapshot", 0,
+=======
+                remote_snapshot, 0,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 calc_real_num_threads(config::replication_threads, REPLICATION_CPU_CORES_MULTIPLIER),
                 std::numeric_limits<int>::max(), _thread_pool_remote_snapshot);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(
+<<<<<<< HEAD
                 "replicate_snapshot", 0,
+=======
+                replicate_snapshot, 0,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 calc_real_num_threads(config::replication_threads, REPLICATION_CPU_CORES_MULTIPLIER),
                 std::numeric_limits<int>::max(), _thread_pool_replicate_snapshot);
 
@@ -276,13 +376,22 @@ void AgentServer::Impl::init_or_die() {
                               config::push_worker_count_high_priority + config::push_worker_count_normal_priority)
         CREATE_AND_START_POOL(_delete_workers, DeleteTaskWorkerPool,
                               config::delete_worker_count_normal_priority + config::delete_worker_count_high_priority)
+<<<<<<< HEAD
         CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         CREATE_AND_START_POOL(_report_disk_state_workers, ReportDiskStateTaskWorkerPool, REPORT_DISK_STATE_WORKER_COUNT)
         CREATE_AND_START_POOL(_report_tablet_workers, ReportOlapTableTaskWorkerPool, REPORT_OLAP_TABLE_WORKER_COUNT)
         CREATE_AND_START_POOL(_report_workgroup_workers, ReportWorkgroupTaskWorkerPool, REPORT_WORKGROUP_WORKER_COUNT)
     }
     CREATE_AND_START_POOL(_report_resource_usage_workers, ReportResourceUsageTaskWorkerPool,
                           REPORT_RESOURCE_USAGE_WORKER_COUNT)
+<<<<<<< HEAD
+=======
+    CREATE_AND_START_POOL(_report_datacache_metrics_workers, ReportDataCacheMetricsTaskWorkerPool,
+                          REPORT_DATACACHE_METRICS_WORKER_COUNT)
+    CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #undef CREATE_AND_START_POOL
 }
 
@@ -296,6 +405,11 @@ void AgentServer::Impl::stop() {
         _thread_pool_storage_medium_migrate->shutdown();
         _thread_pool_check_consistency->shutdown();
         _thread_pool_compaction->shutdown();
+<<<<<<< HEAD
+=======
+        _thread_pool_compaction_control->shutdown();
+        _thread_pool_update_schema->shutdown();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _thread_pool_upload->shutdown();
         _thread_pool_download->shutdown();
         _thread_pool_make_snapshot->shutdown();
@@ -316,16 +430,28 @@ void AgentServer::Impl::stop() {
         // Both PUSH and REALTIME_PUSH type use _push_workers
         STOP_POOL(PUSH, _push_workers);
         STOP_POOL(DELETE, _delete_workers);
+<<<<<<< HEAD
         STOP_POOL(REPORT_TASK, _report_task_workers);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         STOP_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
         STOP_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
         STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
     }
     STOP_POOL(REPORT_WORKGROUP, _report_resource_usage_workers);
+<<<<<<< HEAD
 #undef STOP_POOL
 }
 
 AgentServer::Impl::~Impl() {}
+=======
+    STOP_POOL(REPORT_DATACACHE_METRICS, _report_datacache_metrics_workers);
+    STOP_POOL(REPORT_TASK, _report_task_workers);
+#undef STOP_POOL
+}
+
+AgentServer::Impl::~Impl() = default;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
@@ -366,7 +492,13 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::STORAGE_MEDIUM_MIGRATE, storage_medium_migrate_req);
             HANDLE_TYPE(TTaskType::CHECK_CONSISTENCY, check_consistency_req);
             HANDLE_TYPE(TTaskType::COMPACTION, compaction_req);
+<<<<<<< HEAD
             HANDLE_TYPE(TTaskType::UPLOAD, upload_req);
+=======
+            HANDLE_TYPE(TTaskType::COMPACTION_CONTROL, compaction_control_req);
+            HANDLE_TYPE(TTaskType::UPLOAD, upload_req);
+            HANDLE_TYPE(TTaskType::UPDATE_SCHEMA, update_schema_req);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             HANDLE_TYPE(TTaskType::DOWNLOAD, download_req);
             HANDLE_TYPE(TTaskType::MAKE_SNAPSHOT, snapshot_req);
             HANDLE_TYPE(TTaskType::RELEASE_SNAPSHOT, release_snapshot_req);
@@ -407,7 +539,11 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
 #undef HANDLE_TYPE
 
         if (!ret_st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "fail to submit task. reason: " << ret_st.get_error_msg() << ", task: " << task;
+=======
+            LOG(WARNING) << "fail to submit task. reason: " << ret_st.message() << ", task: " << task;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // For now, all tasks in the batch share one status, so if any task
             // was failed to submit, we can only return error to FE(even when some
             // tasks have already been successfully submitted).
@@ -477,6 +613,17 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TASK(TTaskType::COMPACTION, all_tasks, run_compaction_task, CompactionTaskRequest, compaction_req,
                         _exec_env);
             break;
+<<<<<<< HEAD
+=======
+        case TTaskType::COMPACTION_CONTROL:
+            HANDLE_TASK(TTaskType::COMPACTION_CONTROL, all_tasks, run_compaction_control_task,
+                        CompactionControlTaskRequest, compaction_control_req, _exec_env);
+            break;
+        case TTaskType::UPDATE_SCHEMA:
+            HANDLE_TASK(TTaskType::UPDATE_SCHEMA, all_tasks, run_update_schema_task, UpdateSchemaTaskRequest,
+                        update_schema_req, _exec_env);
+            break;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         case TTaskType::UPLOAD:
             HANDLE_TASK(TTaskType::UPLOAD, all_tasks, run_upload_task, UploadAgentTaskRequest, upload_req, _exec_env);
             break;
@@ -523,7 +670,11 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         default:
             ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0) has wrong task type", task_type));
+<<<<<<< HEAD
             LOG(WARNING) << "fail to batch submit task. reason: " << ret_st.get_error_msg();
+=======
+            LOG(WARNING) << "fail to batch submit task. reason: " << ret_st.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -544,7 +695,11 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             default:
                 ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0, push_type=$1) has wrong task type",
                                                                      TTaskType::PUSH, push_type));
+<<<<<<< HEAD
                 LOG(WARNING) << "fail to batch submit push task. reason: " << ret_st.get_error_msg();
+=======
+                LOG(WARNING) << "fail to batch submit push task. reason: " << ret_st.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
@@ -616,6 +771,46 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
     LOG_IF(ERROR, !st.ok()) << st;
 }
 
+<<<<<<< HEAD
+=======
+#define STOP_IF_NOT_NULL(worker_pool) \
+    if (worker_pool != nullptr) {     \
+        worker_pool->stop();          \
+    }
+
+void AgentServer::Impl::stop_task_worker_pool(TaskWorkerType type) const {
+    switch (type) {
+    case TaskWorkerType::PUSH:
+        STOP_IF_NOT_NULL(_push_workers);
+        break;
+    case TaskWorkerType::PUBLISH_VERSION:
+        STOP_IF_NOT_NULL(_publish_version_workers);
+        break;
+    case TaskWorkerType::DELETE:
+        STOP_IF_NOT_NULL(_delete_workers);
+        break;
+    case TaskWorkerType::REPORT_TASK:
+        STOP_IF_NOT_NULL(_report_task_workers);
+        break;
+    case TaskWorkerType::REPORT_DISK_STATE:
+        STOP_IF_NOT_NULL(_report_disk_state_workers);
+        break;
+    case TaskWorkerType::REPORT_OLAP_TABLE:
+        STOP_IF_NOT_NULL(_report_tablet_workers);
+        break;
+    case TaskWorkerType::REPORT_WORKGROUP:
+        STOP_IF_NOT_NULL(_report_workgroup_workers);
+        STOP_IF_NOT_NULL(_report_resource_usage_workers);
+        break;
+    case TaskWorkerType::REPORT_DATACACHE_METRICS:
+        STOP_IF_NOT_NULL(_report_datacache_metrics_workers);
+        break;
+    default:
+        break;
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     // TODO: more thread pools.
     ThreadPool* ret = nullptr;
@@ -647,6 +842,15 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     case TTaskType::COMPACTION:
         ret = _thread_pool_compaction.get();
         break;
+<<<<<<< HEAD
+=======
+    case TTaskType::COMPACTION_CONTROL:
+        ret = _thread_pool_compaction_control.get();
+        break;
+    case TTaskType::UPDATE_SCHEMA:
+        ret = _thread_pool_update_schema.get();
+        break;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     case TTaskType::UPLOAD:
         ret = _thread_pool_upload.get();
         break;
@@ -721,6 +925,13 @@ ThreadPool* AgentServer::get_thread_pool(int type) const {
     return _impl->get_thread_pool(type);
 }
 
+<<<<<<< HEAD
+=======
+void AgentServer::stop_task_worker_pool(TaskWorkerType type) const {
+    return _impl->stop_task_worker_pool(type);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void AgentServer::init_or_die() {
     return _impl->init_or_die();
 }

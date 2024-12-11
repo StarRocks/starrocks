@@ -24,6 +24,10 @@ import java.util.List;
 public class CompactionClause extends AlterTableClause {
 
     private List<String> partitionNames;
+<<<<<<< HEAD
+=======
+    // used only in shared-nothing mode
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private boolean baseCompaction = true;
 
     public List<String> getPartitionNames() {
@@ -34,14 +38,20 @@ public class CompactionClause extends AlterTableClause {
         super(AlterOpType.COMPACT, pos);
         this.partitionNames = partitionNames;
         this.baseCompaction = baseCompaction;
+<<<<<<< HEAD
         this.needTableStable = false;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public CompactionClause(boolean baseCompaction, NodePosition pos) {
         super(AlterOpType.COMPACT, pos);
         this.partitionNames = Lists.newArrayList();
         this.baseCompaction = baseCompaction;
+<<<<<<< HEAD
         this.needTableStable = false;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public boolean isBaseCompaction() {

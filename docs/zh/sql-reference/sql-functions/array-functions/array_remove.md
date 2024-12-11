@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_remove
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 从数组中移除指定元素。
 

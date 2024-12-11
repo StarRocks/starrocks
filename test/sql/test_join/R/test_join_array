@@ -19,8 +19,12 @@ aad_1 Array<Array<Array<DECIMAL(26, 2)>>>
 DUPLICATE KEY(`pk`)
 DISTRIBUTED BY HASH(`pk`) BUCKETS 3
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false"
+=======
+"replication_num" = "1"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 );
 -- result:
 -- !result
@@ -1112,7 +1116,11 @@ None	[1,2,3,4,10]
 -- !result
 select s.s_1, t.i_1 from array_test s full join array_test t on s.s_1 => t.i_1 order by 1, 2;
 -- result:
+<<<<<<< HEAD
 E: (1064, "Getting syntax error at line 1, column 70. Detail message: Unexpected input '=', the most similar input is {<EOF>, ';'}.")
+=======
+E: (1064, "Getting syntax error at line 1, column 70. Detail message: Unexpected input '=>', the most similar input is {<EOF>, ';'}.")
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 -- !result
 select s.aas_1, t.aas_1 from array_test s full join array_test t on s.aas_1 <= t.aas_1 order by 1, 2;
 -- result:
@@ -1212,4 +1220,8 @@ select s.i_1, t.d_1 from array_test s join array_test t on array_map(x -> x*3, s
 -- !result
 select s.i_1, t.d_1 from array_test s join array_test t on array_map(x -> x*3, s.i_1)[0] = array_map(x-> x*3 + 1, t.d_1)[0] order by 1, 2;
 -- result:
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

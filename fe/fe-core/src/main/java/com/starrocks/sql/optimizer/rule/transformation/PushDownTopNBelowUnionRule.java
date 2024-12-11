@@ -14,8 +14,13 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+<<<<<<< HEAD
 import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.google.api.client.util.Sets;
+=======
+import com.google.api.client.util.Sets;
+import com.google.common.base.Preconditions;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;

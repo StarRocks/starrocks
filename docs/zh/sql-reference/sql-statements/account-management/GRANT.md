@@ -119,7 +119,11 @@ GRANT
 > **注意**
 >
 > 1. 需要执行 SET CATALOG 之后才能使用。table 还可以用 `<db_name>.<table_name>` 的方式来进行表示。
+<<<<<<< HEAD
 > 2. 所有 Internal Catalog 和 External Catalog 下的表，都支持赋予 SELECT 权限。Iceberg catalog 下的表，还支持赋予 INSERT 权限 (3.1 版本起)。
+=======
+> 2. 所有 Internal Catalog 和 External Catalog 下的表，都支持赋予 SELECT 权限。Hive 和 Iceberg catalog 下的表，还支持赋予 INSERT 权限 (从 3.1 版本起，支持赋予 Iceberg 表的 INSERT 权限；从 3.2 版本起，支持赋予 Hive 表的 INSERT 权限)。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```SQL
 GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
@@ -139,7 +143,11 @@ GRANT
 > **注意**
 >
 > 1. 需要执行 SET CATALOG 之后才能使用。view 还可以用 `<db_name>.<view_name>` 的方式来进行表示。
+<<<<<<< HEAD
 > 2. 对于 External Catalog，仅 Hive 表视图支持 SELECT 权限。（3.1 版本起）
+=======
+> 2. 对于 External Catalog，仅 Hive 表视图支持 SELECT 权限。（3.1 及以后）
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ```SQL
 GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}

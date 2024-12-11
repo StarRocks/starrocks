@@ -24,7 +24,10 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Replica;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -52,7 +55,11 @@ public class AdminStmtAnalyzer {
         new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
 
+<<<<<<< HEAD
     static class AdminStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class AdminStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public void analyze(StatementBase statementBase, ConnectContext session) {
             visit(statementBase, session);
         }
@@ -132,11 +139,15 @@ public class AdminStmtAnalyzer {
             }
             adminShowReplicaStatusStmt.setDbName(dbName);
 
+<<<<<<< HEAD
             try {
                 CatalogUtils.checkIsLakeTable(dbName, tblName);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage(), pos);
             }
+=======
+            CatalogUtils.checkIsLakeTable(dbName, tblName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             List<String> partitions = Lists.newArrayList();
             PartitionNames partitionNames = adminShowReplicaStatusStmt.getTblRef().getPartitionNames();

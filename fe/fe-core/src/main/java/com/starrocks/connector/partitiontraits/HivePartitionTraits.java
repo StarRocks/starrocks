@@ -13,7 +13,10 @@
 // limitations under the License.
 package com.starrocks.connector.partitiontraits;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
@@ -25,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class HivePartitionTraits extends DefaultTraits {
+<<<<<<< HEAD
 
     @Override
     public boolean supportPartitionRefresh() {
@@ -36,12 +40,22 @@ public class HivePartitionTraits extends DefaultTraits {
         return ((HiveMetaStoreTable) table).getDbName();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public boolean isSupportPCTRefresh() {
         return true;
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public String getTableName() {
+        return table.getCatalogTableName();
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public PartitionKey createEmptyKey() {
         return new HivePartitionKey();
     }

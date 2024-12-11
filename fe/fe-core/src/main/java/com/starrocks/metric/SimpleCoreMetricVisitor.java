@@ -131,6 +131,13 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public void visitHistogram(HistogramMetric histogram) {
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void visitHistogram(String name, Histogram histogram) {
         if (!CORE_METRICS.containsKey(name)) {
             return;
@@ -147,9 +154,17 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
 
     @Override
     public void getNodeInfo() {
+<<<<<<< HEAD
         long feDeadNum = GlobalStateMgr.getCurrentState().getFrontends(null).stream().filter(f -> !f.isAlive()).count();
         long beDeadNum =
                 GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values().stream().filter(b -> !b.isAlive())
+=======
+        long feDeadNum = GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getFrontends(null).stream().filter(f -> !f.isAlive()).count();
+        long beDeadNum =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values().stream()
+                        .filter(b -> !b.isAlive())
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         .count();
         long brokerDeadNum =
                 GlobalStateMgr.getCurrentState().getBrokerMgr().getAllBrokers().stream().filter(b -> !b.isAlive)

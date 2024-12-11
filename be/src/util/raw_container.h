@@ -20,6 +20,11 @@
 #include <utility>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "runtime/memory/column_allocator.h"
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 namespace starrocks::raw {
 
 // RawAllocator allocates `trailing` more object(not bytes) than caller required,
@@ -55,6 +60,7 @@ public:
         T* x = A::allocate(n + RawAllocator::_trailing);
         return x;
     }
+<<<<<<< HEAD
     T* allocate(size_t n, const void* hint) {
         T* x = A::allocate(n + RawAllocator::_trailing, hint);
         return x;
@@ -62,6 +68,11 @@ public:
 
     // deallocate the storage referenced by the pointer p
     void deallocate(T* p, size_t n) { A::deallocate(p, n + RawAllocator::_trailing); }
+=======
+
+    // deallocate the storage referenced by the pointer p
+    void deallocate(T* p, size_t n) { A::deallocate(p, (n + RawAllocator::_trailing)); }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // do not initialized allocated.
     template <typename U>
@@ -152,6 +163,7 @@ using RawStringPad16 = std::string;
 // starrocks::raw::RawVectorPad16<int8_t> a;
 // a.resize(100);
 // std::vector<uint8_t> b = std::move(reinterpret_cast<std::vector<uint8_t>&>(a));
+<<<<<<< HEAD
 template <class T>
 using RawVector = std::vector<T, RawAllocator<T, 0>>;
 
@@ -163,6 +175,22 @@ inline void make_room(std::vector<T>* v, size_t n) {
     RawVector<T> rv;
     rv.resize(n);
     v->swap(reinterpret_cast<std::vector<T>&>(rv));
+=======
+template <class T, class Alloc = std::allocator<T>>
+using RawVector = std::vector<T, RawAllocator<T, 0, Alloc>>;
+
+template <class T, class Alloc = std::allocator<T>>
+using RawVectorPad16 = std::vector<T, RawAllocator<T, 16, Alloc>>;
+
+template <typename Container, typename T = typename Container::value_type>
+inline typename std::enable_if<
+        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
+        void>::type
+make_room(Container* v, size_t n) {
+    RawVector<T, typename Container::allocator_type> rv;
+    rv.resize(n);
+    v->swap(reinterpret_cast<Container&>(rv));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 inline void make_room(std::string* s, size_t n) {
@@ -171,9 +199,18 @@ inline void make_room(std::string* s, size_t n) {
     s->swap(reinterpret_cast<std::string&>(rs));
 }
 
+<<<<<<< HEAD
 template <typename T>
 inline void stl_vector_resize_uninitialized(std::vector<T>* vec, size_t new_size) {
     ((RawVector<T>*)vec)->resize(new_size);
+=======
+template <typename Container, typename T = typename Container::value_type>
+inline typename std::enable_if<
+        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
+        void>::type
+stl_vector_resize_uninitialized(Container* vec, size_t new_size) {
+    ((RawVector<T, typename Container::allocator_type>*)vec)->resize(new_size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 inline void stl_string_resize_uninitialized(std::string* str, size_t new_size) {

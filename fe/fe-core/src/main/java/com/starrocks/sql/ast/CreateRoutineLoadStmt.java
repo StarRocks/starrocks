@@ -26,7 +26,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.PropertyAnalyzer;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
@@ -138,7 +143,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String PULSAR_DEFAULT_INITIAL_POSITION = "pulsar_default_initial_position";
 
     private static final String NAME_TYPE = "ROUTINE LOAD NAME";
+<<<<<<< HEAD
     private static final String ENDPOINT_REGEX = "[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]";
+=======
+    // from: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/utils/Utils.java#L97
+    private static final String ENDPOINT_REGEX = ".*?\\[?([0-9a-zA-Z\\-%._:]*)\\]?:(\\d+)";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private static final ImmutableSet<String> PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(DESIRED_CONCURRENT_NUMBER_PROPERTY)
@@ -161,6 +171,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(LOG_REJECTED_RECORD_NUM_PROPERTY)
             .add(TASK_CONSUME_SECOND)
             .add(TASK_TIMEOUT_SECOND)
+<<<<<<< HEAD
+=======
+            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -469,7 +483,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
     }
 
+<<<<<<< HEAD
     public static RoutineLoadDesc buildLoadDesc(List<ParseNode> loadPropertyList) throws UserException {
+=======
+    public static RoutineLoadDesc buildLoadDesc(List<ParseNode> loadPropertyList) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (loadPropertyList == null) {
             return null;
         }
@@ -519,7 +537,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 partitionNames);
     }
 
+<<<<<<< HEAD
     public void checkJobProperties() throws UserException {
+=======
+    public void checkJobProperties() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !PROPERTIES_SET.contains(entity)).findFirst();
         if (optional.isPresent()) {
@@ -541,10 +563,17 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             try {
                 maxFilterRatio = Double.valueOf(maxFilterRatioStr);
             } catch (NumberFormatException exception) {
+<<<<<<< HEAD
                 throw new UserException("Incorrect format of max_filter_ratio", exception);
             }
             if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
                 throw new UserException(MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
+=======
+                throw new StarRocksException("Incorrect format of max_filter_ratio", exception);
+            }
+            if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
+                throw new StarRocksException(MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
@@ -590,7 +619,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 format = "avro";
                 jsonPaths = jobProperties.get(JSONPATHS);
             } else {
+<<<<<<< HEAD
                 throw new UserException("Format type is invalid. format=`" + format + "`");
+=======
+                throw new StarRocksException("Format type is invalid. format=`" + format + "`");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         } else {
             format = "csv"; // default csv
@@ -614,16 +647,27 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             try {
                 taskConsumeSecond = Long.parseLong(taskConsumeSecondStr);
             } catch (NumberFormatException e) {
+<<<<<<< HEAD
                 throw new UserException(e.getMessage());
+=======
+                throw new StarRocksException(e.getMessage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             String taskTimeoutSecondStr = jobProperties.get(TASK_TIMEOUT_SECOND);
             try {
                 taskTimeoutSecond = Long.parseLong(taskTimeoutSecondStr);
             } catch (NumberFormatException e) {
+<<<<<<< HEAD
                 throw new UserException(e.getMessage());
             }
             if (taskConsumeSecond >= taskTimeoutSecond) {
                 throw new UserException("task_timeout_second must be larger than task_consume_second");
+=======
+                throw new StarRocksException(e.getMessage());
+            }
+            if (taskConsumeSecond >= taskTimeoutSecond) {
+                throw new StarRocksException("task_timeout_second must be larger than task_consume_second");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         } else if (jobProperties.containsKey(TASK_CONSUME_SECOND) || jobProperties.containsKey(TASK_TIMEOUT_SECOND)) {
             if (jobProperties.containsKey(TASK_CONSUME_SECOND)) {
@@ -631,7 +675,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 try {
                     taskConsumeSecond = Long.parseLong(taskConsumeSecondStr);
                 } catch (NumberFormatException e) {
+<<<<<<< HEAD
                     throw new UserException(e.getMessage());
+=======
+                    throw new StarRocksException(e.getMessage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
                 taskTimeoutSecond = taskConsumeSecond * TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
             }
@@ -640,7 +688,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 try {
                     taskTimeoutSecond = Long.parseLong(taskTimeoutSecondStr);
                 } catch (NumberFormatException e) {
+<<<<<<< HEAD
                     throw new UserException(e.getMessage());
+=======
+                    throw new StarRocksException(e.getMessage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
                 taskConsumeSecond = taskTimeoutSecond / TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
             }
@@ -993,9 +1045,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
         return visitor.visitCreateRoutineLoadStatement(this, context);
     }
+<<<<<<< HEAD
 
     @Override
     public boolean needAuditEncryption() {
         return true;
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

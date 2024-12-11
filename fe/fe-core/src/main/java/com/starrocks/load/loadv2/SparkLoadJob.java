@@ -54,7 +54,11 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Resource;
@@ -71,10 +75,18 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.LogBuilder;
+import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
@@ -98,6 +110,10 @@ import com.starrocks.task.PushTask;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TColumn;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
@@ -108,7 +124,12 @@ import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
+<<<<<<< HEAD
 import com.starrocks.transaction.BeginTransactionException;
+=======
+import com.starrocks.transaction.CommitRateExceededException;
+import com.starrocks.transaction.RunningTxnExceedException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletQuorumFailedException;
 import com.starrocks.transaction.TransactionState;
@@ -118,10 +139,15 @@ import com.starrocks.transaction.TransactionState.TxnSourceType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.File;
 import java.io.IOException;
+=======
+import java.io.File;
+import java.util.ArrayList;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -188,6 +214,7 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     public String getCurrentWarehouse() {
         // TODO(lzh): pass the current warehouse.
         return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
@@ -195,6 +222,9 @@ public class SparkLoadJob extends BulkLoadJob {
 
     @Override
     protected void setJobProperties(Map<String, String> properties) throws DdlException {
+=======
+    public void setJobProperties(Map<String, String> properties) throws DdlException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super.setJobProperties(properties);
 
         if (properties != null && properties.containsKey(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT)) {
@@ -233,11 +263,19 @@ public class SparkLoadJob extends BulkLoadJob {
 
     @Override
     public void beginTxn()
+<<<<<<< HEAD
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
         transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         LoadJobSourceType.FRONTEND, id, timeoutSecond);
+=======
+            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
+        transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
+                        new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                        LoadJobSourceType.FRONTEND, id, timeoutSecond, warehouseId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -451,7 +489,11 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
+<<<<<<< HEAD
     private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws UserException {
+=======
+    private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!indexToPushBrokerReaderParams.containsKey(indexId)) {
             PushBrokerReaderParams pushBrokerReaderParams = new PushBrokerReaderParams();
             pushBrokerReaderParams.init(table.getSchemaByIndexId(indexId), brokerDesc);
@@ -460,7 +502,11 @@ public class SparkLoadJob extends BulkLoadJob {
         return indexToPushBrokerReaderParams.get(indexId);
     }
 
+<<<<<<< HEAD
     private Set<Long> submitPushTasks() throws UserException {
+=======
+    private Set<Long> submitPushTasks() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // check db exist
         Database db;
         try {
@@ -477,7 +523,12 @@ public class SparkLoadJob extends BulkLoadJob {
         AgentBatchTask batchTask = new AgentBatchTask();
         boolean hasLoadPartitions = false;
         Set<Long> totalTablets = Sets.newHashSet();
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             writeLock();
             try {
@@ -492,7 +543,12 @@ public class SparkLoadJob extends BulkLoadJob {
 
                 for (Map.Entry<Long, Set<Long>> entry : tableToLoadPartitions.entrySet()) {
                     long tableId = entry.getKey();
+<<<<<<< HEAD
                     OlapTable table = (OlapTable) db.getTable(tableId);
+=======
+                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     if (table == null) {
                         LOG.warn("table does not exist. id: {}", tableId);
                         continue;
@@ -500,20 +556,41 @@ public class SparkLoadJob extends BulkLoadJob {
 
                     Set<Long> partitionIds = entry.getValue();
                     for (long partitionId : partitionIds) {
+<<<<<<< HEAD
                         Partition partition = table.getPartition(partitionId);
                         if (partition == null) {
                             LOG.warn("partition does not exist. id: {}", partitionId);
                             continue;
                         }
+=======
+                        PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+                        if (physicalPartition == null) {
+                            LOG.warn("partition does not exist. id: {}", partitionId);
+                            continue;
+                        }
+                        long partitionVersion = physicalPartition.getVisibleVersion();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                         hasLoadPartitions = true;
                         int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
 
+<<<<<<< HEAD
                         List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
+=======
+                        List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.ALL);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         for (MaterializedIndex index : indexes) {
                             long indexId = index.getId();
                             int schemaHash = indexToSchemaHash.get(indexId);
 
+<<<<<<< HEAD
+=======
+                            List<TColumn> columnsDesc = new ArrayList<TColumn>();
+                            for (Column column : table.getSchemaByIndexId(indexId)) {
+                                columnsDesc.add(column.toThrift());
+                            }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             int bucket = 0;
                             for (Tablet tablet : index.getTablets()) {
                                 long tabletId = tablet.getId();
@@ -530,12 +607,22 @@ public class SparkLoadJob extends BulkLoadJob {
                                         long replicaId = replica.getId();
                                         tabletAllReplicas.add(replicaId);
                                         long backendId = replica.getBackendId();
+<<<<<<< HEAD
                                         Backend backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
                                                 .getBackend(backendId);
 
                                         pushTask(backendId, tableId, partitionId, indexId, tabletId,
                                                 replicaId, schemaHash, params, batchTask, tabletMetaStr,
                                                 backend, replica, tabletFinishedReplicas, TTabletType.TABLET_TYPE_DISK);
+=======
+                                        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                                .getBackend(backendId);
+
+                                        pushTask(backendId, tableId, partitionId, indexId, tabletId,
+                                                replicaId, schemaHash, partitionVersion, params, batchTask, tabletMetaStr,
+                                                backend, replica, tabletFinishedReplicas,
+                                                TTabletType.TABLET_TYPE_DISK, columnsDesc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     }
 
                                     if (tabletAllReplicas.size() == 0) {
@@ -552,19 +639,33 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
+<<<<<<< HEAD
                                     long backendId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
                                     // TODO: need to refactor after be split into cn + dn
                                     ComputeNode backend = GlobalStateMgr.getCurrentSystemInfo().
                                             getBackendOrComputeNode(backendId);
                                     if (backend == null) {
                                         LOG.warn("replica {} not exists", backendId);
+=======
+                                    WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                                    ComputeNode backend = warehouseManager
+                                            .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+                                    if (backend == null) {
+                                        LOG.warn("replica {} not exists", ((LakeTablet) tablet).getShardId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                         continue;
                                     }
 
                                     pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
+<<<<<<< HEAD
                                             tabletId, schemaHash, params, batchTask, tabletMetaStr,
                                             backend, new Replica(tabletId, backendId, -1, NORMAL),
                                             tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE);
+=======
+                                            tabletId, schemaHash, partitionVersion, params, batchTask, tabletMetaStr,
+                                            backend, new Replica(tabletId, backend.getId(), -1, NORMAL),
+                                            tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE, columnsDesc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                                     if (tabletFinishedReplicas.contains(tabletId)) {
                                         quorumTablets.add(tabletId);
@@ -594,22 +695,38 @@ public class SparkLoadJob extends BulkLoadJob {
                 writeUnlock();
             }
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     private void pushTask(long backendId, long tableId, long partitionId, long indexId,
+<<<<<<< HEAD
                           long tabletId, long replicaId, int schemaHash,
+=======
+                          long tabletId, long replicaId, int schemaHash, long partitionVersion,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                           PushBrokerReaderParams params,
                           AgentBatchTask batchTask,
                           String tabletMetaStr,
                           ComputeNode backend, Replica replica, Set<Long> tabletFinishedReplicas,
+<<<<<<< HEAD
                           TTabletType tabletType)
+=======
+                          TTabletType tabletType, List<TColumn> columnDesc)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throws AnalysisException {
 
         if (!tabletToSentReplicaPushTask.containsKey(tabletId)
                 || !tabletToSentReplicaPushTask.get(tabletId).containsKey(replicaId)) {
+<<<<<<< HEAD
             long taskSignature = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+=======
+            long taskSignature = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .getTransactionIDGenerator().getNextTransactionId();
             // deep copy TBrokerScanRange because filePath and fileSize will be updated
             // in different tablet push task
@@ -645,11 +762,19 @@ public class SparkLoadJob extends BulkLoadJob {
             }
 
             PushTask pushTask = new PushTask(backendId, dbId, tableId, partitionId,
+<<<<<<< HEAD
                     indexId, tabletId, replicaId, schemaHash,
                     0, id, TPushType.LOAD_V2,
                     TPriority.NORMAL, transactionId, taskSignature,
                     tBrokerScanRange, params.tDescriptorTable,
                     timezone, tabletType);
+=======
+                    indexId, tabletId, replicaId, schemaHash, partitionVersion,
+                    0, id, TPushType.LOAD_V2,
+                    TPriority.NORMAL, transactionId, taskSignature,
+                    tBrokerScanRange, params.tDescriptorTable,
+                    timezone, tabletType, columnDesc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (AgentTaskQueue.addTask(pushTask)) {
                 batchTask.addTask(pushTask);
                 if (!tabletToSentReplicaPushTask.containsKey(tabletId)) {
@@ -686,7 +811,11 @@ public class SparkLoadJob extends BulkLoadJob {
      * 1. Sends push tasks to Be
      * 2. Commit transaction after all push tasks execute successfully
      */
+<<<<<<< HEAD
     public void updateLoadingStatus() throws UserException {
+=======
+    public void updateLoadingStatus() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!checkState(JobState.LOADING)) {
             return;
         }
@@ -730,11 +859,16 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
+<<<<<<< HEAD
     private void tryCommitJob() throws UserException {
+=======
+    private void tryCommitJob() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
                 .add("txn_id", transactionId)
                 .add("msg", "Load job try to commit txn")
                 .build());
+<<<<<<< HEAD
         Database db = getDb();
         db.writeLock();
         try {
@@ -746,6 +880,26 @@ public class SparkLoadJob extends BulkLoadJob {
             // retry in next loop
         } finally {
             db.writeUnlock();
+=======
+
+        TransactionState transactionState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(dbId, transactionId);
+        List<Long> tableIdList = transactionState.getTableIdList();
+
+        Database db = getDb();
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitTransaction(
+                    dbId, transactionId, commitInfos, Lists.newArrayList(),
+                    new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
+                            finishTimestamp, state, failMsg));
+        } catch (TabletQuorumFailedException | CommitRateExceededException e) {
+            // retry in next loop
+            LOG.info("Failed commit for txn {}, will retry. Error: {}", transactionId, e.getMessage());
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -808,7 +962,11 @@ public class SparkLoadJob extends BulkLoadJob {
     public void afterVisible(TransactionState txnState, boolean txnOperated) {
         super.afterVisible(txnState, txnOperated);
         // collect table-level metrics after spark load job finished
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (null == db) {
             return;
         }
@@ -870,6 +1028,7 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
@@ -901,6 +1060,8 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * log load job update info when job state changed to etl or loading
      */
@@ -1000,7 +1161,11 @@ public class SparkLoadJob extends BulkLoadJob {
             this.tDescriptorTable = null;
         }
 
+<<<<<<< HEAD
         public void init(List<Column> columns, BrokerDesc brokerDesc) throws UserException {
+=======
+        public void init(List<Column> columns, BrokerDesc brokerDesc) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // Generate tuple descriptor
             DescriptorTable descTable = new DescriptorTable();
             TupleDescriptor destTupleDesc = descTable.createTupleDescriptor();

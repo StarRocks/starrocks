@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_raw_agg
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 此函数为聚合函数，用于聚合 HLL 类型的字段，返回的还是 HLL 类型。
 

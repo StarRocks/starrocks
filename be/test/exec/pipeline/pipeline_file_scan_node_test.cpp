@@ -27,6 +27,10 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -40,6 +44,10 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
+<<<<<<< HEAD
+=======
+#include "testutil/assert.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/defer_op.h"
 #include "util/disk_info.h"
 #include "util/mem_info.h"
@@ -89,8 +97,13 @@ public:
         _runtime_state->set_query_ctx(_query_ctx);
         _runtime_state->set_fragment_ctx(_fragment_ctx);
         _pool = _runtime_state->obj_pool();
+<<<<<<< HEAD
 
         _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, false));
+=======
+        auto sink_dop = degree_of_parallelism;
+        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, sink_dop, false));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _builder = _pool->add(new PipelineBuilder(*_context));
     }
 
@@ -130,6 +143,10 @@ private:
 
     std::string _file = "./be/test/exec/test_data/csv_scanner/csv_file1";
     Pipelines _pipelines;
+<<<<<<< HEAD
+=======
+    ExecutionGroupPtr exec_group;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 ChunkPtr PipeLineFileScanNodeTest::_create_chunk(const std::vector<TypeDescriptor>& types) {
@@ -187,14 +204,20 @@ std::vector<TScanRangeParams> PipeLineFileScanNodeTest::_create_csv_scan_ranges(
 
 std::shared_ptr<TPlanNode> PipeLineFileScanNodeTest::_create_tplan_node() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
+<<<<<<< HEAD
     std::vector<bool> nullable_tuples{true};
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::FILE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
+<<<<<<< HEAD
     tnode->__set_nullable_tuples(nullable_tuples);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -216,7 +239,12 @@ DescriptorTbl* PipeLineFileScanNodeTest::_create_table_desc(const std::vector<Ty
     tuple_desc_builder.build(&desc_tbl_builder);
 
     DescriptorTbl* tbl = nullptr;
+<<<<<<< HEAD
     DescriptorTbl::create(_runtime_state, _pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+=======
+    CHECK(DescriptorTbl::create(_runtime_state, _pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                  .ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     _runtime_state->set_desc_tbl(tbl);
     return tbl;
@@ -224,6 +252,7 @@ DescriptorTbl* PipeLineFileScanNodeTest::_create_table_desc(const std::vector<Ty
 
 void PipeLineFileScanNodeTest::prepare_pipeline() {
     // const auto& params = _request.params;
+<<<<<<< HEAD
 
     _fragment_ctx->set_pipelines(std::move(_pipelines));
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
@@ -234,11 +263,21 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
     for (const auto& pipeline : pipelines) {
         if (pipeline->source_operator_factory()->with_morsels()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
+=======
+    ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
+
+    MorselQueueFactoryMap& morsel_queues = _fragment_ctx->morsel_queue_factories();
+
+    _fragment_ctx->iterate_pipeline([&morsel_queues](auto pipeline) {
+        if (pipeline->source_operator_factory()->with_morsels()) {
+            auto source_id = pipeline->source_operator_factory()->plan_node_id();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             DCHECK(morsel_queues.count(source_id));
             auto& morsel_queue_factory = morsel_queues[source_id];
 
             pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
         }
+<<<<<<< HEAD
     }
 
     for (const auto& pipeline : pipelines) {
@@ -254,6 +293,21 @@ void PipeLineFileScanNodeTest::execute_pipeline() {
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
         exec_env->wg_driver_executor()->submit(driver.get());
         return Status::OK();
+=======
+    });
+
+    _fragment_ctx->iterate_pipeline(
+            [this](auto pipeline) { pipeline->instantiate_drivers(_fragment_ctx->runtime_state()); });
+}
+
+void PipeLineFileScanNodeTest::execute_pipeline() {
+    _fragment_ctx->iterate_drivers(
+            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
+
+    _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
+        LOG(WARNING) << driver->to_readable_string();
+        exec_env->wg_driver_executor()->submit(driver.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     });
 }
 
@@ -266,7 +320,11 @@ void PipeLineFileScanNodeTest::generate_morse_queue(const std::vector<starrocks:
     for (auto& i : scan_nodes) {
         auto* scan_node = (ScanNode*)(i);
         auto morsel_queue_factory = scan_node->convert_scan_range_to_morsel_queue_factory(
+<<<<<<< HEAD
                 scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, true,
+=======
+                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, false, true,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 TTabletInternalParallelMode::type::AUTO);
         DCHECK(morsel_queue_factory.ok());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory).value());
@@ -407,12 +465,25 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     starrocks::pipeline::CounterPtr sinkCounter = std::make_shared<starrocks::pipeline::FileScanCounter>();
 
+<<<<<<< HEAD
+=======
+    exec_group = ExecutionGroupBuilder::create_normal_exec_group();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     OpFactories op_factories = file_scan_node->decompose_to_pipeline(_context);
 
     op_factories.push_back(std::make_shared<starrocks::pipeline::TestFileScanSinkOperatorFactory>(
             _context->next_operator_id(), 0, sinkCounter));
 
+<<<<<<< HEAD
     _pipelines.push_back(std::make_shared<starrocks::pipeline::Pipeline>(_context->next_pipe_id(), op_factories));
+=======
+    _pipelines.push_back(
+            std::make_shared<starrocks::pipeline::Pipeline>(_context->next_pipe_id(), op_factories, exec_group.get()));
+    exec_group->add_pipeline(_pipelines.back().get());
+    auto pipelines = _pipelines;
+    _fragment_ctx->set_pipelines({exec_group}, std::move(pipelines));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     prepare_pipeline();
 

@@ -73,12 +73,26 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
     (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type))
 #define ADD_TIMER(profile, name) \
     (profile)->add_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS))
+<<<<<<< HEAD
+=======
+#define ADD_TIMER_WITH_THRESHOLD(profile, name, threshold) \
+    (profile)->add_counter(                                \
+            name, TUnit::TIME_NS,                          \
+            RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #define ADD_PEAK_COUNTER(profile, name, type) \
     (profile)->AddHighWaterMarkCounter(name, type, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
 #define ADD_CHILD_COUNTER(profile, name, type, parent) \
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type), parent)
 #define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) \
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type), parent)
+<<<<<<< HEAD
+=======
+#define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent)                                      \
+    (profile)->add_child_counter(                                                                                      \
+            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::MERGE_ALL, 0, min_max_type), \
+            parent)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) \
     (profile)->add_child_counter(                                  \
             name, TUnit::TIME_NS,                                  \
@@ -121,15 +135,28 @@ class ObjectPool;
 // Thread-safe.
 class RuntimeProfile {
 public:
+<<<<<<< HEAD
     class Counter {
     public:
         static TCounterStrategy create_strategy(TCounterAggregateType::type aggregate_type,
                                                 TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
                                                 int64_t display_threshold = 0) {
+=======
+    inline static const std::string MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
+    inline static const std::string MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
+
+    class Counter {
+    public:
+        static TCounterStrategy create_strategy(
+                TCounterAggregateType::type aggregate_type,
+                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL, int64_t display_threshold = 0,
+                TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             TCounterStrategy strategy;
             strategy.aggregate_type = aggregate_type;
             strategy.merge_type = merge_type;
             strategy.display_threshold = display_threshold;
+<<<<<<< HEAD
             return strategy;
         }
 
@@ -138,6 +165,18 @@ public:
                                                 int64_t display_threshold = 0) {
             auto aggregate_type = is_time_type(type) ? TCounterAggregateType::AVG : TCounterAggregateType::SUM;
             return create_strategy(aggregate_type, merge_type, display_threshold);
+=======
+            strategy.min_max_type = min_max_type;
+            return strategy;
+        }
+
+        static TCounterStrategy create_strategy(
+                TUnit::type type, TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
+                int64_t display_threshold = 0,
+                TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
+            auto aggregate_type = is_time_type(type) ? TCounterAggregateType::AVG : TCounterAggregateType::SUM;
+            return create_strategy(aggregate_type, merge_type, display_threshold, min_max_type);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         explicit Counter(TUnit::type type, int64_t value = 0)
@@ -184,7 +223,17 @@ public:
                    _strategy.merge_type == TCounterMergeType::SKIP_FIRST_MERGE;
         }
 
+<<<<<<< HEAD
         int64_t display_threshold() const { return _strategy.display_threshold; }
+=======
+        bool skip_min_max() const { return _strategy.min_max_type == TCounterMinMaxType::SKIP_ALL; }
+
+        int64_t display_threshold() const { return _strategy.display_threshold; }
+        bool should_display() const {
+            int64_t threshold = _strategy.display_threshold;
+            return threshold == 0 || value() > threshold;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private:
         friend class RuntimeProfile;
@@ -197,11 +246,15 @@ public:
     class ConcurrentTimerCounter;
     class DerivedCounter;
     class EventSequence;
+<<<<<<< HEAD
     class HighWaterMarkCounter;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     class SummaryStatsCounter;
     class ThreadCounters;
     class TimeSeriesCounter;
 
+<<<<<<< HEAD
     /// A counter that keeps track of the highest value seen (reporting that
     /// as value()) and the current value.
     class HighWaterMarkCounter : public Counter {
@@ -213,6 +266,22 @@ public:
         virtual void add(int64_t delta) {
             int64_t new_val = current_value_.fetch_add(delta, std::memory_order_relaxed) + delta;
             UpdateMax(new_val);
+=======
+    /// A counter that keeps track of the highest/lowest value seen (reporting that
+    /// as value()) and the current value.
+    template <bool is_high>
+    class WaterMarkCounter : public Counter {
+    public:
+        explicit WaterMarkCounter(TUnit::type type, int64_t value = 0) : Counter(type, value) { _set_init_value(); }
+        explicit WaterMarkCounter(TUnit::type type, const TCounterStrategy& strategy, int64_t value = 0)
+                : Counter(type, strategy, value) {
+            _set_init_value();
+        }
+
+        virtual void add(int64_t delta) {
+            int64_t new_val = current_value_.fetch_add(delta, std::memory_order_relaxed) + delta;
+            Update(new_val);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         /// Tries to increase the current value by delta. If current_value() + delta
@@ -223,7 +292,11 @@ public:
                 int64_t new_val = old_val + delta;
                 if (UNLIKELY(new_val > max)) return false;
                 if (LIKELY(current_value_.compare_exchange_strong(old_val, new_val, std::memory_order_relaxed))) {
+<<<<<<< HEAD
                     UpdateMax(new_val);
+=======
+                    Update(new_val);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     return true;
                 }
             }
@@ -231,12 +304,17 @@ public:
 
         void set(int64_t v) override {
             current_value_.store(v, std::memory_order_relaxed);
+<<<<<<< HEAD
             UpdateMax(v);
+=======
+            Update(v);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         int64_t current_value() const { return current_value_.load(std::memory_order_relaxed); }
 
     private:
+<<<<<<< HEAD
         /// Set '_value' to 'v' if 'v' is larger than '_value'. The entire operation is
         /// atomic.
         void UpdateMax(int64_t v) {
@@ -245,14 +323,49 @@ public:
                 int64_t new_max = std::max(old_max, v);
                 if (new_max == old_max) break; // Avoid atomic update.
                 if (LIKELY(_value.compare_exchange_strong(old_max, new_max, std::memory_order_relaxed))) break;
+=======
+        void _set_init_value() {
+            if constexpr (is_high) {
+                _value.store(0, std::memory_order_relaxed);
+                current_value_.store(0, std::memory_order_relaxed);
+            } else {
+                _value.store(MAX_INT64, std::memory_order_relaxed);
+                current_value_.store(MAX_INT64, std::memory_order_relaxed);
+            }
+        }
+
+        /// Set '_value' to 'v' if 'v' is larger/lower than '_value'. The entire operation is
+        /// atomic.
+        void Update(int64_t v) {
+            while (true) {
+                int64_t old_value = _value.load(std::memory_order_relaxed);
+                int64_t new_value;
+                if constexpr (is_high) {
+                    new_value = std::max(old_value, v);
+                } else {
+                    new_value = std::min(old_value, v);
+                }
+                if (new_value == old_value) break; // Avoid atomic update.
+                if (LIKELY(_value.compare_exchange_strong(old_value, new_value, std::memory_order_relaxed))) break;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
         /// The current value of the counter. _value in the super class represents
         /// the high water mark.
+<<<<<<< HEAD
         std::atomic<int64_t> current_value_{0};
     };
 
+=======
+        std::atomic<int64_t> current_value_;
+        static const int64_t MAX_INT64 = 9223372036854775807ll;
+    };
+
+    using HighWaterMarkCounter = WaterMarkCounter<true>;
+    using LowWaterMarkCounter = WaterMarkCounter<false>;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     typedef std::function<int64_t()> DerivedCounterFunction;
 
     // A DerivedCounter also has a name and type, but the value is computed.
@@ -500,11 +613,30 @@ public:
                                                   const TCounterStrategy& strategy,
                                                   const std::string& parent_name = "");
 
+<<<<<<< HEAD
+=======
+    LowWaterMarkCounter* AddLowWaterMarkCounter(const std::string& name, TUnit::type unit,
+                                                const TCounterStrategy& strategy, const std::string& parent_name = "");
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Recursively compute the fraction of the 'total_time' spent in this profile and
     // its children.
     // This function updates _local_time_percent for each profile.
     void compute_time_in_profile();
 
+<<<<<<< HEAD
+=======
+    void inc_version() {
+        std::lock_guard<std::mutex> l(_version_lock);
+        _version += 1;
+    }
+
+    int64_t get_version() const {
+        std::lock_guard<std::mutex> l(_version_lock);
+        return _version;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public:
     // The root counter name for all top level counters.
     const static std::string ROOT_COUNTER;
@@ -577,9 +709,24 @@ private:
     // of the total time in the entire profile tree.
     double _local_time_percent;
 
+<<<<<<< HEAD
     // update a subtree of profiles from nodes, rooted at *idx.
     // On return, *idx points to the node immediately following this subtree.
     void update(const std::vector<TRuntimeProfileNode>& nodes, int* idx);
+=======
+    // Protects _version
+    mutable std::mutex _version_lock;
+    // The version of this profile. It is used to prevent updating this profile
+    // from an old one.
+    int64_t _version{0};
+
+    // update a subtree of profiles from nodes, rooted at *idx. If the version
+    // of the parent node, or the version of root node for this subtree is older,
+    // skip to update the subtree, but still traverse the nodes of subtree to
+    // get the node immediately following this subtree.
+    // On return, *idx points to the node immediately following this subtree.
+    void update(const std::vector<TRuntimeProfileNode>& nodes, int* idx, bool is_parent_node_old);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Helper function to compute compute the fraction of the total time spent in
     // this profile and its children.

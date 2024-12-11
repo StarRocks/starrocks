@@ -104,7 +104,11 @@ public class UDFTest extends PlanTestBase {
         PhysicalTableFunctionOperator tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
 
         Assert.assertEquals(3, tp.getFnParamColumnRefs().size());
+<<<<<<< HEAD
         Assert.assertEquals("[2, 4, 4]",
+=======
+        Assert.assertEquals("[8, 9, 10]",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
 
         sql = "select * from tarray, unnest(v3, v3)";

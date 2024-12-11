@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     n_name,
@@ -23,6 +24,8 @@ group by
     n_name
 order by
     revenue desc ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [planCount]
 8
 [plan-1]

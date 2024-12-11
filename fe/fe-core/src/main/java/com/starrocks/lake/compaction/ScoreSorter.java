@@ -23,6 +23,7 @@ import javax.validation.constraints.NotNull;
 public class ScoreSorter implements Sorter {
     @Override
     @NotNull
+<<<<<<< HEAD
     public List<PartitionStatistics> sort(@NotNull List<PartitionStatistics> partitionStatistics) {
         return partitionStatistics.stream()
                 .filter(p -> p.getCompactionScore() != null)
@@ -30,3 +31,13 @@ public class ScoreSorter implements Sorter {
                 .collect(Collectors.toList());
     }
 }
+=======
+    public List<PartitionStatisticsSnapshot> sort(@NotNull List<PartitionStatisticsSnapshot> partitionStatistics) {
+        return partitionStatistics.stream()
+                .filter(p -> p.getCompactionScore() != null)
+                .sorted(Comparator.comparingInt((PartitionStatisticsSnapshot stats) -> stats.getPriority().getValue()).reversed()
+                        .thenComparing(Comparator.comparing(PartitionStatisticsSnapshot::getCompactionScore).reversed()))
+                .collect(Collectors.toList());
+    }
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

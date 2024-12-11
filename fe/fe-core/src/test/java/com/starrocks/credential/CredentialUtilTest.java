@@ -16,6 +16,10 @@ package com.starrocks.credential;
 
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.junit.Assert;

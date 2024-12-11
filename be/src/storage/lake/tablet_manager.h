@@ -20,11 +20,21 @@
 #include <variant>
 
 #include "common/statusor.h"
+<<<<<<< HEAD
+=======
+#include "compaction_task_context.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gutil/macros.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
+<<<<<<< HEAD
+=======
+#include "storage/options.h"
+#include "storage/rowset/base_rowset.h"
+#include "util/bthreads/single_flight.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 struct FileInfo;
@@ -40,9 +50,17 @@ class MetadataIterator;
 class UpdateManager;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
+<<<<<<< HEAD
 
 class CompactionScheduler;
 class Metacache;
+=======
+using TabletAndRowsets = std::tuple<std::shared_ptr<Tablet>, std::vector<BaseRowsetSharedPtr>>;
+
+class CompactionScheduler;
+class Metacache;
+class VersionedTablet;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 class TabletManager {
     friend class Tablet;
@@ -53,12 +71,20 @@ public:
     // this TabletManager.
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
+<<<<<<< HEAD
     explicit TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity);
+=======
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
+                           int64_t cache_capacity);
+
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ~TabletManager();
 
     DISALLOW_COPY_AND_MOVE(TabletManager);
 
+<<<<<<< HEAD
     [[nodiscard]] Status create_tablet(const TCreateTabletReq& req);
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
@@ -90,11 +116,61 @@ public:
     [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
 
     [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
+=======
+    Status create_tablet(const TCreateTabletReq& req);
+
+    StatusOr<Tablet> get_tablet(int64_t tablet_id);
+
+    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version);
+
+    StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
+
+    Status put_tablet_metadata(const TabletMetadata& metadata);
+
+    Status put_tablet_metadata(const TabletMetadataPtr& metadata);
+
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true);
+
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(std::shared_ptr<FileSystem> fs, const std::string& path,
+                                                    bool fill_cache = true);
+
+    TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
+
+    StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
+
+    Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
+
+    // Use this function instead of get_tablet_metadata where you just need to check if tablet metadata exists
+    Status tablet_metadata_exists(int64_t tablet_id, int64_t version);
+
+    // Do not use this function except in a list dir
+    Status tablet_metadata_exists(const std::string& path);
+
+    Status put_txn_log(const TxnLog& log);
+
+    Status put_txn_log(const TxnLogPtr& log);
+
+    Status put_txn_log(const TxnLogPtr& log, const std::string& path);
+
+    Status put_txn_slog(const TxnLogPtr& log);
+
+    Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
+
+    Status put_txn_vlog(const TxnLogPtr& log, int64_t version);
+
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
 
+<<<<<<< HEAD
+=======
+    StatusOr<CombinedTxnLogPtr> get_combined_txn_log(const std::string& path, bool fill_cache = true);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     StatusOr<TxnLogPtr> get_txn_slog(int64_t tablet_id, int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_slog(const std::string& path, bool fill_cache = true);
@@ -102,6 +178,7 @@ public:
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
 
     StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true);
+<<<<<<< HEAD
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
 
     [[nodiscard]] Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
@@ -114,12 +191,28 @@ public:
 
 #ifdef USE_STAROS
     bool is_tablet_in_worker(int64_t tablet_id);
+=======
+
+    StatusOr<TabletSchemaPtr> get_output_rowset_schema(std::vector<uint32_t>& input_rowset,
+                                                       const TabletMetadata* metadata);
+
+#ifdef USE_STAROS
+#if !defined(BUILD_FORMAT_LIB)
+    bool is_tablet_in_worker(int64_t tablet_id);
+#else
+    bool is_tablet_in_worker(int64_t tablet_id) { return true; }
+#endif
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #endif // USE_STAROS
 
     void prune_metacache();
 
     // TODO: remove this method
+<<<<<<< HEAD
     LocationProvider* TEST_set_location_provider(LocationProvider* value) {
+=======
+    std::shared_ptr<LocationProvider> TEST_set_location_provider(std::shared_ptr<LocationProvider> value) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto ret = _location_provider;
         _location_provider = value;
         return ret;
@@ -131,21 +224,36 @@ public:
 
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
+<<<<<<< HEAD
+=======
+    std::string tablet_initial_metadata_location(int64_t tablet_id) const;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
 
+<<<<<<< HEAD
+=======
+    std::string combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const;
 
     std::string del_location(int64_t tablet_id, std::string_view del_name) const;
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
+<<<<<<< HEAD
     std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const;
 
     const LocationProvider* location_provider() const { return _location_provider; }
+=======
+    const std::shared_ptr<LocationProvider> location_provider() { return _location_provider; }
+    std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     UpdateManager* update_mgr();
 
@@ -156,6 +264,19 @@ public:
     // The return value will never be null.
     Metacache* metacache() { return _metacache.get(); }
 
+<<<<<<< HEAD
+=======
+    StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
+
+    StatusOr<int64_t> get_tablet_num_rows(int64_t tablet_id, int64_t version);
+
+    int64_t in_writing_data_size(int64_t tablet_id);
+
+    int64_t add_in_writing_data_size(int64_t tablet_id, int64_t size);
+
+    void clean_in_writing_data_size();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
 
@@ -165,11 +286,29 @@ public:
     // updating the cache size where the cached object is not the one as expected.
     void update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint = 0);
 
+<<<<<<< HEAD
+=======
+    StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
+                                      const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
+                                      TabletSchemaPtr tablet_schema);
+    // for load segment parallel
+    StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
+                                      bool fill_metadata_cache, TabletSchemaPtr tablet_schema);
+
+    StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
+
+    Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
+    StatusOr<TabletAndRowsets> capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version, int64_t to_version);
+
+    void stop();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
     static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
 
+<<<<<<< HEAD
     Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
@@ -183,6 +322,28 @@ private:
     UpdateManager* _update_mgr;
 
     std::shared_mutex _meta_lock;
+=======
+    StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
+    StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);
+
+    StatusOr<TabletMetadataPtr> load_tablet_metadata(std::shared_ptr<FileSystem> fs,
+                                                     const std::string& metadata_location, bool fill_cache);
+    Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
+    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache);
+    StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
+    StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
+
+    std::shared_ptr<LocationProvider> _location_provider;
+    std::unique_ptr<Metacache> _metacache;
+    std::unique_ptr<CompactionScheduler> _compaction_scheduler;
+    UpdateManager* _update_mgr = nullptr;
+
+    std::shared_mutex _meta_lock;
+    std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;
+
+    bthreads::singleflight::Group<std::string, StatusOr<TabletSchemaPtr>> _schema_group;
+    bthreads::singleflight::Group<std::string, StatusOr<CombinedTxnLogPtr>> _combined_txn_log_group;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks::lake

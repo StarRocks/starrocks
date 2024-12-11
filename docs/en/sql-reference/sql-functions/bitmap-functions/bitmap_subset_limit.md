@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_subset_limit
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Intercepts a specified number of elements from a BITMAP value with element value starting from `start range`. The output elements are a subset of `src`.
 

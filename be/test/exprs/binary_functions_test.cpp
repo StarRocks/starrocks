@@ -79,7 +79,10 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
 
     for (auto& c : good_cases) {
         auto [binary_type, arg, expect] = c;
+<<<<<<< HEAD
         std::cout << "good case, arg:" << arg << std::endl;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto result = test_to_binary(arg, binary_type);
         ASSERT_TRUE(result.ok());
 
@@ -88,9 +91,15 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
         ASSERT_TRUE(!v->is_null(0));
         ASSERT_EQ(v->size(), 1);
         if (binary_type == BinaryFormatType::HEX) {
+<<<<<<< HEAD
             ASSERT_EQ(expect, hex_binary(v->get_data()[0]));
         } else {
             ASSERT_EQ(expect, v->get_data()[0]);
+=======
+            ASSERT_EQ(Slice(expect).to_string(), hex_binary(v->get_data()[0]));
+        } else {
+            ASSERT_EQ(Slice(expect), v->get_data()[0]);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -100,7 +109,10 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
     };
     for (auto& c : bad_cases) {
         auto [binary_type, arg] = c;
+<<<<<<< HEAD
         std::cout << "bad case, arg:" << arg << std::endl;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto result = test_to_binary(arg, binary_type);
         ASSERT_TRUE(result.ok());
         auto v = ColumnHelper::as_column<BinaryColumn>(result.value());
@@ -135,7 +147,10 @@ TEST_F(BinaryFunctionsTest, TestFromToBinaryNormal) {
 
     for (auto& c : good_cases) {
         auto [binary_type, arg, expect] = c;
+<<<<<<< HEAD
         std::cout << "good case, arg:" << arg << std::endl;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto result = test_to_binary(arg, binary_type);
         ASSERT_TRUE(result.ok());
 

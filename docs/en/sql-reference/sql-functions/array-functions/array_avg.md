@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_avg
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Calculates the average value of all data in an ARRAY and return this result.
 

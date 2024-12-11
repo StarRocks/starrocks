@@ -5,7 +5,11 @@ displayed_sidebar: docs
 
 # hll_union
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回一组 HLL 值的并集。
 

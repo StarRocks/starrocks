@@ -62,7 +62,11 @@ public class MysqlHandshakePacketTest {
         // assert protocol version
         Assert.assertEquals(10, MysqlProto.readInt1(buffer));
         // server version
+<<<<<<< HEAD
         Assert.assertEquals("5.1.0", new String(MysqlProto.readNulTerminateString(buffer)));
+=======
+        Assert.assertEquals("8.0.33", new String(MysqlProto.readNulTerminateString(buffer)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // connection id
         Assert.assertEquals(1090, MysqlProto.readInt4(buffer));
         // plugin data 1

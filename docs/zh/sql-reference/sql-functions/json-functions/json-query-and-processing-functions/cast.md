@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # cast
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 使用 CAST 函数，实现 JSON 类型数据与 SQL 类型间的相互转换。
 

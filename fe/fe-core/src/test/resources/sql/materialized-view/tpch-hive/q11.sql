@@ -39,5 +39,11 @@ TOP-N (order by [[18: sum DESC NULLS LAST]])
                     AGGREGATE ([GLOBAL] aggregate [{36: sum=sum(36: sum)}] group by [[]] having [null]
                         EXCHANGE GATHER
                             AGGREGATE ([LOCAL] aggregate [{36: sum=sum(35: expr)}] group by [[]] having [null]
+<<<<<<< HEAD
                                 SCAN (mv[partsupp_mv] columns[114: n_name, 128: ps_partvalue] predicate[114: n_name = PERU])
 [end]
+=======
+                                SCAN (mv[partsupp_mv] columns[110: n_name, 124: ps_partvalue] predicate[110: n_name = PERU])
+[end]
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

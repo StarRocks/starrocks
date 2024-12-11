@@ -15,6 +15,10 @@ displayed_sidebar: docs
 - [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)：用于查询 JDBC 数据源中的数据。
 - [Elasticsearch catalog](../../../data_source/catalog/elasticsearch_catalog.md)：用于查询 Elasticsearch 中的数据。该特性自 3.1 版本起支持。
 - [Paimon catalog](../../../data_source/catalog/paimon_catalog.md)：用于查询 Apache Paimon 中的数据。该特性自 3.1 版本起支持。
+<<<<<<< HEAD
+=======
+- [Unified catalog](../../../data_source/catalog/unified_catalog.md)：把 Hive、Iceberg、Hudi 和 Delta Lake 作为一个融合的数据源，从中查询数据。该特性自 3.2 版本起支持。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 > **注意**
 >
@@ -24,7 +28,11 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
+<<<<<<< HEAD
 CREATE EXTERNAL CATALOG <catalog_name>
+=======
+CREATE EXTERNAL CATALOG [IF NOT EXISTS] <catalog_name>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [COMMENT <comment>]
 PROPERTIES ("key"="value", ...)
 ```
@@ -33,7 +41,11 @@ PROPERTIES ("key"="value", ...)
 
 | 参数         | 必选 | 说明                                                         |
 | ------------ | ---- | ------------------------------------------------------------ |
+<<<<<<< HEAD
 | catalog_name | 是   | External catalog 的名称，命名要求如下：<ul><li>必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。</li><li>总长度不能超过 1023 个字符。</li><li>Catalog 名称大小写敏感。</li></ul> |
+=======
+| catalog_name | 是   | External catalog 的名称，命名要求参见[系统限制](../../System_limit.md)。 |
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 | comment      | 否   | External catalog 的描述。 |
 | PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md) 和 [JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md)。 |
 

@@ -34,7 +34,11 @@ public class BasicDbStmtAnalyzer {
         new BasicDbStmtAnalyzerVisitor().analyze(statement, session);
     }
 
+<<<<<<< HEAD
     private static class BasicDbStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    private static class BasicDbStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }

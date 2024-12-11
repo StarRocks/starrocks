@@ -38,10 +38,20 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
+<<<<<<< HEAD
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
+=======
+import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.qe.scheduler.Coordinator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -49,6 +59,11 @@ import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TReportFragmentFinishParams;
+import com.starrocks.thrift.TReportFragmentFinishResponse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -58,6 +73,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -73,6 +89,28 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
 
     static {
         INSTANCE = new QeProcessorImpl();
+=======
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+import static com.starrocks.mysql.MysqlCommand.COM_STMT_EXECUTE;
+
+public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
+    private static final Logger LOG = LogManager.getLogger(QeProcessorImpl.class);
+    private static final int MEMORY_QUERY_SAMPLES = 10;
+    private final Map<TUniqueId, QueryInfo> coordinatorMap = Maps.newConcurrentMap();
+    private final Map<TUniqueId, Long> monitorQueryMap = Maps.newConcurrentMap();
+
+    public static final QeProcessorImpl INSTANCE;
+    private static final ScheduledExecutorService MONITOR_EXECUTOR;
+
+    static {
+        INSTANCE = new QeProcessorImpl();
+        MONITOR_EXECUTOR = Executors.newSingleThreadScheduledExecutor();
+        MONITOR_EXECUTOR.scheduleAtFixedRate(INSTANCE::scanMonitorQueries, 0, 1, TimeUnit.SECONDS);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private QeProcessorImpl() {
@@ -95,11 +133,16 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
+<<<<<<< HEAD
     public void registerQuery(TUniqueId queryId, Coordinator coord) throws UserException {
+=======
+    public void registerQuery(TUniqueId queryId, Coordinator coord) throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         registerQuery(queryId, new QueryInfo(coord));
     }
 
     @Override
+<<<<<<< HEAD
     public void registerQuery(TUniqueId queryId, QueryInfo info) throws UserException {
         LOG.info("register query id = {}", DebugUtil.printId(queryId));
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
@@ -119,6 +162,28 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                     unregisterQuery(entry.getKey());
                     monitorQueryMap.remove(entry.getKey());
                 }
+=======
+    public void registerQuery(TUniqueId queryId, QueryInfo info) throws StarRocksException {
+        if (needLogRegisterAndUnregisterQueryId(info)) {
+            LOG.info("register query id = {}", DebugUtil.printId(queryId));
+        }
+        final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
+        if (result != null) {
+            throw new StarRocksException("queryId " + queryId + " already exists");
+        }
+    }
+
+    /**
+     * Scan all monitored queries, cleanup them if expired
+     */
+    private void scanMonitorQueries() {
+        long now = System.currentTimeMillis();
+        for (Map.Entry<TUniqueId, Long> entry : monitorQueryMap.entrySet()) {
+            if (now > entry.getValue()) {
+                LOG.warn("monitor expired, query id = {}", DebugUtil.printId(entry.getKey()));
+                unregisterQuery(entry.getKey());
+                monitorQueryMap.remove(entry.getKey());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
@@ -140,7 +205,13 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             if (info.getCoord() != null) {
                 info.getCoord().onFinished();
             }
+<<<<<<< HEAD
             LOG.info("deregister query id = {}", DebugUtil.printId(queryId));
+=======
+            if (needLogRegisterAndUnregisterQueryId(info)) {
+                LOG.info("deregister query id = {}", DebugUtil.printId(queryId));
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -155,6 +226,10 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             }
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
             final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
+<<<<<<< HEAD
+=======
+                    .customQueryId(context.getCustomQueryId())
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .queryId(queryIdStr)
                     .executionId(info.getConnectContext().getExecutionId())
                     .queryStartTime(info.getStartExecTime())
@@ -163,7 +238,15 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                     .connId(String.valueOf(context.getConnectionId()))
                     .db(context.getDatabase())
                     .fragmentInstanceInfos(info.getCoord().getFragmentInstanceInfos())
+<<<<<<< HEAD
                     .profile(info.getCoord().getQueryProfile()).build();
+=======
+                    .profile(info.getCoord().getQueryProfile())
+                    .warehouseName(info.coord.getWarehouseName())
+                    .resourceGroupName(info.coord.getResourceGroupName())
+                    .build();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             querySet.put(queryIdStr, item);
         }
         return querySet;
@@ -180,7 +263,12 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         final TReportExecStatusResult result = new TReportExecStatusResult();
         final QueryInfo info = coordinatorMap.get(params.query_id);
         if (info == null) {
+<<<<<<< HEAD
             LOG.info("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
+=======
+            // query is already removed which is acceptable
+            LOG.debug("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
             result.setStatus(new TStatus(TStatusCode.NOT_FOUND));
             result.status.addToError_msgs("query id " + DebugUtil.printId(params.query_id) + " not found");
@@ -279,6 +367,25 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams params) {
+        final TReportFragmentFinishResponse result = new TReportFragmentFinishResponse();
+        final QueryInfo info = coordinatorMap.get(params.query_id);
+        if (info == null) {
+            LOG.debug("reportFragmentFinish() failed, query does not exist, fragment_instance_id={}, query_id={},",
+                    DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+            result.setStatus(new TStatus(TStatusCode.OK));
+            return result;
+        }
+        final TUniqueId fragment_instance_id = params.fragment_instance_id;
+        Status status = info.getCoord().scheduleNextTurn(fragment_instance_id);
+        result.setStatus(status.toThrift());
+        return result;
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public long getCoordinatorCount() {
         return coordinatorMap.size();
     }
@@ -294,7 +401,11 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
+<<<<<<< HEAD
         return ImmutableMap.of("QueryInfo", (long) coordinatorMap.size());
+=======
+        return ImmutableMap.of("QueryCoordinator", (long) coordinatorMap.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static final class QueryInfo {
@@ -341,4 +452,15 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             return startExecTime;
         }
     }
+<<<<<<< HEAD
+=======
+
+    private static boolean needLogRegisterAndUnregisterQueryId(QueryInfo inf) {
+        ConnectContext context = inf.getConnectContext();
+        return Config.log_register_and_unregister_query_id &&
+                context != null &&
+                (context.getCommand() != COM_STMT_EXECUTE ||
+                        context.getSessionVariable().isAuditExecuteStmt());
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

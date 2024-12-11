@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_shipmode,
@@ -27,6 +28,8 @@ group by
     l_shipmode
 order by
     l_shipmode ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:25: L_SHIPMODE | 30: sum | 31: sum
@@ -88,7 +91,10 @@ tabletRatio=10/10
 tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=150000000
 avgRowSize=23.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -112,6 +118,9 @@ tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=6124846
 avgRowSize=30.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [end]
 

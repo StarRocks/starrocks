@@ -16,6 +16,10 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -30,6 +34,10 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         MvRewriteTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");
+<<<<<<< HEAD
+=======
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -78,9 +86,12 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     @Test
     public void testHiveSingleTableEqualPredicateRewrite() throws Exception {
         createAndRefreshMv("create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
+<<<<<<< HEAD
                         "PROPERTIES (\n" +
                         "\"force_external_table_query_rewrite\" = \"true\"\n" +
                         ") " +
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey = 5");
         String query = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey = 5";
         String plan = getFragmentPlan(query);
@@ -172,9 +183,12 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     public void testHiveSingleTableRangePredicateRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
         createAndRefreshMv("create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
+<<<<<<< HEAD
                         "PROPERTIES (\n" +
                         "\"force_external_table_query_rewrite\" = \"true\"\n" +
                         ") " +
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         String query = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5";
         String plan = getFragmentPlan(query);
@@ -224,9 +238,12 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     @Test
     public void testHiveSingleTableResidualPredicateRewrite() throws Exception {
         createAndRefreshMv("create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
+<<<<<<< HEAD
                         "PROPERTIES (\n" +
                         "\"force_external_table_query_rewrite\" = \"true\"\n" +
                         ") " +
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where " +
                         "s_suppkey * s_acctbal > 100 and s_name like \"%abc%\"");
         String query = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where " +

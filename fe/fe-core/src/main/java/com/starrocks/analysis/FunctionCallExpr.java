@@ -312,6 +312,7 @@ public class FunctionCallExpr extends Expr {
     }
 
     public boolean isDistinct() {
+<<<<<<< HEAD
         Preconditions.checkState(isAggregateFunction());
         return fnParams.isDistinct();
     }
@@ -333,15 +334,24 @@ public class FunctionCallExpr extends Expr {
         return false;
     }
 
+=======
+        return fnParams.isDistinct();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     protected void toThrift(TExprNode msg) {
         // TODO: we never serialize this to thrift if it's an aggregate function
         // except in test cases that do it explicitly.
         if (isAggregate() || isAnalyticFnCall) {
             msg.node_type = TExprNodeType.AGG_EXPR;
+<<<<<<< HEAD
             if (!isAnalyticFnCall) {
                 msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
             }
+=======
+            msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             msg.node_type = TExprNodeType.FUNCTION_CALL;
         }
@@ -505,5 +515,8 @@ public class FunctionCallExpr extends Expr {
             return this;
         }
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

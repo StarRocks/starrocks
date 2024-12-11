@@ -52,7 +52,10 @@ const std::string TABLET_ID = "tablet_id";
 // do not use name "VERSION",
 // or will be conflict with "VERSION" in thrift/config.h
 const std::string TABLET_VERSION = "version";
+<<<<<<< HEAD
 const std::string SCHEMA_HASH = "schema_hash";
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 void ChecksumAction::handle(HttpRequest* req) {
     LOG(INFO) << "accept one request " << req->debug_string();

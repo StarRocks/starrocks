@@ -48,7 +48,10 @@ public abstract class AlterTableColumnClause extends AlterTableClause {
         this.rollupName = rollupName;
     }
 
+<<<<<<< HEAD
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Map<String, String> getProperties() {
         return this.properties;
     }

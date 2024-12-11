@@ -40,13 +40,29 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
+import com.starrocks.load.batchwrite.TableId;
+import com.starrocks.load.streamload.StreamLoadHttpHeader;
+import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.privilege.AccessDeniedException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+<<<<<<< HEAD
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.Warehouse;
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TNetworkAddress;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpUtil;
@@ -60,6 +76,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.ThreadLocalRandom;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class LoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(LoadAction.class);
@@ -75,7 +95,11 @@ public class LoadAction extends RestBaseAction {
     }
 
     @Override
+<<<<<<< HEAD
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+=======
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             executeWithoutPasswordInternal(request, response);
         } catch (DdlException e) {
@@ -104,7 +128,13 @@ public class LoadAction extends RestBaseAction {
         return message.protocolVersion().compareTo(HttpVersion.HTTP_1_1) >= 0;
     }
 
+<<<<<<< HEAD
     public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException {
+=======
+    public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException,
+            AccessDeniedException {
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // A 'Load' request must have "Expect: 100-continue" header for HTTP/1.1 and onward.
         // Skip the "Expect" header check for HTTP/1.0 and earlier versions.
         if (isExpectHeaderValid(request.getRequest()) && !HttpUtil.is100ContinueExpected(request.getRequest())) {
@@ -116,6 +146,15 @@ public class LoadAction extends RestBaseAction {
         // affect subsequent requests processing.
         response.setForceCloseConnection(true);
 
+<<<<<<< HEAD
+=======
+        boolean enableBatchWrite = "true".equalsIgnoreCase(
+                request.getRequest().headers().get(StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE));
+        if (enableBatchWrite && redirectToLeader(request, response)) {
+            return;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String dbName = request.getSingleParameter(DB_KEY);
         if (Strings.isNullOrEmpty(dbName)) {
             throw new DdlException("No database selected.");
@@ -126,6 +165,7 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No table selected.");
         }
 
+<<<<<<< HEAD
         String label = request.getRequest().headers().get(LABEL_KEY);
 
         checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
@@ -136,30 +176,104 @@ public class LoadAction extends RestBaseAction {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+=======
+        Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
+                dbName, tableName, PrivilegeType.INSERT);
+
+        if (!enableBatchWrite) {
+            processNormalStreamLoad(request, response, dbName, tableName);
+        } else {
+            processBatchWriteStreamLoad(request, response, dbName, tableName);
+        }
+    }
+
+    private void processNormalStreamLoad(
+            BaseRequest request, BaseResponse response, String dbName, String tableName) throws DdlException {
+        String label = request.getRequest().headers().get(LABEL_KEY);
+
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
+            warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+        }
+
+        // Choose a backend sequentially, or choose a cn in shared_data mode
+        List<Long> nodeIds = new ArrayList<>();
+        if (RunMode.isSharedDataMode()) {
+            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseName);
+            for (long nodeId : computeIds) {
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (node != null && node.isAvailable()) {
                     nodeIds.add(nodeId);
                 }
             }
             Collections.shuffle(nodeIds);
         } else {
+<<<<<<< HEAD
             nodeIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
         }
         
+=======
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, false, false, null);
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (CollectionUtils.isEmpty(nodeIds)) {
             throw new DdlException("No backend alive.");
         }
 
         // TODO: need to refactor after be split into cn + dn
+<<<<<<< HEAD
         ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+=======
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (node == null) {
             throw new DdlException("No backend or compute node alive.");
         }
 
         TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
 
+<<<<<<< HEAD
         LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}",
                 redirectAddr.toString(), dbName, tableName, label);
         redirectTo(request, response, redirectAddr);
     }
+=======
+        LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}, warehouse: {}",
+                redirectAddr.toString(), dbName, tableName, label, warehouseName);
+        redirectTo(request, response, redirectAddr);
+    }
+
+    private void processBatchWriteStreamLoad(
+            BaseRequest request, BaseResponse response, String dbName, String tableName) throws DdlException {
+        TableId tableId = new TableId(dbName, tableName);
+        StreamLoadKvParams params = StreamLoadKvParams.fromHttpHeaders(request.getRequest().headers());
+        RequestCoordinatorBackendResult result = GlobalStateMgr.getCurrentState()
+                .getBatchWriteMgr().requestCoordinatorBackends(tableId, params);
+        if (!result.isOk()) {
+            BatchWriteResponseResult responseResult = new BatchWriteResponseResult(
+                    result.getStatus().status_code.name(), ActionStatus.FAILED,
+                    result.getStatus().error_msgs.get(0));
+            sendResult(request, response, responseResult);
+            return;
+        }
+
+        List<ComputeNode> nodes = result.getValue();
+        int index = ThreadLocalRandom.current().nextInt(nodes.size());
+        ComputeNode node = nodes.get(index);
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
+        LOG.info("redirect batch write to destination={}, db: {}, tbl: {}", redirectAddr, dbName, tableName);
+        redirectTo(request, response, redirectAddr);
+    }
+
+    public static class BatchWriteResponseResult extends RestBaseResult {
+
+        public BatchWriteResponseResult(String code, ActionStatus status, String msg) {
+            super(code, status, msg);
+        }
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 

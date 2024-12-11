@@ -12,10 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
+=======
+package com.starrocks.privilege;
+
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.HashSet;
 import java.util.List;
@@ -136,10 +143,25 @@ public class RolePrivilegeCollectionV2 extends PrivilegeCollectionV2 {
         super.grant(type, privilegeTypes, objects, isGrant);
     }
 
+<<<<<<< HEAD
+=======
+    public void grantWithoutAssertMutable(ObjectType type, List<PrivilegeType> privilegeTypes,
+                                          List<PEntryObject> objects, boolean isGrant) throws PrivilegeException {
+        super.grant(type, privilegeTypes, objects, isGrant);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public void revoke(ObjectType type, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects)
             throws PrivilegeException {
         assertMutable();
         super.revoke(type, privilegeTypes, objects);
     }
+<<<<<<< HEAD
+=======
+
+    public RolePrivilegeCollectionV2 cloneSelf() {
+        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), RolePrivilegeCollectionV2.class);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

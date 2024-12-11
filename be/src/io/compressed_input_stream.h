@@ -21,6 +21,10 @@
 #include "io/seekable_input_stream.h"
 #include "util/bit_util.h"
 #include "util/raw_container.h"
+<<<<<<< HEAD
+=======
+#include "util/slice.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 class StreamCompression;

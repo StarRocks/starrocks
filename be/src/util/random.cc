@@ -20,10 +20,16 @@
 
 #include "util/random.h"
 
+<<<<<<< HEAD
 #include <limits.h>
 #include <stdint.h>
 #include <string.h>
 
+=======
+#include <climits>
+#include <cstdint>
+#include <cstring>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <thread>
 #include <utility>
 

@@ -15,22 +15,37 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.TaskName;
+=======
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.TaskName;
+import com.starrocks.scheduler.persist.TaskSchedule;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
 public class SubmitTaskStmt extends DdlStmt {
+<<<<<<< HEAD
+=======
+    private String catalogName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private String dbName;
 
     private String taskName;
 
+<<<<<<< HEAD
     private Map<String, String> properties;
+=======
+    private Map<String, String> properties = Maps.newHashMap();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private int sqlBeginIndex;
 
     private String sqlText;
+<<<<<<< HEAD
 
     private CreateTableAsSelectStmt createTableAsSelectStmt;
     private InsertStmt insertStmt;
@@ -41,20 +56,63 @@ public class SubmitTaskStmt extends DdlStmt {
         this.dbName = taskName.getDbName();
         this.taskName = taskName.getName();
         this.properties = properties;
+=======
+    private TaskSchedule schedule;
+
+    private CreateTableAsSelectStmt createTableAsSelectStmt;
+    private DataCacheSelectStatement dataCacheSelectStmt;
+    private InsertStmt insertStmt;
+
+    public SubmitTaskStmt(TaskName taskName, int sqlBeginIndex, CreateTableAsSelectStmt createTableAsSelectStmt,
+                          NodePosition pos) {
+        super(pos);
+        this.dbName = taskName.getDbName();
+        this.taskName = taskName.getName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.sqlBeginIndex = sqlBeginIndex;
         this.createTableAsSelectStmt = createTableAsSelectStmt;
     }
 
+<<<<<<< HEAD
     public SubmitTaskStmt(TaskName taskName, Map<String, String> properties, int sqlBeginIndex,
                           InsertStmt insertStmt, NodePosition pos) {
         super(pos);
         this.dbName = taskName.getDbName();
         this.taskName = taskName.getName();
         this.properties = properties;
+=======
+    public SubmitTaskStmt(TaskName taskName, int sqlBeginIndex, DataCacheSelectStatement dataCacheSelectStatement,
+                          NodePosition pos) {
+        super(pos);
+        this.dbName = taskName.getDbName();
+        this.taskName = taskName.getName();
+        this.sqlBeginIndex = sqlBeginIndex;
+        this.dataCacheSelectStmt = dataCacheSelectStatement;
+        if (this.dataCacheSelectStmt.getProperties() != null) {
+            this.properties.putAll(this.dataCacheSelectStmt.getProperties());
+        }
+    }
+
+    public SubmitTaskStmt(TaskName taskName, int sqlBeginIndex, InsertStmt insertStmt, NodePosition pos) {
+        super(pos);
+        this.dbName = taskName.getDbName();
+        this.taskName = taskName.getName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.sqlBeginIndex = sqlBeginIndex;
         this.insertStmt = insertStmt;
     }
 
+<<<<<<< HEAD
+=======
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getDbName() {
         return dbName;
     }
@@ -95,6 +153,17 @@ public class SubmitTaskStmt extends DdlStmt {
         this.sqlText = sqlText;
     }
 
+<<<<<<< HEAD
+=======
+    public void setSchedule(TaskSchedule schedule) {
+        this.schedule = schedule;
+    }
+
+    public TaskSchedule getSchedule() {
+        return schedule;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public CreateTableAsSelectStmt getCreateTableAsSelectStmt() {
         return createTableAsSelectStmt;
     }
@@ -107,6 +176,13 @@ public class SubmitTaskStmt extends DdlStmt {
         return insertStmt;
     }
 
+<<<<<<< HEAD
+=======
+    public DataCacheSelectStatement getDataCacheSelectStmt() {
+        return dataCacheSelectStmt;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setInsertStmt(InsertStmt insertStmt) {
         this.insertStmt = insertStmt;
     }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hex_decode_string
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This function performs the opposite operation of [hex()](hex.md).
 

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_count,
@@ -19,6 +20,8 @@ group by
 order by
     custdist desc,
     c_count desc ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [planCount]
 4
 [plan-1]

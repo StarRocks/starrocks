@@ -17,7 +17,11 @@
 #include "common/statusor.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/MasterService_types.h"
+<<<<<<< HEAD
 #include "storage/lake/tablet.h"
+=======
+#include "storage/lake/versioned_tablet.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/olap_common.h"
 
 namespace starrocks::lake {
@@ -27,16 +31,26 @@ public:
     SparkLoadHandler() = default;
     ~SparkLoadHandler() = default;
 
+<<<<<<< HEAD
     Status process_streaming_ingestion(Tablet& tablet, const TPushReq& request, PushType push_type,
+=======
+    Status process_streaming_ingestion(VersionedTablet& tablet, const TPushReq& request, PushType push_type,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                        std::vector<TTabletInfo>* tablet_info_vec);
 
     int64_t write_bytes() const { return _write_bytes; }
     int64_t write_rows() const { return _write_rows; }
 
 private:
+<<<<<<< HEAD
     Status _load_convert(Tablet& cur_tablet);
 
     void _get_tablet_infos(const Tablet& tablet, std::vector<TTabletInfo>* tablet_info_vec);
+=======
+    Status _load_convert(VersionedTablet& cur_tablet);
+
+    void _get_tablet_infos(const VersionedTablet& tablet, std::vector<TTabletInfo>* tablet_info_vec);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     // mainly tablet_id, version and delta file path

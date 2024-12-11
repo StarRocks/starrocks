@@ -36,8 +36,13 @@
 
 #include <cstddef>
 
+<<<<<<< HEAD
 #include "storage/rowset/page_handle.h"
 
+=======
+#include "io/seekable_input_stream.h"
+#include "storage/rowset/page_handle.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 namespace starrocks {
 
 class FileSystem;
@@ -49,7 +54,11 @@ class PageBuilderOptions {
 public:
     uint32_t data_page_size = DEFAULT_PAGE_SIZE;
 
+<<<<<<< HEAD
     uint32_t dict_page_size = DEFAULT_PAGE_SIZE;
+=======
+    uint32_t dict_page_size = config::dictionary_page_size;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class IndexReadOptions {
@@ -57,9 +66,16 @@ public:
     bool use_page_cache = false;
     bool kept_in_memory = false;
     // for lake tablet
+<<<<<<< HEAD
     bool skip_fill_data_cache = false;
 
     RandomAccessFile* read_file = nullptr;
+=======
+    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+
+    //RandomAccessFile* read_file = nullptr;
+    io::SeekableInputStream* read_file = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     OlapReaderStatistics* stats = nullptr;
 };
 

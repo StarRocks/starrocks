@@ -20,6 +20,10 @@ public enum IcebergCatalogType {
     CUSTOM_CATALOG,
     GLUE_CATALOG,
     REST_CATALOG,
+<<<<<<< HEAD
+=======
+    HADOOP_CATALOG,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     UNKNOWN;
     // TODO: add more iceberg catalog type
 

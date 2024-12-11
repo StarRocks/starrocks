@@ -45,11 +45,40 @@
 #include "util/murmur_hash3.h"
 
 namespace starrocks {
+<<<<<<< HEAD
 
+=======
+class Slice;
+
+static const std::string FPP_KEY = "bloom_filter_fpp";
+static const std::string GRAM_NUM_KEY = "gram_num";
+static const std::string CASE_SENSITIVE_KEY = "case_sensitive";
+// used in write
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 struct BloomFilterOptions {
     // false positive probablity
     double fpp = 0.05;
     HashStrategyPB strategy = HASH_MURMUR3_X64_64;
+<<<<<<< HEAD
+=======
+    bool use_ngram = false;
+    // only use when use_ngram is true
+    size_t gram_num = 0;
+    bool case_sensitive = true;
+};
+
+// used in read from ngram bloom filter
+struct NgramBloomFilterReaderOptions {
+    size_t index_gram_num = 0;
+    bool index_case_sensitive = true;
+};
+
+struct NgramBloomFilterState {
+    bool initialized = false;
+    // whether this index can be used for predicate or not
+    bool index_useful = false;
+    std::vector<std::string> ngram_set;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 // Base class for bloom filter
@@ -150,13 +179,22 @@ public:
     virtual void add_hash(uint64_t hash) = 0;
     virtual bool test_hash(uint64_t hash) const = 0;
 
+<<<<<<< HEAD
+=======
+    static uint32_t estimate_bytes(uint64_t n, double fpp) { return _optimal_bit_num(n, fpp) / 8 + 1; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     // Compute the optimal bit number according to the following rule:
     //     m = -n * ln(fpp) / (ln(2) ^ 2)
     // n: expected distinct record number
     // fpp: false positive probablity
     // the result will be power of 2
+<<<<<<< HEAD
     uint32_t _optimal_bit_num(uint64_t n, double fpp);
+=======
+    static uint32_t _optimal_bit_num(uint64_t n, double fpp);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 protected:
     // bloom filter data

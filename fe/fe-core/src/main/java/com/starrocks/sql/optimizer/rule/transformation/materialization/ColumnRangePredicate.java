@@ -15,6 +15,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+<<<<<<< HEAD
+=======
+import com.google.common.annotations.VisibleForTesting;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.base.Preconditions;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.ImmutableList;
@@ -64,6 +68,18 @@ public class ColumnRangePredicate extends RangePredicate {
 
     private TreeRangeSet<ConstantOperator> canonicalColumnRanges;
 
+<<<<<<< HEAD
+=======
+    public static ColumnRangePredicate FALSE = new ColumnRangePredicate(TreeRangeSet.create());
+
+    public ColumnRangePredicate(TreeRangeSet<ConstantOperator> columnRanges) {
+        this.columnRanges = columnRanges;
+        this.expression = null;
+        this.columnRef = null;
+        this.canonicalColumnRanges = columnRanges;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ColumnRangePredicate(ScalarOperator expression, TreeRangeSet<ConstantOperator> columnRanges) {
         this.expression = expression;
         List<ColumnRefOperator> columns = Utils.collect(expression, ColumnRefOperator.class);
@@ -93,6 +109,7 @@ public class ColumnRangePredicate extends RangePredicate {
     public static ColumnRangePredicate andRange(
             ColumnRangePredicate rangePredicate, ColumnRangePredicate otherRangePredicate) {
         List<Range<ConstantOperator>> ranges = new ArrayList<>();
+<<<<<<< HEAD
         for (Range<ConstantOperator> range : rangePredicate.columnRanges.asRanges()) {
             if (otherRangePredicate.columnRanges.intersects(range)) {
                 for (Range<ConstantOperator> otherRange : otherRangePredicate.columnRanges.asRanges()) {
@@ -101,10 +118,30 @@ public class ColumnRangePredicate extends RangePredicate {
                         if (!intersection.isEmpty()) {
                             ranges.add(intersection);
                         }
+=======
+        boolean isConnected = false;
+        for (Range<ConstantOperator> range : rangePredicate.columnRanges.asRanges()) {
+            if (otherRangePredicate.columnRanges.intersects(range)) {
+                for (Range<ConstantOperator> otherRange : otherRangePredicate.columnRanges.asRanges()) {
+                    if (!range.isConnected(otherRange)) {
+                        continue;
+                    }
+                    Range<ConstantOperator> intersection = range.intersection(otherRange);
+                    if (!intersection.isEmpty()) {
+                        isConnected = true;
+                        ranges.add(intersection);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     }
                 }
             }
         }
+<<<<<<< HEAD
+=======
+        // once there is a range that is not connected with the range, the result is null
+        if (!isConnected) {
+            return FALSE;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return new ColumnRangePredicate(rangePredicate.getExpression(), TreeRangeSet.create(ranges));
     }
 
@@ -154,7 +191,11 @@ public class ColumnRangePredicate extends RangePredicate {
         for (DateTimeFormatter format : SUPPORTED_DATE_FORMATS) {
             TreeRangeSet<ConstantOperator> stringRangeSet = TreeRangeSet.create();
             // convert constant date to constant string
+<<<<<<< HEAD
             for (Range<ConstantOperator> range : canonicalColumnRanges.asRanges()) {
+=======
+            for (Range<ConstantOperator> range : columnRanges.asRanges()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Range<ConstantOperator> stringRange = convertRange(range, format);
                 stringRangeSet.add(stringRange);
             }
@@ -164,6 +205,14 @@ public class ColumnRangePredicate extends RangePredicate {
         return results;
     }
 
+<<<<<<< HEAD
+=======
+    @VisibleForTesting
+    public TreeRangeSet<ConstantOperator> getColumnRanges() {
+        return columnRanges;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private Range<ConstantOperator> convertRange(Range<ConstantOperator> from, DateTimeFormatter format) {
         if (from.hasLowerBound() && from.hasUpperBound()) {
             return Range.range(

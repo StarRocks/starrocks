@@ -23,6 +23,10 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.SchemaConstants;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.TimeUtils;
 
 import java.sql.Connection;
@@ -61,7 +65,11 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 columnName = "\"" + columnName + "\"";
             }
             fullSchema.add(new Column(columnName, type,
+<<<<<<< HEAD
                     columnSet.getString("IS_NULLABLE").equals("YES")));
+=======
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return fullSchema;
     }
@@ -113,7 +121,11 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 if (typeName.equalsIgnoreCase("varchar")) {
                     return ScalarType.createVarcharType(columnSize);
                 } else if (typeName.equalsIgnoreCase("text")) {
+<<<<<<< HEAD
                     return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+                    return ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
@@ -135,7 +147,11 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
             // if user not specify numeric precision and scale, the default value is 0,
             // we can't defer the precision and scale, can only deal it as string.
             if (precision == 0) {
+<<<<<<< HEAD
                 return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+                return ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
         }

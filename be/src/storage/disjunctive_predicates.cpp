@@ -25,7 +25,11 @@ Status DisjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection) c
 Status DisjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
     RETURN_IF_ERROR(_preds[0].evaluate(chunk, selection, from, to));
     for (size_t i = 1; i < _preds.size(); i++) {
+<<<<<<< HEAD
         _preds[i].evaluate_or(chunk, selection, from, to);
+=======
+        RETURN_IF_ERROR(_preds[i].evaluate_or(chunk, selection, from, to));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
     return Status::OK();
 }

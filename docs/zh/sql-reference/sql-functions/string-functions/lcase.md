@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # lcase
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 该函数与 `lower` 一致，将字符串转换为小写形式。
 

@@ -35,6 +35,10 @@
 #pragma once
 
 #include <functional>
+<<<<<<< HEAD
+=======
+#include <map>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #include "gen_cpp/PlanNodes_types.h"
 #include "http/http_handler.h"
@@ -70,6 +74,11 @@ private:
     Status _execute_plan_fragment(StreamLoadContext* ctx);
     Status _process_put(HttpRequest* http_req, StreamLoadContext* ctx);
 
+<<<<<<< HEAD
+=======
+    Status _handle_batch_write(HttpRequest* http_req, StreamLoadContext* ctx);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     ExecEnv* _exec_env;
     ConcurrentLimiter* _http_concurrent_limiter = nullptr;

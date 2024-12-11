@@ -202,5 +202,10 @@ struct PartitionHashMapVariant {
     bool is_nullable() const;
 
     void set_passthrough();
+<<<<<<< HEAD
+=======
+
+    void set_enable_pre_agg();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 } // namespace starrocks

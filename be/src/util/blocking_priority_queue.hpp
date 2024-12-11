@@ -39,6 +39,10 @@
 #include <mutex>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "common/compiler_util.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/config.h"
 #include "gutil/port.h"
 
@@ -108,6 +112,20 @@ public:
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    // force push val
+    void force_put(T&& val) {
+        std::unique_lock<std::mutex> unique_lock(_lock);
+        if (!_shutdown) {
+            _heap.emplace_back(std::move(val));
+            std::push_heap(_heap.begin(), _heap.end());
+            unique_lock.unlock();
+            _get_cv.notify_one();
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Return false iff has been shutdown.
     bool blocking_put(T&& val) {
         std::unique_lock<std::mutex> unique_lock(_lock);

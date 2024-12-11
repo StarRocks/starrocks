@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # days_sub
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 从给定日期或者日期时间中减去指定的天数，获得新的 DATETIME 结果。
 

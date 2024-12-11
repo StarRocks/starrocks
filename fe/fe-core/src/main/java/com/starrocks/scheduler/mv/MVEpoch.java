@@ -129,7 +129,11 @@ public class MVEpoch implements Writable {
                 state.equals(EpochState.COMMITTED) ||
                 state.equals(EpochState.FAILED));
         this.state = EpochState.INIT;
+<<<<<<< HEAD
         this.commitInfos.clear();;
+=======
+        this.commitInfos.clear();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.failedInfos.clear();
         numEpochFinished.set(0);
     }

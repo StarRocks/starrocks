@@ -30,6 +30,7 @@
 
 namespace starrocks::lake {
 
+<<<<<<< HEAD
 Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_func) {
     if (progress == nullptr) {
         return Status::InvalidArgument("progress is null");
@@ -38,6 +39,11 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
+=======
+Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t total_num_rows = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
@@ -45,20 +51,37 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
 
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size());
 
+<<<<<<< HEAD
     VLOG(3) << "Start horizontal compaction. tablet: " << _tablet->id() << ", reader chunk size: " << chunk_size;
 
     Schema schema = ChunkHelper::convert_schema(*tablet_schema);
     TabletReader reader(*_tablet, _version, schema, _input_rowsets);
+=======
+    VLOG(3) << "Start horizontal compaction. tablet: " << _tablet.id() << ", reader chunk size: " << chunk_size;
+
+    Schema schema = ChunkHelper::convert_schema(_tablet_schema);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, _tablet_schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
+<<<<<<< HEAD
     reader_params.fill_data_cache = false;
     RETURN_IF_ERROR(reader.open(reader_params));
 
     ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kHorizontal, _txn_id, 0, true));
+=======
+    reader_params.lake_io_opts = {false, config::lake_compaction_stream_buffer_size_bytes};
+    reader_params.column_access_paths = &_column_access_paths;
+    RETURN_IF_ERROR(reader.open(reader_params));
+
+    ASSIGN_OR_RETURN(auto writer,
+                     _tablet.new_writer_with_schema(kHorizontal, _txn_id, 0, flush_pool, true /** compaction **/,
+                                                    _tablet_schema /** output rowset schema**/))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -70,6 +93,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
+<<<<<<< HEAD
             return Status::Cancelled("background worker stopped");
         }
         if (cancel_func()) {
@@ -90,6 +114,30 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
             return st;
         }
         ChunkHelper::padding_char_columns(char_field_indexes, schema, *tablet_schema, chunk.get());
+=======
+            return Status::Aborted("background worker stopped");
+        }
+
+        RETURN_IF_ERROR(cancel_func());
+
+#ifndef BE_TEST
+        RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
+#endif
+        {
+            auto st = Status::OK();
+            if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
+                st = reader.get_next(chunk.get(), &rssid_rowids);
+            } else {
+                st = reader.get_next(chunk.get());
+            }
+            if (st.is_end_of_file()) {
+                break;
+            } else if (!st.ok()) {
+                return st;
+            }
+        }
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (rssid_rowids.empty()) {
             RETURN_IF_ERROR(writer->write(*chunk));
         } else {
@@ -99,6 +147,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
         chunk->reset();
         rssid_rowids.clear();
 
+<<<<<<< HEAD
         progress->update(100 * reader.stats().raw_rows_read / total_num_rows);
         VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet->id() << ", compaction progress: " << progress->value();
     }
@@ -129,20 +178,71 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
         // preload primary key table's compaction state
         _tablet->update_mgr()->preload_compaction_state(*txn_log, _tablet.get(), *tablet_schema);
     }
+=======
+        _context->progress.update(100 * reader.stats().raw_rows_read / total_num_rows);
+        _context->stats->collect(reader.stats());
+    }
+
+    RETURN_IF_ERROR(writer->finish());
+
+    // Adjust the progress here for 2 reasons:
+    // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"
+    // 2. If the "total_num_rows" is 0, the progress will not be updated above
+    _context->progress.update(100);
+    _context->stats->collect(reader.stats());
+
+    auto txn_log = std::make_shared<TxnLog>();
+    auto op_compaction = txn_log->mutable_op_compaction();
+    txn_log->set_tablet_id(_tablet.id());
+    txn_log->set_txn_id(_txn_id);
+    RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
+    op_compaction->set_compact_version(_tablet.metadata()->version());
+    RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
+    RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        // preload primary key table's compaction state
+        Tablet t(_tablet.tablet_manager(), _tablet.id());
+        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
+    }
+
+    LOG(INFO) << "Horizontal compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
+              << ", statistics: " << _context->stats->to_json_stats();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
 StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
+<<<<<<< HEAD
+=======
+    if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
+        // can not call `get_read_chunk_size`, for example, if `total_input_segs` is shrinked to half,
+        // read_chunk_size might be doubled, in this case, this optimization will not take effect
+        return config::lake_compaction_chunk_size;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int64_t total_num_rows = 0;
     int64_t total_input_segs = 0;
     int64_t total_mem_footprint = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(auto segments, rowset->segments(false));
         for (auto& segment : segments) {
             for (size_t i = 0; i < segment->num_columns(); ++i) {
                 const auto* column_reader = segment->column(i);
+=======
+        LakeIOOptions lake_io_opts{.fill_data_cache = false,
+                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .fill_metadata_cache = false};
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
+        for (auto& segment : segments) {
+            for (size_t i = 0; i < segment->num_columns(); ++i) {
+                auto uid = _tablet_schema->column(i).unique_id();
+                const auto* column_reader = segment->column_with_uid(uid);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (column_reader == nullptr) {
                     continue;
                 }
@@ -150,8 +250,15 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
             }
         }
     }
+<<<<<<< HEAD
     return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
                                                 total_num_rows, total_mem_footprint, total_input_segs);
+=======
+
+    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
+                                                config::lake_compaction_chunk_size, total_num_rows, total_mem_footprint,
+                                                total_input_segs);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 } // namespace starrocks::lake

@@ -42,6 +42,13 @@ public abstract class Tablet extends MetaObject implements Writable {
 
     public abstract long getRowCount(long version);
 
+<<<<<<< HEAD
+=======
+    public long getFuzzyRowCount() {
+        return 1L;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public abstract Set<Long> getBackendIds();
 
     public abstract List<Replica> getAllReplicas();
@@ -49,6 +56,12 @@ public abstract class Tablet extends MetaObject implements Writable {
     public abstract void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                               long visibleVersion, long localBeId, int schemaHash);
 
+<<<<<<< HEAD
+=======
+    public abstract void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
+                                              long visibleVersion, long localBeId, int schemaHash, long warehouseId);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public String toString() {
         return "id=" + id;

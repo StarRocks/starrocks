@@ -33,7 +33,11 @@ public class CreateInsertOverwriteJobLogTest {
     @Test
     public void testBasic() throws IOException {
         List<Long> targetPartitionIds = Lists.newArrayList(10L, 20L);
+<<<<<<< HEAD
         CreateInsertOverwriteJobLog jobInfo = new CreateInsertOverwriteJobLog(100L, 101L, 102L, targetPartitionIds);
+=======
+        CreateInsertOverwriteJobLog jobInfo = new CreateInsertOverwriteJobLog(100L, 101L, 102L, targetPartitionIds, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
         jobInfo.write(dataOutputStream);

@@ -22,7 +22,11 @@ namespace starrocks {
 
 static const int64_t kDefaultMinInterval = 10 * 1000; // 10ms
 
+<<<<<<< HEAD
 bool Awaitility::until(condition_fun cond) {
+=======
+bool Awaitility::until(const condition_fun& cond) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_timeout <= 0) {
         return cond();
     }

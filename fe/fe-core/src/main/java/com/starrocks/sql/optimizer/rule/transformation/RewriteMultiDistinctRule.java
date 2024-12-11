@@ -14,31 +14,57 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+=======
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Function;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.ExpressionContext;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+=======
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+=======
+
+import java.util.List;
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -47,7 +73,10 @@ import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficie
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
 
 public class RewriteMultiDistinctRule extends TransformationRule {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(RewriteMultiDistinctRule.class);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public RewriteMultiDistinctRule() {
         super(RuleType.TF_REWRITE_MULTI_DISTINCT,
@@ -59,6 +88,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
 
+<<<<<<< HEAD
         Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(agg.getAggregations().values());
 
         // all distinct function use the same distinct columns, we use the split rule to rewrite
@@ -66,6 +96,23 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     }
 
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+=======
+        // any aggregate function is distinct and constant, we replace it to any_value
+        if (isComplexConstantCountDistinct(input)) {
+            return true;
+        }
+
+        Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(agg.getAggregations().values());
+
+        // all distinct function use the same distinct columns, we use the split rule to rewrite
+        return distinctCols.isEmpty();
+    }
+
+    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        if (isComplexConstantCountDistinct(input)) {
+            return rewriteComplexConstantDistinct(input);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (useCteToRewrite(input, context)) {
             MultiDistinctByCTERewriter rewriter = new MultiDistinctByCTERewriter();
             return rewriter.transformImpl(input, context);
@@ -75,6 +122,43 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private boolean isComplexConstantCountDistinct(OptExpression input) {
+        LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        // sr support count(distinct constant array/struct/map) in four-phase aggregate,
+        // but doesn't support in two-phase aggregate, we replace it to any_value
+        return agg.getAggregations().values().stream()
+                .anyMatch(c -> c.isDistinct() && c.isConstant() && FunctionSet.COUNT.equalsIgnoreCase(c.getFnName()) &&
+                        (c.getChildren().size() == 1) && c.getChild(0).getType().isComplexType());
+    }
+
+    private List<OptExpression> rewriteComplexConstantDistinct(OptExpression input) {
+        LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
+
+        agg.getAggregations().forEach((k, v) -> {
+            if (v.isDistinct() && v.isConstant() && FunctionSet.COUNT.equalsIgnoreCase(v.getFnName()) &&
+                    (v.getChildren().size() == 1) && v.getChild(0).getType().isComplexType()) {
+                Preconditions.checkState(v.getType() == Type.BIGINT);
+                IsNullPredicateOperator isNull = new IsNullPredicateOperator(true, v.getChild(0));
+                CastOperator cast = new CastOperator(Type.BIGINT, isNull);
+                Function fn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {Type.BIGINT},
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                CallOperator anyValue =
+                        new CallOperator(FunctionSet.ANY_VALUE, v.getType(), Lists.newArrayList(cast), fn, false);
+                newAggregations.put(k, anyValue);
+            } else {
+                newAggregations.put(k, v);
+            }
+        });
+
+        LogicalAggregationOperator newAgg =
+                LogicalAggregationOperator.builder().withOperator(agg).setAggregations(newAggregations).build();
+        return Lists.newArrayList(OptExpression.create(newAgg, input.getInputs()));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private boolean useCteToRewrite(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
@@ -134,7 +218,11 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         if (aggOp.hasLimit()) {
             return false;
         }
+<<<<<<< HEAD
         calculateStatistics(input, context);
+=======
+        Utils.calculateStatistics(input, context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         Statistics inputStatistics = input.inputAt(0).getStatistics();
         // inputStatistics may be null if it's a cte consumer operator
@@ -173,6 +261,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         }
         return true;
     }
+<<<<<<< HEAD
 
     private void calculateStatistics(OptExpression expr, OptimizerContext context) {
         // Avoid repeated calculate
@@ -200,4 +289,6 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         }
         expr.setStatistics(expressionContext.getStatistics());
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

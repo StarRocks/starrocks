@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # log
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回以 `base` 为底数的 `x` 的对数。如果未指定 `base`，则该函数等同于 [ln()](./ln.md)。
 

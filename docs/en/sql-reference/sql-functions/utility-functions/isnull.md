@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # isnull
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Checks whether the value is `NULL`, returns `1` if it is `NULL`, and returns `0` if it is not `NULL`.
 

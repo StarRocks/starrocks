@@ -59,5 +59,8 @@ public class ElasticsearchConnector
         this.esRestClient = new EsRestClient(esConfig.getNodes(), esConfig.getUserName(),
                 esConfig.getPassword(), esConfig.isEnableSsl());
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # lower
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts all strings in an argument to lower-case.
 

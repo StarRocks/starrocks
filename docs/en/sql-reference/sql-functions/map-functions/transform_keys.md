@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # transform_keys
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Transforms keys in a map using a [Lambda expression](../Lambda_expression.md) and produces a new key for each entry in the map.
 

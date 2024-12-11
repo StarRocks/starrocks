@@ -19,8 +19,28 @@
 
 namespace starrocks::parquet {
 
+<<<<<<< HEAD
 CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type parquet_codec);
 
 enum ColumnContentType { VALUE, DICT_CODE };
 
+=======
+enum ColumnContentType { VALUE, DICT_CODE };
+
+enum ColumnIOType { PAGE_INDEX, PAGES };
+
+class ParquetUtils {
+public:
+    static CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type parquet_codec);
+
+    static int decimal_precision_to_byte_count(int precision);
+
+    static int64_t get_column_start_offset(const tparquet::ColumnMetaData& column);
+
+    static int64_t get_row_group_start_offset(const tparquet::RowGroup& row_group);
+
+    static int64_t get_row_group_end_offset(const tparquet::RowGroup& row_group);
+};
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::parquet

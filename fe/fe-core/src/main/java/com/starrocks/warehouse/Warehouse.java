@@ -15,6 +15,7 @@
 package com.starrocks.warehouse;
 
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -30,10 +31,23 @@ import java.util.Map;
 
 public abstract class Warehouse implements Writable {
 
+=======
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.common.proc.ProcResult;
+import com.starrocks.persist.gson.GsonUtils;
+
+import java.io.DataOutput;
+import java.io.IOException;
+import java.util.List;
+
+public abstract class Warehouse implements Writable {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "name")
     protected String name;
     @SerializedName(value = "id")
     private long id;
+<<<<<<< HEAD
 
     public enum WarehouseState {
         INITIALIZING,
@@ -50,12 +64,22 @@ public abstract class Warehouse implements Writable {
     public Warehouse(long id, String name) {
         this.id = id;
         this.name = name;
+=======
+    @SerializedName(value = "comment")
+    protected String comment;
+
+    public Warehouse(long id, String name, String comment) {
+        this.id = id;
+        this.name = name;
+        this.comment = comment;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public long getId() {
         return id;
     }
 
+<<<<<<< HEAD
     public String getFullName() {
         return name;
     }
@@ -86,14 +110,36 @@ public abstract class Warehouse implements Writable {
 
     public abstract ProcResult getClusterProcData();
 
+=======
+    public String getName() {
+        return name;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
 
+<<<<<<< HEAD
     public static Warehouse read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Warehouse.class);
     }
+=======
+    public abstract Long getAnyWorkerGroupId();
+
+    public abstract List<Long> getWorkerGroupIds();
+
+    public abstract List<String> getWarehouseInfo();
+
+    public abstract List<List<String>> getWarehouseNodesInfo();
+
+    public abstract ProcResult fetchResult();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

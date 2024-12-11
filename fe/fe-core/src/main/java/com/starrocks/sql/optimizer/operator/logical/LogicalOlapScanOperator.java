@@ -21,7 +21,13 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.PartitionNames;
+=======
+import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.TableSampleClause;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -41,13 +47,28 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private boolean hasTableHints;
     private List<Long> selectedTabletId;
     private List<Long> hintsTabletIds;
+<<<<<<< HEAD
 
     private List<ScalarOperator> prunedPartitionPredicates;
     private boolean usePkIndex;
+=======
+    private List<Long> hintsReplicaIds;
+
+    private List<ScalarOperator> prunedPartitionPredicates;
+    private boolean usePkIndex;
+    private TableSampleClause sample;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // record if this scan is derived from SplitScanORToUnionRule
     private boolean fromSplitOR;
 
+<<<<<<< HEAD
+=======
+    private long gtid = 0;
+
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
         this(table, Maps.newHashMap(), Maps.newHashMap(), null, Operator.DEFAULT_LIMIT, null);
@@ -67,6 +88,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 false,
                 Lists.newArrayList(),
                 Lists.newArrayList(),
+<<<<<<< HEAD
+=======
+                Lists.newArrayList(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 false);
     }
 
@@ -83,6 +108,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             boolean hasTableHints,
             List<Long> selectedTabletId,
             List<Long> hintsTabletIds,
+<<<<<<< HEAD
+=======
+            List<Long> hintsReplicaIds,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             boolean usePkIndex) {
         super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
                 null);
@@ -95,6 +124,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.hasTableHints = hasTableHints;
         this.selectedTabletId = selectedTabletId;
         this.hintsTabletIds = hintsTabletIds;
+<<<<<<< HEAD
+=======
+        this.hintsReplicaIds = hintsReplicaIds;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.prunedPartitionPredicates = Lists.newArrayList();
         this.usePkIndex = usePkIndex;
     }
@@ -124,10 +157,30 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return selectedTabletId;
     }
 
+<<<<<<< HEAD
+=======
+    public long getGtid() {
+        return gtid;
+    }
+
+    @Override
+    public boolean isEmptyOutputRows() {
+        return selectedTabletId == null || selectedTabletId.isEmpty() ||
+                selectedPartitionId == null || selectedPartitionId.isEmpty();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<Long> getHintsTabletIds() {
         return hintsTabletIds;
     }
 
+<<<<<<< HEAD
+=======
+    public List<Long> getHintsReplicaIds() {
+        return hintsReplicaIds;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean hasTableHints() {
         return hasTableHints;
     }
@@ -144,6 +197,29 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return fromSplitOR;
     }
 
+<<<<<<< HEAD
+=======
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
+    }
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions;
+    }
+
+    public TableSampleClause getSample() {
+        return sample;
+    }
+
+    public void setSample(TableSampleClause sample) {
+        this.sample = sample;
+    }
+
+    public boolean isSample() {
+        return sample != null && sample.isUseSampling();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalOlapScan(this, context);
@@ -161,17 +237,32 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
         return selectedIndexId == that.selectedIndexId &&
+<<<<<<< HEAD
+=======
+                gtid == that.gtid &&
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(partitionNames, that.partitionNames) &&
                 Objects.equals(selectedTabletId, that.selectedTabletId) &&
+<<<<<<< HEAD
                 Objects.equals(hintsTabletIds, that.hintsTabletIds);
+=======
+                Objects.equals(sample, that.sample) &&
+                Objects.equals(hintsTabletIds, that.hintsTabletIds) &&
+                Objects.equals(hintsReplicaIds, that.hintsReplicaIds);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
                 selectedTabletId, hintsTabletIds);
+=======
+        return Objects.hash(super.hashCode(), selectedIndexId, gtid, selectedPartitionId,
+                selectedTabletId, hintsTabletIds, hintsReplicaIds, sample);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static Builder builder() {
@@ -191,14 +282,27 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
             builder.distributionSpec = scanOperator.distributionSpec;
             builder.selectedIndexId = scanOperator.selectedIndexId;
+<<<<<<< HEAD
+=======
+            builder.gtid = scanOperator.gtid;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             builder.selectedPartitionId = scanOperator.selectedPartitionId;
             builder.partitionNames = scanOperator.partitionNames;
             builder.hasTableHints = scanOperator.hasTableHints;
             builder.selectedTabletId = scanOperator.selectedTabletId;
             builder.hintsTabletIds = scanOperator.hintsTabletIds;
+<<<<<<< HEAD
             builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
             builder.usePkIndex = scanOperator.usePkIndex;
             builder.fromSplitOR = scanOperator.fromSplitOR;
+=======
+            builder.hintsReplicaIds = scanOperator.hintsReplicaIds;
+            builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
+            builder.usePkIndex = scanOperator.usePkIndex;
+            builder.fromSplitOR = scanOperator.fromSplitOR;
+            builder.vectorSearchOptions = scanOperator.vectorSearchOptions;
+            builder.sample = scanOperator.getSample();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return this;
         }
 
@@ -207,13 +311,29 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public Builder setGtid(long gtid) {
+            builder.gtid = gtid;
+            return this;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Builder setSelectedTabletId(List<Long> selectedTabletId) {
             builder.selectedTabletId = ImmutableList.copyOf(selectedTabletId);
             return this;
         }
 
         public Builder setSelectedPartitionId(List<Long> selectedPartitionId) {
+<<<<<<< HEAD
             builder.selectedPartitionId = ImmutableList.copyOf(selectedPartitionId);
+=======
+            if (selectedPartitionId == null) {
+                builder.selectedPartitionId = null;
+            } else {
+                builder.selectedPartitionId = ImmutableList.copyOf(selectedPartitionId);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return this;
         }
 
@@ -237,6 +357,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public Builder setHintsReplicaIds(List<Long> hintsReplicaIds) {
+            builder.hintsReplicaIds = ImmutableList.copyOf(hintsReplicaIds);
+            return this;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Builder setHasTableHints(boolean hasTableHints) {
             builder.hasTableHints = hasTableHints;
             return this;
@@ -251,5 +379,13 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.usePkIndex = usePkIndex;
             return this;
         }
+<<<<<<< HEAD
+=======
+
+        public Builder setSample(TableSampleClause sample) {
+            builder.sample = sample;
+            return this;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

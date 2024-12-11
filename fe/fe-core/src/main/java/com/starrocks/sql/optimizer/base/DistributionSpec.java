@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.base;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.starrocks.thrift.TDistributionType;
 
@@ -122,6 +123,14 @@ public class DistributionSpec {
             copy.nullStrictDisjointSet = nullStrictDisjointSet.copy();
             return copy;
         }
+=======
+import com.starrocks.thrift.TDistributionType;
+
+public class DistributionSpec {
+    protected final DistributionType type;
+    protected DistributionSpec(DistributionType type) {
+        this.type = type;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @SuppressWarnings("unchecked")
@@ -129,17 +138,24 @@ public class DistributionSpec {
         return (T) this;
     }
 
+<<<<<<< HEAD
     public PropertyInfo getPropertyInfo() {
         return propertyInfo;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public DistributionType getType() {
         return type;
     }
 
     public static DistributionSpec createAnyDistributionSpec() {
+<<<<<<< HEAD
         return new AnyDistributionSpec();
+=======
+        return AnyDistributionSpec.INSTANCE;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static HashDistributionSpec createHashDistributionSpec(HashDistributionDesc distributionDesc) {
@@ -154,10 +170,13 @@ public class DistributionSpec {
         return new GatherDistributionSpec();
     }
 
+<<<<<<< HEAD
     public static DistributionSpec createGatherDistributionSpec(long limit) {
         return new GatherDistributionSpec(limit);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isSatisfy(DistributionSpec spec) {
         return false;
     }
@@ -167,6 +186,10 @@ public class DistributionSpec {
         BROADCAST,
         SHUFFLE,
         GATHER,
+<<<<<<< HEAD
+=======
+        ROUND_ROBIN,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ;
 
         public TDistributionType toThrift() {

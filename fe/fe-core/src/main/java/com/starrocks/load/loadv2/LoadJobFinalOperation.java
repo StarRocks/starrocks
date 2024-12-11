@@ -25,7 +25,10 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -111,6 +114,7 @@ public class LoadJobFinalOperation extends TxnCommitAttachment implements Writab
         }
     }
 
+<<<<<<< HEAD
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         id = in.readLong();
@@ -125,6 +129,8 @@ public class LoadJobFinalOperation extends TxnCommitAttachment implements Writab
         }
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public String toString() {
         return "LoadJobEndOperation{" +

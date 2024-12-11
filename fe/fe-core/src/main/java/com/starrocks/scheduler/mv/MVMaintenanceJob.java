@@ -28,12 +28,22 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+<<<<<<< HEAD
 import com.starrocks.planner.PlanFragmentId;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.QeProcessorImpl;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.qe.scheduler.dag.JobSpec;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
@@ -46,8 +56,11 @@ import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceStopTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
+<<<<<<< HEAD
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -61,11 +74,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+<<<<<<< HEAD
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+=======
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 /**
  * Long-running job responsible for MV incremental maintenance.
@@ -126,7 +145,11 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
 
     // TODO recover the entire job state, include execution plan
     public void restore() {
+<<<<<<< HEAD
         Table table = GlobalStateMgr.getCurrentState().getDb(dbId).getTable(viewId);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, viewId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Preconditions.checkState(table != null && table.isMaterializedView());
         this.view = (MaterializedView) table;
         this.serializedState = JobState.INIT;
@@ -233,18 +256,26 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         // Build connection context
         this.connectContext = StatisticUtils.buildConnectContext();
         this.connectContext.setNeedQueued(false);
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(view.getDbId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
         if (db != null) {
             this.connectContext.setDatabase(db.getFullName());
         }
+<<<<<<< HEAD
         TUniqueId queryId = connectContext.getExecutionId();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // Build  query coordinator
         ExecPlan execPlan = this.view.getMaintenancePlan();
         List<PlanFragment> fragments = execPlan.getFragments();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
+<<<<<<< HEAD
         TQueryGlobals queryGlobals =
                 CoordinatorPreprocessor.genQueryGlobals(connectContext.getStartTimeInstant(),
                         connectContext.getSessionVariable().getTimeZone());
@@ -252,6 +283,10 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         this.queryCoordinator =
                 new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, descTable, queryGlobals,
                         queryOptions);
+=======
+        JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(connectContext, fragments, scanNodes, descTable);
+        this.queryCoordinator = new CoordinatorPreprocessor(connectContext, jobSpec, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.epochCoordinator = new TxnBasedEpochCoordinator(this);
     }
 
@@ -274,16 +309,25 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
             // NOTE use a fake transaction id, the real one would be generated when epoch started
             long fakeTransactionId = 1;
             long dbId = getView().getDbId();
+<<<<<<< HEAD
             long timeout = context.getSessionVariable().getQueryTimeoutS();
+=======
+            long timeout = context.getExecTimeout();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             dataSink.init(context.getExecutionId(), fakeTransactionId, dbId, timeout);
             dataSink.complete();
         }
         queryCoordinator.prepareExec();
 
+<<<<<<< HEAD
         Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentExecParams =
                 queryCoordinator.getFragmentExecParamsMap();
         TDescriptorTable descTable = queryCoordinator.getDescriptorTable();
         boolean enablePipeline = true;
+=======
+        List<ExecutionFragment> execFragments = queryCoordinator.getFragmentsInPreorder();
+        TDescriptorTable descTable = queryCoordinator.getDescriptorTable();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         int tabletSinkDop = 1;
 
         // Group all fragment instances by BE id, and package them into a task
@@ -292,6 +336,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         Map<Long, MVMaintenanceTask> tasksByBe = new HashMap<>();
         long taskIdGen = 0;
         int backendIdGen = 0;
+<<<<<<< HEAD
         for (Map.Entry<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> kv : fragmentExecParams.entrySet()) {
             CoordinatorPreprocessor.FragmentExecParams execParams = kv.getValue();
             Set<TUniqueId> inflightInstanceSet =
@@ -305,6 +350,16 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
                 CoordinatorPreprocessor.FInstanceExecParam instanceParam = execParams.instanceExecParams.get(i);
                 // Get brpc address instead of the default address
                 TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instanceParam.getHost());
+=======
+        TFragmentInstanceFactory execPlanFragmentParamsFactory = queryCoordinator.createTFragmentInstanceFactory();
+        for (ExecutionFragment execFragment : execFragments) {
+            List<TExecPlanFragmentParams> tParams = execPlanFragmentParamsFactory.create(
+                    execFragment, execFragment.getInstances(), descTable, tabletSinkDop, tabletSinkDop);
+            for (int i = 0; i < execFragment.getInstances().size(); i++) {
+                FragmentInstance instance = execFragment.getInstances().get(i);
+                // Get brpc address instead of the default address
+                TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instance.getWorkerId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Long taskId = addr2TaskId.get(beRpcAddr);
                 MVMaintenanceTask task;
                 if (taskId == null) {
@@ -318,7 +373,11 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
 
                 // TODO(murphy) is this necessary
                 int backendId = backendIdGen++;
+<<<<<<< HEAD
                 instanceParam.setBackendNum(backendId);
+=======
+                instance.setIndexInJob(backendId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 task.addFragmentInstance(tParams.get(i));
             }
         }
@@ -375,10 +434,18 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
             throw ex;
         }
     }
+<<<<<<< HEAD
     private void setMVMaintenanceTasksInfo(TMVMaintenanceTasks request,
                                            MVMaintenanceTask task) {
         // Request information
         String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
+=======
+
+    private void setMVMaintenanceTasksInfo(TMVMaintenanceTasks request,
+                                           MVMaintenanceTask task) {
+        // Request information
+        String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(view.getDbId()).getFullName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         request.setDb_name(dbName);
         request.setMv_name(view.getName());
@@ -481,6 +548,10 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
     public long getViewId() {
         return viewId;
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public long getDbId() {
         return dbId;
     }

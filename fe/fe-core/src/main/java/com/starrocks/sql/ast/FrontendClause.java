@@ -18,9 +18,12 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.sql.parser.NodePosition;
+<<<<<<< HEAD
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.Map;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class FrontendClause extends AlterClause {
     protected String hostPort;
@@ -55,11 +58,14 @@ public class FrontendClause extends AlterClause {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, String> getProperties() {
         throw new NotImplementedException();
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitFrontendClause(this, context);
     }

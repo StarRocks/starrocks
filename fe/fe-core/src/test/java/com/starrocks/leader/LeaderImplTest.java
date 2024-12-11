@@ -19,7 +19,11 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
@@ -65,13 +69,21 @@ public class LeaderImplTest {
 
     @Test
     public void testFindRelatedReplica(@Mocked OlapTable olapTable, @Mocked LakeTable lakeTable,
+<<<<<<< HEAD
                                        @Mocked Partition partition, @Mocked MaterializedIndex index
+=======
+                                       @Mocked PhysicalPartition physicalPartition, @Mocked MaterializedIndex index
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                        ) throws Exception {
 
         // olap table
         new Expectations() {
             {
+<<<<<<< HEAD
                 partition.getIndex(indexId);
+=======
+                physicalPartition.getIndex(indexId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 result = index;
                 index.getTablet(tabletId);
                 result = new LocalTablet(tabletId);
@@ -79,7 +91,11 @@ public class LeaderImplTest {
         };
         
         Assert.assertNull(Deencapsulation.invoke(leader, "findRelatedReplica",
+<<<<<<< HEAD
                 olapTable, partition, backendId, tabletId, indexId));
+=======
+                olapTable, physicalPartition, backendId, tabletId, indexId));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // lake table
         new MockUp<LakeTablet>() {
             @Mock
@@ -90,7 +106,11 @@ public class LeaderImplTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 partition.getIndex(indexId);
+=======
+                physicalPartition.getIndex(indexId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 result = index;
                 index.getTablet(tabletId);
                 result = new LakeTablet(tabletId);
@@ -98,6 +118,10 @@ public class LeaderImplTest {
         };
 
         Assert.assertEquals(new Replica(tabletId, backendId, -1, NORMAL), Deencapsulation.invoke(leader, "findRelatedReplica",
+<<<<<<< HEAD
                 olapTable, partition, backendId, tabletId, indexId));
+=======
+                olapTable, physicalPartition, backendId, tabletId, indexId));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

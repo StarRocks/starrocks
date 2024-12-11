@@ -35,6 +35,10 @@ private:
     int _table_index{0};
     TGetDbsResult _db_result;
     TListTableStatusResult _table_result;
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
 

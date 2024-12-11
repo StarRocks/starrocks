@@ -30,6 +30,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <sys/resource.h>
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <cstdint>
 
 namespace base {
@@ -49,6 +54,12 @@ extern double CyclesPerSecond();
 // * "2,4-127,128-143\n" -> 143
 // Ref: https://www.kernel.org/doc/Documentation/cputopology.txt
 // Exposed for testing.
+<<<<<<< HEAD
 extern int ParseMaxCpuIndex(const char* str);
+=======
+int ParseMaxCpuIndex(const char* str);
+
+int get_cur_core_file_limit();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 } // namespace base

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # unhex
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将输入的参数 `str` 中的两个字符为一组转化为16进制后的字符，然后拼接成字符串输出。
 

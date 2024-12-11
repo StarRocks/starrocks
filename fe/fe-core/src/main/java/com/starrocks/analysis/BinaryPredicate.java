@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
@@ -46,6 +47,15 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TExprNodeType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -56,7 +66,10 @@ import java.util.Objects;
  * Most predicates with two operands..
  */
 public class BinaryPredicate extends Predicate implements Writable {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(BinaryPredicate.class);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static final com.google.common.base.Predicate<BinaryPredicate> IS_RANGE_PREDICATE =
             arg -> arg.getOp() == BinaryType.LT
@@ -170,6 +183,7 @@ public class BinaryPredicate extends Predicate implements Writable {
         }
     }
 
+<<<<<<< HEAD
     private static boolean canCompareDate(PrimitiveType t1, PrimitiveType t2) {
         if (t1.isDateType()) {
             return t2.isDateType() || t2.isStringType();
@@ -265,6 +279,8 @@ public class BinaryPredicate extends Predicate implements Writable {
         return slotIsleft;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /*
      * the follow persistence code is only for TableFamilyDeleteInfo.
      * Maybe useless
@@ -319,6 +335,24 @@ public class BinaryPredicate extends Predicate implements Writable {
         return binaryPredicate;
     }
 
+<<<<<<< HEAD
+=======
+    public Pair<SlotRef, Expr> createSlotAndLiteralPair() {
+        Expr leftExpr = getChild(0);
+        Expr rightExpr = getChild(1);
+        if (leftExpr instanceof SlotRef && (rightExpr instanceof Parameter) &&
+                (((Parameter) rightExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) leftExpr;
+            return Pair.create(slot, ((Parameter) rightExpr).getExpr());
+        } else if (rightExpr instanceof SlotRef && (leftExpr instanceof Parameter) &&
+                (((Parameter) leftExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) rightExpr;
+            return Pair.create(slot, ((Parameter) leftExpr).getExpr());
+        }
+        return null;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public int hashCode() {
         return 31 * super.hashCode() + Objects.hashCode(op);

@@ -22,7 +22,11 @@
 #include "column/column_viewer.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
+<<<<<<< HEAD
 #include "gen_cpp/InternalService_constants.h"
+=======
+#include "gen_cpp/InternalService_types.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
@@ -173,7 +177,11 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
     TimezoneHsScan timezone_hsscan;
+<<<<<<< HEAD
     timezone_hsscan.compile();
+=======
+    RETURN_IF_ERROR(timezone_hsscan.compile());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     for (int row = 0; row < size; ++row) {
         if (time_viewer.is_null(row) || from_str.is_null(row) || to_str.is_null(row)) {
             result.append_null();
@@ -555,6 +563,29 @@ DEFINE_UNARY_FN_WITH_IMPL(week_of_yearImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(week_of_year, TYPE_DATETIME, TYPE_INT);
 
+<<<<<<< HEAD
+=======
+DEFINE_UNARY_FN_WITH_IMPL(year_week_with_default_modeImpl, t) {
+    auto date_value = (DateValue)t;
+    int year = 0, month = 0, day = 0;
+    date_value.to_date(&year, &month, &day);
+    uint to_year = 0;
+    int week = TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(0 | 2), &to_year);
+    return to_year * 100 + week;
+}
+DEFINE_TIME_UNARY_FN(year_week_with_default_mode, TYPE_DATETIME, TYPE_INT);
+
+DEFINE_BINARY_FUNCTION_WITH_IMPL(year_week_with_modeImpl, t, m) {
+    auto date_value = (DateValue)t;
+    int year = 0, month = 0, day = 0;
+    date_value.to_date(&year, &month, &day);
+    uint to_year = 0;
+    int week = TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(m | 2), &to_year);
+    return to_year * 100 + week;
+}
+DEFINE_TIME_BINARY_FN(year_week_with_mode, TYPE_DATETIME, TYPE_INT, TYPE_INT);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 uint TimeFunctions::week_mode(uint mode) {
     uint week_format = (mode & 7);
     if (!(week_format & WEEK_MONDAY_FIRST)) week_format ^= WEEK_FIRST_WEEKDAY;
@@ -609,7 +640,11 @@ long TimeFunctions::compute_daynr(uint year, uint month, uint day) {
     return (delsum + static_cast<int>(y) / 4 - temp);
 }
 
+<<<<<<< HEAD
 int32_t TimeFunctions::compute_week(uint year, uint month, uint day, uint week_behaviour) {
+=======
+int32_t TimeFunctions::compute_week(uint year, uint month, uint day, uint week_behaviour, uint* to_year) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     uint days;
     ulong daynr = TimeFunctions::compute_daynr((uint)year, (uint)month, (uint)day);
     ulong first_daynr = TimeFunctions::compute_daynr((uint)year, 1, 1);
@@ -619,13 +654,21 @@ int32_t TimeFunctions::compute_week(uint year, uint month, uint day, uint week_b
 
     uint weekday = TimeFunctions::compute_weekday(first_daynr, !monday_first);
     uint year_local = year;
+<<<<<<< HEAD
 
+=======
+    *to_year = year;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (month == 1 && day <= 7 - weekday) {
         if (!week_year && ((first_weekday && weekday != 0) || (!first_weekday && weekday >= 4))) {
             return 0;
         }
         week_year = true;
         year_local--;
+<<<<<<< HEAD
+=======
+        (*to_year)--;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         first_daynr -= (days = TimeFunctions::compute_days_in_year(year_local));
         weekday = (weekday + 53 * 7 - days) % 7;
     }
@@ -640,6 +683,10 @@ int32_t TimeFunctions::compute_week(uint year, uint month, uint day, uint week_b
         weekday = (weekday + TimeFunctions::compute_days_in_year(year_local)) % 7;
         if ((!first_weekday && weekday < 4) || (first_weekday && weekday == 0)) {
             year_local++;
+<<<<<<< HEAD
+=======
+            (*to_year)++;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return 1;
         }
     }
@@ -650,8 +697,13 @@ DEFINE_UNARY_FN_WITH_IMPL(week_of_year_with_default_modeImpl, t) {
     auto date_value = (DateValue)t;
     int year = 0, month = 0, day = 0;
     date_value.to_date(&year, &month, &day);
+<<<<<<< HEAD
 
     return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(0));
+=======
+    uint to_year = 0;
+    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(0), &to_year);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 DEFINE_TIME_UNARY_FN(week_of_year_with_default_mode, TYPE_DATETIME, TYPE_INT);
 
@@ -659,8 +711,13 @@ DEFINE_UNARY_FN_WITH_IMPL(week_of_year_isoImpl, t) {
     auto date_value = (DateValue)t;
     int year = 0, month = 0, day = 0;
     date_value.to_date(&year, &month, &day);
+<<<<<<< HEAD
 
     return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(3));
+=======
+    uint to_year = 0;
+    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(3), &to_year);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 DEFINE_TIME_UNARY_FN(week_of_year_iso, TYPE_DATETIME, TYPE_INT);
@@ -669,8 +726,13 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(week_of_year_with_modeImpl, t, m) {
     auto date_value = (DateValue)t;
     int year = 0, month = 0, day = 0;
     date_value.to_date(&year, &month, &day);
+<<<<<<< HEAD
 
     return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(m));
+=======
+    uint to_year = 0;
+    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(m), &to_year);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 DEFINE_TIME_BINARY_FN(week_of_year_with_mode, TYPE_DATETIME, TYPE_INT, TYPE_INT);
 
@@ -1498,6 +1560,44 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+<<<<<<< HEAD
+=======
+template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row) / 1000;
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+            result.append_null();
+            continue;
+        }
+
+        DateTimeValue dtv;
+        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
+            result.append_null();
+            continue;
+        }
+        char buf[64];
+        dtv.to_string(buf);
+        result.append(Slice(buf));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_64(FunctionContext* context, const Columns& columns) {
     return _t_from_unix_to_datetime<TYPE_BIGINT>(context, columns);
 }
@@ -1506,6 +1606,13 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_32(FunctionContext* con
     return _t_from_unix_to_datetime<TYPE_INT>(context, columns);
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_ms_64(FunctionContext* context, const Columns& columns) {
+    return _t_from_unix_to_datetime_ms<TYPE_BIGINT>(context, columns);
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 std::string TimeFunctions::convert_format(const Slice& format) {
     switch (format.get_size()) {
     case 8:
@@ -1890,6 +1997,14 @@ StatusOr<ColumnPtr> TimeFunctions::parse_jodatime(FunctionContext* context, cons
 
             DateTimeValue date_time_value;
             if (!formatter->parse(str, &date_time_value)) {
+<<<<<<< HEAD
+=======
+                if (context->state() && context->state()->get_sql_dialect() == "trino") {
+                    std::string_view format_str =
+                            ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(1));
+                    return Status::InvalidArgument(fmt::format("Invalid format '{}' for '{}'", format_str, str));
+                }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 result.append_null();
             } else {
                 TimestampValue ts = TimestampValue::create(
@@ -2035,7 +2150,11 @@ std::string format_for_yyyyMMdd(const DateValue& date_value) {
     to[5] = m % 10 + '0';
     to[6] = d / 10 + '0';
     to[7] = d % 10 + '0';
+<<<<<<< HEAD
     return std::string(to, 8);
+=======
+    return {to, 8};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyMMddImpl, v) {
@@ -2074,7 +2193,11 @@ std::string format_for_yyyy_MMImpl(const DateValue& date_value) {
     to[4] = '-';
     to[5] = m / 10 + '0';
     to[6] = m % 10 + '0';
+<<<<<<< HEAD
     return std::string(to, 7);
+=======
+    return {to, 7};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyy_MMImpl, v) {
@@ -2095,7 +2218,11 @@ std::string format_for_yyyyMMImpl(const DateValue& date_value) {
 
     to[4] = m / 10 + '0';
     to[5] = m % 10 + '0';
+<<<<<<< HEAD
     return std::string(to, 6);
+=======
+    return {to, 6};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyMMImpl, v) {
@@ -2113,7 +2240,11 @@ std::string format_for_yyyyImpl(const DateValue& date_value) {
     t = y % 100;
     to[2] = t / 10 + '0';
     to[3] = t % 10 + '0';
+<<<<<<< HEAD
     return std::string(to, 4);
+=======
+    return {to, 4};
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyImpl, v) {
@@ -2746,7 +2877,11 @@ StatusOr<ColumnPtr> TimeFunctions::next_day_wdc(FunctionContext* context, const 
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + wdc->dow_weekday - datetime_weekday) % 7 + 1);
         result.append(date);
     }
+<<<<<<< HEAD
     return result.build(ColumnHelper::is_all_const(columns));
+=======
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, const Columns& columns) {
@@ -2770,7 +2905,11 @@ StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, con
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + dow_weekday - datetime_weekday) % 7 + 1);
         result.append(date);
     }
+<<<<<<< HEAD
     return result.build(ColumnHelper::is_all_const(columns));
+=======
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status TimeFunctions::next_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -2837,7 +2976,11 @@ StatusOr<ColumnPtr> TimeFunctions::previous_day_wdc(FunctionContext* context, co
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - wdc->dow_weekday) % 7 + 1));
         result.append(date);
     }
+<<<<<<< HEAD
     return result.build(ColumnHelper::is_all_const(columns));
+=======
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 StatusOr<ColumnPtr> TimeFunctions::previous_day_common(FunctionContext* context, const Columns& columns) {
@@ -2861,7 +3004,11 @@ StatusOr<ColumnPtr> TimeFunctions::previous_day_common(FunctionContext* context,
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - dow_weekday) % 7 + 1));
         result.append(date);
     }
+<<<<<<< HEAD
     return result.build(ColumnHelper::is_all_const(columns));
+=======
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status TimeFunctions::previous_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {

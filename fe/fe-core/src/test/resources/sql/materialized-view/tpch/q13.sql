@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_count,
@@ -19,6 +20,8 @@ group by
 order by
     custdist desc,
     c_count desc ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 TOP-N (order by [[19: count DESC NULLS LAST, 18: count DESC NULLS LAST]])
     TOP-N (order by [[19: count DESC NULLS LAST, 18: count DESC NULLS LAST]])
@@ -30,5 +33,9 @@ TOP-N (order by [[19: count DESC NULLS LAST, 18: count DESC NULLS LAST]])
                             SCAN (table[customer] columns[1: c_custkey] predicate[null])
                             EXCHANGE SHUFFLE[11]
                                 SCAN (table[orders] columns[17: o_comment, 9: o_orderkey, 11: o_custkey] predicate[NOT 17: o_comment LIKE %unusual%deposits%])
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

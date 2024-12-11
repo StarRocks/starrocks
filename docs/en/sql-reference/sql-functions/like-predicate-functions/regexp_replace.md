@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # regexp_replace
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This function uses repl to replace a sequence of characters in str that matches a regular expression pattern.
 

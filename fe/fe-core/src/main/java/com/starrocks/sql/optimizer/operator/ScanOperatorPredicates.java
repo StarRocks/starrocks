@@ -22,6 +22,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -45,6 +49,11 @@ public class ScanOperatorPredicates {
     private List<ScalarOperator> minMaxConjuncts = new ArrayList<>();
     // Map of columnRefOperator to column which column in minMaxConjuncts
     private Map<ColumnRefOperator, Column> minMaxColumnRefMap = Maps.newHashMap();
+<<<<<<< HEAD
+=======
+    // flag to indicate whether if has pruned partition
+    private boolean hasPrunedPartition = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public Map<Long, PartitionKey> getIdToPartitionKey() {
         return idToPartitionKey;
@@ -63,6 +72,10 @@ public class ScanOperatorPredicates {
     }
 
     public void setSelectedPartitionIds(Collection<Long> selectedPartitionIds) {
+<<<<<<< HEAD
+=======
+        this.hasPrunedPartition = true;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.selectedPartitionIds = selectedPartitionIds;
     }
 
@@ -95,6 +108,13 @@ public class ScanOperatorPredicates {
         return minMaxColumnRefMap;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean hasPrunedPartition() {
+        return hasPrunedPartition;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void clear() {
         idToPartitionKey.clear();
         selectedPartitionIds.clear();
@@ -115,6 +135,10 @@ public class ScanOperatorPredicates {
         other.nonPartitionConjuncts.addAll(this.nonPartitionConjuncts);
         other.minMaxConjuncts.addAll(this.minMaxConjuncts);
         other.minMaxColumnRefMap.putAll(this.minMaxColumnRefMap);
+<<<<<<< HEAD
+=======
+        other.hasPrunedPartition = this.hasPrunedPartition;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         return other;
     }
@@ -163,4 +187,23 @@ public class ScanOperatorPredicates {
         }
         return Joiner.on(", ").join(strings);
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * Duplicate and rewrite all columnRefOperator in predicates by rewriter.
+     */
+    public void duplicate(ReplaceColumnRefRewriter rewriter) {
+        this.partitionConjuncts = this.partitionConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.noEvalPartitionConjuncts = this.noEvalPartitionConjuncts.stream()
+                .map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.nonPartitionConjuncts = nonPartitionConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.minMaxConjuncts = minMaxConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        Map<ColumnRefOperator, Column> newMinMaxColumnRefMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, Column> e : this.minMaxColumnRefMap.entrySet()) {
+            newMinMaxColumnRefMap.put((ColumnRefOperator) rewriter.rewrite(e.getKey()), e.getValue());
+        }
+        this.minMaxColumnRefMap = newMinMaxColumnRefMap;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_json
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a Map or Struct value into a JSON string. If the input value is NULL, NULL is returned.
 

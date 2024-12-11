@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # generate_series
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 生成一系列从 `start` 到 `end` 的数值，步长为 `step`，`step` 默认为 1。
 

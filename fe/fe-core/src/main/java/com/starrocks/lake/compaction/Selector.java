@@ -17,9 +17,18 @@ package com.starrocks.lake.compaction;
 
 import java.util.Collection;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import javax.validation.constraints.NotNull;
 
 public interface Selector {
     @NotNull
+<<<<<<< HEAD
     List<PartitionStatistics> select(@NotNull Collection<PartitionStatistics> statistics);
+=======
+    List<PartitionStatisticsSnapshot> select(@NotNull Collection<PartitionStatistics> statistics,
+                                             @NotNull Set<Long> excludeTables);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

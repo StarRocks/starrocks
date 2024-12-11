@@ -104,7 +104,11 @@ public:
 
     void fill_default(const Filter& filter) override;
 
+<<<<<<< HEAD
     Status update_rows(const Column& src, const uint32_t* indexes) override;
+=======
+    void update_rows(const Column& src, const uint32_t* indexes) override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
@@ -112,8 +116,11 @@ public:
 
     [[nodiscard]] bool append_nulls(size_t count) override;
 
+<<<<<<< HEAD
     [[nodiscard]] bool append_strings(const Buffer<Slice>& strs) override;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     [[nodiscard]] size_t append_numbers(const void* buff, size_t length) override;
 
     void append_value_multiple_times(const void* value, size_t count) override;
@@ -151,7 +158,11 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
+<<<<<<< HEAD
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+=======
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is) const override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::string debug_item(size_t idx) const override;
 
@@ -171,7 +182,11 @@ public:
 
     void reset_column() override;
 
+<<<<<<< HEAD
     bool capacity_limit_reached(std::string* msg = nullptr) const override;
+=======
+    Status capacity_limit_reached() const override;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     void check_or_die() const override;
 

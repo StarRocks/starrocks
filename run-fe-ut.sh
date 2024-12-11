@@ -145,4 +145,8 @@ else
         # set trimStackTrace to false to show full stack when debugging specified class or case
         ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME"
     fi
+<<<<<<< HEAD
 fi
+=======
+fi
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

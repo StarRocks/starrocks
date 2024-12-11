@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # if
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 若参数 `expr1` 成立，返回结果 `expr2`，否则返回结果 `expr3`。
 

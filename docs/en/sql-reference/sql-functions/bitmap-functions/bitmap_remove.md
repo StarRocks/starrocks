@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_remove
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Removes `input` from the Bitmap value `lhs` and returns a result set.
 

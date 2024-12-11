@@ -26,8 +26,16 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.util.List;
 
+=======
+import java.util.Collections;
+import java.util.List;
+
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class ExternalScanPartitionPruneRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(ExternalScanPartitionPruneRule.class);
 
@@ -45,6 +53,13 @@ public class ExternalScanPartitionPruneRule extends TransformationRule {
             new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_ES_SCAN);
     public static final ExternalScanPartitionPruneRule PAIMON_SCAN =
             new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_PAIMON_SCAN);
+<<<<<<< HEAD
+=======
+    public static final ExternalScanPartitionPruneRule ODPS_SCAN =
+            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_ODPS_SCAN);
+    public static final ExternalScanPartitionPruneRule KUDU_SCAN =
+            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_KUDU_SCAN);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public ExternalScanPartitionPruneRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));
@@ -53,7 +68,15 @@ public class ExternalScanPartitionPruneRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator operator = (LogicalScanOperator) input.getOp();
+<<<<<<< HEAD
         OptExternalPartitionPruner.prunePartitions(context, operator);
+=======
+        if (operator.isOpRuleBitSet(OP_PARTITION_PRUNED)) {
+            return Collections.emptyList();
+        }
+        OptExternalPartitionPruner.prunePartitions(context, operator);
+        operator.setOpRuleBit(OP_PARTITION_PRUNED);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Lists.newArrayList();
     }
 }

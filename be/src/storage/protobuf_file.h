@@ -31,6 +31,11 @@ class ProtobufFile {
 public:
     explicit ProtobufFile(std::string path) : _path(std::move(path)) {}
 
+<<<<<<< HEAD
+=======
+    explicit ProtobufFile(std::string path, std::shared_ptr<FileSystem> fs) : _path(std::move(path)), _fs(fs) {}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DISALLOW_COPY_AND_MOVE(ProtobufFile);
 
     Status save(const ::google::protobuf::Message& message, bool sync = true);
@@ -39,12 +44,22 @@ public:
 
 private:
     std::string _path;
+<<<<<<< HEAD
+=======
+    std::shared_ptr<FileSystem> _fs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class ProtobufFileWithHeader {
 public:
     explicit ProtobufFileWithHeader(std::string path) : _path(std::move(path)) {}
 
+<<<<<<< HEAD
+=======
+    explicit ProtobufFileWithHeader(std::string path, std::shared_ptr<FileSystem> fs)
+            : _path(std::move(path)), _fs(fs) {}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DISALLOW_COPY_AND_MOVE(ProtobufFileWithHeader);
 
     Status save(const ::google::protobuf::Message& message, bool sync = true);
@@ -55,6 +70,10 @@ public:
 
 private:
     std::string _path;
+<<<<<<< HEAD
+=======
+    std::shared_ptr<FileSystem> _fs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

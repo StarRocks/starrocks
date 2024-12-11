@@ -19,8 +19,18 @@ add_library(Types STATIC
     bitmap_value.cpp
     date_value.cpp
     hll.cpp
+<<<<<<< HEAD
+=======
+    hll_sketch.cpp
+    large_int_value.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     logical_type.cpp
     map_type_info.cpp
     struct_type_info.cpp
     timestamp_value.cpp
+<<<<<<< HEAD
+=======
+    checker/type_checker.cpp
+    type_checker_manager.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 )

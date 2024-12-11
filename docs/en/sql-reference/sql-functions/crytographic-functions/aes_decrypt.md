@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # aes_decrypt
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Uses the AES_128_ECB algorithm to decrypt a string and returns a binary string.
 

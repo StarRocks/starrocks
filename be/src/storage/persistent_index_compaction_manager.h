@@ -20,16 +20,29 @@
 #include <vector>
 
 #include "storage/olap_common.h"
+<<<<<<< HEAD
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 
 namespace starrocks {
 
+=======
+#include "storage/storage_engine.h"
+#include "storage/tablet.h"
+#include "storage/tablet_manager.h"
+#include "storage/tablet_updates.h"
+#include "util/starrocks_metrics.h"
+
+namespace starrocks {
+
+using TabletAndScore = std::pair<int64_t, double>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 class ThreadPool;
 
 class PersistentIndexCompactionManager {
 public:
     PersistentIndexCompactionManager() {}
+<<<<<<< HEAD
     ~PersistentIndexCompactionManager();
     Status init();
     void schedule(const std::function<std::vector<TabletAndScore>()>& pick_algo);
@@ -37,16 +50,33 @@ public:
     void mark_running(Tablet* tablet);
     // Mark tablet is no running and decrease disk concurrency
     void unmark_running(Tablet* tablet);
+=======
+    virtual ~PersistentIndexCompactionManager();
+    Status init();
+    virtual void schedule(const std::function<std::vector<TabletAndScore>()>& pick_algo);
+    // Mark tablet is running and increase disk concurrency
+    void mark_running(int64_t tablet_id, DataDir* data_dir);
+    // Mark tablet is no running and decrease disk concurrency
+    void unmark_running(int64_t tablet_id, DataDir* data_dir);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // change the thread pool thread count
     Status update_max_threads(int max_threads);
     // Call pick algo function, and refresh ready tablet queue
     void update_ready_tablet_queue(const std::function<std::vector<TabletAndScore>()>& pick_algo);
     // Is tablet in running state
+<<<<<<< HEAD
     bool is_running(Tablet* tablet);
     // Is tablet's disk out of concurrency limit
     bool disk_limit(Tablet* tablet);
 
 private:
+=======
+    bool is_running(int64_t tablet_id);
+    // Is tablet's disk out of concurrency limit
+    bool disk_limit(DataDir* data_dir);
+
+protected:
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::mutex _mutex;
     // Sorted by prority
     std::vector<TabletAndScore> _ready_tablets_queue;
@@ -56,4 +86,8 @@ private:
     size_t _last_schedule_time = 0;
 };
 
+<<<<<<< HEAD
 } // namespace starrocks
+=======
+} // namespace starrocks
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

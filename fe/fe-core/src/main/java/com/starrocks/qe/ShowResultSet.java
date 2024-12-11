@@ -115,6 +115,13 @@ public class ShowResultSet {
         return Short.parseShort(getString(col));
     }
 
+<<<<<<< HEAD
+=======
+    public int numColumns() {
+        return metaData.getColumnCount();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public TShowResultSet tothrift() {
         TShowResultSet set = new TShowResultSet();
         set.metaData = new TShowResultSetMetaData();

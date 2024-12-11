@@ -44,8 +44,13 @@
 #include "exec/scan_node.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 #include "storage/tuple.h"
+=======
+#include "storage/tuple.h"
+#include "types/large_int_value.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -193,11 +198,32 @@ Status OlapScanKeys::get_key_range(std::vector<std::unique_ptr<OlapScanRange>>* 
 }
 
 template <class T>
+<<<<<<< HEAD
+=======
+TCondition ColumnValueRange<T>::to_olap_not_null_filter() const {
+    TCondition condition;
+    condition.__set_is_index_filter_only(_is_index_filter_only);
+    condition.__set_column_name(_column_name);
+    condition.__set_condition_op("IS");
+    condition.condition_values.emplace_back("NOT NULL");
+
+    return condition;
+}
+
+template <class T>
+template <bool Negative>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
     // If we have fixed range value, we generate in/not-in predicates.
     if (is_fixed_value_range()) {
         DCHECK(_fixed_op == FILTER_IN || _fixed_op == FILTER_NOT_IN);
         bool filter_in = (_fixed_op == FILTER_IN) ? true : false;
+<<<<<<< HEAD
+=======
+        if constexpr (Negative) {
+            filter_in = !filter_in;
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         const std::string op = (filter_in) ? "*=" : "!=";
 
         TCondition condition;
@@ -219,31 +245,59 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
         }
 
         if (can_push) {
+<<<<<<< HEAD
             filters.push_back(condition);
+=======
+            filters.push_back(std::move(condition));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     } else {
         TCondition low;
         low.__set_is_index_filter_only(_is_index_filter_only);
         if (_type_min != _low_value || FILTER_LARGER_OR_EQUAL != _low_op) {
             low.__set_column_name(_column_name);
+<<<<<<< HEAD
             low.__set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? ">=" : ">>"));
+=======
+            if constexpr (Negative) {
+                low.__set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? "<<" : "<="));
+            } else {
+                low.__set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? ">=" : ">>"));
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             low.condition_values.push_back(cast_to_string(_low_value, type(), precision(), scale()));
         }
 
         if (!low.condition_values.empty()) {
+<<<<<<< HEAD
             filters.push_back(low);
+=======
+            filters.push_back(std::move(low));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         TCondition high;
         high.__set_is_index_filter_only(_is_index_filter_only);
         if (_type_max != _high_value || FILTER_LESS_OR_EQUAL != _high_op) {
             high.__set_column_name(_column_name);
+<<<<<<< HEAD
             high.__set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? "<=" : "<<"));
+=======
+            if constexpr (Negative) {
+                high.__set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? ">>" : ">="));
+            } else {
+                high.__set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? "<=" : "<<"));
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             high.condition_values.push_back(cast_to_string(_high_value, type(), precision(), scale()));
         }
 
         if (!high.condition_values.empty()) {
+<<<<<<< HEAD
             filters.push_back(high);
+=======
+            filters.push_back(std::move(high));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 }
@@ -710,6 +764,7 @@ int ColumnValueRange<T>::scale() const {
     return this->_scale;
 }
 
+<<<<<<< HEAD
 template class ColumnValueRange<int8_t>;
 template class ColumnValueRange<uint8_t>;
 template class ColumnValueRange<int16_t>;
@@ -741,6 +796,31 @@ template Status OlapScanKeys::extend_scan_key<bool>(ColumnValueRange<bool>& rang
 template Status OlapScanKeys::extend_scan_key<DateValue>(ColumnValueRange<DateValue>& range, int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<TimestampValue>(ColumnValueRange<TimestampValue>& range,
                                                               int32_t max_scan_key_num);
+=======
+#define InsitializeColumnValueRange(T)                                                  \
+    template class ColumnValueRange<T>;                                                 \
+                                                                                        \
+    template void ColumnValueRange<T>::to_olap_filter<false>(std::vector<TCondition>&); \
+    template void ColumnValueRange<T>::to_olap_filter<true>(std::vector<TCondition>&);  \
+                                                                                        \
+    template Status OlapScanKeys::extend_scan_key<T>(ColumnValueRange<T> & range, int32_t max_scan_key_num);
+
+InsitializeColumnValueRange(int8_t);
+InsitializeColumnValueRange(uint8_t);
+InsitializeColumnValueRange(int16_t);
+InsitializeColumnValueRange(int32_t);
+InsitializeColumnValueRange(int64_t);
+InsitializeColumnValueRange(__int128);
+InsitializeColumnValueRange(StringValue);
+InsitializeColumnValueRange(Slice);
+InsitializeColumnValueRange(DateTimeValue);
+InsitializeColumnValueRange(DecimalV2Value);
+InsitializeColumnValueRange(bool);
+InsitializeColumnValueRange(DateValue);
+InsitializeColumnValueRange(TimestampValue);
+
+#undef InsitializeColumnValueRange
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 } // namespace starrocks
 

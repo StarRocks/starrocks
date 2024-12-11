@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Circle
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a WKT (WEll Known Text) to a circle on the sphere of the earth.
 

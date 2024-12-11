@@ -70,11 +70,16 @@ public class TableSnapshotInfo {
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         return "TableSnapshotInfo{" +
                 "baseTableInfo=" + baseTableInfo +
                 ", baseTable=" + baseTable.getName() +
                 ", refreshedPartitionInfos=" + refreshedPartitionInfos +
                 '}';
+=======
+        return "baseTable=" + baseTable.getName() +
+                ", refreshedPartitionInfos=" + refreshedPartitionInfos;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

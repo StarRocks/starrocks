@@ -15,23 +15,41 @@
 package com.starrocks.warehouse;
 
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.load.LoadJobWithWarehouse;
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.Collection;
 import java.util.Map;
 
 public class WarehouseLoadInfoBuilder {
+<<<<<<< HEAD
     private final Map<String, Long> warehouseToRemovedJobLastFinishedTimeMs = Maps.newConcurrentMap();
 
     public <T extends LoadJobWithWarehouse> Map<String, WarehouseLoadStatusInfo> buildFromJobs(Collection<T> jobs) {
         Map<String, WarehouseLoadStatusInfo> warehouseToInfo = Maps.newHashMap();
+=======
+    private final Map<Long, Long> warehouseToRemovedJobLastFinishedTimeMs = Maps.newConcurrentMap();
+
+    public <T extends LoadJobWithWarehouse> Map<Long, WarehouseLoadStatusInfo> buildFromJobs(Collection<T> jobs) {
+        Map<Long, WarehouseLoadStatusInfo> warehouseToInfo = Maps.newHashMap();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (T job : jobs) {
             if (job.isInternalJob()) {
                 continue;
             }
 
+<<<<<<< HEAD
             WarehouseLoadStatusInfo info =
                     warehouseToInfo.computeIfAbsent(job.getCurrentWarehouse(), k -> new WarehouseLoadStatusInfo());
+=======
+            long warehouseId = job.getCurrentWarehouseId();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            WarehouseLoadStatusInfo info =
+                    warehouseToInfo.computeIfAbsent(warehouse.getId(), k -> new WarehouseLoadStatusInfo());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (job.isFinal()) {
                 info.updateLastFinishedJobTimeMs(job.getFinishTimestampMs());
             } else {
@@ -40,12 +58,21 @@ public class WarehouseLoadInfoBuilder {
         }
 
         // Merge warehouseToRemovedTaskLastFinishedTimeMs to warehouseToInfo.
+<<<<<<< HEAD
         warehouseToRemovedJobLastFinishedTimeMs.forEach((warehouse, removedTaskLastFinishedTimeMs) -> {
             if (warehouseToInfo.containsKey(warehouse)) {
                 WarehouseLoadStatusInfo info = warehouseToInfo.get(warehouse);
                 info.updateLastFinishedJobTimeMs(removedTaskLastFinishedTimeMs);
             } else {
                 warehouseToInfo.put(warehouse, new WarehouseLoadStatusInfo(0L, removedTaskLastFinishedTimeMs));
+=======
+        warehouseToRemovedJobLastFinishedTimeMs.forEach((warehouseId, removedTaskLastFinishedTimeMs) -> {
+            if (warehouseToInfo.containsKey(warehouseId)) {
+                WarehouseLoadStatusInfo info = warehouseToInfo.get(warehouseId);
+                info.updateLastFinishedJobTimeMs(removedTaskLastFinishedTimeMs);
+            } else {
+                warehouseToInfo.put(warehouseId, new WarehouseLoadStatusInfo(0L, removedTaskLastFinishedTimeMs));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         });
 
@@ -56,7 +83,13 @@ public class WarehouseLoadInfoBuilder {
         if (!job.isFinal() || job.isInternalJob()) {
             return;
         }
+<<<<<<< HEAD
         warehouseToRemovedJobLastFinishedTimeMs.compute(job.getCurrentWarehouse(), (k, lastFinishedTimeMs) -> {
+=======
+
+        long warehouseId = job.getCurrentWarehouseId();
+        warehouseToRemovedJobLastFinishedTimeMs.compute(warehouseId, (k, lastFinishedTimeMs) -> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (lastFinishedTimeMs == null) {
                 return job.getFinishTimestampMs();
             } else {

@@ -37,11 +37,19 @@
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
+<<<<<<< HEAD
 #include "gen_cpp/QueryPlanExtra_constants.h"
+=======
+#include "gen_cpp/QueryPlanExtra_types.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
+<<<<<<< HEAD
+=======
+#include "runtime/memory/counting_allocator.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "util/defer_op.h"
@@ -214,6 +222,10 @@ struct AggregatorParams {
     bool needs_finalize;
     bool has_outer_join_child;
     int64_t limit;
+<<<<<<< HEAD
+=======
+    bool enable_pipeline_share_limit;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TStreamingPreaggregationMode::type streaming_preaggregation_mode;
     TupleId intermediate_tuple_id;
     TupleId output_tuple_id;
@@ -292,12 +304,23 @@ public:
     bool is_hash_set() const { return _is_only_group_by_columns; }
     const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
+<<<<<<< HEAD
 
     const int64_t memory_usage() const {
         if (is_hash_set()) {
             return hash_set_memory_usage();
         } else if (!_group_by_expr_ctxs.empty()) {
             return hash_map_memory_usage();
+=======
+    const int64_t agg_state_memory_usage() const { return _agg_state_mem_usage; }
+    const int64_t allocator_memory_usage() const { return _allocator->memory_usage(); }
+
+    const int64_t memory_usage() const {
+        if (is_hash_set()) {
+            return hash_set_memory_usage() + agg_state_memory_usage() + allocator_memory_usage();
+        } else if (!_group_by_expr_ctxs.empty()) {
+            return hash_map_memory_usage() + agg_state_memory_usage() + allocator_memory_usage();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             return 0;
         }
@@ -308,7 +331,11 @@ public:
     const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
     const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
     std::any& it_hash() { return _it_hash; }
+<<<<<<< HEAD
     const std::vector<uint8_t>& streaming_selection() { return _streaming_selection; }
+=======
+    const Filter& streaming_selection() { return _streaming_selection; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RuntimeProfile::Counter* agg_compute_timer() { return _agg_stat->agg_compute_timer; }
     RuntimeProfile::Counter* agg_expr_timer() { return _agg_stat->agg_function_compute_timer; }
     RuntimeProfile::Counter* streaming_timer() { return _agg_stat->streaming_timer; }
@@ -328,10 +355,17 @@ public:
                                           int64_t ht_rows) const;
 
     // For aggregate without group by
+<<<<<<< HEAD
     [[nodiscard]] Status compute_single_agg_state(Chunk* chunk, size_t chunk_size);
     // For aggregate with group by
     [[nodiscard]] Status compute_batch_agg_states(Chunk* chunk, size_t chunk_size);
     [[nodiscard]] Status compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size);
+=======
+    Status compute_single_agg_state(Chunk* chunk, size_t chunk_size);
+    // For aggregate with group by
+    Status compute_batch_agg_states(Chunk* chunk, size_t chunk_size);
+    Status compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Convert one row agg states to chunk
     Status convert_to_chunk_no_groupby(ChunkPtr* chunk);
@@ -343,17 +377,28 @@ public:
     Status evaluate_agg_fn_exprs(Chunk* chunk, bool use_intermediate);
     Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
+<<<<<<< HEAD
     [[nodiscard]] Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
 
     // convert input chunk to spill format
     [[nodiscard]] Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
+=======
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
+
+    // convert input chunk to spill format
+    Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Elements queried in HashTable will be added to HashTable,
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     // selection[i] = 0: found in hash table
     // selection[1] = 1: not found in hash table
+<<<<<<< HEAD
     [[nodiscard]] Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk);
+=======
+    Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
@@ -384,8 +429,11 @@ public:
     const SpillProcessChannelPtr spill_channel() const { return _spill_channel; }
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
 
+<<<<<<< HEAD
     auto& io_executor() { return *spill_channel()->io_executor(); }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status spill_aggregate_data(RuntimeState* state, std::function<StatusOr<ChunkPtr>()> chunk_provider);
 
     bool has_pending_data() const { return _spiller != nullptr && _spiller->has_pending_data(); }
@@ -408,6 +456,11 @@ protected:
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
+<<<<<<< HEAD
+=======
+    // used to count heap memory usage of agg states
+    std::unique_ptr<CountingAllocatorWithHook> _allocator;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // The open phase still relies on the TFunction object for some initialization operations
     std::vector<TFunction> _fns;
 
@@ -491,7 +544,11 @@ protected:
     AggrMode _aggr_mode = AM_DEFAULT;
     bool _is_passthrough = false;
     bool _is_pending_reset_state = false;
+<<<<<<< HEAD
     std::vector<uint8_t> _streaming_selection;
+=======
+    Filter _streaming_selection;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     bool _has_udaf = false;
 
@@ -499,9 +556,22 @@ protected:
 
     std::shared_ptr<spill::Spiller> _spiller;
     SpillProcessChannelPtr _spill_channel;
+<<<<<<< HEAD
 
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
+=======
+    bool _is_opened = false;
+    bool _is_prepared = false;
+    int64_t _agg_state_mem_usage = 0;
+
+    // aggregate combinator functions since they are not persisted in agg hash map
+    std::vector<AggregateFunctionPtr> _combinator_function;
+
+public:
+    void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
+    void build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown, bool agg_group_by_with_limit);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
     Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
@@ -516,6 +586,11 @@ public:
 protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
 
+<<<<<<< HEAD
+=======
+    void _build_hash_map_with_shared_limit(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     bool _use_intermediate_as_input() {
         if (is_pending_reset_state()) {
             DCHECK(_aggr_mode == AM_BLOCKING_PRE_CACHE || _aggr_mode == AM_STREAMING_PRE_CACHE);
@@ -562,6 +637,14 @@ protected:
 
     void _release_agg_memory();
 
+<<<<<<< HEAD
+=======
+    bool _is_agg_result_nullable(const TExpr& desc, const AggFunctionTypes& agg_func_type);
+
+    Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
+                                      const AggregateFunction** ret);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     template <class HashMapWithKey>
     friend struct AllocateState;
 };
@@ -619,7 +702,13 @@ class AggregatorFactoryBase {
 public:
     using Ptr = std::shared_ptr<T>;
     AggregatorFactoryBase(const TPlanNode& tnode)
+<<<<<<< HEAD
             : _tnode(tnode), _aggregator_param(convert_to_aggregator_params(_tnode)) {}
+=======
+            : _tnode(tnode), _aggregator_param(convert_to_aggregator_params(_tnode)) {
+        _shared_limit_countdown.store(_aggregator_param->limit);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     Ptr get_or_create(size_t id) {
         auto it = _aggregators.find(id);
@@ -639,11 +728,20 @@ public:
     const TPlanNode& t_node() { return _tnode; }
     const AggrMode aggr_mode() { return _aggr_mode; }
 
+<<<<<<< HEAD
+=======
+    std::atomic<int64_t>& get_shared_limit_countdown() { return _shared_limit_countdown; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 private:
     const TPlanNode& _tnode;
     AggregatorParamsPtr _aggregator_param;
     std::unordered_map<size_t, Ptr> _aggregators;
     AggrMode _aggr_mode = AggrMode::AM_DEFAULT;
+<<<<<<< HEAD
+=======
+    std::atomic<int64_t> _shared_limit_countdown;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 using AggregatorFactory = AggregatorFactoryBase<Aggregator>;

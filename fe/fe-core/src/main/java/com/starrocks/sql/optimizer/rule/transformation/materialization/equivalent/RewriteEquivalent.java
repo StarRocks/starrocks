@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -31,6 +32,39 @@ public class RewriteEquivalent {
     private final IRewriteEquivalent iRewriteEquivalent;
 
 
+=======
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+public class RewriteEquivalent {
+    public static final List<IAggregateRewriteEquivalent> AGGREGATE_EQUIVALENTS = Lists.newArrayList(
+            CountRewriteEquivalent.INSTANCE,
+            BitmapRewriteEquivalent.INSTANCE,
+            ArrayRewriteEquivalent.INSTANCE,
+            HLLRewriteEquivalent.INSTANCE,
+            PercentileRewriteEquivalent.INSTANCE,
+            AggStateRewriteEquivalent.INSTANCE
+    );
+    public static final List<IRewriteEquivalent> PREDICATE_EQUIVALENTS = Lists.newArrayList(
+            TimeSliceRewriteEquivalent.INSTANCE,
+            DateTruncEquivalent.INSTANCE);
+    public static final List<IRewriteEquivalent> EQUIVALENTS = Stream.concat(
+            AGGREGATE_EQUIVALENTS.stream(),
+            PREDICATE_EQUIVALENTS.stream()
+    ).collect(ImmutableList.toImmutableList());
+
+    private final IRewriteEquivalent.RewriteEquivalentContext rewriteEquivalentContext;
+    private final IRewriteEquivalent iRewriteEquivalent;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public RewriteEquivalent(IRewriteEquivalent.RewriteEquivalentContext rewriteEquivalentContext,
                              IRewriteEquivalent iRewriteEquivalent,
                              ColumnRefOperator replace) {
@@ -50,8 +84,14 @@ public class RewriteEquivalent {
     public ScalarOperator rewrite(EquivalentShuttleContext shuttleContext,
                                   Map<ColumnRefOperator, ColumnRefOperator> columnMapping,
                                   ScalarOperator newInput) {
+<<<<<<< HEAD
         if (columnMapping == null) {
             return this.iRewriteEquivalent.rewrite(this.rewriteEquivalentContext,
+=======
+        ScalarOperator result = null;
+        if (columnMapping == null) {
+            result = this.iRewriteEquivalent.rewrite(this.rewriteEquivalentContext,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     shuttleContext, rewriteEquivalentContext.getReplace(), newInput);
         } else {
             ColumnRefOperator oldReplace = rewriteEquivalentContext.getReplace();
@@ -59,8 +99,23 @@ public class RewriteEquivalent {
                 return null;
             }
             ColumnRefOperator target = columnMapping.get(oldReplace);
+<<<<<<< HEAD
             return this.iRewriteEquivalent.rewrite(this.rewriteEquivalentContext,
                     shuttleContext, target, newInput);
         }
+=======
+            result = this.iRewriteEquivalent.rewrite(this.rewriteEquivalentContext,
+                    shuttleContext, target, newInput);
+        }
+        if (result != null) {
+            RewriteContext rewriteContext = shuttleContext.getRewriteContext();
+            if (rewriteContext != null && rewriteContext.getAggregatePushDownContext() != null &&
+                    newInput instanceof CallOperator && rewriteEquivalentContext.getInput() instanceof CallOperator) {
+                rewriteContext.getAggregatePushDownContext().registerOrigAggRewriteInfo((CallOperator) newInput,
+                        (CallOperator) rewriteEquivalentContext.getInput());
+            }
+        }
+        return result;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

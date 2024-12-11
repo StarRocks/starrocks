@@ -26,9 +26,16 @@ import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class TablesSystemTable {
     public static final int MY_CS_NAME_SIZE = 32;
+<<<<<<< HEAD
 
     public static SystemTable create() {
         return new SystemTable(SystemId.TABLES_ID, "tables", Table.TableType.SCHEMA, builder()
+=======
+    private static final String NAME = "tables";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(catalogName, SystemId.TABLES_ID, NAME, Table.TableType.SCHEMA, builder()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .column("TABLE_CATALOG", ScalarType.createVarchar(FN_REFLEN))
                 .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
                 .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))

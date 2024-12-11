@@ -44,9 +44,15 @@ import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TxnFinishState;
@@ -64,9 +70,15 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+<<<<<<< HEAD
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+=======
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 /**
  * This class represents the local olap tablet related metadata.
@@ -75,7 +87,11 @@ import java.util.stream.Collectors;
 public class LocalTablet extends Tablet implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(LocalTablet.class);
 
+<<<<<<< HEAD
     public enum TabletStatus {
+=======
+    public enum TabletHealthStatus {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         HEALTHY,
         REPLICA_MISSING, // not enough alive replica num.
         VERSION_INCOMPLETE, // alive replica num is enough, but version is missing.
@@ -87,6 +103,10 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         COLOCATE_REDUNDANT, // replicas match the colocate backends set, but redundant.
         NEED_FURTHER_REPAIR, // one of replicas need a definite repair.
         DISK_MIGRATION, // The disk where the replica is located is decommissioned.
+<<<<<<< HEAD
+=======
+        LOCATION_MISMATCH // The location of replica doesn't match the location specified in table property.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // Most read only accesses to replicas should acquire db lock, to prevent
@@ -129,6 +149,10 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         checkedVersion = -1L;
 
         isConsistent = true;
+<<<<<<< HEAD
+=======
+        assert replicas != null;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.immutableReplicas = Collections.unmodifiableList(replicas);
     }
 
@@ -172,7 +196,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
                 replicas.add(replica);
                 if (updateInvertedIndex) {
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentInvertedIndex().addReplica(id, replica);
+=======
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addReplica(id, replica);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
         }
@@ -194,6 +222,13 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return num;
     }
 
+<<<<<<< HEAD
+=======
+    public Lock getReadLock() {
+        return rwLock.readLock();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public List<Replica> getAllReplicas() {
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
@@ -227,8 +262,13 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public List<String> getBackends() {
+<<<<<<< HEAD
         List<String> backends = new ArrayList<String>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        List<String> backends = new ArrayList<>();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 Backend backend = infoService.getBackend(replica.getBackendId());
@@ -244,7 +284,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     // for loading data
     public List<Long> getNormalReplicaBackendIds() {
         List<Long> beIds = Lists.newArrayList();
+<<<<<<< HEAD
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
@@ -261,10 +305,16 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     // return map of (BE id -> path hash) of normal replicas
+<<<<<<< HEAD
     public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
         Multimap<Replica, Long> map = LinkedHashMultimap.create();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
+=======
+    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(SystemInfoService infoService) {
+        Multimap<Replica, Long> map = LinkedHashMultimap.create();
+        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
                     continue;
@@ -311,6 +361,15 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public void getQueryableReplicas(List<Replica> allQueryableReplicas, List<Replica> localReplicas,
+                                     long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
+        throw new SemanticException("not implemented");
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public int getQueryableReplicasSize(long visibleVersion, int schemaHash) {
         int size = 0;
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
@@ -364,7 +423,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
             if (replicas.contains(replica)) {
                 replicas.remove(replica);
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, replica.getBackendId());
+=======
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteReplica(id, replica.getBackendId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return true;
             }
         }
@@ -378,7 +441,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 Replica replica = iterator.next();
                 if (replica.getBackendId() == backendId) {
                     iterator.remove();
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, backendId);
+=======
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteReplica(id, backendId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     return true;
                 }
             }
@@ -508,6 +575,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return tabletRowCount;
     }
 
+<<<<<<< HEAD
     private Pair<TabletStatus, TabletSchedCtx.Priority> createRedundantSchedCtx(
             TabletStatus status, Priority prio, Replica needFurtherRepairReplica) {
         if (needFurtherRepairReplica != null) {
@@ -827,6 +895,17 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         }
 
         return false;
+=======
+    @Override
+    public long getFuzzyRowCount() {
+        long tabletRowCount = 0L;
+        for (Replica replica : immutableReplicas) {
+            if (replica.getRowCount() > tabletRowCount) {
+                tabletRowCount = replica.getRowCount();
+            }
+        }
+        return tabletRowCount;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     /**
@@ -836,10 +915,17 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
      * NORMAL:  delay Config.tablet_repair_delay_factor_second * 2;
      * LOW:     delay Config.tablet_repair_delay_factor_second * 3;
      */
+<<<<<<< HEAD
     public boolean readyToBeRepaired(TabletStatus status, TabletSchedCtx.Priority priority) {
         if (priority == Priority.VERY_HIGH ||
                 status == TabletStatus.VERSION_INCOMPLETE ||
                 status == TabletStatus.NEED_FURTHER_REPAIR) {
+=======
+    public boolean readyToBeRepaired(TabletHealthStatus status, TabletSchedCtx.Priority priority) {
+        if (priority == Priority.VERY_HIGH ||
+                status == TabletHealthStatus.VERSION_INCOMPLETE ||
+                status == TabletHealthStatus.NEED_FURTHER_REPAIR) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return true;
         }
 
@@ -874,7 +960,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     private String getReplicaBackendState(long backendId) {
+<<<<<<< HEAD
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Backend backend = infoService.getBackend(backendId);
         if (backend == null) {
             return "NIL";
@@ -937,7 +1027,12 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                                 replicas.size()));
                         empty = false;
                     }
+<<<<<<< HEAD
                     Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+=======
+                    Backend backend =
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(replica.getBackendId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     sb.append(String.format(" %s:%d%s",
                             backend == null ? Long.toString(replica.getBackendId()) : backend.getHost(), replicaVersion,
                             replica.getState() == ReplicaState.ALTER ? "ALTER" : ""));

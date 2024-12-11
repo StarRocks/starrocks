@@ -49,7 +49,10 @@ CREATE TABLE `test_decimal_type6` (
              DISTRIBUTED BY HASH(`dec_1_2`) BUCKETS 10
              PROPERTIES (
              "replication_num" = "1",
+<<<<<<< HEAD
              "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
              "enable_persistent_index" = "false"
              );
 insert into test_decimal_type6 values(1,1,0.100000000000000000),(2,10,0.100000000000000000);

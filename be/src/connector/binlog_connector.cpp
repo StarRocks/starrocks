@@ -96,7 +96,11 @@ Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         status = _mock_chunk_test(chunk);
     }
 #else
+<<<<<<< HEAD
     if (_need_seek_binlog.load(std::memory_order::memory_order_acquire)) {
+=======
+    if (_need_seek_binlog.load(std::memory_order::acquire)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!_is_stream_pipeline) {
             RETURN_IF_ERROR(_prepare_non_stream_pipeline());
         }
@@ -193,7 +197,12 @@ BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_ci
 }
 
 StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
+<<<<<<< HEAD
     BinlogMetaFieldMap binlog_meta_map = _build_binlog_meta_fields(_tablet->tablet_schema().num_columns());
+=======
+    auto tablet_schema = _tablet->tablet_schema();
+    BinlogMetaFieldMap binlog_meta_map = _build_binlog_meta_fields(tablet_schema->num_columns());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::vector<uint32_t> data_column_cids;
     std::vector<uint32_t> meta_column_slot_index;
     Fields meta_fields;
@@ -201,7 +210,11 @@ StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
     for (auto slot : _tuple_desc->slots()) {
         DCHECK(slot->is_materialized());
         slot_index += 1;
+<<<<<<< HEAD
         int32_t index = _tablet->field_index(slot->col_name());
+=======
+        int32_t index = tablet_schema->field_index(slot->col_name());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (index >= 0) {
             data_column_cids.push_back(index);
         } else if (slot->col_name() == _column_name_constants.BINLOG_OP_COLUMN_NAME) {
@@ -227,7 +240,10 @@ StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
         return Status::InternalError("failed to build binlog schema, no materialized data slot!");
     }
 
+<<<<<<< HEAD
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Schema schema = ChunkHelper::convert_schema(tablet_schema, data_column_cids);
     for (int32_t i = 0; i < meta_column_slot_index.size(); i++) {
         uint32_t index = meta_column_slot_index[i];

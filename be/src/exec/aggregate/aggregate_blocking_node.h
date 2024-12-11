@@ -35,6 +35,10 @@ public:
 private:
     template <class AggFactory, class SourceFactory, class SinkFactory>
     pipeline::OpFactories _decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
+<<<<<<< HEAD
                                                  pipeline::PipelineBuilderContext* context);
+=======
+                                                 pipeline::PipelineBuilderContext* context, bool per_bucket_optimize);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 } // namespace starrocks

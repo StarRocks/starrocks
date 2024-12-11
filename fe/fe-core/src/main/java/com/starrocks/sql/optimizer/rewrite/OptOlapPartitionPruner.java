@@ -15,6 +15,10 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -22,6 +26,10 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.SlotRef;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
@@ -32,6 +40,10 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PrimitiveType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -55,9 +67,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentNavigableMap;
+<<<<<<< HEAD
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
+=======
+import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner.collectOlapTablePartitionValuesMap;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class OptOlapPartitionPruner {
     private static final Logger LOG = LogManager.getLogger(OptOlapPartitionPruner.class);
 
@@ -75,7 +94,11 @@ public class OptOlapPartitionPruner {
 
         if (selectedPartitionIds == null) {
             selectedPartitionIds =
+<<<<<<< HEAD
                     table.getPartitions().stream().filter(Partition::hasData).map(Partition::getId).collect(
+=======
+                    table.getVisiblePartitions().stream().filter(Partition::hasData).map(Partition::getId).collect(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             Collectors.toList());
             // some test cases need to perceive partitions pruned, so we can not filter empty partitions.
         } else {
@@ -83,12 +106,19 @@ public class OptOlapPartitionPruner {
                     .filter(id -> table.getPartition(id).hasData()).collect(Collectors.toList());
         }
 
+<<<<<<< HEAD
         if (isNeedFurtherPrune(selectedPartitionIds, logicalOlapScanOperator, partitionInfo)) {
             PartitionColPredicateExtractor extractor = new PartitionColPredicateExtractor(
                     (RangePartitionInfo) partitionInfo, logicalOlapScanOperator.getColumnMetaToColRefMap());
             PartitionColPredicateEvaluator evaluator = new PartitionColPredicateEvaluator((RangePartitionInfo) partitionInfo,
                     selectedPartitionIds);
             selectedPartitionIds = evaluator.prunePartitions(extractor, logicalOlapScanOperator.getPredicate());
+=======
+        // Do further partition prune if needed
+        if (isNeedFurtherPrune(selectedPartitionIds, logicalOlapScanOperator, partitionInfo)) {
+            selectedPartitionIds = doFurtherPartitionPrune(table, logicalOlapScanOperator.getPredicate(),
+                    logicalOlapScanOperator.getColumnMetaToColRefMap(), selectedPartitionIds);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         final Pair<ScalarOperator, List<ScalarOperator>> prunePartitionPredicate =
@@ -105,6 +135,39 @@ public class OptOlapPartitionPruner {
         return builder.build();
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * If the selected partition ids are not null, merge the selected partition ids and do further partition pruning.
+     * @param olapScanOperator the olap scan operator
+     * @return the new olap scan operator with merged partition ids and predicates
+     */
+    public static LogicalOlapScanOperator mergePartitionPrune(LogicalOlapScanOperator olapScanOperator) {
+        // already pruned partitions
+        List<Long> selectedPartitionIds = olapScanOperator.getSelectedPartitionId();
+        // new pruned partitions
+        LogicalOlapScanOperator newOlapScanOperator = OptOlapPartitionPruner.prunePartitions(olapScanOperator);
+        List<Long> newSelectedPartitionIds = newOlapScanOperator.getSelectedPartitionId();
+        // merge selected partition ids
+        List<Long> ansPartitionIds = null;
+        if (newSelectedPartitionIds != null && selectedPartitionIds != null) {
+            ansPartitionIds = Lists.newArrayList(selectedPartitionIds);
+            // use hash set to accelerate the intersection operation
+            ansPartitionIds.retainAll(new HashSet<>(newSelectedPartitionIds));
+        } else {
+            ansPartitionIds = (selectedPartitionIds == null) ? newSelectedPartitionIds : selectedPartitionIds;
+        }
+        final LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+        builder.withOperator(newOlapScanOperator)
+                .setSelectedPartitionId(ansPartitionIds)
+                // new predicate should cover the old one
+                .setPredicate(newOlapScanOperator.getPredicate())
+                // use the new pruned partition predicates
+                .setPrunedPartitionPredicates(newOlapScanOperator.getPrunedPartitionPredicates());
+        return builder.build();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static Pair<ScalarOperator, List<ScalarOperator>> prunePartitionPredicates(
             LogicalOlapScanOperator logicalOlapScanOperator, List<Long> selectedPartitionIds) {
         List<ScalarOperator> scanPredicates = Utils.extractConjuncts(logicalOlapScanOperator.getPredicate());
@@ -116,13 +179,21 @@ public class OptOlapPartitionPruner {
         }
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) tablePartitionInfo;
+<<<<<<< HEAD
         if (partitionInfo.getPartitionColumns().size() != 1 || selectedPartitionIds.isEmpty()) {
+=======
+        if (partitionInfo.getPartitionColumnsSize() != 1 || selectedPartitionIds.isEmpty()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return null;
         }
         List<ScalarOperator> prunedPartitionPredicates = Lists.newArrayList();
         Map<String, PartitionColumnFilter> predicateRangeMap = Maps.newHashMap();
 
+<<<<<<< HEAD
         String columnName = partitionInfo.getPartitionColumns().get(0).getName();
+=======
+        String columnName = partitionInfo.getPartitionColumns(table.getIdToColumn()).get(0).getName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Column column = logicalOlapScanOperator.getTable().getColumn(columnName);
 
         List<Range<PartitionKey>> partitionRanges =
@@ -208,7 +279,11 @@ public class OptOlapPartitionPruner {
 
         scanPredicates.removeAll(prunedPartitionPredicates);
 
+<<<<<<< HEAD
         if (column.isAllowNull() && containsNullValue(column, minRange)
+=======
+        if (column.isAllowNull() && containsNullValue(minRange)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 && !checkFilterNullValue(scanPredicates, logicalOlapScanOperator.getPredicate().clone())) {
             return null;
         }
@@ -216,6 +291,7 @@ public class OptOlapPartitionPruner {
         return Pair.create(Utils.compoundAnd(scanPredicates), prunedPartitionPredicates);
     }
 
+<<<<<<< HEAD
     private static void putValueMapItem(ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds,
                                         Long partitionId,
                                         LiteralExpr value) {
@@ -227,6 +303,8 @@ public class OptOlapPartitionPruner {
         partitionValueToIds.put(value, partitionIdSet);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static List<Long> listPartitionPrune(OlapTable olapTable, ListPartitionInfo listPartitionInfo,
                                                  LogicalOlapScanOperator operator) {
 
@@ -238,8 +316,11 @@ public class OptOlapPartitionPruner {
         // where two partitions are checked at the same time
         boolean isTemporaryPartitionPrune = false;
         List<Long> specifyPartitionIds = null;
+<<<<<<< HEAD
         // single item list partition has only one column mapper
         Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Set<Long> partitionIds = Sets.newHashSet();
         if (operator.getPartitionNames() != null) {
             for (String partName : operator.getPartitionNames().getPartitionNames()) {
@@ -257,6 +338,7 @@ public class OptOlapPartitionPruner {
         } else {
             partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(false));
         }
+<<<<<<< HEAD
 
         if (literalExprValuesMap != null && literalExprValuesMap.size() > 0) {
             ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds = new ConcurrentSkipListMap<>();
@@ -308,6 +390,18 @@ public class OptOlapPartitionPruner {
         List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(operator.getPredicate());
         PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
                 columnToNullPartitions, scalarOperatorList, specifyPartitionIds, listPartitionInfo);
+=======
+        Map<Column, ColumnRefOperator> columnRefMap = operator.getColumnMetaToColRefMap();
+
+        // collect partition values map
+        collectOlapTablePartitionValuesMap(olapTable, partitionIds, columnRefMap,
+                columnToPartitionValuesMap, columnToNullPartitions, false);
+
+        List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(operator.getPredicate());
+        ListPartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
+                columnToNullPartitions, scalarOperatorList, specifyPartitionIds, listPartitionInfo);
+        partitionPruner.prepareDeduceExtraConjuncts(operator);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             List<Long> prune = partitionPruner.prune();
             if (prune == null && isTemporaryPartitionPrune) {
@@ -324,7 +418,11 @@ public class OptOlapPartitionPruner {
     private static List<Long> rangePartitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
                                                   LogicalOlapScanOperator operator) {
         Map<Long, Range<PartitionKey>> keyRangeById;
+<<<<<<< HEAD
         if (operator.getPartitionNames() != null) {
+=======
+        if (operator.getPartitionNames() != null && operator.getPartitionNames().getPartitionNames() != null) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             keyRangeById = Maps.newHashMap();
             for (String partName : operator.getPartitionNames().getPartitionNames()) {
                 Partition part = olapTable.getPartition(partName, operator.getPartitionNames().isTemp());
@@ -337,7 +435,12 @@ public class OptOlapPartitionPruner {
             keyRangeById = partitionInfo.getIdToRange(false);
         }
         PartitionPruner partitionPruner = new RangePartitionPruner(keyRangeById,
+<<<<<<< HEAD
                 partitionInfo.getPartitionColumns(), operator.getColumnFilters());
+=======
+                partitionInfo.getPartitionColumns(olapTable.getIdToColumn()),
+                operator.getColumnFilters());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             return partitionPruner.prune();
         } catch (Exception e) {
@@ -346,23 +449,93 @@ public class OptOlapPartitionPruner {
         return Lists.newArrayList(keyRangeById.keySet());
     }
 
+<<<<<<< HEAD
     private static boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator,
                                               PartitionInfo partitionInfo) {
         if (candidatePartitions.isEmpty()
                 || olapScanOperator.getPredicate() == null) {
+=======
+    private static boolean isNeedFurtherPrune(List<Long> candidatePartitions,
+                                              LogicalOlapScanOperator olapScanOperator,
+                                             PartitionInfo partitionInfo) {
+        return isNeedFurtherPrune((OlapTable) olapScanOperator.getTable(), candidatePartitions,
+                olapScanOperator.getPredicate(), partitionInfo);
+    }
+
+    public static List<Long> doFurtherPartitionPrune(OlapTable table,
+                                                     ScalarOperator predicate,
+                                                     Map<Column, ColumnRefOperator> columnRefOperatorMap,
+                                                     List<Long> selectedPartitionIds) {
+        Preconditions.checkArgument(table.getPartitionInfo() instanceof RangePartitionInfo);
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
+        List<Range<PartitionKey>> candidateRanges = selectedPartitionIds.stream()
+                .map(rangePartitionInfo::getRange)
+                .collect(Collectors.toList());
+        return doFurtherPartitionPrune(table, predicate, columnRefOperatorMap, selectedPartitionIds, candidateRanges);
+    }
+
+    /**
+     * Use input candidateRanges to prune partitions rather than all table's partitions.
+     */
+    public static List<Long> doFurtherPartitionPrune(OlapTable table,
+                                                     ScalarOperator predicate,
+                                                     Map<Column, ColumnRefOperator> columnRefOperatorMap,
+                                                     List<Long> selectedPartitionIds,
+                                                     List<Range<PartitionKey>> candidateRanges) {
+        List<Column> partitionColumns = table.getPartitionColumns();
+        PartitionColPredicateExtractor extractor = new PartitionColPredicateExtractor(
+                partitionColumns,
+                columnRefOperatorMap);
+        PartitionColPredicateEvaluator evaluator = new PartitionColPredicateEvaluator(
+                partitionColumns, selectedPartitionIds, candidateRanges);
+        return evaluator.prunePartitions(extractor, predicate);
+    }
+
+    public static boolean isNeedFurtherPrune(OlapTable olapTable,
+                                             List<Long> candidatePartitions,
+                                             ScalarOperator predicate,
+                                             PartitionInfo partitionInfo) {
+        if (candidatePartitions.isEmpty() || predicate == null) {
+            return false;
+        }
+        if (partitionInfo == null || !(partitionInfo instanceof RangePartitionInfo)) {
+            return false;
+        }
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        return isNeedFurtherPrune(olapTable, candidatePartitions, predicate, rangePartitionInfo,
+                rangePartitionInfo.getIdToRange(true));
+    }
+
+    /**
+     * Use input idToRange to check whether to further prune partitions rather than all table's partitions.
+     */
+    public static boolean isNeedFurtherPrune(OlapTable olapTable,
+                                             List<Long> candidatePartitions,
+                                             ScalarOperator predicate,
+                                             RangePartitionInfo rangePartitionInfo,
+                                             Map<Long, Range<PartitionKey>> tmpIdToRange) {
+        if (candidatePartitions.isEmpty() || predicate == null) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return false;
         }
 
         // only support RANGE and EXPR_RANGE
         // EXPR_RANGE_V2 type like partition by RANGE(cast(substring(col, 3)) as int)) is unsupported
+<<<<<<< HEAD
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             List<Expr> partitionExpr = exprPartitionInfo.getPartitionExprs();
+=======
+        if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
+            List<Expr> partitionExpr = exprPartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr.get(0);
                 String functionName = functionCallExpr.getFnName().getFunction();
                 return (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)
                         || FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName))
+<<<<<<< HEAD
                         && !exprPartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
             }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
@@ -371,21 +544,47 @@ public class OptOlapPartitionPruner {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             return rangePartitionInfo.getPartitionColumns().size() == 1
                     && !rangePartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+=======
+                        && !tmpIdToRange.containsKey(candidatePartitions.get(0));
+            } else if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof SlotRef) {
+                return !tmpIdToRange.containsKey(candidatePartitions.get(0));
+            }
+        } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
+            return false;
+        } else if (rangePartitionInfo instanceof RangePartitionInfo) {
+            return rangePartitionInfo.getPartitionColumnsSize() == 1
+                    && !tmpIdToRange.containsKey(candidatePartitions.get(0));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return false;
     }
 
+<<<<<<< HEAD
     private static boolean containsNullValue(Column column, PartitionKey minRange) {
         PartitionKey nullValue = new PartitionKey();
         try {
             nullValue.pushColumn(LiteralExpr.createInfinity(column.getType(), false), column.getPrimitiveType());
+=======
+    private static boolean containsNullValue(PartitionKey minRange) {
+        PartitionKey nullValue = new PartitionKey();
+        try {
+            for (int i = 0; i < minRange.getKeys().size(); ++i) {
+                LiteralExpr rangeKey = minRange.getKeys().get(i);
+                PrimitiveType type = minRange.getTypes().get(i);
+                nullValue.pushColumn(LiteralExpr.createInfinity(rangeKey.getType(), false), type);
+            }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return minRange.compareTo(nullValue) <= 0;
         } catch (AnalysisException e) {
             return false;
         }
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static boolean checkFilterNullValue(List<ScalarOperator> scanPredicates, ScalarOperator predicate) {
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
         ScalarOperator newPredicate = Utils.compoundAnd(scanPredicates);
@@ -418,5 +617,8 @@ public class OptOlapPartitionPruner {
 
         return newPredicateFilterNulls == predicateFilterNulls;
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

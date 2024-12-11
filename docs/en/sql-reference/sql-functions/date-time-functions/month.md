@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # month
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the month for a given date. The return value ranges from 1 to 12.
 

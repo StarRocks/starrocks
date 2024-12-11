@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_trunc
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Truncates a time value based on the specified date part, such as year, day, hour, or minute.
 

@@ -14,6 +14,10 @@
 
 package com.starrocks.scheduler;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.profile.Tracers;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
@@ -41,7 +45,13 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                     .setUser(ctx.getQualifiedUser())
                     .setDb(ctx.getDatabase())
                     .setCatalog(ctx.getCurrentCatalog());
+<<<<<<< HEAD
             ctx.getPlannerProfile().reset();
+=======
+            Tracers.register(ctx);
+            Tracers.init(ctx, Tracers.Mode.TIMER, null);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             StatementBase sqlStmt = SqlParser.parse(context.getDefinition(), ctx.getSessionVariable()).get(0);
             sqlStmt.setOrigStmt(new OriginStatement(context.getDefinition(), 0));
             //Build View SQL without Policy Rewrite
@@ -56,10 +66,20 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
             executor = new StmtExecutor(ctx, sqlStmt);
             ctx.setExecutor(executor);
             ctx.setThreadLocalInfo();
+<<<<<<< HEAD
             executor.execute();
         } finally {
             if (executor != null) {
                 auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+=======
+            executor.addRunningQueryDetail(sqlStmt);
+            executor.execute();
+        } finally {
+            Tracers.close();
+            if (executor != null) {
+                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+                executor.addFinishedQueryDetail();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 // executor can be null if we encounter analysis error.
                 auditAfterExec(context, null, null);

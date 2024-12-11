@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     supp_nation,
@@ -38,6 +39,8 @@ order by
     supp_nation,
     cust_nation,
     l_year ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [planCount]
 4
 [plan-1]

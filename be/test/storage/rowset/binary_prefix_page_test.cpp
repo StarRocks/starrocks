@@ -138,10 +138,17 @@ public:
         ret = page_decoder->seek_to_position_in_page(0);
         ASSERT_TRUE(ret.ok());
         auto column3 = BinaryColumn::create();
+<<<<<<< HEAD
         SparseRange read_range;
         read_range.add(Range(0, 10));
         read_range.add(Range(15, 25));
         read_range.add(Range(28, 38));
+=======
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, 10));
+        read_range.add(Range<>(15, 25));
+        read_range.add(Range<>(28, 38));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ret = page_decoder->next_batch(read_range, column3.get());
         ASSERT_TRUE(ret.ok());
         ASSERT_EQ(30, column3->size());

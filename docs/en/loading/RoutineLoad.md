@@ -6,6 +6,12 @@ keywords: ['Routine Load']
 # Load data using Routine Load
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+<<<<<<< HEAD
+=======
+import QSTip from '../_assets/commonMarkdown/quickstart-routine-load-tip.mdx'
+
+<QSTip />
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This topic introduces how to create a Routine Load job to stream Kafka messages (events) into StarRocks, and familiarizes you with some basic concepts about Routine Load.
 
@@ -112,7 +118,11 @@ DISTRIBUTED BY HASH(`order_id`);
 
 > **NOTICE**
 >
+<<<<<<< HEAD
 > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/data_distribution/Data_distribution.md#determine-the-number-of-buckets).
+=======
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #### Submit a Routine Load job
 
@@ -231,7 +241,11 @@ DISTRIBUTED BY HASH(`commodity_id`);
 
 > **NOTICE**
 >
+<<<<<<< HEAD
 > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/data_distribution/Data_distribution.md#determine-the-number-of-buckets).
+=======
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #### Submit a Routine Load job
 
@@ -293,7 +307,11 @@ Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
 
 #### Prepare a dataset
 
+<<<<<<< HEAD
 - **Avro schema**
+=======
+##### Avro schema
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 1. Create the following  Avro schema file `avro_schema.avsc`:
 
@@ -313,7 +331,11 @@ Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
 
 2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/cloud/current/get-started/schema-registry.html#create-a-schema).
 
+<<<<<<< HEAD
 - **Avro data**
+=======
+##### Avro data
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Prepare the Avro data and send it to the Kafka topic `topic_0`.
 
@@ -336,7 +358,11 @@ DISTRIBUTED BY HASH(`id`);
 
 > **NOTICE**
 >
+<<<<<<< HEAD
 > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/data_distribution/Data_distribution.md#determine-the-number-of-buckets).
+=======
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #### Submit a Routine Load job
 
@@ -386,7 +412,11 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 The data type mapping between the Avro data fields you want to load and the StarRocks table columns is as follows:
 
+<<<<<<< HEAD
 - **Primitive types**
+=======
+##### Primitive types
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 | Avro    | StarRocks |
 | ------- | --------- |
@@ -399,7 +429,11 @@ The data type mapping between the Avro data fields you want to load and the Star
 | bytes   | STRING    |
 | string  | STRING    |
 
+<<<<<<< HEAD
 - **Complex types**
+=======
+##### Complex types
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 | Avro           | StarRocks                                                    |
 | -------------- | ------------------------------------------------------------ |

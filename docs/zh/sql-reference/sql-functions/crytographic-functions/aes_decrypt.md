@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # aes_decrypt
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 使用 AES_128_ECB 算法将字符串 `str` 解密并返回一个二进制字符串。
 

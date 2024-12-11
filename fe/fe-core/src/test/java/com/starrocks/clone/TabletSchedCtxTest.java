@@ -47,6 +47,10 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TTabletSchedule;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -63,6 +67,10 @@ public class TabletSchedCtxTest {
     private static int PART_ID = 3;
     private static int INDEX_ID = 4;
     private static int SCHEMA_HASH = 5;
+<<<<<<< HEAD
+=======
+    private static int PH_PART_ID = 6;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     private static String TB_NAME = "test";
     private static List<Column> TB_BASE_SCHEMA = Lists.newArrayList(new Column("k1", ScalarType
@@ -104,20 +112,34 @@ public class TabletSchedCtxTest {
         be2.setDisks(ImmutableMap.copyOf(disks));
         be2.setAlive(true);
 
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be1);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be2);
+=======
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be1);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be2);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // tablet with single replica
         LocalTablet tablet = new LocalTablet(TABLET_ID_1);
         TabletMeta tabletMeta = new TabletMeta(DB_ID, TB_ID, PART_ID, INDEX_ID, SCHEMA_HASH, TStorageMedium.HDD);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentInvertedIndex().addTablet(TABLET_ID_1, tabletMeta);
         GlobalStateMgr.getCurrentInvertedIndex().
+=======
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(TABLET_ID_1, tabletMeta);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 addReplica(TABLET_ID_1, new Replica(50001, be1.getId(), 0, Replica.ReplicaState.NORMAL));
 
         // mock catalog
         MaterializedIndex baseIndex = new MaterializedIndex(TB_ID, MaterializedIndex.IndexState.NORMAL);
         DistributionInfo distributionInfo = new RandomDistributionInfo(32);
+<<<<<<< HEAD
         Partition partition = new Partition(PART_ID, TB_NAME, baseIndex, distributionInfo);
+=======
+        Partition partition = new Partition(PART_ID, PH_PART_ID, TB_NAME, baseIndex, distributionInfo);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         baseIndex.addTablet(tablet, tabletMeta);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(PART_ID, (short) 3);
@@ -130,6 +152,7 @@ public class TabletSchedCtxTest {
         olapTable.setIndexMeta(INDEX_ID, TB_NAME, TB_BASE_SCHEMA, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                 KeysType.AGG_KEYS);
         olapTable.addPartition(partition);
+<<<<<<< HEAD
         Database db = new Database();
         db.registerTableUnlocked(olapTable);
         GlobalStateMgr.getCurrentState().getIdToDb().put(DB_ID, db);
@@ -137,12 +160,25 @@ public class TabletSchedCtxTest {
         // prepare clusterLoadStatistic
         clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentSystemInfo(),
                 GlobalStateMgr.getCurrentInvertedIndex());
+=======
+        Database db = new Database(DB_ID, "");
+        db.registerTableUnlocked(olapTable);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(DB_ID, db);
+
+        // prepare clusterLoadStatistic
+        clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         clusterLoadStatistic.init();
 
         // mock tabletScheduler
         tabletScheduler = new TabletScheduler(stat);
         tabletScheduler.setLoadStatistic(clusterLoadStatistic);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentSystemInfo().getBackends().forEach(be -> {
+=======
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().forEach(be -> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             List<Long> pathHashes =
                     be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
             TabletScheduler.PathSlot slot = new TabletScheduler.PathSlot(pathHashes, Config.tablet_sched_slot_num_per_path);
@@ -153,33 +189,60 @@ public class TabletSchedCtxTest {
     @Test
     public void testSingleReplicaRecover() throws SchedException {
         // drop be1 and TABLET_ID_1 missing
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentSystemInfo().dropBackend(be1);
         clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentSystemInfo(),
                 GlobalStateMgr.getCurrentInvertedIndex());
+=======
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(be1);
+        clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         clusterLoadStatistic.init();
         tabletScheduler.setLoadStatistic(clusterLoadStatistic);
 
         LocalTablet missedTablet = new LocalTablet(TABLET_ID_1,
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentInvertedIndex().getReplicasByTabletId(TABLET_ID_1));
         TabletSchedCtx ctx =
                 new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
                         TABLET_ID_1, System.currentTimeMillis(), GlobalStateMgr.getCurrentSystemInfo());
+=======
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(TABLET_ID_1));
+        TabletSchedCtx ctx = new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PH_PART_ID, INDEX_ID,
+                TABLET_ID_1, System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ctx.setTablet(missedTablet);
         ctx.setStorageMedium(TStorageMedium.HDD);
 
         AgentBatchTask agentBatchTask = new AgentBatchTask();
         Config.recover_with_empty_tablet = false;
         SchedException schedException = Assert.assertThrows(SchedException.class, () -> tabletScheduler
+<<<<<<< HEAD
                 .handleTabletByTypeAndStatus(LocalTablet.TabletStatus.REPLICA_MISSING, ctx, agentBatchTask));
         Assert.assertEquals("unable to find source replica", schedException.getMessage());
 
         Config.recover_with_empty_tablet = true;
         tabletScheduler.handleTabletByTypeAndStatus(LocalTablet.TabletStatus.REPLICA_MISSING, ctx, agentBatchTask);
+=======
+                .handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask));
+        Assert.assertEquals("unable to find source replica", schedException.getMessage());
+
+        Config.recover_with_empty_tablet = true;
+        tabletScheduler.handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertEquals(1, agentBatchTask.getTaskNum());
 
         AgentTask recoverTask = agentBatchTask.getAllTasks().get(0);
         Assert.assertEquals(be2.getId(), recoverTask.getBackendId());
         Assert.assertEquals(TABLET_ID_1, recoverTask.getTabletId());
+<<<<<<< HEAD
+=======
+
+        TTabletSchedule res = ctx.toTabletScheduleThrift();
+        Assert.assertNotNull(res);
+        Assert.assertEquals(TABLET_ID_1, res.getTablet_id());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -229,7 +292,11 @@ public class TabletSchedCtxTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testChooseDestReplicaForVersionIncomplete() {        
+=======
+    public void testChooseDestReplicaForVersionIncomplete() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TabletMeta tabletMeta = new TabletMeta(DB_ID, TB_ID, PART_ID, INDEX_ID, SCHEMA_HASH, TStorageMedium.HDD);
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(TABLET_ID_2, tabletMeta);
         Replica replica1 = new Replica(50011, be1.getId(), 0, Replica.ReplicaState.NORMAL);
@@ -269,7 +336,11 @@ public class TabletSchedCtxTest {
             Assert.assertTrue(false);
         }
         Assert.assertEquals(be2.getId(), ctx.getDestBackendId());
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         replica2.updateVersionInfo(101, 120, 101);
         try {
             ctx.chooseDestReplicaForVersionIncomplete(backendsWorkingSlots);

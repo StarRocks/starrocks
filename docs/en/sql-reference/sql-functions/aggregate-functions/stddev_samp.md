@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # stddev_samp
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the sample standard deviation of an expression. Since v2.5.10, this function can also be used as a window function.
 

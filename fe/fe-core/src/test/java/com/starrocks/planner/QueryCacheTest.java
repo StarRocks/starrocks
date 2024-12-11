@@ -27,6 +27,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.plan.ExecPlan;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.util.Util;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TCacheParam;
 import com.starrocks.utframe.StarRocksAssert;
@@ -1550,7 +1554,11 @@ public class QueryCacheTest {
         Set<String> digests = planFragments.stream().map(optFrag -> optFrag
                         .map(PlanFragment::getCacheParam)
                         .map(TCacheParam::getDigest)
+<<<<<<< HEAD
                         .map(QueryCacheTest::toHexString))
+=======
+                        .map(Util::toHexString))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(Collectors.toSet());

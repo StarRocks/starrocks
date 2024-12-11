@@ -36,6 +36,10 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
@@ -50,7 +54,11 @@ import javax.annotation.Nullable;
 public class PartitionCommitInfo implements Writable {
 
     @SerializedName(value = "partitionId")
+<<<<<<< HEAD
     private long partitionId;
+=======
+    private long physicalPartitionId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "version")
     private long version;
 
@@ -63,15 +71,30 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "versionTime")
     private long versionTime;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "dataVersion")
+    private long dataVersion;
+
+    @SerializedName(value = "versionEpoch")
+    private long versionEpoch;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // For low cardinality string column with global dict
     // TODO(KKS): move invalidDictCacheColumns and validDictCacheColumns to TableCommitInfo
     // Currently, for support FE rollback, we persist the invalidDictCacheColumns in PartitionCommitInfo by json,
     // not TableCommitInfo.
 
     @SerializedName(value = "invalidColumns")
+<<<<<<< HEAD
     private List<String> invalidDictCacheColumns = Lists.newArrayList();
     @SerializedName(value = "validColumns")
     private List<String> validDictCacheColumns = Lists.newArrayList();
+=======
+    private List<ColumnId> invalidDictCacheColumns = Lists.newArrayList();
+    @SerializedName(value = "validColumns")
+    private List<ColumnId> validDictCacheColumns = Lists.newArrayList();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @SerializedName(value = "DictCollectedVersion")
     private List<Long> dictCollectedVersions = Lists.newArrayList();
 
@@ -79,23 +102,43 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
 
+<<<<<<< HEAD
+=======
+    private boolean isDoubleWrite = false;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public PartitionCommitInfo() {
 
     }
 
+<<<<<<< HEAD
     public PartitionCommitInfo(long partitionId, long version, long visibleTime) {
         super();
         this.partitionId = partitionId;
+=======
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime) {
+        super();
+        this.physicalPartitionId = physicalPartitionId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.version = version;
         this.versionTime = visibleTime;
     }
 
+<<<<<<< HEAD
     public PartitionCommitInfo(long partitionId, long version, long visibleTime,
                                List<String> invalidDictCacheColumns,
                                List<String> validDictCacheColumns,
                                List<Long> dictCollectedVersions) {
         super();
         this.partitionId = partitionId;
+=======
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime,
+                               List<ColumnId> invalidDictCacheColumns,
+                               List<ColumnId> validDictCacheColumns,
+                               List<Long> dictCollectedVersions) {
+        super();
+        this.physicalPartitionId = physicalPartitionId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.version = version;
         this.versionTime = visibleTime;
         this.invalidDictCacheColumns = invalidDictCacheColumns;
@@ -118,8 +161,13 @@ public class PartitionCommitInfo implements Writable {
         this.versionTime = time;
     }
 
+<<<<<<< HEAD
     public long getPartitionId() {
         return partitionId;
+=======
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public long getVersion() {
@@ -134,11 +182,43 @@ public class PartitionCommitInfo implements Writable {
         return versionTime;
     }
 
+<<<<<<< HEAD
     public List<String> getInvalidDictCacheColumns() {
         return invalidDictCacheColumns;
     }
 
     public List<String> getValidDictCacheColumns() {
+=======
+    public long getDataVersion() {
+        return dataVersion;
+    }
+
+    public void setDataVersion(long dataVersion) {
+        this.dataVersion = dataVersion;
+    }
+
+    public long getVersionEpoch() {
+        return versionEpoch;
+    }
+
+    public void setVersionEpoch(long versionEpoch) {
+        this.versionEpoch = versionEpoch;
+    }
+
+    public void setIsDoubleWrite(boolean isDoubleWrite) {
+        this.isDoubleWrite = isDoubleWrite;
+    }
+
+    public boolean isDoubleWrite() {
+        return isDoubleWrite;
+    }
+
+    public List<ColumnId> getInvalidDictCacheColumns() {
+        return invalidDictCacheColumns;
+    }
+
+    public List<ColumnId> getValidDictCacheColumns() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return validDictCacheColumns;
     }
 
@@ -158,10 +238,18 @@ public class PartitionCommitInfo implements Writable {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("partitionid=");
+<<<<<<< HEAD
         sb.append(partitionId);
         sb.append(", version=").append(version);
         sb.append(", versionHash=").append(0);
         sb.append(", versionTime=").append(versionTime);
+=======
+        sb.append(physicalPartitionId);
+        sb.append(", version=").append(version);
+        sb.append(", versionHash=").append(0);
+        sb.append(", versionTime=").append(versionTime);
+        sb.append(", isDoubleWrite=").append(isDoubleWrite);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return sb.toString();
     }
 }

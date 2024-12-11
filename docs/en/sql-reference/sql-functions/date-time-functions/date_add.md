@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_add,adddate
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Adds a specified time interval to a date.
 

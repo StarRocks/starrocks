@@ -22,7 +22,11 @@ import com.starrocks.journal.bdbje.BDBJEJournal;
 public class JournalFactory {
     public enum JournalType {
         BDB
+<<<<<<< HEAD
     };
+=======
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public static Journal create(String nodeName) throws JournalException, InterruptedException {
         JournalType type = JournalType.valueOf(Config.edit_log_type.toUpperCase());

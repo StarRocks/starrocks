@@ -12,16 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.server;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
+<<<<<<< HEAD
 import com.starrocks.common.util.StringUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
+=======
+import com.starrocks.common.util.SRStringUtils;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -92,9 +100,15 @@ public class ConcurrentDDLTest {
                 try {
                     System.out.println("start to create table");
                     starRocksAssert.withTable("create table test.test_tbl_" + Thread.currentThread().getId() +
+<<<<<<< HEAD
                             " (id int) duplicate key (id)" +
                             " distributed by hash(id) buckets 5183 " +
                             "properties(\"replication_num\"=\"1\", \"colocate_with\"=\"test_cg_001\");");
+=======
+                                " (id int) duplicate key (id)" +
+                                " distributed by hash(id) buckets 5183 " +
+                                "properties(\"replication_num\"=\"1\", \"colocate_with\"=\"test_cg_001\");");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     System.out.println("end to create table");
                 } catch (Exception e) {
                     throw new RuntimeException(e);
@@ -113,6 +127,7 @@ public class ConcurrentDDLTest {
             thread.join();
         }
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getServingState().getDb("test");
         Table table = db.getTable("test_tbl_" + threadIds.get(0));
 
@@ -126,6 +141,23 @@ public class ConcurrentDDLTest {
                     .map(id -> GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(id))
                     .map(replicaList -> replicaList.get(0).getBackendId())
                     .collect(Collectors.toList());
+=======
+        Database db = GlobalStateMgr.getServingState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_tbl_" + threadIds.get(0));
+
+        List<List<Long>> bucketSeq = GlobalStateMgr.getCurrentState().getColocateTableIndex().getBackendsPerBucketSeq(
+                    GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId()));
+        // check all created colocate tables has same tablet distribution as the bucket seq in colocate group
+        for (long threadId : threadIds) {
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_tbl_" + threadId);
+            List<Long> tablets = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition()
+                    .getBaseIndex().getTabletIdsInOrder();
+            List<Long> backendIdList = tablets.stream()
+                        .map(id -> GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(id))
+                        .map(replicaList -> replicaList.get(0).getBackendId())
+                        .collect(Collectors.toList());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.assertEquals(bucketSeq, backendIdList.stream().map(Arrays::asList).collect(Collectors.toList()));
         }
     }
@@ -133,6 +165,7 @@ public class ConcurrentDDLTest {
     @Test
     public void testConcurrentlyDropDbAndCreateTable() throws Exception {
         final String createTableSqlFormat =
+<<<<<<< HEAD
                 "CREATE TABLE IF NOT EXISTS concurrent_test_db.test_tbl_RRR(k1 int, k2 int, k3 int)" +
                         " distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         final String createViewSqlFormat = "CREATE VIEW IF NOT EXISTS concurrent_test_db.test_view_RRR" +
@@ -143,6 +176,20 @@ public class ConcurrentDDLTest {
 
         // run multi rounds to try to detect potential concurrency problems
         for (int round = 0; round < 5; round++) {
+=======
+                    "CREATE TABLE IF NOT EXISTS concurrent_test_db.test_tbl_RRR(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        final String createViewSqlFormat = "CREATE VIEW IF NOT EXISTS concurrent_test_db.test_view_RRR" +
+                    " as select k1,k2 from concurrent_test_db.base_t1;";
+        final String createMVSqlFormat = "CREATE MATERIALIZED VIEW IF NOT EXISTS" +
+                    " concurrent_test_db.test_mv_RRR DISTRIBUTED BY HASH(`k2`) REFRESH MANUAL" +
+                    " as select k2,k3 from concurrent_test_db.base_t1;";
+
+        final int NUM_ROUND = 1;
+
+        // run multi rounds to try to detect potential concurrency problems
+        for (int round = 0; round < NUM_ROUND; round++) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             System.out.println("round-" + round + " begin");
             AtomicBoolean stop = new AtomicBoolean(false);
 
@@ -155,17 +202,29 @@ public class ConcurrentDDLTest {
                         System.out.println("creating table and db time: " + times);
                         starRocksAssert.withDatabase("concurrent_test_db");
                         starRocksAssert.withTable(
+<<<<<<< HEAD
                                 "CREATE TABLE IF NOT EXISTS concurrent_test_db.base_t1(k1 int, k2 int, k3 int)" +
                                         " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+=======
+                                    "CREATE TABLE IF NOT EXISTS concurrent_test_db.base_t1(k1 int, k2 int, k3 int)" +
+                                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         int time = 300 + random.nextInt(100);
                         // sleep random time before dropping database
                         Thread.sleep(time);
                         System.out.println("dropping table and db");
+<<<<<<< HEAD
                         Database db = GlobalStateMgr.getCurrentState().getDb("concurrent_test_db");
                         ShowTableStmt showTableStmt =
                                 (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(
                                         "show tables from concurrent_test_db", connectContext);
                         ShowExecutor showExecutor = new ShowExecutor(connectContext, showTableStmt);
+=======
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("concurrent_test_db");
+                        ShowTableStmt showTableStmt =
+                                    (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                                                "show tables from concurrent_test_db", connectContext);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         starRocksAssert.dropDatabase("concurrent_test_db");
                         System.out.println("concurrent_test_db dropped");
                     } catch (Exception e) {
@@ -195,7 +254,11 @@ public class ConcurrentDDLTest {
                         } catch (InterruptedException e) {
                             throw new RuntimeException(e);
                         }
+<<<<<<< HEAD
                         String randomStr = StringUtils.generateRandomString(24);
+=======
+                        String randomStr = SRStringUtils.generateRandomString(24);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         int idx = time % 3;
                         String sql = null;
                         try {
@@ -252,9 +315,15 @@ public class ConcurrentDDLTest {
                     System.out.println("start to create table same_tbl");
                     try {
                         starRocksAssert.withTable("create table test.same_tbl " +
+<<<<<<< HEAD
                                 " (id int) duplicate key (id)" +
                                 " distributed by hash(id) buckets 5183 " +
                                 "properties(\"replication_num\"=\"1\", \"colocate_with\"=\"test_cg_001\");");
+=======
+                                    " (id int) duplicate key (id)" +
+                                    " distributed by hash(id) buckets 5183 " +
+                                    "properties(\"replication_num\"=\"1\", \"colocate_with\"=\"test_cg_001\");");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     } catch (Exception e) {
                         errorCount.incrementAndGet();
                     }

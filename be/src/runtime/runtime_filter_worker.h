@@ -15,6 +15,10 @@
 #pragma once
 
 #include <atomic>
+<<<<<<< HEAD
+=======
+#include <cstdint>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <map>
 #include <memory>
 #include <thread>
@@ -49,6 +53,10 @@ public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
     void add_listener(RuntimeFilterProbeDescriptor* rf_desc);
     void publish_runtime_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
+<<<<<<< HEAD
+=======
+    void publish_local_colocate_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // receiver runtime filter allocated in this fragment instance(broadcast join generate it)
     // or allocated in this query(shuffle join generate global runtime filter)
     void receive_runtime_filter(int32_t filter_id, const JoinRuntimeFilter* rf);
@@ -159,6 +167,17 @@ struct RuntimeFilterWorkerMetrics {
 
     void update_rf_bytes(EventType event_type, int64_t delta) { runtime_filter_bytes[event_type] += delta; }
 
+<<<<<<< HEAD
+=======
+    int64_t total_rf_bytes() {
+        int64_t total = 0;
+        for (int i = 0; i < EventType::MAX_COUNT; i++) {
+            total += runtime_filter_bytes[i];
+        }
+        return total;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::array<std::atomic_int64_t, EventType::MAX_COUNT> event_nums{};
     std::array<std::atomic_int64_t, EventType::MAX_COUNT> runtime_filter_bytes{};
 };
@@ -202,6 +221,11 @@ private:
                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,
                                       int64_t rpc_http_min_size);
 
+<<<<<<< HEAD
+=======
+    bool _reach_queue_limit();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
     ExecEnv* _exec_env;

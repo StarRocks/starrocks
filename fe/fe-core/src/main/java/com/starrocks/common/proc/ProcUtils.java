@@ -24,7 +24,11 @@ public class ProcUtils {
         try {
             return Long.parseLong(dbIdOrName);
         } catch (NumberFormatException e) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbIdOrName);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbIdOrName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (db == null) {
                 throw new AnalysisException("Unknown database id or name \"" + dbIdOrName + "\"");
             }

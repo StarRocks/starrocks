@@ -32,6 +32,11 @@ struct TCloudProperty {
 
 struct TCloudConfiguration {
     1: optional TCloudType cloud_type;
+<<<<<<< HEAD
     2: optional list<TCloudProperty> cloud_properties; // Deprecated
     3: optional map<string, string> cloud_properties_v2;
+=======
+    2: optional list<TCloudProperty> deprecated_cloud_properties; // Deprecated
+    3: optional map<string, string> cloud_properties;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

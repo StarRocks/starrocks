@@ -58,6 +58,12 @@ public:
 
     static Status traverse_rowset_metas(
             KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, std::string_view)> const& func);
+<<<<<<< HEAD
+=======
+
+    static Status get_rowset_meta_value(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id,
+                                        std::string* value);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

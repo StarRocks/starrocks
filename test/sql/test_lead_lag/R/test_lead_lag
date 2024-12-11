@@ -24,7 +24,10 @@ DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c3",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -137,4 +140,8 @@ select c0, lead(c6, 5, '2021-11-11') over() from common_duplicate;
 3	2021-11-11
 2	2021-11-11
 1	2021-11-11
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

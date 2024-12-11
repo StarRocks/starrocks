@@ -50,7 +50,11 @@ public:
     virtual Status seek(const Columns& keys, StateTableResult& values) const = 0;
 
     // Seek with selection, only seek values when selection's flag is true.
+<<<<<<< HEAD
     virtual Status seek(const Columns& keys, const std::vector<uint8_t>& selection, StateTableResult& values) const = 0;
+=======
+    virtual Status seek(const Columns& keys, const Filter& selection, StateTableResult& values) const = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // If `projection_columns` is not empty, only output all needed projection_columns in values.
     virtual Status seek(const Columns& keys, const std::vector<std::string>& projection_columns,

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Distance_Sphere
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算地球两点之间的球面距离，单位是「米」。
 

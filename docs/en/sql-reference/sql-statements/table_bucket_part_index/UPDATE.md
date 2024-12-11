@@ -16,7 +16,11 @@ When executing the UPDATE statement involving multiple tables, StarRocks convert
 
 ## Syntax
 
+<<<<<<< HEAD
 **Single-table UPDATE**
+=======
+### Single-table UPDATE
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 If the data rows of the table to be updated meet the WHERE condition, the specified columns of these data rows are assigned new values.
 
@@ -27,7 +31,11 @@ UPDATE <table_name>
     WHERE <where_condition>
 ```
 
+<<<<<<< HEAD
 **Multi-table UPDATE**
+=======
+### Multi-table UPDATE
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 The result set from the multi-table join is matched against the table to be updated. If the data rows of the table to be updated match the result set and meet the WHERE condition, the specified columns of these data rows are assigned new values.
 
@@ -74,8 +82,13 @@ The system variable `partial_update_mode` controls the mode of partial updates a
 - `auto` (default): The system automatically determines the mode of partial updates by analyzing the UPDATE statement and the columns involved. If the following criteria are met, the system automatically uses the column mode:
   - The percentage of updated columns compared to the total number of columns is less than 30%, and the number of updated columns is fewer than 4.
   - The update statement does not use a WHERE condition.
+<<<<<<< HEAD
 Otherwise, the system does not use the column mode.
 
+=======
+
+  Otherwise, the system does not use the column mode.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 - `column`: The column mode is used for the partial updates, which is particularly suitable for the partial updates which involve a small number of columns and a large number of rows.
 
 You can use `EXPLAIN UPDATE xxx` to view the mode of partial updates.

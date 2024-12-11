@@ -17,7 +17,11 @@
 
 package com.starrocks.fs;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -36,6 +40,7 @@ public class HdfsUtilTest {
             Assert.assertEquals("val1", columns.get(2));
 
             // invalid path
+<<<<<<< HEAD
             Assert.assertThrows(UserException.class, () ->
                     HdfsUtil.parseColumnsFromPath("invalid_path", Arrays.asList("key3", "key2", "key1")));
 
@@ -43,6 +48,15 @@ public class HdfsUtilTest {
             Assert.assertThrows(UserException.class, () ->
                     HdfsUtil.parseColumnsFromPath("hdfs://key1=val1/some_path/key3=val3/*", Arrays.asList("key3", "key2", "key1")));
         } catch (UserException e) {
+=======
+            Assert.assertThrows(StarRocksException.class, () ->
+                    HdfsUtil.parseColumnsFromPath("invalid_path", Arrays.asList("key3", "key2", "key1")));
+
+            // missing key of columns from path
+            Assert.assertThrows(StarRocksException.class, () ->
+                    HdfsUtil.parseColumnsFromPath("hdfs://key1=val1/some_path/key3=val3/*", Arrays.asList("key3", "key2", "key1")));
+        } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.fail(e.getMessage());
         }
     }

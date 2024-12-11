@@ -14,23 +14,39 @@
 
 package com.starrocks.alter;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.TableName;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.InternalCatalog;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Table;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
@@ -46,7 +62,12 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.AlterClause;
+=======
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.AlterTableStmt;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -116,7 +137,11 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         KeysType keysType = KeysType.DUP_KEYS;
         db = new Database(dbId, "db0");
 
+<<<<<<< HEAD
         Database oldDb = GlobalStateMgr.getCurrentState().getIdToDb().putIfAbsent(db.getId(), db);
+=======
+        Database oldDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().putIfAbsent(db.getId(), db);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Assert.assertNull(oldDb);
 
         Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
@@ -126,7 +151,11 @@ public class LakeTableAlterDataCachePartitionDurationTest {
 
         table = new LakeTable(tableId, "t0", Collections.singletonList(c0), keysType, partitionInfo, dist);
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, "t0", index, dist);
+=======
+        Partition partition = new Partition(partitionId, partitionId + 100, "t0", index, dist);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TStorageMedium storage = TStorageMedium.HDD;
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
         for (int i = 0; i < NUM_BUCKETS; i++) {
@@ -172,10 +201,36 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "7 months");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+<<<<<<< HEAD
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
         List<AlterClause> alterList = Collections.singletonList(modify);
         alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+=======
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return table;
+            }
+        };
+
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                Lists.newArrayList(modify)
+        ), connectContext);
+
+        //SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        //List<AlterClause> alterList = Collections.singletonList(modify);
+        //alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
         Assert.assertEquals("7 months", TimeUtils.toHumanReadableString(
@@ -188,10 +243,32 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "2 days");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+<<<<<<< HEAD
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
         List<AlterClause> alterList = Collections.singletonList(modify);
         alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+=======
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return table;
+            }
+        };
+
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                Lists.newArrayList(modify)
+        ), connectContext);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
         Assert.assertEquals("2 days", TimeUtils.toHumanReadableString(
@@ -204,10 +281,31 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "4 hours");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+<<<<<<< HEAD
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
         List<AlterClause> alterList = Collections.singletonList(modify);
         alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return table;
+            }
+        };
+
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                Lists.newArrayList(modify)
+        ), connectContext);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
         Assert.assertEquals("4 hours", TimeUtils.toHumanReadableString(

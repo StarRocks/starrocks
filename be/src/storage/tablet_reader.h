@@ -26,6 +26,10 @@
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader_params.h"
+<<<<<<< HEAD
+=======
+#include "storage/tablet_schema.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -33,16 +37,32 @@ class ColumnPredicate;
 
 class TabletReader final : public ChunkIterator {
 public:
+<<<<<<< HEAD
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema);
     // *captured_rowsets* is captured forward before creating TabletReader.
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
                  const std::vector<RowsetSharedPtr>& captured_rowsets);
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                  RowSourceMaskBuffer* mask_buffer);
+=======
+    TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
+                 const TabletSchemaCSPtr& tablet_schema = nullptr);
+    // *captured_rowsets* is captured forward before creating TabletReader.
+    TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
+                 std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaCSPtr* tablet_schema = nullptr);
+    TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
+                 RowSourceMaskBuffer* mask_buffer, const TabletSchemaCSPtr& tablet_schema = nullptr);
+    TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaCSPtr& tablet_schema, Schema schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ~TabletReader() override { close(); }
 
     void set_is_asc_hint(bool is_asc) { _is_asc_hint = is_asc; }
 
+<<<<<<< HEAD
+=======
+    void set_use_gtid(bool use_gtid) { _use_gtid = use_gtid; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status prepare();
 
     // Precondition: the last method called must have been `prepare()`.
@@ -59,7 +79,11 @@ public:
 
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
 
+<<<<<<< HEAD
     static Status parse_seek_range(const TabletSharedPtr& tablet,
+=======
+    static Status parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                    TabletReaderParams::RangeStartOperation range_start_op,
                                    TabletReaderParams::RangeEndOperation range_end_op,
                                    const std::vector<OlapTuple>& range_start_key,
@@ -78,12 +102,23 @@ private:
     Status _init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
     Status _init_collector(const TabletReaderParams& read_params);
 
+<<<<<<< HEAD
     static Status _to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                  MemPool* mempool);
 
     Status _init_collector_for_pk_index_read();
 
     TabletSharedPtr _tablet;
+=======
+    static Status _to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
+                                 MemPool* mempool);
+
+    Status _init_collector_for_pk_index_read();
+    Status _init_compaction_column_paths(const TabletReaderParams& read_params);
+
+    TabletSharedPtr _tablet;
+    TabletSchemaCSPtr _tablet_schema;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Version _version;
     // version of delete predicates, equal as _version by default
     // _delete_predicates_version will be set as max_version of tablet in schema change
@@ -92,7 +127,10 @@ private:
     MemPool _mempool;
     ObjectPool _obj_pool;
 
+<<<<<<< HEAD
     PredicateMap _pushdown_predicates;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;
 
@@ -109,6 +147,11 @@ private:
     // used for pk index based pointer read
     const TabletReaderParams* _reader_params = nullptr;
     bool _is_asc_hint = true;
+<<<<<<< HEAD
+=======
+
+    bool _use_gtid = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

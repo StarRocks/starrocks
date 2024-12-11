@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # convert_tz
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将给定的时间转化为另一个时区的时间。
 

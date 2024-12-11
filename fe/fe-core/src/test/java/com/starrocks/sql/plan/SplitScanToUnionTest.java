@@ -18,7 +18,11 @@ import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.rewrite.scalar.FilterSelectivityEvaluator;
+<<<<<<< HEAD
 import com.starrocks.statistic.MockTPCHHistogramStatisticStorage;
+=======
+import com.starrocks.statistic.MockHistogramStatisticStorage;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
@@ -45,7 +49,11 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
 
         int scale = 100;
+<<<<<<< HEAD
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCHHistogramStatisticStorage(scale));
+=======
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @ParameterizedTest

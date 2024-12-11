@@ -18,13 +18,17 @@ import com.google.common.base.Enums;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.CastExpr;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -33,13 +37,29 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+=======
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.CompressionUtils;
+import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.PlanMode;
+import com.starrocks.datacache.DataCachePopulateMode;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants;
+<<<<<<< HEAD
 import com.starrocks.qe.VariableMgr;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -94,7 +114,12 @@ public class SetStmtAnalyzer {
 
         if (unResolvedExpression == null) {
             // SET var = DEFAULT
+<<<<<<< HEAD
             resolvedExpression = new StringLiteral(VariableMgr.getDefaultValue(var.getVariable()));
+=======
+            resolvedExpression = new StringLiteral(GlobalStateMgr.getCurrentState().getVariableMgr().
+                    getDefaultValue(var.getVariable()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else if (unResolvedExpression instanceof SlotRef) {
             resolvedExpression = new StringLiteral(((SlotRef) unResolvedExpression).getColumnName());
         } else {
@@ -141,11 +166,19 @@ public class SetStmtAnalyzer {
 
             if (variable.equalsIgnoreCase(SessionVariable.EXEC_MEM_LIMIT)) {
                 resolvedExpression = new StringLiteral(
+<<<<<<< HEAD
                         Long.toString(ParseUtil.analyzeDataVolumn(resolvedExpression.getStringValue())));
                 checkRangeLongVariable(resolvedExpression, SessionVariable.EXEC_MEM_LIMIT,
                         SessionVariable.MIN_EXEC_MEM_LIMIT, null);
             }
         } catch (UserException e) {
+=======
+                        Long.toString(ParseUtil.analyzeDataVolume(resolvedExpression.getStringValue())));
+                checkRangeLongVariable(resolvedExpression, SessionVariable.EXEC_MEM_LIMIT,
+                        SessionVariable.MIN_EXEC_MEM_LIMIT, null);
+            }
+        } catch (StarRocksException e) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throw new SemanticException(e.getMessage());
         }
 
@@ -158,6 +191,14 @@ public class SetStmtAnalyzer {
                     1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
         }
 
+<<<<<<< HEAD
+=======
+        if (variable.equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.INSERT_TIMEOUT,
+                    1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (variable.equalsIgnoreCase(SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT, 1L, null);
         }
@@ -197,7 +238,12 @@ public class SetStmtAnalyzer {
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ)) {
+<<<<<<< HEAD
             checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
+=======
+            checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L,
+                    null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.CHOOSE_EXECUTE_INSTANCES_MODE)) {
@@ -210,19 +256,57 @@ public class SetStmtAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {
             String baseType = resolvedExpression.getStringValue();
             if (!baseType.equalsIgnoreCase(SessionVariableConstants.VARCHAR) &&
                     !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL)) {
                 throw new SemanticException(String.format("Unsupported cbo_eq_base_type: %s, " +
                         "supported list is {varchar, decimal}", baseType));
+=======
+        if (variable.equalsIgnoreCase(SessionVariable.COMPUTATION_FRAGMENT_SCHEDULING_POLICY)) {
+            String policy = resolvedExpression.getStringValue();
+            SessionVariableConstants.ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy =
+                    Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                            StringUtils.upperCase(policy)).orNull();
+            if (computationFragmentSchedulingPolicy == null) {
+                String supportedList = Joiner.on(",").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+                throw new SemanticException(String.format("Unsupported computation_fragment_scheduling_policy: %s, " +
+                        "supported list is %s", policy, supportedList));
+            }
+        }
+
+        // materialized_view_rewrite_mode
+        if (variable.equalsIgnoreCase(SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE)) {
+            String rewriteModeName = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.MaterializedViewRewriteMode.class, rewriteModeName)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class), ",");
+                throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
+                        "supported list is %s", rewriteModeName, supportedList));
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {
+            String baseType = resolvedExpression.getStringValue();
+            if (!baseType.equalsIgnoreCase(SessionVariableConstants.VARCHAR) &&
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL) &&
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DOUBLE)) {
+                throw new SemanticException(String.format("Unsupported cbo_eq_base_type: %s, " +
+                        "supported list is {varchar, decimal, double}", baseType));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 
         // follower_query_forward_mode
         if (variable.equalsIgnoreCase(SessionVariable.FOLLOWER_QUERY_FORWARD_MODE)) {
             String queryFollowerForwardMode = resolvedExpression.getStringValue();
+<<<<<<< HEAD
             if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class, queryFollowerForwardMode)) {
+=======
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class,
+                    queryFollowerForwardMode)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 String supportedList = StringUtils.join(
                         EnumUtils.getEnumList(SessionVariable.FollowerQueryForwardMode.class), ",");
                 throw new SemanticException(String.format("Unsupported follower query forward mode: %s, " +
@@ -230,6 +314,7 @@ public class SetStmtAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         // big_query_profile_threshold
         if (variable.equalsIgnoreCase(SessionVariable.BIG_QUERY_PROFILE_THRESHOLD)) {
             String timeStr = resolvedExpression.getStringValue();
@@ -239,6 +324,8 @@ public class SetStmtAnalyzer {
             }
         }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // query_debug_options
         if (variable.equalsIgnoreCase(SessionVariable.QUERY_DEBUG_OPTIONS)) {
             String queryDebugOptions = resolvedExpression.getStringValue();
@@ -265,6 +352,52 @@ public class SetStmtAnalyzer {
             checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT,
                     1, null);
         }
+<<<<<<< HEAD
+=======
+        // big_query_profile_threshold
+        if (variable.equalsIgnoreCase(SessionVariable.BIG_QUERY_PROFILE_THRESHOLD)) {
+            String timeStr = resolvedExpression.getStringValue();
+            TimeValue timeValue = TimeValue.parseTimeValue(timeStr, null);
+            if (timeValue == null) {
+                throw new SemanticException(String.format("failed to parse time value %s", timeStr));
+            }
+        }
+        // catalog
+        if (variable.equalsIgnoreCase(SessionVariable.CATALOG)) {
+            String catalog = resolvedExpression.getStringValue();
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalog)) {
+                throw new SemanticException(String.format("Unknown catalog %s", catalog));
+            }
+        }
+        // connector sink compression codec
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_COMPRESSION_CODEC)) {
+            String codec = resolvedExpression.getStringValue();
+            if (CompressionUtils.getConnectorSinkCompressionType(codec).isEmpty()) {
+                throw new SemanticException(String.format("Unsupported compression codec %s." +
+                        " Use any of (uncompressed, snappy, lz4, zstd, gzip)", codec));
+            }
+        }
+        // check plan mode
+        if (variable.equalsIgnoreCase(SessionVariable.PLAN_MODE)) {
+            PlanMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        // check populate datacache mode
+        if (variable.equalsIgnoreCase(SessionVariable.POPULATE_DATACACHE_MODE)) {
+            DataCachePopulateMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        // count_distinct_implementation
+        if (variable.equalsIgnoreCase(SessionVariable.COUNT_DISTINCT_IMPLEMENTATION)) {
+            String rewriteModeName = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariableConstants.CountDistinctImplMode.class, rewriteModeName)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariableConstants.CountDistinctImplMode.class), ",");
+                throw new SemanticException(String.format("Unsupported count distinct implementation mode: %s, " +
+                        "supported list is %s", rewriteModeName, supportedList));
+            }
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         var.setResolvedExpression(resolvedExpression);
     }
@@ -307,6 +440,7 @@ public class SetStmtAnalyzer {
         }
     }
 
+<<<<<<< HEAD
     private static void analyzeUserVariable(UserVariable var) {
         if (var.getVariable().length() > 64) {
             throw new SemanticException("User variable name '" + var.getVariable() + "' is illegal");
@@ -349,6 +483,12 @@ public class SetStmtAnalyzer {
                 var.setUnevaluatedExpression(subquery);
             }
         }
+=======
+    public static void analyzeUserVariable(UserVariable var) {
+        if (var.getVariable().length() > 64) {
+            throw new SemanticException("User variable name '" + var.getVariable() + "' is illegal");
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private static void analyzeSetUserPropertyVar(SetUserPropertyVar setUserPropertyVar) {
@@ -390,6 +530,7 @@ public class SetStmtAnalyzer {
     }
 
     private static void analyzeSetPassVar(SetPassVar var, ConnectContext session) {
+<<<<<<< HEAD
         try {
             UserIdentity userIdentity = var.getUserIdent();
             if (userIdentity == null) {
@@ -401,6 +542,76 @@ public class SetStmtAnalyzer {
 
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
+=======
+        UserIdentity userIdentity = var.getUserIdent();
+        if (userIdentity == null) {
+            userIdentity = session.getCurrentUserIdentity();
+        }
+        userIdentity.analyze();
+        var.setUserIdent(userIdentity);
+        var.setPasswdBytes(MysqlPassword.checkPassword(var.getPasswdParam()));
+    }
+
+    private static boolean checkUserVariableType(Type type) {
+        if (type.isArrayType()) {
+            ArrayType arrayType = (ArrayType) type;
+            PrimitiveType itemPrimitiveType = arrayType.getItemType().getPrimitiveType();
+            if (itemPrimitiveType == PrimitiveType.BOOLEAN ||
+                    itemPrimitiveType.isDateType() || itemPrimitiveType.isNumericType() ||
+                    itemPrimitiveType.isCharFamily()) {
+                return true;
+            }
+        } else if (type.isScalarType()) {
+            PrimitiveType primitiveType = type.getPrimitiveType();
+            if (primitiveType == PrimitiveType.BOOLEAN ||
+                    primitiveType.isDateType() || primitiveType.isNumericType() ||
+                    primitiveType.isCharFamily() || primitiveType.isJsonType()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static void calcuteUserVariable(UserVariable userVariable) {
+        Expr expression = userVariable.getUnevaluatedExpression();
+        if (expression instanceof NullLiteral) {
+            userVariable.setEvaluatedExpression(NullLiteral.create(Type.STRING));
+        } else {
+            Expr foldedExpression;
+            foldedExpression = Expr.analyzeAndCastFold(expression);
+
+            if (foldedExpression.isLiteral()) {
+                userVariable.setEvaluatedExpression(foldedExpression);
+            } else {
+                SelectList selectList = new SelectList(Lists.newArrayList(
+                        new SelectListItem(userVariable.getUnevaluatedExpression(), null)), false);
+
+                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.STRING));
+                List<List<Expr>> rows = new ArrayList<>();
+                rows.add(row);
+                ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));
+                valuesRelation.setNullValues(true);
+
+                SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, null, null, null);
+                QueryStatement queryStatement = new QueryStatement(selectRelation);
+                Analyzer.analyze(queryStatement, ConnectContext.get());
+
+                Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
+
+                Type type = variableResult.getType();
+                // can not apply to metric types or complex type except array type
+                if (!checkUserVariableType(type)) {
+                    throw new SemanticException("Can't set variable with type " + variableResult.getType());
+                }
+
+                ((SelectRelation) queryStatement.getQueryRelation()).getSelectList().getItems()
+                        .set(0, new SelectListItem(variableResult, null));
+                Subquery subquery = new Subquery(queryStatement);
+                subquery.setType(variableResult.getType());
+                userVariable.setUnevaluatedExpression(subquery);
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 }

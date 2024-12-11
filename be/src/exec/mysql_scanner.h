@@ -40,6 +40,10 @@
 #include <vector>
 
 #include "common/status.h"
+<<<<<<< HEAD
+=======
+#include "util/slice.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #ifndef __StarRocksMysql
 #define __StarRocksMysql void

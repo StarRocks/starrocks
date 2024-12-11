@@ -94,6 +94,7 @@ private:
     std::vector<const FieldConverter*> _converters;
 };
 
+<<<<<<< HEAD
 class ChunkConverter {
 public:
     ChunkConverter() = default;
@@ -109,4 +110,6 @@ private:
     std::vector<const FieldConverter*> _converters;
 };
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

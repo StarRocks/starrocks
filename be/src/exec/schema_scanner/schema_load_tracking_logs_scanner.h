@@ -29,11 +29,21 @@ public:
 
 private:
     Status fill_chunk(ChunkPtr* chunk);
+<<<<<<< HEAD
 
     int64_t _start_ts;
     RuntimeState* _state;
     int _cur_idx = 0;
     TGetLoadsResult _result;
+=======
+    void _fill_tracking_msg(std::string url);
+
+    std::vector<std::string> _tracking_msg_vec;
+    int64_t _start_ts;
+    RuntimeState* _state;
+    int _cur_idx = 0;
+    TGetTrackingLoadsResult _result;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
 

@@ -56,6 +56,11 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     set(SOURCE_FILES ${SOURCE_FILES} atomicops-internals-x86.cc)
 endif()
 
+<<<<<<< HEAD
+=======
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 add_library(Gutil STATIC ${SOURCE_FILES})
 
 set_target_properties(Gutil PROPERTIES COMPILE_FLAGS "-funsigned-char -Wno-deprecated -Wno-char-subscripts")

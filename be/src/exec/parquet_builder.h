@@ -44,8 +44,13 @@ class ParquetBuilder : public FileBuilder {
 public:
     ParquetBuilder(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
+<<<<<<< HEAD
                    const std::vector<ExprContext*>& output_expr_ctxs, int64_t row_group_max_size,
                    int64_t max_file_size);
+=======
+                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t row_group_max_size, int64_t max_file_size,
+                   RuntimeState* state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     ~ParquetBuilder() override = default;
 

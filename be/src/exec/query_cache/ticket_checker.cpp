@@ -13,8 +13,17 @@
 // limitations under the License.
 
 #include "exec/query_cache/ticket_checker.h"
+<<<<<<< HEAD
 namespace starrocks::query_cache {
 void TicketChecker::enter(TicketIdType id, bool is_last) {
+=======
+
+#include <mutex>
+
+namespace starrocks::query_cache {
+void TicketChecker::enter(TicketIdType id, bool is_last) {
+    std::lock_guard<SpinLock> require_lock(_lock);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto [it, _] = _tickets.try_emplace(id, id, 0);
     Ticket& ticket = it->second;
     ticket.data += 1L;
@@ -22,6 +31,10 @@ void TicketChecker::enter(TicketIdType id, bool is_last) {
 }
 
 bool TicketChecker::leave(TicketIdType id) {
+<<<<<<< HEAD
+=======
+    std::lock_guard<SpinLock> require_lock(_lock);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto it = _tickets.find(id);
     DCHECK(it != _tickets.end());
     Ticket& ticket = it->second;
@@ -33,10 +46,36 @@ bool TicketChecker::leave(TicketIdType id) {
 }
 
 bool TicketChecker::are_all_ready(TicketIdType id) {
+<<<<<<< HEAD
+=======
+    std::lock_guard<SpinLock> require_lock(_lock);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto it = _tickets.find(id);
     DCHECK(it != _tickets.end());
     Ticket& ticket = it->second;
     return (ticket.data & ALL_READY_BIT) != 0L;
 }
 
+<<<<<<< HEAD
+=======
+bool TicketChecker::are_all_left(TicketIdType id) {
+    std::lock_guard<SpinLock> require_lock(_lock);
+    auto it = _tickets.find(id);
+    DCHECK(it != _tickets.end());
+    Ticket& ticket = it->second;
+    bool is_all_enter = (ticket.data & ALL_READY_BIT) == ALL_READY_BIT;
+    int64_t enter_count = ticket.data & ENTER_COUNT_BITS;
+    int64_t leave_count = (ticket.data & LEAVE_COUNT_BITS) >> LEAVE_COUNT_SHIFT;
+    return is_all_enter && (enter_count == leave_count);
+}
+
+void TicketChecker::more_tickets(TicketIdType id) {
+    std::lock_guard<SpinLock> require_lock(_lock);
+    auto it = _tickets.find(id);
+    DCHECK(it != _tickets.end());
+    Ticket& ticket = it->second;
+    ticket.data &= ~ALL_READY_BIT;
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks::query_cache

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # approx_count_distinct
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the approximate value of aggregate function similar to the result of COUNT(DISTINCT col).
 

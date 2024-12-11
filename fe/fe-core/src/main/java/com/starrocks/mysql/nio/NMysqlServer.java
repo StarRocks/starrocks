@@ -35,6 +35,10 @@ package com.starrocks.mysql.nio;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.NetUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.mysql.MysqlServer;
 import com.starrocks.qe.ConnectScheduler;
 import org.apache.logging.log4j.LogManager;
@@ -47,7 +51,10 @@ import org.xnio.XnioWorker;
 import org.xnio.channels.AcceptingChannel;
 
 import java.io.IOException;
+<<<<<<< HEAD
 import java.net.InetSocketAddress;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.concurrent.ExecutorService;
 import javax.net.ssl.SSLContext;
 
@@ -82,9 +89,21 @@ public class NMysqlServer extends MysqlServer {
     @Override
     public boolean start() {
         try {
+<<<<<<< HEAD
             server = xnioWorker.createStreamConnectionServer(new InetSocketAddress(port),
                     acceptListener,
                     OptionMap.create(Options.TCP_NODELAY, true, Options.BACKLOG, Config.mysql_nio_backlog_num));
+=======
+            OptionMap optionMap = OptionMap.builder()
+                    .set(Options.TCP_NODELAY, true)
+                    .set(Options.BACKLOG, Config.mysql_nio_backlog_num)
+                    .set(Options.KEEP_ALIVE, Config.mysql_service_nio_enable_keep_alive)
+                    .getMap();
+
+            server = xnioWorker.createStreamConnectionServer(NetUtils.getSockAddrBasedOnCurrIpVersion(port),
+                    acceptListener,
+                    optionMap);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             server.resumeAccepts();
             running = true;
             LOG.info("Open mysql server success on {}", port);

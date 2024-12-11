@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # concat
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 This function combines multiple strings. If any of the parameter value is NULL, it will return NULL.
 

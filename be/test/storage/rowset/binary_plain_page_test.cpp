@@ -99,17 +99,28 @@ public:
 
         size = 1024;
         auto column1 = BinaryColumn::create();
+<<<<<<< HEAD
         page_decoder.seek_to_position_in_page(2);
+=======
+        ASSERT_OK(page_decoder.seek_to_position_in_page(2));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         status = page_decoder.next_batch(&size, column1.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(1, size);
         ASSERT_EQ("StarRocks", column1->get_data()[0]);
 
         auto column2 = BinaryColumn::create();
+<<<<<<< HEAD
         page_decoder.seek_to_position_in_page(0);
         SparseRange read_range;
         read_range.add(Range(0, 1));
         read_range.add(Range(2, 3));
+=======
+        ASSERT_OK(page_decoder.seek_to_position_in_page(0));
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, 1));
+        read_range.add(Range<>(2, 3));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         status = page_decoder.next_batch(read_range, column2.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(2, column2->size());
@@ -161,12 +172,20 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
     }
 
     auto column = BinaryColumn::create();
+<<<<<<< HEAD
     SparseRange range(0, 5);
+=======
+    SparseRange<> range(0, 5);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_OK(decoder.next_batch(range, column.get()));
     ASSERT_EQ(column->debug_string(), "['first value', 'second value', 'third value', 'fourth value', 'fifth value']");
 
     ASSERT_OK(decoder.seek_to_position_in_page(0));
+<<<<<<< HEAD
     ASSERT_OK(decoder.next_batch(SparseRange(0, 1), column.get()));
+=======
+    ASSERT_OK(decoder.next_batch(SparseRange<>(0, 1), column.get()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_EQ(column->debug_string(),
               "['first value', 'second value', 'third value', 'fourth value', 'fifth value', 'first value']");
 }

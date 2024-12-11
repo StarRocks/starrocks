@@ -21,6 +21,10 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.ImageWriter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -103,7 +107,11 @@ public class MaterializedViewMgr {
             LOG.info("Replay MV maintenance jobs: {}", job);
         } catch (Exception e) {
             LOG.warn("Replay MV maintenance job failed: {}", job);
+<<<<<<< HEAD
             LOG.warn(e);
+=======
+            LOG.warn("Failed to replay MV maintenance job", e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -120,7 +128,11 @@ public class MaterializedViewMgr {
             LOG.info("Replay MV epoch: {}", job);
         } catch (Exception e) {
             LOG.warn("Replay MV epoch failed: {}", epoch);
+<<<<<<< HEAD
             LOG.warn(e);
+=======
+            LOG.warn("Failed to replay MV epoch", e);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -287,10 +299,17 @@ public class MaterializedViewMgr {
         List<MVMaintenanceJob> jobList;
     }
 
+<<<<<<< HEAD
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int numJson = 1 + jobMap.size();
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.MATERIALIZED_VIEW_MGR, numJson);
         writer.writeJson(jobMap.size());
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        int numJson = 1 + jobMap.size();
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.MATERIALIZED_VIEW_MGR, numJson);
+        writer.writeInt(jobMap.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (MVMaintenanceJob mvMaintenanceJob : jobMap.values()) {
             writer.writeJson(mvMaintenanceJob);
         }
@@ -299,13 +318,21 @@ public class MaterializedViewMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+<<<<<<< HEAD
         int numJson = reader.readInt();
         for (int i = 0; i < numJson; ++i) {
             MVMaintenanceJob mvMaintenanceJob = reader.readJson(MVMaintenanceJob.class);
+=======
+        reader.readCollection(MVMaintenanceJob.class, mvMaintenanceJob -> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // NOTE: job's view is not serialized, cannot use it directly!
             MvId mvId = new MvId(mvMaintenanceJob.getDbId(), mvMaintenanceJob.getViewId());
             mvMaintenanceJob.restore();
             jobMap.put(mvId, mvMaintenanceJob);
+<<<<<<< HEAD
         }
+=======
+        });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

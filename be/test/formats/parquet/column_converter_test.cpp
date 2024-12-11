@@ -44,6 +44,11 @@ protected:
 
     HdfsScannerContext* _create_scan_context() {
         auto* ctx = _pool.add(new HdfsScannerContext());
+<<<<<<< HEAD
+=======
+        auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ctx->timezone = "Asia/Shanghai";
         ctx->stats = &g_hdfs_scan_stats;
         return ctx;
@@ -81,9 +86,16 @@ protected:
 
         Utils::SlotDesc slot_descs[] = {{col_name, col_type}, {""}};
 
+<<<<<<< HEAD
         ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
         Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
         ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+=======
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
+        ctx->scan_range = (_create_scan_range(filepath));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // --------------finish init context---------------
 
         Status status = file_reader->init(ctx);
@@ -92,7 +104,11 @@ protected:
             return;
         }
         if (!status.ok()) {
+<<<<<<< HEAD
             std::cout << status.get_error_msg() << std::endl;
+=======
+            std::cout << status.message() << std::endl;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         ASSERT_TRUE(status.ok());
 
@@ -112,7 +128,11 @@ protected:
             chunk->reset();
             status = file_reader->get_next(&chunk);
             if (!status.ok() && !status.is_end_of_file()) {
+<<<<<<< HEAD
                 std::cout << status.get_error_msg() << std::endl;
+=======
+                std::cout << status.message() << std::endl;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             }
             check_chunk_values(chunk, expected_value);
@@ -366,14 +386,22 @@ TEST_F(ColumnConverterTest, Int64Test) {
         const std::string col_name = "time_micros";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
+<<<<<<< HEAD
             check(file_path, col_type, col_name, "[5]", expected_rows, true);
+=======
+            check(file_path, col_type, col_name, "[3600]", expected_rows);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     {
         const std::string col_name = "time_nanos";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
+<<<<<<< HEAD
             check(file_path, col_type, col_name, "[5]", expected_rows, true);
+=======
+            check(file_path, col_type, col_name, "[3.6e+06]", expected_rows);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     {
@@ -566,4 +594,8 @@ TEST_F(ColumnConverterTest, Int64_2_Timestamp) {
         }
     }
 }
+<<<<<<< HEAD
 } // namespace starrocks::parquet
+=======
+} // namespace starrocks::parquet
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

@@ -29,7 +29,11 @@ Optional:
 
 Other:
 
+<<<<<<< HEAD
 [Stream Load](../../docs/loading/StreamLoad.md)
+=======
+[Stream Load](../../docs/en/loading/StreamLoad.md)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ### Warn
 

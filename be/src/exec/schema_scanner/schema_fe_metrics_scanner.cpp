@@ -30,10 +30,17 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaFeMetricsScanner::_s_columns[] = {
+<<<<<<< HEAD
         {"FE_ID", TYPE_VARCHAR, sizeof(StringValue), false},
         {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"LABELS", TYPE_VARCHAR, sizeof(StringValue), false},
         {"VALUE", TYPE_BIGINT, sizeof(int64_t), false},
+=======
+        {"FE_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LABELS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VALUE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 SchemaFeMetricsScanner::SchemaFeMetricsScanner()
@@ -42,7 +49,11 @@ SchemaFeMetricsScanner::SchemaFeMetricsScanner()
 SchemaFeMetricsScanner::~SchemaFeMetricsScanner() = default;
 
 Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
+<<<<<<< HEAD
     for (TFrontend frontend : _param->frontends) {
+=======
+    for (const TFrontend& frontend : _param->frontends) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::string metrics;
         std::string url = "http://" + frontend.ip + ":" + SimpleItoa(frontend.http_port) + "/metrics?type=json";
         auto timeout = state->query_options().query_timeout * 1000 / 2;
@@ -53,7 +64,11 @@ Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
             return Status::OK();
         };
         RETURN_IF_ERROR(HttpClient::execute_with_retry(2 /* retry times */, 1 /* sleep interval */, mmetrics_cb));
+<<<<<<< HEAD
         VLOG(1) << "metrics: " << metrics;
+=======
+        VLOG(2) << "metrics: " << metrics;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         simdjson::ondemand::parser parser;
         simdjson::padded_string json_metrics(metrics);
@@ -66,7 +81,11 @@ Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
             std::ostringstream oss;
             oss << simdjson::to_json_string(json_metric["tags"]);
             info.labels = oss.str();
+<<<<<<< HEAD
             VLOG(1) << "id: " << info.id << "name: " << info.name << ", labels: " << info.labels
+=======
+            VLOG(2) << "id: " << info.id << "name: " << info.name << ", labels: " << info.labels
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     << ", value: " << info.value;
         }
     }

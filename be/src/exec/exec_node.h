@@ -244,8 +244,18 @@ public:
 
     static void may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id);
 
+<<<<<<< HEAD
     const std::vector<ExecNode*>& children() const { return _children; }
 
+=======
+    void set_children(std::vector<ExecNode*>&& children) { _children = std::move(children); }
+
+    const std::vector<ExecNode*>& children() const { return _children; }
+
+    static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
+                                         const DescriptorTbl& descs, ExecNode** node);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 protected:
     friend class DataSink;
 
@@ -296,9 +306,12 @@ protected:
     /// Valid to call in or after Prepare().
     bool is_in_subplan() const { return false; }
 
+<<<<<<< HEAD
     static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
                                          const DescriptorTbl& descs, ExecNode** node);
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vector<TPlanNode>& tnodes,
                                      const DescriptorTbl& descs, ExecNode* parent, int* node_idx, ExecNode** root);
 

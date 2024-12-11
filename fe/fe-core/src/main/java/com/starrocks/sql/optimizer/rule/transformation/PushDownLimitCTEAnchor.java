@@ -37,7 +37,11 @@ public class PushDownLimitCTEAnchor extends TransformationRule {
         OptExpression anchor = input.inputAt(0);
 
         // push down to right child
+<<<<<<< HEAD
         OptExpression nl = new OptExpression(new LogicalLimitOperator(limit.getLimit(), limit.getOffset(), limit.getPhase()));
+=======
+        OptExpression nl = new OptExpression(limit);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         nl.getInputs().add(anchor.getInputs().get(1));
         anchor.getInputs().set(1, nl);
 

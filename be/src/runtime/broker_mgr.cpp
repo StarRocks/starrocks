@@ -45,6 +45,10 @@
 #include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
+<<<<<<< HEAD
+=======
+#include "util/thrift_rpc_helper.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
@@ -81,6 +85,7 @@ void BrokerMgr::ping(const TNetworkAddress& addr) {
     request.__set_clientId(_client_id);
 
     TBrokerOperationStatus response;
+<<<<<<< HEAD
     try {
         Status status;
         // 500ms is enough
@@ -102,6 +107,15 @@ void BrokerMgr::ping(const TNetworkAddress& addr) {
         }
     } catch (apache::thrift::TException& e) {
         LOG(WARNING) << "Broker ping failed, broker:" << addr << " failed:" << e.what();
+=======
+    Status rpc_status;
+
+    // 500ms is enough
+    rpc_status = ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+            addr, [&response, &request](BrokerServiceConnection& client) { client->ping(response, request); }, 500);
+    if (!rpc_status.ok()) {
+        LOG(WARNING) << "Broker ping failed, broker:" << addr << " failed:" << rpc_status;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }
 

@@ -894,7 +894,11 @@ public class AnalyzeDecimalV3Test {
             Assert.assertEquals(items.get(0).getType(), ScalarType.DOUBLE);
             Assert.assertEquals(items.get(1).getType(),
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+<<<<<<< HEAD
             Assert.assertEquals(items.get(2).getType(), ScalarType.DOUBLE);
+=======
+            Assert.assertEquals(items.get(2).getType(), ScalarType.FLOAT);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             Assert.assertEquals(items.get(3).getType(), ScalarType.createDecimalV3NarrowestType(3, 2));
             Assert.assertEquals(items.get(4).getType(), ScalarType.createDecimalV3TypeForZero(1));
         }

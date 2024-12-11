@@ -16,11 +16,20 @@
 package com.starrocks.sql.optimizer.base;
 
 import com.google.common.base.Objects;
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
+=======
+import com.google.common.collect.Sets;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.Group;
+import com.starrocks.sql.optimizer.GroupExpression;
+import org.apache.commons.collections4.CollectionUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -29,6 +38,7 @@ public class CTEProperty implements PhysicalProperty {
     // All cteID will be passed from top to bottom, and prune plan when meet CTENoOp node with same CTEid 
     private final Set<Integer> cteIds;
 
+<<<<<<< HEAD
     public static final CTEProperty EMPTY = new CTEProperty(ImmutableSet.of());
 
     public CTEProperty(Set<Integer> cteIds) {
@@ -37,6 +47,18 @@ public class CTEProperty implements PhysicalProperty {
 
     public CTEProperty() {
         this.cteIds = Sets.newHashSet();
+=======
+    public static CTEProperty createProperty(Set<Integer> cteIds) {
+        if (CollectionUtils.isEmpty(cteIds)) {
+            return EmptyCTEProperty.INSTANCE;
+        } else {
+            return new CTEProperty(cteIds);
+        }
+    }
+
+    protected CTEProperty(Set<Integer> cteIds) {
+        this.cteIds = cteIds;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public CTEProperty(int cteId) {
@@ -47,6 +69,7 @@ public class CTEProperty implements PhysicalProperty {
         return cteIds;
     }
 
+<<<<<<< HEAD
     public CTEProperty removeCTE(int cteID) {
         CTEProperty p = new CTEProperty();
         p.getCteIds().addAll(this.cteIds);
@@ -54,14 +77,19 @@ public class CTEProperty implements PhysicalProperty {
         return p;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isEmpty() {
         return cteIds.isEmpty();
     }
 
+<<<<<<< HEAD
     public void merge(CTEProperty other) {
         this.cteIds.addAll(other.cteIds);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public boolean isSatisfy(PhysicalProperty other) {
         return true;
@@ -69,8 +97,12 @@ public class CTEProperty implements PhysicalProperty {
 
     @Override
     public GroupExpression appendEnforcers(Group child) {
+<<<<<<< HEAD
         Preconditions.checkState(false, "It's impassible enforce CTE property");
         return null;
+=======
+        throw new StarRocksPlannerException("cannot enforce cte property", ErrorType.INTERNAL_ERROR);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_map
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 array_map() 是支持 Lambda 表达式的高阶函数。用于将输入的 `arr1`，`arr2` 等数组按照 `lambda_function` 进行转换，输出一个新的数组。有关 Lambda 表达式的详细信息，参见 [Lambda expression](../Lambda_expression.md)。该函数从 2.5 版本开始支持。
 

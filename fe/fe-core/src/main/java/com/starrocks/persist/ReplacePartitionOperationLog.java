@@ -44,16 +44,35 @@ public class ReplacePartitionOperationLog implements Writable {
     private boolean strictRange;
     @SerializedName(value = "useTempPartitionName")
     private boolean useTempPartitionName;
+<<<<<<< HEAD
 
     public ReplacePartitionOperationLog(long dbId, long tblId, List<String> partitionNames,
                                         List<String> tempPartitonNames, boolean strictRange,
                                         boolean useTempPartitionName) {
+=======
+    @SerializedName(value = "unPartitionedTable")
+    private boolean unPartitionedTable;
+
+    public ReplacePartitionOperationLog(long dbId, long tblId, List<String> partitionNames,
+                                        List<String> tempPartitonNames, boolean strictRange,
+                                        boolean useTempPartitionName, boolean unPartitionedTable) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.dbId = dbId;
         this.tblId = tblId;
         this.partitions = partitionNames;
         this.tempPartitions = tempPartitonNames;
         this.strictRange = strictRange;
         this.useTempPartitionName = useTempPartitionName;
+<<<<<<< HEAD
+=======
+        this.unPartitionedTable = unPartitionedTable;
+    }
+
+    public ReplacePartitionOperationLog(long dbId, long tblId, List<String> partitionNames,
+                                        List<String> tempPartitonNames, boolean strictRange,
+                                        boolean useTempPartitionName) {
+        this(dbId, tblId, partitionNames, tempPartitonNames, strictRange, useTempPartitionName, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public long getDbId() {
@@ -80,6 +99,13 @@ public class ReplacePartitionOperationLog implements Writable {
         return useTempPartitionName;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isUnPartitionedTable() {
+        return unPartitionedTable;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static ReplacePartitionOperationLog read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, ReplacePartitionOperationLog.class);

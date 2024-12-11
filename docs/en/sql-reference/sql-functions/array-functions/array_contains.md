@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_contains
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Checks whether the array contains a certain element. If yes, it returns 1; otherwise, it returns 0.
 

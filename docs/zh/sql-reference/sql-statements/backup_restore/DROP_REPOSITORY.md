@@ -7,7 +7,11 @@ keywords: ['beifen']
 
 ## 功能
 
+<<<<<<< HEAD
 删除一个仓库。仓库用于 [备份和恢复](../../../administration/management/Backup_and_restore.md) 数据库数据。
+=======
+删除一个仓库。仓库用于 备份和恢复 数据库数据。
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 > **注意**
 >

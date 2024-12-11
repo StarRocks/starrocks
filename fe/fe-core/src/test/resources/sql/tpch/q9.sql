@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     nation,
@@ -31,6 +32,8 @@ group by
 order by
     nation,
     o_year desc ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])

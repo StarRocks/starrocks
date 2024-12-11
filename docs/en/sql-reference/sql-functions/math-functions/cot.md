@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # cot
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the cotangent of the angle in radians `x`. If the angle in radians `x` is `0` or `NULL`, `NULL` is returned.
 

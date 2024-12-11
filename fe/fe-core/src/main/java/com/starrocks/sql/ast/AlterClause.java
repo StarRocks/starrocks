@@ -15,13 +15,19 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
 import java.util.Map;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // Alter clause.
 public abstract class AlterClause implements ParseNode {
 
@@ -34,10 +40,13 @@ public abstract class AlterClause implements ParseNode {
         this.opType = opType;
     }
 
+<<<<<<< HEAD
     public Map<String, String> getProperties() {
         return Maps.newHashMap();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public AlterOpType getOpType() {
         return opType;
     }

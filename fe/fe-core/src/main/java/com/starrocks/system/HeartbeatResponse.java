@@ -45,6 +45,10 @@ import java.io.IOException;
 
 /**
  * This the superclass of all kinds of heartbeat response
+<<<<<<< HEAD
+=======
+ * Wrapper the heartbeat RPC response to a HeartbeatResponse instance and do further processing
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
  */
 public class HeartbeatResponse implements Writable {
     public enum Type {

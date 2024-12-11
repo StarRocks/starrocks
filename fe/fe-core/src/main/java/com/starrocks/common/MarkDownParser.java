@@ -79,7 +79,11 @@ public class MarkDownParser {
         state = ParseState.START;
     }
 
+<<<<<<< HEAD
     public Map<String, Map<String, String>> parse() throws UserException {
+=======
+    public Map<String, Map<String, String>> parse() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         while (nextToRead < lines.size()) {
             Map.Entry<String, String> keyValue = parseOneItem();
             if (keyValue == null) {
@@ -94,7 +98,11 @@ public class MarkDownParser {
                         state = ParseState.PARSED_H1;
                     } else {
                         // State error
+<<<<<<< HEAD
                         throw new UserException("Head first read is not h1.");
+=======
+                        throw new StarRocksException("Head first read is not h1.");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     }
                     break;
                 case PARSED_H1:
@@ -107,7 +115,11 @@ public class MarkDownParser {
                         keyValues.put(keyValue.getKey(), keyValue.getValue());
                         state = ParseState.PARSED_H2;
                     } else {
+<<<<<<< HEAD
                         throw new UserException("Unknown head level.");
+=======
+                        throw new StarRocksException("Unknown head level.");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     }
                     break;
                 case PARSED_H2:
@@ -126,7 +138,11 @@ public class MarkDownParser {
                     break;
                 default:
                     // State error
+<<<<<<< HEAD
                     throw new UserException("Unknown parse state.");
+=======
+                    throw new StarRocksException("Unknown parse state.");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
 

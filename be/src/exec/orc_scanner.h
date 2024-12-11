@@ -40,7 +40,11 @@ public:
     void close() override;
 
 private:
+<<<<<<< HEAD
     Status _next_orc_batch(ChunkPtr* result);
+=======
+    StatusOr<ChunkPtr> _next_orc_batch();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     StatusOr<ChunkPtr> _next_orc_chunk();
 

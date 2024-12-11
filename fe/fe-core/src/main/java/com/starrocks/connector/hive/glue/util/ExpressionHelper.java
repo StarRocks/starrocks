@@ -206,7 +206,11 @@ public final class ExpressionHelper {
     }
 
     private static boolean isQuotedType(String type) {
+<<<<<<< HEAD
         return QUOTED_TYPES.contains(type);
+=======
+        return QUOTED_TYPES.contains(type) || type.startsWith("varchar");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public static String replaceDoubleQuoteWithSingleQuotes(String s) {

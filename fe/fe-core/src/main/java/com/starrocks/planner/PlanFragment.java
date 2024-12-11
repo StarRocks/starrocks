@@ -39,6 +39,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
@@ -46,22 +51,46 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TCacheParam;
+<<<<<<< HEAD
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TGlobalDict;
+=======
+import com.starrocks.thrift.TDataSink;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TGlobalDict;
+import com.starrocks.thrift.TGroupExecutionParam;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections4.MapUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.roaringbitmap.RoaringBitmap;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.Comparator;
+=======
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.LinkedList;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+<<<<<<< HEAD
+=======
+import java.util.function.Consumer;
+import java.util.function.Function;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -138,6 +167,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // default value is 1
     protected int parallelExecNum = 1;
     protected int pipelineDop = 1;
+<<<<<<< HEAD
+=======
+    protected boolean dopEstimated = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Whether to assign scan ranges to each driver sequence of pipeline,
     // for the normal backend assignment (not colocate, bucket, and replicated join).
@@ -150,6 +183,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newHashMap();
 
     protected List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
+<<<<<<< HEAD
+=======
+    protected Map<Integer, Expr> queryGlobalDictExprs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     protected List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
 
     private final Set<Integer> runtimeFilterBuildNodeIds = Sets.newHashSet();
@@ -157,11 +194,27 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private TCacheParam cacheParam = null;
     private boolean hasOlapTableSink = false;
     private boolean hasIcebergTableSink = false;
+<<<<<<< HEAD
+=======
+    private boolean hasHiveTableSink = false;
+    private boolean hasTableFunctionTableSink = false;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private boolean forceSetTableSinkDop = false;
     private boolean forceAssignScanRangesPerDriverSeq = false;
 
     private boolean useRuntimeAdaptiveDop = false;
 
+<<<<<<< HEAD
+=======
+    private boolean isShortCircuit = false;
+
+    // Controls whether group execution is used for plan fragment execution.
+    private List<ExecGroup> colocateExecGroups = Lists.newArrayList();
+
+    private List<Integer> collectExecStatsIds;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -275,6 +328,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.pipelineDop = dop;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean hasTableSink() {
+        return hasIcebergTableSink() || hasOlapTableSink() || hasHiveTableSink() || hasTableFunctionTableSink();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean hasOlapTableSink() {
         return this.hasOlapTableSink;
     }
@@ -291,6 +351,25 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.hasIcebergTableSink = true;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean hasHiveTableSink() {
+        return this.hasHiveTableSink;
+    }
+
+    public void setHasHiveTableSink() {
+        this.hasHiveTableSink = true;
+    }
+
+    public boolean hasTableFunctionTableSink() {
+        return this.hasTableFunctionTableSink;
+    }
+
+    public void setHasTableFunctionTableSink() {
+        this.hasTableFunctionTableSink = true;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean forceSetTableSinkDop() {
         return this.forceSetTableSinkDop;
     }
@@ -307,6 +386,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.withLocalShuffle |= withLocalShuffle;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isUseGroupExecution() {
+        return !colocateExecGroups.isEmpty();
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isAssignScanRangesPerDriverSeq() {
         return assignScanRangesPerDriverSeq;
     }
@@ -342,6 +428,34 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void assignColocateExecGroups(PlanNode root, List<ExecGroup> groups) {
+        for (ExecGroup group : groups) {
+            if (group.contains(root)) {
+                colocateExecGroups.add(group);
+                groups.remove(group);
+                break;
+            }
+        }
+        if (!groups.isEmpty()) {
+            for (PlanNode child : root.getChildren()) {
+                if (child.getFragment() == this) {
+                    assignColocateExecGroups(child, groups);
+                }
+            }
+        }
+    }
+
+    public boolean isColocateGroupFragment() {
+        return colocateExecGroups.size() > 0;
+    }
+
+    public boolean isDopEstimated() {
+        return dopEstimated;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setOutputExprs(List<Expr> outputExprs) {
         this.outputExprs = Expr.cloneList(outputExprs, null);
     }
@@ -372,6 +486,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+<<<<<<< HEAD
     /**
      * Return the number of nodes on which the plan fragment will execute.
      * invalid: -1
@@ -380,10 +495,23 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return dataPartition == DataPartition.UNPARTITIONED ? 1 : planRoot.getNumNodes();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public int getParallelExecNum() {
         return parallelExecNum;
     }
 
+<<<<<<< HEAD
+=======
+    public List<Integer> getCollectExecStatsIds() {
+        return collectExecStatsIds;
+    }
+
+    public void setCollectExecStatsIds(List<Integer> collectExecStatsIds) {
+        this.collectExecStatsIds = collectExecStatsIds;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public TPlanFragment toThrift() {
         TPlanFragment result = new TPlanFragment();
         if (planRoot != null) {
@@ -400,6 +528,15 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (!queryGlobalDicts.isEmpty()) {
             result.setQuery_global_dicts(dictToThrift(queryGlobalDicts));
         }
+<<<<<<< HEAD
+=======
+        if (MapUtils.isNotEmpty(queryGlobalDictExprs)) {
+            Preconditions.checkState(!queryGlobalDicts.isEmpty(), "Global dict expression error!");
+            Map<Integer, TExpr> exprs = Maps.newHashMap();
+            queryGlobalDictExprs.forEach((k, v) -> exprs.put(k, v.treeToThrift()));
+            result.setQuery_global_dict_exprs(exprs);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (!loadGlobalDicts.isEmpty()) {
             result.setLoad_global_dicts(dictToThrift(loadGlobalDicts));
         }
@@ -412,6 +549,18 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
             result.setCache_param(cacheParam);
         }
+<<<<<<< HEAD
+=======
+
+        if (!colocateExecGroups.isEmpty()) {
+            TGroupExecutionParam tGroupExecutionParam = new TGroupExecutionParam();
+            tGroupExecutionParam.setEnable_group_execution(true);
+            for (ExecGroup colocateExecGroup : colocateExecGroups) {
+                tGroupExecutionParam.addToExec_groups(colocateExecGroup.toThrift());
+            }
+            result.setGroup_execution_param(tGroupExecutionParam);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return result;
     }
 
@@ -482,9 +631,21 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                     .collect(Collectors.joining(" | ")));
 
         }
+<<<<<<< HEAD
 
         str.append(outputBuilder);
         str.append("\n");
+=======
+        str.append(outputBuilder);
+        str.append("\n");
+        if (!colocateExecGroups.isEmpty() && Config.show_execution_groups) {
+            str.append("  colocate exec groups: ");
+            for (ExecGroup group : colocateExecGroups) {
+                str.append(group);
+            }
+            str.append("\n");
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         str.append("  PARTITION: ").append(dataPartition.getExplainString(explainLevel)).append("\n");
         if (sink != null) {
             str.append(sink.getExplainString("  ", explainLevel)).append("\n");
@@ -498,6 +659,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public String getVerboseExplain() {
         StringBuilder str = new StringBuilder();
         Preconditions.checkState(dataPartition != null);
+<<<<<<< HEAD
         StringBuilder outputBuilder = new StringBuilder();
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
@@ -505,11 +667,37 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                     .collect(Collectors.joining(" | ")));
         }
         str.append(outputBuilder.toString());
+=======
+        if (FeConstants.showFragmentCost) {
+            str.append("  Fragment Cost: ").append(fragmentCost).append("\n");
+        }
+        if (!colocateExecGroups.isEmpty() && Config.show_execution_groups) {
+            str.append("  colocate exec groups: ");
+            for (ExecGroup group : colocateExecGroups) {
+                str.append(group);
+            }
+            str.append("\n");
+        }
+        if (CollectionUtils.isNotEmpty(outputExprs)) {
+            str.append("  Output Exprs:");
+            str.append(outputExprs.stream().map(Expr::toSql)
+                    .collect(Collectors.joining(" | ")));
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         str.append("\n");
         str.append("  Input Partition: ").append(dataPartition.getExplainString(TExplainLevel.NORMAL));
         if (sink != null) {
             str.append(sink.getVerboseExplain("  ")).append("\n");
         }
+<<<<<<< HEAD
+=======
+        if (MapUtils.isNotEmpty(queryGlobalDictExprs)) {
+            str.append("  Global Dict Exprs:\n");
+            queryGlobalDictExprs.entrySet().stream()
+                    .map(p -> "    " + p.getKey() + ": " + p.getValue().toMySql() + "\n").forEach(str::append);
+            str.append("\n");
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (planRoot != null) {
             str.append(planRoot.getVerboseExplain("  ", "  "));
         }
@@ -525,7 +713,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             outputBuilder.append(outputExprs.stream().map(Expr::toSql)
                     .collect(Collectors.joining(" | ")));
         }
+<<<<<<< HEAD
         str.append(outputBuilder);
+=======
+        str.append(outputBuilder.toString());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         str.append("\n");
         str.append("  Input Partition: ").append(dataPartition.getExplainString(TExplainLevel.NORMAL));
         if (sink != null) {
@@ -566,6 +758,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return dataPartition;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isGatherFragment() {
+        return getDataPartition() == DataPartition.UNPARTITIONED;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setOutputPartition(DataPartition outputPartition) {
         this.outputPartition = outputPartition;
     }
@@ -593,6 +792,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.sink = sink;
     }
 
+<<<<<<< HEAD
+=======
+    public TDataSink sinkToThrift() {
+        return sink != null ? sink.toThrift() : null;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public PlanFragmentId getFragmentId() {
         return fragmentId;
     }
@@ -660,6 +866,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return this.queryGlobalDicts;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<Integer, Expr> getQueryGlobalDictExprs() {
+        return queryGlobalDictExprs;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<Pair<Integer, ColumnDict>> getLoadGlobalDicts() {
         return this.loadGlobalDicts;
     }
@@ -676,6 +889,21 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void mergeQueryDictExprs(Map<Integer, Expr> queryGlobalDictExprs) {
+        if (this.queryGlobalDictExprs != queryGlobalDictExprs) {
+            Map<Integer, Expr> n = Maps.newHashMap(MapUtils.emptyIfNull(this.queryGlobalDictExprs));
+            n.putAll(MapUtils.emptyIfNull(queryGlobalDictExprs));
+            this.queryGlobalDictExprs = n;
+        }
+    }
+
+    public void setQueryGlobalDictExprs(Map<Integer, Expr> queryGlobalDictExprs) {
+        this.queryGlobalDictExprs = queryGlobalDictExprs;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void setLoadGlobalDicts(
             List<Pair<Integer, ColumnDict>> loadGlobalDicts) {
         this.loadGlobalDicts = loadGlobalDicts;
@@ -705,8 +933,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.cacheParam = cacheParam;
     }
 
+<<<<<<< HEAD
     public int getNumOlapScanNodes() {
         int numOlapScanNodes = 0;
+=======
+    public Map<PlanNodeId, ScanNode> collectScanNodes() {
+        Map<PlanNodeId, ScanNode> scanNodes = Maps.newHashMap();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Queue<PlanNode> queue = Lists.newLinkedList();
         queue.add(planRoot);
         while (!queue.isEmpty()) {
@@ -715,16 +948,59 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             if (node instanceof ExchangeNode) {
                 continue;
             }
+<<<<<<< HEAD
             if (node instanceof OlapScanNode) {
                 numOlapScanNodes++;
+=======
+            if (node instanceof ScanNode) {
+                scanNodes.put(node.getId(), (ScanNode) node);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
 
             queue.addAll(node.getChildren());
         }
 
+<<<<<<< HEAD
         return numOlapScanNodes;
     }
 
+=======
+        return scanNodes;
+    }
+
+    public boolean isUnionFragment() {
+        Deque<PlanNode> dq = new LinkedList<>();
+        dq.offer(planRoot);
+
+        while (!dq.isEmpty()) {
+            PlanNode nd = dq.poll();
+
+            if (nd instanceof UnionNode) {
+                return true;
+            }
+            if (!(nd instanceof ExchangeNode)) {
+                dq.addAll(nd.getChildren());
+            }
+        }
+        return false;
+    }
+
+    public ArrayList<Expr> getOutputExprs() {
+        return outputExprs;
+    }
+
+    public boolean isShortCircuit() {
+        return isShortCircuit;
+    }
+
+    public void setShortCircuit(boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
+    }
+
+    /**
+     * Returns the leftmost node of the fragment.
+     */
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public PlanNode getLeftMostNode() {
         PlanNode node = planRoot;
         while (!node.getChildren().isEmpty() && !(node instanceof ExchangeNode)) {
@@ -733,6 +1009,25 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return node;
     }
 
+<<<<<<< HEAD
+=======
+    public void reset() {
+        // Do nothing.
+    }
+
+    public void disablePhysicalPropertyOptimize() {
+        colocateExecGroups.clear();
+        forEachNode(planRoot, PlanNode::disablePhysicalPropertyOptimize);
+    }
+
+    private void forEachNode(PlanNode root, Consumer<PlanNode> consumer) {
+        consumer.accept(root);
+        for (PlanNode child : root.getChildren()) {
+            forEachNode(child, consumer);
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private RoaringBitmap collectNonBroadcastRfIds(PlanNode root) {
         RoaringBitmap filterIds = root.getChildren().stream()
                 .filter(child -> child.getFragmentId().equals(root.getFragmentId()))

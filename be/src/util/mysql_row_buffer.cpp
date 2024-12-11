@@ -43,6 +43,10 @@
 
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
+<<<<<<< HEAD
+=======
+#include "types/large_int_value.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/mysql_global.h"
 
 namespace starrocks {
@@ -77,7 +81,21 @@ static uint8_t* pack_vlen(uint8_t* packet, uint64_t length) {
     return packet + 8;
 }
 
+<<<<<<< HEAD
 void MysqlRowBuffer::push_null() {
+=======
+void MysqlRowBuffer::push_null(bool is_binary_protocol) {
+    if (is_binary_protocol) {
+        uint offset = (_field_pos + 2) / 8 + 1;
+        uint bit = (1 << ((_field_pos + 2) & 7));
+        /* Room for this as it's allocated start_binary_row*/
+        char* to = _data.data() + offset;
+        *to = (char)((uchar)*to | (uchar)bit);
+        update_field_pos();
+        return;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (_array_level == 0) {
         _data.push_back(0xfb);
     } else {
@@ -87,8 +105,52 @@ void MysqlRowBuffer::push_null() {
 }
 
 template <typename T>
+<<<<<<< HEAD
 void MysqlRowBuffer::push_number(T data) {
     static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, __int128>);
+=======
+void MysqlRowBuffer::push_number_binary_format(T data) {
+    if constexpr (std::is_same_v<T, float>) {
+        char buff[4];
+        float4store(buff, data);
+        _data.append(buff, 4);
+    } else if constexpr (std::is_same_v<T, double>) {
+        char buff[8];
+        float8store(buff, data);
+        _data.append(buff, 8);
+    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int8_t>) {
+        char buff[1];
+        int1store(buff, data);
+        _data.append(buff, 1);
+    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int16_t>) {
+        char buff[2];
+        int2store(buff, data);
+        _data.append(buff, 2);
+    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int32_t>) {
+        char buff[4];
+        int4store(buff, data);
+        _data.append(buff, 4);
+    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int64_t>) {
+        char buff[8];
+        int8store(buff, data);
+        _data.append(buff, 8);
+    } else if constexpr (std::is_same_v<std::make_signed_t<T>, __int128>) {
+        std::string value = LargeIntValue::to_string(data);
+        _push_string_normal(value.data(), value.size());
+    } else {
+        CHECK(false) << "unhandled data type";
+    }
+}
+
+template <typename T>
+void MysqlRowBuffer::push_number(T data, bool is_binary_protocol) {
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, __int128>);
+
+    if (is_binary_protocol) {
+        return push_number_binary_format(data);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int length = 0;
     char* end = nullptr;
     char* pos = nullptr;
@@ -166,6 +228,56 @@ void MysqlRowBuffer::push_decimal(const Slice& s) {
     }
 }
 
+<<<<<<< HEAD
+=======
+void MysqlRowBuffer::push_date(const DateValue& data, bool is_binary_protocol) {
+    if (is_binary_protocol) {
+        int y, m, d;
+        data.to_date(&y, &m, &d);
+        char buff[5];
+        // first pos store the length
+        buff[0] = 4;
+        buff[1] = (uint8_t)y;
+        buff[2] = (uint8_t)(y >> 8);
+        buff[3] = m;
+        buff[4] = d;
+        _data.append(buff, 5);
+    } else {
+        std::string s = data.to_string();
+        push_string(s.data(), s.size());
+    }
+}
+
+void MysqlRowBuffer::push_timestamp(const TimestampValue& data, bool is_binary_protocol) {
+    if (is_binary_protocol) {
+        int y, m, d, h, min, s, u;
+        data.to_timestamp(&y, &m, &d, &h, &min, &s, &u);
+        char buff[8];
+        // first pos store the length
+        buff[0] = u == 0 ? 7 : 11;
+        buff[1] = (uint8_t)y;
+        buff[2] = (uint8_t)(y >> 8);
+        buff[3] = m;
+        buff[4] = d;
+        buff[5] = h;
+        buff[6] = min;
+        buff[7] = s;
+        _data.append(buff, 8);
+        if (u > 0) {
+            char micro[4];
+            micro[0] = (uint8_t)u;
+            micro[1] = (uint8_t)(u >> 8);
+            micro[2] = (uint8_t)(u >> 16);
+            micro[3] = (uint8_t)(u >> 24);
+            _data.append(micro, 4);
+        }
+    } else {
+        std::string s = data.to_string();
+        push_string(s.data(), s.size());
+    }
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void MysqlRowBuffer::_enter_scope(char c) {
     if (++_array_level == 1) {
         // Leave one space for storing the string length.
@@ -240,6 +352,7 @@ void MysqlRowBuffer::_push_string_normal(const char* str, size_t length) {
     _data.resize(pos - _data.data());
 }
 
+<<<<<<< HEAD
 template void MysqlRowBuffer::push_number<int8_t>(int8_t);
 template void MysqlRowBuffer::push_number<int16_t>(int16_t);
 template void MysqlRowBuffer::push_number<int32_t>(int32_t);
@@ -251,6 +364,27 @@ template void MysqlRowBuffer::push_number<uint64_t>(uint64_t);
 template void MysqlRowBuffer::push_number<__int128>(__int128);
 template void MysqlRowBuffer::push_number<float>(float);
 template void MysqlRowBuffer::push_number<double>(double);
+=======
+template void MysqlRowBuffer::push_number<int8_t>(int8_t, bool);
+template void MysqlRowBuffer::push_number<int16_t>(int16_t, bool);
+template void MysqlRowBuffer::push_number<int32_t>(int32_t, bool);
+template void MysqlRowBuffer::push_number<int64_t>(int64_t, bool);
+template void MysqlRowBuffer::push_number<uint8_t>(uint8_t, bool);
+template void MysqlRowBuffer::push_number<uint16_t>(uint16_t, bool);
+template void MysqlRowBuffer::push_number<uint32_t>(uint32_t, bool);
+template void MysqlRowBuffer::push_number<uint64_t>(uint64_t, bool);
+template void MysqlRowBuffer::push_number<__int128>(__int128, bool);
+template void MysqlRowBuffer::push_number<float>(float, bool);
+template void MysqlRowBuffer::push_number<double>(double, bool);
+
+void MysqlRowBuffer::start_binary_row(uint32_t num_cols) {
+    DCHECK(_is_binary_format) << "start_binary_row() only for is_binary_format=true";
+    int bit_fields = (num_cols + 9) / 8;
+    char* pos = _resize_extra(bit_fields + 1);
+    memset(pos, 0, 1 + bit_fields);
+    _field_pos = 0;
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 } // namespace starrocks
 

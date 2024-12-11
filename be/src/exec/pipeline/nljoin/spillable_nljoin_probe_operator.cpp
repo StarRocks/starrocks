@@ -20,6 +20,10 @@
 
 #include "common/statusor.h"
 #include "exec/spill/common.h"
+<<<<<<< HEAD
+=======
+#include "exec/spill/options.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exec/spill/spiller_factory.h"
 
 namespace starrocks::pipeline {
@@ -125,7 +129,13 @@ Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     _accumulator.set_desired_size(state->chunk_size());
     RETURN_IF_ERROR(_prober.prepare(state, _unique_metrics.get()));
     _spill_factory = std::make_shared<spill::SpillerFactory>();
+<<<<<<< HEAD
     _spiller = _spill_factory->create({});
+=======
+    spill::SpilledOptions opts;
+    opts.wg = state->fragment_ctx()->workgroup();
+    _spiller = _spill_factory->create(opts);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     _cross_join_context->incr_prober();
     return Status::OK();
@@ -180,7 +190,11 @@ StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state)
     TRACE_SPILL_LOG << "pull_chunk:" << _driver_sequence;
     RETURN_IF_ERROR(_spiller->task_status());
     if (_prober.probe_finished() || _build_chunk == nullptr || _build_chunk->is_empty()) {
+<<<<<<< HEAD
         auto chunk_st = _chunk_stream->get_next(state, _executor());
+=======
+        auto chunk_st = _chunk_stream->get_next(state);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (chunk_st.status().is_end_of_file()) {
             _prober.reset();
             _set_current_build_probe_finished(true);
@@ -215,7 +229,11 @@ Status SpillableNLJoinProbeOperator::push_chunk(RuntimeState* state, const Chunk
     _set_current_build_probe_finished(false);
     RETURN_IF_ERROR(_prober.push_probe_chunk(chunk));
     RETURN_IF_ERROR(_chunk_stream->reset(state, _spiller.get()));
+<<<<<<< HEAD
     RETURN_IF_ERROR(_chunk_stream->prefetch(state, _executor()));
+=======
+    RETURN_IF_ERROR(_chunk_stream->prefetch(state));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -225,10 +243,13 @@ void SpillableNLJoinProbeOperator::_init_chunk_stream() const {
     }
 }
 
+<<<<<<< HEAD
 spill::IOTaskExecutor& SpillableNLJoinProbeOperator::_executor() {
     return *_cross_join_context->spill_channel_factory()->executor();
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 void SpillableNLJoinProbeOperatorFactory::_init_row_desc() {
     for (auto& tuple_desc : _left_row_desc.tuple_descriptors()) {
         for (auto& slot : tuple_desc->slots()) {

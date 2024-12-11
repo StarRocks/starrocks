@@ -14,6 +14,7 @@
 
 #include "formats/csv/varbinary_converter.h"
 
+<<<<<<< HEAD
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -23,6 +24,17 @@
 #include "gutil/strings/escaping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
+=======
+#include <iostream>
+
+#include "column/binary_column.h"
+#include "common/config.h"
+#include "exprs/base64.h"
+#include "gutil/strings/escaping.h"
+#include "runtime/descriptors.h"
+#include "runtime/types.h"
+#include "util/defer_op.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/string_parser.hpp"
 
 namespace starrocks::csv {
@@ -35,6 +47,7 @@ Status VarBinaryConverter::write_string(OutputStream* os, const Column& column, 
     // TODO: support binary type config later
 
     Slice str(&bytes[offsets[row_num]], offsets[row_num + 1] - offsets[row_num]);
+<<<<<<< HEAD
     std::stringstream ss;
     ss << std::hex << std::uppercase << std::setfill('0');
     for (int i = 0; i < str.size; ++i) {
@@ -44,6 +57,16 @@ Status VarBinaryConverter::write_string(OutputStream* os, const Column& column, 
     }
     // from binary to hex
     return os->write(Slice(ss.str()));
+=======
+    auto byte_length = offsets[row_num + 1] - offsets[row_num];
+
+    int buf_size = (size_t)(4.0 * ceil((double)byte_length / 3.0)) + 1;
+    auto buf = new uint8_t[buf_size];
+    DeferOp defer([&]() { delete[] buf; });
+
+    int encoded_len = base64_encode2((unsigned char*)str.data, byte_length, buf);
+    return os->write(Slice(buf, encoded_len));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status VarBinaryConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
@@ -54,13 +77,18 @@ Status VarBinaryConverter::write_quoted_string(OutputStream* os, const Column& c
 }
 
 bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Options& options) const {
+<<<<<<< HEAD
     int max_size = 0;
+=======
+    int max_size = -1;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (options.type_desc != nullptr) {
         max_size = options.type_desc->len;
     }
 
     char* data_ptr = static_cast<char*>(s.data);
     int start = StringParser::skip_leading_whitespace(data_ptr, s.size);
+<<<<<<< HEAD
     int len = s.size - start;
     // hex's length should be 2x.
     if (len % 2 != 0) {
@@ -72,10 +100,43 @@ bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Optio
     int hex_len = len / 2;
     if (config::enable_check_string_lengths &&
         ((hex_len > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && hex_len > max_size))) {
+=======
+    if (start == s.size) {
+        column->append_default();
+        return true;
+    }
+
+    auto buf = new char[s.size + 3];
+    DeferOp defer([&]() { delete[] buf; });
+
+    int r = base64_decode2(s.data + start, s.size, buf);
+    char* data = buf;
+    int len = r;
+
+    if (r == -1) { // fallback if decode failed
+        data = data_ptr;
+        len = s.size;
+    }
+
+    bool length_check_status = true;
+    // check if length exceed max varbinary length
+    if (options.is_hive) {
+        if (UNLIKELY(max_size != -1 && len > max_size)) {
+            length_check_status = false;
+        }
+    } else {
+        if (config::enable_check_string_lengths &&
+            ((len > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size != -1 && len > max_size))) {
+            length_check_status = false;
+        }
+    }
+    if (!length_check_status) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG(WARNING) << "Column [" << column->get_name() << "]'s length exceed max varbinary length.";
         return false;
     }
 
+<<<<<<< HEAD
     // check slice is valid
     for (int i = start; i < s.size; i++) {
         if (LIKELY((s[i] >= '0' && s[i] <= '9') || (s[i] >= 'A' && s[i] <= 'F') || (s[i] >= 'a' && s[i] <= 'f'))) {
@@ -92,6 +153,9 @@ bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Optio
     strings::a2b_hex(data_ptr + start, p.get(), hex_len);
     down_cast<BinaryColumn*>(column)->append(Slice(p.get(), hex_len));
 
+=======
+    down_cast<BinaryColumn*>(column)->append(Slice(data, len));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return true;
 }
 

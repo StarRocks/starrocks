@@ -23,14 +23,28 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+=======
+import com.starrocks.connector.CacheUpdateProcessor;
+import com.starrocks.connector.DatabaseTableName;
+import com.starrocks.connector.iceberg.CachingIcebergCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalog;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -45,6 +59,10 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
     private final Map<String, CacheUpdateProcessor> cacheUpdateProcessors = new ConcurrentHashMap<>();
 
     private final ExecutorService refreshRemoteFileExecutor;
+<<<<<<< HEAD
+=======
+    private final Map<String, IcebergCatalog> cachingIcebergCatalogs = new ConcurrentHashMap<>();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public void registerTableInfo(BaseTableInfo tableInfo) {
         registeredTableInfos.add(tableInfo);
@@ -60,6 +78,19 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         cacheUpdateProcessors.remove(catalogName);
     }
 
+<<<<<<< HEAD
+=======
+    public void registerCachingIcebergCatalog(String catalogName, IcebergCatalog icebergCatalog) {
+        LOG.info("register to caching iceberg catalog on {} in the ConnectorTableMetadataProcessor", catalogName);
+        cachingIcebergCatalogs.put(catalogName, icebergCatalog);
+    }
+
+    public void unRegisterCachingIcebergCatalog(String catalogName) {
+        LOG.info("unregister to caching iceberg catalog on {} in the ConnectorTableMetadataProcessor", catalogName);
+        cachingIcebergCatalogs.remove(catalogName);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ConnectorTableMetadataProcessor() {
         super(ConnectorTableMetadataProcessor.class.getName(), Config.background_refresh_metadata_interval_millis);
         refreshRemoteFileExecutor = Executors.newFixedThreadPool(Config.background_refresh_file_metadata_concurrency,
@@ -76,6 +107,10 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
 
         if (Config.enable_background_refresh_connector_metadata) {
             refreshCatalogTable();
+<<<<<<< HEAD
+=======
+            refreshIcebergCachingCatalog();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -89,7 +124,11 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                 continue;
             }
 
+<<<<<<< HEAD
             for (HiveTableName cachedTableName : updateProcessor.getCachedTableNames()) {
+=======
+            for (DatabaseTableName cachedTableName : updateProcessor.getCachedTableNames()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 String dbName = cachedTableName.getDatabaseName();
                 String tableName = cachedTableName.getTableName();
                 Table table;
@@ -116,6 +155,23 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void refreshIcebergCachingCatalog() {
+        List<String> catalogNames = Lists.newArrayList(cachingIcebergCatalogs.keySet());
+        for (String catalogName : catalogNames) {
+            CachingIcebergCatalog icebergCatalog = (CachingIcebergCatalog) cachingIcebergCatalogs.get(catalogName);
+            if (icebergCatalog == null) {
+                LOG.error("Failed to get cachingIcebergCatalog by catalog {}.", catalogName);
+                continue;
+            }
+            LOG.info("Start to refresh iceberg caching catalog {}", catalogName);
+            icebergCatalog.refreshCatalog();
+            LOG.info("Finish to refresh iceberg caching catalog {}", catalogName);
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private void refreshRegisteredTable() {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<BaseTableInfo> registeredTableInfoList = Lists.newArrayList(registeredTableInfos);
@@ -124,12 +180,22 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                     registeredTableInfo.getCatalogName(), registeredTableInfo.getDbName(),
                     registeredTableInfo.getTableName());
             try {
+<<<<<<< HEAD
                 Table registeredTable = registeredTableInfo.getTable();
                 if (registeredTable == null) {
                     LOG.warn("Table {}.{}.{} not exist",  registeredTableInfo.getCatalogName(),
                             registeredTableInfo.getDbName(), registeredTableInfo.getTableName());
                     continue;
                 }
+=======
+                Optional<Table> registeredTableOpt = MvUtils.getTableWithIdentifier(registeredTableInfo);
+                if (registeredTableOpt.isEmpty()) {
+                    LOG.warn("Table {}.{}.{} not exist", registeredTableInfo.getCatalogName(),
+                            registeredTableInfo.getDbName(), registeredTableInfo.getTableName());
+                    continue;
+                }
+                Table registeredTable = registeredTableOpt.get();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (!registeredTable.isHiveTable()) {
                     continue;
                 }
@@ -150,23 +216,40 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         LOG.info("Start to refresh hive external table metadata in the background");
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
         MetadataMgr metadataMgr = gsm.getMetadataMgr();
+<<<<<<< HEAD
         List<Database> databases = gsm.getDbIds().stream()
                 .map(gsm::getDb)
+=======
+        List<Database> databases = gsm.getLocalMetastore().getDbIds().stream()
+                .map(dbId -> GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .filter(Objects::nonNull)
                 .filter(db -> !db.isSystemDatabase())
                 .collect(Collectors.toList());
         for (Database db : databases) {
+<<<<<<< HEAD
             List<HiveTable> tables = db.getTables().stream()
+=======
+            List<HiveTable> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).stream()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     .filter(tbl -> tbl.getType() == Table.TableType.HIVE)
                     .map(tbl -> (HiveTable) tbl)
                     .collect(Collectors.toList());
             for (HiveTable table : tables) {
                 try {
                     LOG.info("Start to refresh hive external table metadata on {}.{} of StarRocks and {}.{} of hive " +
+<<<<<<< HEAD
                             "in the background", db.getFullName(), table.getName(), table.getDbName(), table.getTableName());
                     // we didn't use db locks to prevent background tasks from affecting the query.
                     // So we need to check if the table to be refreshed exists.
                     if (db.getTable(table.getId()) != null) {
+=======
+                                    "in the background", db.getFullName(), table.getName(), table.getCatalogDBName(),
+                            table.getCatalogTableName());
+                    // we didn't use db locks to prevent background tasks from affecting the query.
+                    // So we need to check if the table to be refreshed exists.
+                    if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) != null) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         metadataMgr.refreshTable(table.getCatalogName(), db.getFullName(),
                                 table, Lists.newArrayList(), false);
                     }

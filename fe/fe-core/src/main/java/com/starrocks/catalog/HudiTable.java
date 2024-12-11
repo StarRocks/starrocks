@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -22,17 +25,29 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+=======
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hudi.HudiRemoteFileDesc;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -43,6 +58,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hudi.common.model.HoodieTableType;
+<<<<<<< HEAD
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
@@ -54,6 +70,12 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashSet;
+=======
+import org.apache.hudi.common.table.timeline.HoodieInstant;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -62,12 +84,19 @@ import java.util.stream.Collectors;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 /**
  * Currently, we depend on Hive metastore to obtain table/partition path and statistics.
  * This logic should be decoupled from metastore when the related interfaces are ready.
  */
+<<<<<<< HEAD
 public class HudiTable extends Table implements HiveMetaStoreTable {
+=======
+public class HudiTable extends Table {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static final Logger LOG = LogManager.getLogger(HudiTable.class);
 
     private static final String JSON_KEY_HUDI_DB = "database";
@@ -111,13 +140,24 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     @SerializedName(value = "prop")
     private Map<String, String> hudiProperties = Maps.newHashMap();
 
+<<<<<<< HEAD
+=======
+    private HudiTableType tableType;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public HudiTable() {
         super(TableType.HUDI);
     }
 
     public HudiTable(long id, String name, String catalogName, String hiveDbName, String hiveTableName,
+<<<<<<< HEAD
                      String resourceName, List<Column> schema, List<String> dataColumnNames,
                      List<String> partColumnNames, long createTime, Map<String, String> properties) {
+=======
+                     String resourceName, String comment, List<Column> schema, List<String> dataColumnNames,
+                     List<String> partColumnNames, long createTime, Map<String, String> properties,
+                     HudiTableType type) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(id, name, TableType.HUDI, schema);
         this.catalogName = catalogName;
         this.hiveDbName = hiveDbName;
@@ -127,12 +167,25 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         this.partColumnNames = partColumnNames;
         this.createTime = createTime;
         this.hudiProperties = properties;
+<<<<<<< HEAD
     }
 
     public String getDbName() {
         return hiveDbName;
     }
 
+=======
+        this.comment = comment;
+        this.tableType = type;
+    }
+
+    @Override
+    public String getCatalogDBName() {
+        return hiveDbName;
+    }
+
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getResourceName() {
         return resourceName;
     }
@@ -146,6 +199,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getTableLocation() {
         return hudiProperties.get(HUDI_BASE_PATH);
     }
@@ -155,7 +212,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+<<<<<<< HEAD
     public String getTableName() {
+=======
+    public String getCatalogTableName() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return hiveTableName;
     }
 
@@ -180,6 +241,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return partColumnNames;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<String> getDataColumnNames() {
         return dataColumnNames;
     }
@@ -245,13 +310,23 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
         List<RemoteFileInfo> hudiPartitions;
         try {
+<<<<<<< HEAD
             hudiPartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getRemoteFileInfos(getCatalogName(), this, partitionKeys);
+=======
+            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionKeys(partitionKeys).build();
+            hudiPartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getRemoteFiles(this, params);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } catch (StarRocksConnectorException e) {
             LOG.warn("Table {} gets partition info failed.", name, e);
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        HoodieInstant lastInstant = null;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (int i = 0; i < hudiPartitions.size(); i++) {
             DescriptorTable.ReferencedPartitionInfo info = partitions.get(i);
             PartitionKey key = info.getKey();
@@ -268,6 +343,24 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             tPartitionLocation.setSuffix(hudiPartitions.get(i).getFullPath());
             tPartition.setLocation(tPartitionLocation);
             tHudiTable.putToPartitions(partitionId, tPartition);
+<<<<<<< HEAD
+=======
+
+            // update lastInstant according to remote file info.
+            {
+                RemoteFileInfo fileInfo = hudiPartitions.get(i);
+                for (RemoteFileDesc desc : fileInfo.getFiles()) {
+                    HudiRemoteFileDesc hudiDesc = (HudiRemoteFileDesc) desc;
+                    HoodieInstant instant = hudiDesc.getHudiInstant();
+                    if (instant == null) {
+                        continue;
+                    }
+                    if (lastInstant == null || instant.compareTo(lastInstant) > 0) {
+                        lastInstant = instant;
+                    }
+                }
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         Configuration conf = new Configuration();
@@ -280,6 +373,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                     .applyToConfiguration(conf);
         }
 
+<<<<<<< HEAD
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(getTableLocation()).build();
         HoodieTimeline timeline = metaClient.getCommitsAndCompactionTimeline().filterCompletedInstants();
@@ -289,10 +383,20 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             queryInstant = latestInstant.get().getTimestamp();
         }
         tHudiTable.setInstant_time(queryInstant);
+=======
+        if (tableType == HudiTableType.MOR) {
+            tHudiTable.setInstant_time(lastInstant == null ? "" : lastInstant.getTimestamp());
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         tHudiTable.setHive_column_names(hudiProperties.get(HUDI_TABLE_COLUMN_NAMES));
         tHudiTable.setHive_column_types(hudiProperties.get(HUDI_TABLE_COLUMN_TYPES));
         tHudiTable.setInput_format(hudiProperties.get(HUDI_TABLE_INPUT_FOAMT));
         tHudiTable.setSerde_lib(hudiProperties.get(HUDI_TABLE_SERDE_LIB));
+<<<<<<< HEAD
+=======
+        tHudiTable.setTime_zone(TimeUtils.getSessionTimeZone());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         TTableDescriptor tTableDescriptor =
                 new TTableDescriptor(id, TTableType.HUDI_TABLE, fullSchema.size(), 0, hiveTableName, hiveDbName);
@@ -301,6 +405,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         super.write(out);
 
@@ -379,6 +484,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void onDrop(Database db, boolean force, boolean replay) {
         if (isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), db.getFullName(), name);
@@ -435,12 +542,22 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         private String hiveDbName;
         private String hiveTableName;
         private String resourceName;
+<<<<<<< HEAD
+=======
+
+        private String comment;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         private long createTime;
         private List<Column> fullSchema;
         private List<String> partitionColNames = Lists.newArrayList();
         private List<String> dataColNames = Lists.newArrayList();
         private Map<String, String> hudiProperties = Maps.newHashMap();
 
+<<<<<<< HEAD
+=======
+        private HudiTableType tableType;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Builder() {
         }
 
@@ -474,6 +591,14 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public Builder setComment(String comment) {
+            this.comment = comment;
+            return this;
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public Builder setCreateTime(long createTime) {
             this.createTime = createTime;
             return this;
@@ -499,9 +624,20 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             return this;
         }
 
+<<<<<<< HEAD
         public HudiTable build() {
             return new HudiTable(id, tableName, catalogName, hiveDbName, hiveTableName, resourceName, fullSchema,
                     dataColNames, partitionColNames, createTime, hudiProperties);
+=======
+        public Builder setTableType(HudiTableType tableType) {
+            this.tableType = tableType;
+            return this;
+        }
+
+        public HudiTable build() {
+            return new HudiTable(id, tableName, catalogName, hiveDbName, hiveTableName, resourceName, comment,
+                    fullSchema, dataColNames, partitionColNames, createTime, hudiProperties, tableType);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 }

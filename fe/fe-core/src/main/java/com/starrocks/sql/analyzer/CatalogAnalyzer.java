@@ -42,7 +42,11 @@ public class CatalogAnalyzer {
         new CatalogAnalyzerVisitor().visit(stmt, session);
     }
 
+<<<<<<< HEAD
     static class CatalogAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class CatalogAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

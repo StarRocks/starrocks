@@ -38,6 +38,10 @@
 #include <filesystem>
 
 #include "common/logging.h"
+<<<<<<< HEAD
+=======
+#include "fs/encrypt_file.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
@@ -54,7 +58,10 @@ public:
 
 TEST_F(PosixFileSystemTest, random_access) {
     std::string fname = "./ut_dir/fs_posix/random_access";
+<<<<<<< HEAD
     WritableFileOptions ops;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::unique_ptr<WritableFile> wfile;
     auto fs = FileSystem::Default();
     WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
@@ -134,9 +141,122 @@ TEST_F(PosixFileSystemTest, random_access) {
     }
 }
 
+<<<<<<< HEAD
 TEST_F(PosixFileSystemTest, iterate_dir) {
     const std::string dir_path = "./ut_dir/fs_posix/iterate_dir";
     fs::remove_all(dir_path);
+=======
+TEST_F(PosixFileSystemTest, encryption_io) {
+    LOG(INFO) << "openssl aesni support:" << openssl_supports_aesni();
+    ASSERT_EQ(0, get_openssl_errors().size());
+    std::string fname = "./ut_dir/fs_posix/encryption_io";
+    FileEncryptionInfo encryption_info;
+    encryption_info.algorithm = EncryptionAlgorithmPB::AES_128;
+    encryption_info.key = "1234567890123456";
+    FileEncryptionInfo encryption_info_invalid;
+    encryption_info_invalid.algorithm = EncryptionAlgorithmPB::AES_128;
+    encryption_info_invalid.key = "1234567890123";
+    auto fs = FileSystem::Default();
+    WritableFileOptions opts_invalid{.sync_on_close = false,
+                                     .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                     .encryption_info = encryption_info_invalid};
+    std::unique_ptr<WritableFile> wfile_invalid = *fs->new_writable_file(opts_invalid, fname);
+    auto st_invalid = wfile_invalid->append("123456789");
+    ASSERT_FALSE(st_invalid.ok());
+    WritableFileOptions opts{.sync_on_close = false,
+                             .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                             .encryption_info = encryption_info};
+    std::unique_ptr<WritableFile> wfile = *fs->new_writable_file(opts, fname);
+    // writedata
+    Slice field1("123456789");
+    auto st = wfile->append(field1);
+    ASSERT_TRUE(st.ok());
+    std::string buf;
+    for (int i = 0; i < 100; ++i) {
+        buf.push_back((char)i);
+    }
+    st = wfile->append(buf);
+    ASSERT_TRUE(st.ok());
+    Slice abc("abc");
+    Slice bcd("bcd");
+    Slice slices[2]{abc, bcd};
+    st = wfile->appendv(slices, 2);
+    ASSERT_TRUE(st.ok());
+    st = wfile->flush(WritableFile::FLUSH_ASYNC);
+    ASSERT_TRUE(st.ok());
+    st = wfile->sync();
+    ASSERT_TRUE(st.ok());
+    st = wfile->close();
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(115, wfile->size());
+
+    const auto status_or = fs->get_file_size(fname);
+    ASSERT_TRUE(status_or.ok());
+    const uint64_t size = status_or.value();
+    ASSERT_EQ(115, size);
+    RandomAccessFileOptions opts_invalid_read{.encryption_info = encryption_info_invalid};
+    auto rfile_invalid = *fs->new_random_access_file(opts_invalid_read, fname);
+    auto st_invalid_read = rfile_invalid->read_all();
+    ASSERT_FALSE(st_invalid_read.ok());
+    {
+        char mem[1024];
+        RandomAccessFileOptions opts{.encryption_info = encryption_info};
+        auto rfile = *fs->new_random_access_file(opts, fname);
+
+        Slice slice1(mem, 9);
+        Slice slice2(mem + 9, 100);
+        Slice slice3(mem + 9 + 100, 3);
+
+        ASSERT_OK(rfile->read(slice1.data, slice1.size));
+        ASSERT_OK(rfile->read_fully(slice2.data, slice2.size));
+        ASSERT_OK(rfile->read_at_fully(109, slice3.data, slice3.size));
+        ASSERT_STREQ("123456789", std::string(slice1.data, slice1.size).c_str());
+        ASSERT_STREQ("abc", std::string(slice3.data, slice3.size).c_str());
+
+        auto st = rfile->read_at(112, mem, 3);
+        ASSERT_TRUE(st.ok()) << st;
+        ASSERT_STREQ("bcd", std::string(mem, 3).c_str());
+
+        ASSERT_ERROR(rfile->read_at_fully(114, mem, 3));
+        std::string content = *rfile->read_all();
+        ASSERT_EQ(115, content.size());
+        SequentialFileOptions opts_seq{.encryption_info = encryption_info};
+        auto sq = *fs->new_sequential_file(opts_seq, fname);
+        auto ret = sq->read(mem, 115);
+        ASSERT_TRUE(ret.ok());
+        ASSERT_EQ(content, std::string(mem, 115));
+    }
+    // test try read
+    {
+        char mem[1024];
+        RandomAccessFileOptions opts{.encryption_info = encryption_info};
+        auto rfile = *fs->new_random_access_file(opts, fname);
+
+        // normal read
+        {
+            ASSIGN_OR_ABORT(auto nread, rfile->read_at(0, mem, 9));
+            ASSERT_EQ(9, nread);
+            ASSERT_EQ("123456789", std::string_view(mem, 9));
+        }
+        // read too many
+        {
+            ASSIGN_OR_ABORT(auto nread, rfile->read_at(16, mem, 100));
+            ASSERT_EQ(99, nread);
+        }
+        // read empty
+        {
+            Slice slice(mem, 100);
+            ASSIGN_OR_ABORT(auto nread, rfile->read_at(115, mem, 100));
+            ASSERT_EQ(0, nread);
+        }
+    }
+}
+
+TEST_F(PosixFileSystemTest, iterate_dir) {
+    const std::string dir_path = "./ut_dir/fs_posix/iterate_dir";
+    ASSERT_OK(fs::remove_all(dir_path));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ASSERT_OK(FileSystem::Default()->create_dir_if_missing(dir_path));
 
     ASSERT_OK(FileSystem::Default()->create_dir_if_missing(dir_path + "/abc"));

@@ -56,10 +56,18 @@ inline int compare(T lhs, T rhs) {
     }
 }
 
+<<<<<<< HEAD
 // mem_equal is used to optimize the comparastion between the two strings.
 //  1. If the length is equal and larger than 16, use SSE4.1
 //  2. If the length is small than 16, convert the address to int16/int32/int64
 //     to comparasion
+=======
+// memequal is used to optimize the comparison between the two strings.
+//  1. If the length is equal and larger than 16, use SSE4.1
+//  2. If the length is small than 16, convert the address to int16/int32/int64
+//     to comparison
+// so it does not need to consider extra padding bytes for SIMD, which is required by memequal_padded().
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // TODO: If know the size in advance, call the function by constant parameter
 //       like memequal(p1, 10, p2, 10) is efficient
 

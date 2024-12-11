@@ -12,18 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.common.util.UUIDUtil;
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
+=======
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.SqlParser;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -83,7 +95,14 @@ public class UseDbStmtTest {
 
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+<<<<<<< HEAD
         StmtExecutor executor = new StmtExecutor(ctx, "use default_catalog.db");
+=======
+        StatementBase statement = SqlParser.parseSingleStatement("use default_catalog.db",
+                ctx.getSessionVariable().getSqlMode());
+
+        StmtExecutor executor = new StmtExecutor(ctx, statement);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         executor.execute();
 
         Assert.assertEquals("default_catalog", ctx.getCurrentCatalog());

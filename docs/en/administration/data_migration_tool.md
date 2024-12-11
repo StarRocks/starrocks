@@ -114,7 +114,11 @@ The following FE parameters are dynamic configuration items. Refer to [Configure
 
 #### BE Parameters
 
+<<<<<<< HEAD
 The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md#configure-be-dynamic-parameters) on how to modify it.
+=======
+The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md) on how to modify it.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 | **Parameter**       | **Default** | **Unit** | **Description**                                              |
 | ------------------- | ----------- | -------- | ------------------------------------------------------------ |

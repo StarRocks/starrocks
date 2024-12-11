@@ -39,6 +39,11 @@ public class TaskRunExecutor {
         }
         TaskRunStatus status = taskRun.getStatus();
         if (status == null) {
+<<<<<<< HEAD
+=======
+            LOG.warn("TaskRun {}/{} has no state, avoid execute it again", status.getTaskName(),
+                    status.getQueryId());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return false;
         }
         if (status.getState() != Constants.TaskRunState.PENDING) {
@@ -47,10 +52,18 @@ public class TaskRunExecutor {
             return false;
         }
 
+<<<<<<< HEAD
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
             status.setState(Constants.TaskRunState.RUNNING);
             // set process start time
             status.setProcessStartTime(System.currentTimeMillis());
+=======
+        // Synchronously update the status, to make sure they can be persisted
+        status.setState(Constants.TaskRunState.RUNNING);
+        status.setProcessStartTime(System.currentTimeMillis());
+
+        CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             try {
                 boolean isSuccess = taskRun.executeTaskRun();
                 if (isSuccess) {

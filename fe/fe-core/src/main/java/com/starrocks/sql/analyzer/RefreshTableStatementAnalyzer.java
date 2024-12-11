@@ -24,14 +24,21 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class RefreshTableStatementAnalyzer {
     public static void analyze(RefreshTableStmt statement, ConnectContext context) {
         new RefreshTableStatementAnalyzer.RefreshTableStatementAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class RefreshTableStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class RefreshTableStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         private final MetadataMgr metadataMgr;
 
         public RefreshTableStatementAnalyzerVisitor() {
@@ -45,7 +52,11 @@ public class RefreshTableStatementAnalyzer {
         @Override
         public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
             TableName tableName = statement.getTableName();
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(context, tableName);
+=======
+            tableName.normalization(context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             String catalogName = tableName.getCatalog();
             String dbName = tableName.getDb();
             String tblName = tableName.getTbl();

@@ -55,7 +55,11 @@ public class RangerStarRocksAccessRequest extends RangerAccessRequestImpl {
         request.setClusterName("starrocks");
         request.setAccessTime(new Date());
 
+<<<<<<< HEAD
         LOG.debug("RangerStarRocksAccessRequest | " + request.toString());
+=======
+        LOG.debug("RangerStarRocksAccessRequest | " + request);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         return request;
     }

@@ -11,7 +11,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -26,4 +29,8 @@ where (t0.v2 = 2) or t0.v3 in (select x0.v3 from t0 x0 where t0.v2 = x0.v3);
 -- result:
 2	2	2	None	None
 1	1	1	None	None
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

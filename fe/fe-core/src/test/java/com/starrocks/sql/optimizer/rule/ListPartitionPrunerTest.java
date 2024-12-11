@@ -61,6 +61,10 @@ public class ListPartitionPrunerTest {
     private List<ScalarOperator> conjuncts;
     private ColumnRefOperator dateColumn;
     private ColumnRefOperator intColumn;
+<<<<<<< HEAD
+=======
+    private ColumnRefOperator stringColumn;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private ListPartitionPruner pruner;
 
     @Before
@@ -97,7 +101,11 @@ public class ListPartitionPrunerTest {
         columnToNullPartitions.put(intColumn, Sets.newHashSet(9L));
 
         conjuncts = Lists.newArrayList();
+<<<<<<< HEAD
         pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
+=======
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null, null);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test

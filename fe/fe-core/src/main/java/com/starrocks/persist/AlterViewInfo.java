@@ -23,7 +23,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
 import org.apache.commons.lang3.StringUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -98,10 +101,24 @@ public class AlterViewInfo implements Writable {
             return false;
         }
         AlterViewInfo otherInfo = (AlterViewInfo) other;
+<<<<<<< HEAD
         return dbId == otherInfo.getDbId() && tableId == otherInfo.getTableId() &&
                 inlineViewDef.equalsIgnoreCase(otherInfo.getInlineViewDef()) && sqlMode == otherInfo.getSqlMode() &&
                 newFullSchema.equals(otherInfo.getNewFullSchema())
                 && StringUtils.equalsIgnoreCase(comment, otherInfo.getComment());
+=======
+        boolean commentEqual;
+        if (comment == null && otherInfo.getComment() == null) {
+            commentEqual = true;
+        } else if (comment != null) {
+            commentEqual = comment.equalsIgnoreCase(otherInfo.getComment());
+        } else {
+            commentEqual = false;
+        }
+        return dbId == otherInfo.getDbId() && tableId == otherInfo.getTableId() &&
+                inlineViewDef.equalsIgnoreCase(otherInfo.getInlineViewDef()) && sqlMode == otherInfo.getSqlMode() &&
+                newFullSchema.equals(otherInfo.getNewFullSchema()) && commentEqual;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

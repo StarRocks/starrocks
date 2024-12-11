@@ -14,9 +14,19 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "common/status.h"
+=======
+#include <memory>
+#include <string>
+
+#include "column/column_helper.h"
+#include "column/type_traits.h"
+#include "common/status.h"
+#include "exprs/function_context.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
@@ -25,6 +35,10 @@
 
 namespace starrocks {
 class Column;
+<<<<<<< HEAD
+=======
+struct TypeDescriptor;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks
 
 namespace starrocks::parquet {

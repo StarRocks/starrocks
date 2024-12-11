@@ -27,7 +27,10 @@ namespace starrocks {
 // TODO(SmithCruise): Should remove when using cpp sdk
 static const std::map<std::string, std::string> get_cloud_properties(const FSOptions& options) {
     const TCloudConfiguration* cloud_configuration = nullptr;
+<<<<<<< HEAD
     std::map<std::string, std::string> properties;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (options.cloud_configuration != nullptr) {
         // This branch is used by data lake
         cloud_configuration = options.cloud_configuration;
@@ -35,6 +38,7 @@ static const std::map<std::string, std::string> get_cloud_properties(const FSOpt
         // This branch is used by broker load
         cloud_configuration = &options.hdfs_properties()->cloud_configuration;
     }
+<<<<<<< HEAD
     if (cloud_configuration != nullptr) {
         if (cloud_configuration->__isset.cloud_properties) {
             for (const auto& cloud_property : cloud_configuration->cloud_properties) {
@@ -49,6 +53,15 @@ static const std::map<std::string, std::string> get_cloud_properties(const FSOpt
 }
 
 static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr<HdfsFsClient> hdfs_client,
+=======
+    if (cloud_configuration != nullptr && cloud_configuration->__isset.cloud_properties) {
+        return cloud_configuration->cloud_properties;
+    }
+    return {};
+}
+
+static Status create_hdfs_fs_handle(const std::string& namenode, const std::shared_ptr<HdfsFsClient>& hdfs_client,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     const FSOptions& options) {
     RETURN_IF_ERROR(detect_java_runtime());
     auto hdfs_builder = hdfsNewBuilder();
@@ -66,8 +79,11 @@ static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr
     const std::map<std::string, std::string> cloud_properties = get_cloud_properties(options);
     if (!cloud_properties.empty()) {
         for (const auto& cloud_property : cloud_properties) {
+<<<<<<< HEAD
             VLOG_FILE << "[xxx] cloud property: key = " << cloud_property.first.data()
                       << ", value = " << cloud_property.second.data();
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             hdfsBuilderConfSetStr(hdfs_builder, cloud_property.first.data(), cloud_property.second.data());
         }
     }

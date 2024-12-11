@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_binary
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 根据指定的二进制格式 (`binary_type`)，将 VARCHAR 字符串转换为二进制类型。支持的二进制格式包括 Hex, Base64，和 UTF-8。如果未指定，默认为 Hex。
 

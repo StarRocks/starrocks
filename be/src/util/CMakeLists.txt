@@ -30,6 +30,10 @@ set(UTIL_FILES
   coding.cpp
   cpu_info.cpp
   cpu_usage_info.cpp
+<<<<<<< HEAD
+=======
+  cpu_util.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   crc32c.cpp
   date_func.cpp
   dynamic_util.cpp
@@ -40,6 +44,10 @@ set(UTIL_FILES
   hash_util.hpp
   json_util.cpp
   json.cpp
+<<<<<<< HEAD
+=======
+  json_flattener.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   json_converter.cpp
   starrocks_metrics.cpp
   mem_info.cpp
@@ -62,7 +70,10 @@ set(UTIL_FILES
   url_parser.cpp
   url_coding.cpp
   mysql_row_buffer.cpp
+<<<<<<< HEAD
   error_util.cc
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
   spinlock.cc
   file_util.cpp
   filesystem_util.cc
@@ -99,9 +110,17 @@ set(UTIL_FILES
   debug/query_trace_impl.cpp
   random.cc
   stack_trace_mutex.cpp
+<<<<<<< HEAD
   bthreads/future.h
   bthreads/future_impl.cpp
   hash_util.cpp
+=======
+  failpoint/fail_point.cpp
+  bthreads/future.h
+  bthreads/future_impl.cpp
+  hash_util.cpp
+  internal_service_recoverable_stub.cpp
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 )
 
 add_library(Util STATIC

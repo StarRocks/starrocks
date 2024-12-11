@@ -19,17 +19,23 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
 import com.starrocks.privilege.ObjectTypeDeprecate;
 import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.UserPrivilegeCollection;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class UserPrivilegeCollectionInfo implements Writable {
 
@@ -77,6 +83,7 @@ public class UserPrivilegeCollectionInfo implements Writable {
 
     public static UserPrivilegeCollectionInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
+<<<<<<< HEAD
         try {
             return GsonUtils.GSON.fromJson(json, UserPrivilegeCollectionInfo.class);
         } catch (Exception e) {
@@ -104,5 +111,8 @@ public class UserPrivilegeCollectionInfo implements Writable {
             return new UserPrivilegeCollectionInfo(deprecated.getUserIdentity(), collection,
                     deprecated.pluginId, deprecated.pluginVersion);
         }
+=======
+        return GsonUtils.GSON.fromJson(json, UserPrivilegeCollectionInfo.class);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

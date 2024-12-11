@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # minute
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 获得日期中的分钟的信息，返回值范围为 0~59。
 

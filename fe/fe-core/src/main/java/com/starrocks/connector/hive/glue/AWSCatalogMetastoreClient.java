@@ -15,10 +15,13 @@
 
 package com.starrocks.connector.hive.glue;
 
+<<<<<<< HEAD
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.glue.AWSGlue;
 import com.amazonaws.services.glue.model.EntityNotFoundException;
 import com.amazonaws.services.glue.model.GetDatabaseRequest;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -132,6 +135,13 @@ import org.apache.hadoop.hive.metastore.utils.MetaStoreUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+<<<<<<< HEAD
+=======
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.services.glue.GlueClient;
+import software.amazon.awssdk.services.glue.model.EntityNotFoundException;
+import software.amazon.awssdk.services.glue.model.GetDatabaseRequest;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.io.IOException;
 import java.net.URI;
@@ -157,7 +167,11 @@ public class AWSCatalogMetastoreClient implements IMetaStoreClient {
     private static final Logger LOGGER = LogManager.getLogger(AWSCatalogMetastoreClient.class);
 
     private final HiveConf conf;
+<<<<<<< HEAD
     private final AWSGlue glueClient;
+=======
+    private final GlueClient glueClient;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final Warehouse wh;
     private final GlueMetastoreClientDelegate glueMetastoreClientDelegate;
     private final String catalogId;
@@ -192,6 +206,7 @@ public class AWSCatalogMetastoreClient implements IMetaStoreClient {
 
     private boolean doesDefaultDBExist() throws MetaException {
         try {
+<<<<<<< HEAD
             GetDatabaseRequest getDatabaseRequest =
                     new GetDatabaseRequest().withName(DEFAULT_DATABASE_NAME).withCatalogId(
                             catalogId);
@@ -202,6 +217,18 @@ public class AWSCatalogMetastoreClient implements IMetaStoreClient {
             String msg = "Unable to verify existence of default database: ";
             LOGGER.error(msg, e);
             throw new MetaException(msg + e.getErrorMessage());
+=======
+            GetDatabaseRequest.Builder getDatabaseRequest =
+                    GetDatabaseRequest.builder().name(DEFAULT_DATABASE_NAME).catalogId(
+                            catalogId);
+            glueClient.getDatabase(getDatabaseRequest.build());
+        } catch (EntityNotFoundException e) {
+            return false;
+        } catch (SdkException e) {
+            String msg = "Unable to verify existence of default database: ";
+            LOGGER.error(msg, e);
+            throw new MetaException(msg + e.getMessage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return true;
     }

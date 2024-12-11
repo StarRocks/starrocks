@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_empty
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 生成空 HLL 列，用于 INSERT 或导入数据时补充默认值。
 

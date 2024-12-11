@@ -320,7 +320,11 @@ void ReplicationTxnManager::get_tablet_related_txns(TTabletId tablet_id,
 
 bool ReplicationTxnManager::has_txn(TTransactionId transaction_id) const {
     std::shared_lock guard(_mutex);
+<<<<<<< HEAD
     return _transaction_map.find(transaction_id) != _transaction_map.end();
+=======
+    return _transaction_map.contains(transaction_id);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status ReplicationTxnManager::publish_txn(TTransactionId transaction_id, TPartitionId partition_id,
@@ -352,7 +356,16 @@ Status ReplicationTxnManager::publish_txn(TTransactionId transaction_id, TPartit
     std::string snapshot_dir_path =
             get_tablet_snapshot_dir_path(tablet->data_dir(), transaction_id, partition_id, tablet->tablet_id());
 
+<<<<<<< HEAD
     return publish_snapshot(tablet.get(), snapshot_dir_path, version, txn_meta_pb.incremental_snapshot());
+=======
+    auto status = publish_snapshot(tablet.get(), snapshot_dir_path, version, txn_meta_pb.incremental_snapshot());
+    if (!status.ok()) {
+        LOG(WARNING) << "Failed to publish snapshot: " << snapshot_dir_path << ", tablet_id: " << tablet->tablet_id()
+                     << ", partition_id: " << partition_id << ", txn_id: " << transaction_id << ", status: " << status;
+    }
+    return status;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void ReplicationTxnManager::clear_expired_snapshots() {
@@ -451,8 +464,14 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
         auto status = tablet_meta.create_from_memory(header_file_content);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to parse remote snapshot header file: " << remote_header_file_name
+<<<<<<< HEAD
                          << ", content: " << header_file_content << ", " << status;
             return status;
+=======
+                         << ", content: " << header_file_content << ", status: " << status;
+            return status.clone_and_prepend("Failed to parse remote snapshot header file: " + remote_header_file_name +
+                                            ", content: " + header_file_content + ", status");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         // None-pk table always has tablet schema in tablet meta
         source_schema = std::move(tablet_meta.tablet_schema_ptr());
@@ -469,6 +488,7 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
         auto status = snapshot_meta.parse_from_file(memory_file.get());
         if (!status.ok()) {
             LOG(WARNING) << "Failed to parse remote snapshot meta file: " << snapshot_meta_file_name
+<<<<<<< HEAD
                          << ", content: " << snapshot_meta_content << ", " << status;
             return status;
         }
@@ -477,12 +497,30 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
                (!src_snapshot_info.incremental_snapshot &&
                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
+=======
+                         << ", content: " << snapshot_meta_content << ", status: " << status;
+            return status.clone_and_prepend("Failed to parse remote snapshot meta file: " + snapshot_meta_file_name +
+                                            ", content: " + snapshot_meta_content + ", status");
+        }
+
+        DCHECK(((src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
+                (!src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 << ", incremental_snapshot: " << src_snapshot_info.incremental_snapshot
                 << ", snapshot_type: " << SnapshotTypePB_Name(snapshot_meta.snapshot_type());
 
         if (snapshot_meta.tablet_meta().has_schema()) {
             // Try to get source schema from tablet meta, only full snapshot has tablet meta
             source_schema = TabletSchema::create(snapshot_meta.tablet_meta().schema());
+<<<<<<< HEAD
+=======
+        } else if (!snapshot_meta.rowset_metas().empty() && snapshot_meta.rowset_metas().front().has_tablet_schema()) {
+            // Try to get source schema from rowset meta, rowset meta has schema if light schema change enabled in source cluster
+            source_schema = TabletSchema::create(
+                    TabletMeta::rowset_meta_pb_with_max_rowset_version(snapshot_meta.rowset_metas()).tablet_schema());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } else {
             // Get source schema from previous saved in tablet meta
             source_schema = tablet->tablet_meta()->source_schema();
@@ -498,7 +536,11 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
     }
 
     std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
+<<<<<<< HEAD
     ReplicationUtils::calc_column_unique_id_map(source_schema->columns(), tablet->tablet_schema().columns(),
+=======
+    ReplicationUtils::calc_column_unique_id_map(source_schema->columns(), tablet->tablet_schema()->columns(),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                                 &column_unique_id_map);
 
     auto file_converters = [&](const std::string& file_name,
@@ -542,7 +584,14 @@ static Status convert_rowset_meta_pb(RowsetMetaPB* rowset_meta_pb,
                                      const TReplicateSnapshotRequest& request) {
     rowset_meta_pb->set_partition_id(request.partition_id);
     rowset_meta_pb->set_tablet_id(request.tablet_id);
+<<<<<<< HEAD
 
+=======
+    if (rowset_meta_pb->has_tablet_schema()) {
+        ReplicationUtils::convert_column_unique_ids(rowset_meta_pb->mutable_tablet_schema()->mutable_column(),
+                                                    column_unique_id_map);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (rowset_meta_pb->has_txn_meta()) {
         RETURN_IF_ERROR(
                 ReplicationUtils::convert_rowset_txn_meta(rowset_meta_pb->mutable_txn_meta(), *column_unique_id_map));
@@ -688,7 +737,11 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
         TabletMeta cloned_tablet_meta;
         res = cloned_tablet_meta.create_from_file(header_file);
         if (!res.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "Failed to load load tablet meta from " << header_file;
+=======
+            LOG(WARNING) << "Failed to load load tablet meta from " << header_file << ", status: " << res;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             break;
         }
 
@@ -697,7 +750,11 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
         if (has_dcgs_snapshot_file) {
             res = DeltaColumnGroupListHelper::parse_snapshot(dcgs_snapshot_file, dcg_snapshot_pb);
             if (!res.ok()) {
+<<<<<<< HEAD
                 LOG(WARNING) << "Failed to load load dcg snapshot from " << dcgs_snapshot_file;
+=======
+                LOG(WARNING) << "Failed to load load dcg snapshot from " << dcgs_snapshot_file << ", status: " << res;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             }
         }
@@ -705,7 +762,11 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
         std::set<std::string> clone_files;
         res = fs::list_dirs_files(snapshot_dir, nullptr, &clone_files);
         if (!res.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "Failed to list directory " << snapshot_dir << ": " << res;
+=======
+            LOG(WARNING) << "Failed to list directory " << snapshot_dir << ", status: " << res;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             break;
         }
 
@@ -718,14 +779,22 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
         std::string tablet_dir = tablet->schema_hash_path();
         res = fs::list_dirs_files(tablet_dir, nullptr, &local_files);
         if (!res.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "Failed to list tablet directory " << tablet_dir << ": " << res;
+=======
+            LOG(WARNING) << "Failed to list tablet directory " << tablet_dir << ", status: " << res;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             break;
         }
 
         // link files from clone dir, if file exists, skip it
         for (const string& clone_file : clone_files) {
             if (local_files.find(clone_file) != local_files.end()) {
+<<<<<<< HEAD
                 VLOG(3) << "find same file when clone, skip it. "
+=======
+                VLOG(3) << "Find same file when clone, skip it. "
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         << "tablet=" << tablet->full_name() << ", clone_file=" << clone_file;
                 continue;
             }
@@ -734,7 +803,11 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
             std::string to = strings::Substitute("$0/$1", tablet_dir, clone_file);
             res = FileSystem::Default()->link_file(from, to);
             if (!res.ok()) {
+<<<<<<< HEAD
                 LOG(WARNING) << "Failed to link " << from << " to " << to << ": " << res;
+=======
+                LOG(WARNING) << "Failed to link " << from << " to " << to << ", status: " << res;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             }
             linked_success_files.emplace_back(std::move(to));
@@ -751,8 +824,17 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
             res = publish_full_meta(tablet, &cloned_tablet_meta, rs_to_clone);
         }
 
+<<<<<<< HEAD
         // if full clone success, need to update cumulative layer point
         if (!incremental_snapshot && res.ok()) {
+=======
+        if (!res.ok()) {
+            break;
+        }
+
+        // if full clone success, need to update cumulative layer point
+        if (!incremental_snapshot) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             tablet->set_cumulative_layer_point(-1);
         }
 
@@ -770,26 +852,49 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
                     // dcgs for each segment
                     auto& dcg_list_pb = dcg_snapshot_pb.dcg_lists(idx);
                     DeltaColumnGroupList dcgs;
+<<<<<<< HEAD
                     RETURN_IF_ERROR(
                             DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs));
+=======
+                    res = DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs);
+                    if (!res.ok()) {
+                        LOG(WARNING) << "Failed to deserialize_delta_column_group_list, status: " << res;
+                        break;
+                    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
                     if (dcgs.size() == 0) {
                         ++idx;
                         continue;
                     }
 
+<<<<<<< HEAD
                     RETURN_IF_ERROR(TabletMetaManager::put_delta_column_group(
                             data_dir, &wb, dcg_snapshot_pb.tablet_id(idx), dcg_snapshot_pb.rowset_id(idx),
                             dcg_snapshot_pb.segment_id(idx), dcgs));
+=======
+                    res = TabletMetaManager::put_delta_column_group(data_dir, &wb, dcg_snapshot_pb.tablet_id(idx),
+                                                                    dcg_snapshot_pb.rowset_id(idx),
+                                                                    dcg_snapshot_pb.segment_id(idx), dcgs);
+                    if (!res.ok()) {
+                        LOG(WARNING) << "Failed to put_delta_column_group, status: " << res;
+                        break;
+                    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     ++idx;
                 }
             }
             res = data_dir->get_meta()->write_batch(&wb);
             if (!res.ok()) {
+<<<<<<< HEAD
                 std::stringstream ss;
                 ss << "save dcgs meta failed, tablet id: " << tablet->tablet_id();
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
+=======
+                LOG(WARNING) << "Failed to save dcgs meta, tablet id: " << tablet->tablet_id() << ", status: " << res;
+                break;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     } while (false);
@@ -823,7 +928,11 @@ Status ReplicationTxnManager::publish_snapshot_for_primary(Tablet* tablet, const
         ASSIGN_OR_RETURN(auto md5sum1, fs::md5sum(snapshot_dir + "/" + fname));
         ASSIGN_OR_RETURN(auto md5sum2, fs::md5sum(tablet_dir + "/" + fname));
         if (md5sum1 != md5sum2) {
+<<<<<<< HEAD
             LOG(WARNING) << "duplicated file `" << fname << "` with different md5sum";
+=======
+            LOG(WARNING) << "Duplicated file `" << fname << "` with different md5sum";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return Status::InternalError("duplicate file with different md5");
         }
         clone_files.erase(fname);
@@ -842,10 +951,15 @@ Status ReplicationTxnManager::publish_snapshot_for_primary(Tablet* tablet, const
 
     Status status = tablet->updates()->load_snapshot(snapshot_meta, false, true);
     if (!status.ok()) {
+<<<<<<< HEAD
+=======
+        LOG(WARNING) << "Failed to load snapshot of tablet " << tablet->tablet_id() << " from " << snapshot_dir;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Status clear_st;
         for (const std::string& filename : tablet_files) {
             clear_st = fs::delete_file(filename);
             if (!clear_st.ok()) {
+<<<<<<< HEAD
                 LOG(WARNING) << "remove tablet file: " << filename << " failed, status: " << clear_st;
             }
         }
@@ -855,13 +969,29 @@ Status ReplicationTxnManager::publish_snapshot_for_primary(Tablet* tablet, const
     tablet->updates()->remove_expired_versions(expired_stale_sweep_endtime);
     LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << " from " << snapshot_dir;
 
+=======
+                LOG(WARNING) << "Failed to remove tablet file: " << filename << ", status: " << clear_st;
+            }
+        }
+    } else {
+        int64_t expired_stale_sweep_endtime = UnixSeconds() - config::tablet_rowset_stale_sweep_time_sec;
+        tablet->updates()->remove_expired_versions(expired_stale_sweep_endtime);
+        LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << " from " << snapshot_dir;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return status;
 }
 
 Status ReplicationTxnManager::publish_incremental_meta(Tablet* tablet, const TabletMeta& cloned_tablet_meta,
                                                        int64_t snapshot_version) {
+<<<<<<< HEAD
     LOG(INFO) << "begin to publish incremental meta. tablet=" << tablet->full_name()
               << ", snapshot_version=" << snapshot_version;
+=======
+    LOG(INFO) << "Begin to publish incremental meta. tablet: " << tablet->full_name()
+              << ", snapshot_version: " << snapshot_version;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::vector<Version> missed_versions;
     tablet->calc_missed_versions_unlocked(snapshot_version, &missed_versions);
@@ -869,7 +999,11 @@ Status ReplicationTxnManager::publish_incremental_meta(Tablet* tablet, const Tab
     std::vector<Version> versions_to_delete;
     std::vector<RowsetMetaSharedPtr> rowsets_to_clone;
 
+<<<<<<< HEAD
     VLOG(3) << "get missed versions again when publish incremental meta. "
+=======
+    VLOG(3) << "Get missed versions again when publish incremental meta. "
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             << "tablet=" << tablet->full_name() << ", snapshot_version=" << snapshot_version
             << ", missed_versions_size=" << missed_versions.size();
 
@@ -877,7 +1011,12 @@ Status ReplicationTxnManager::publish_incremental_meta(Tablet* tablet, const Tab
     for (Version version : missed_versions) {
         RowsetMetaSharedPtr inc_rs_meta = cloned_tablet_meta.acquire_inc_rs_meta_by_version(version);
         if (inc_rs_meta == nullptr) {
+<<<<<<< HEAD
             LOG(WARNING) << "missed version is not found in cloned tablet meta."
+=======
+            LOG(WARNING) << "Missed version is not found in cloned incremental tablet meta. tablet="
+                         << tablet->full_name() << ", snapshot_version=" << snapshot_version
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                          << ", missed_version=" << version.first << "-" << version.second;
             return Status::NotFound(strings::Substitute("version not found"));
         }
@@ -887,21 +1026,41 @@ Status ReplicationTxnManager::publish_incremental_meta(Tablet* tablet, const Tab
 
     // clone_data to tablet
     Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+<<<<<<< HEAD
     LOG(INFO) << "finish to publish incremental meta. [tablet=" << tablet->full_name() << ", status=" << st << "]";
     return st;
+=======
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to publish incremental meta. tablet: " << tablet->full_name()
+                     << ", snapshot_version: " << snapshot_version << ", status: " << st;
+        return st;
+    }
+
+    LOG(INFO) << "Finish to publish incremental meta. tablet: " << tablet->full_name()
+              << ", snapshot_version: " << snapshot_version;
+    return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status ReplicationTxnManager::publish_full_meta(Tablet* tablet, TabletMeta* cloned_tablet_meta,
                                                 std::vector<RowsetMetaSharedPtr>& rs_to_clone) {
     Version cloned_max_version = cloned_tablet_meta->max_version();
+<<<<<<< HEAD
     LOG(INFO) << "begin to publish full meta. tablet=" << tablet->full_name()
+=======
+    LOG(INFO) << "Begin to publish full meta. tablet=" << tablet->full_name()
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
               << ", cloned_max_version=" << cloned_max_version.first << "-" << cloned_max_version.second;
     std::vector<Version> versions_to_delete;
     std::vector<RowsetMetaSharedPtr> rs_metas_found_in_src;
     // check local versions
     for (auto& rs_meta : tablet->tablet_meta()->all_rs_metas()) {
         Version local_version(rs_meta->start_version(), rs_meta->end_version());
+<<<<<<< HEAD
         LOG(INFO) << "check local delta when publish full snapshot."
+=======
+        LOG(INFO) << "Check local delta when publish full snapshot."
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                   << "tablet=" << tablet->full_name() << ", local_version=" << local_version.first << "-"
                   << local_version.second;
 
@@ -912,7 +1071,11 @@ Status ReplicationTxnManager::publish_full_meta(Tablet* tablet, TabletMeta* clon
         // It should not happen because if there is a hole, the following delta will not
         // do compaction.
         if (local_version.first <= cloned_max_version.second && local_version.second > cloned_max_version.second) {
+<<<<<<< HEAD
             LOG(WARNING) << "stop to publish full snapshot, version cross src latest."
+=======
+            LOG(WARNING) << "Stop to publish full snapshot, version cross src latest."
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                          << "tablet=" << tablet->full_name() << ", local_version=" << local_version.first << "-"
                          << local_version.second;
             return Status::InternalError("clone version conflict with local version");
@@ -960,11 +1123,24 @@ Status ReplicationTxnManager::publish_full_meta(Tablet* tablet, TabletMeta* clon
 
     // clone_data to tablet
     Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+<<<<<<< HEAD
     LOG(INFO) << "finish to full clone. tablet=" << tablet->full_name() << ", res=" << st;
+=======
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to publish full meta. tablet: " << tablet->full_name()
+                     << ", cloned_max_version: " << cloned_max_version.first << "-" << cloned_max_version.second
+                     << ", status: " << st;
+    } else {
+        LOG(INFO) << "Finish to publish full meta. tablet: " << tablet->full_name()
+                  << ", cloned_max_version: " << cloned_max_version.first << "-" << cloned_max_version.second;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // in previous step, copy all files from CLONE_DIR to tablet dir
     // but some rowset is useless, so that remove them here
     for (auto& rs_meta_ptr : rs_metas_found_in_src) {
         RowsetSharedPtr rowset_to_remove;
+<<<<<<< HEAD
         if (auto s = RowsetFactory::create_rowset(cloned_tablet_meta->tablet_schema_ptr().get(),
                                                   tablet->schema_hash_path(), rs_meta_ptr, &rowset_to_remove);
             !s.ok()) {
@@ -973,6 +1149,16 @@ Status ReplicationTxnManager::publish_full_meta(Tablet* tablet, TabletMeta* clon
         }
         if (auto ost = rowset_to_remove->remove(); !ost.ok()) {
             LOG(WARNING) << "failed to remove rowset " << rs_meta_ptr->rowset_id().to_string() << ", res=" << ost;
+=======
+        if (auto s = RowsetFactory::create_rowset(cloned_tablet_meta->tablet_schema_ptr(), tablet->schema_hash_path(),
+                                                  rs_meta_ptr, &rowset_to_remove);
+            !s.ok()) {
+            LOG(WARNING) << "Failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
+            continue;
+        }
+        if (auto ost = rowset_to_remove->remove(); !ost.ok()) {
+            LOG(WARNING) << "Failed to remove rowset " << rs_meta_ptr->rowset_id().to_string() << ", status: " << ost;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
     return st;
@@ -1118,7 +1304,11 @@ StatusOr<TabletSharedPtr> ReplicationTxnManager::get_tablet(TTabletId tablet_id)
     std::string error_msg;
     auto tablet = tablet_manager->get_tablet(tablet_id, false, &error_msg);
     if (tablet == nullptr) {
+<<<<<<< HEAD
         LOG(WARNING) << "Cannot get tablet " << tablet_id << ", error: " << error_msg;
+=======
+        LOG(WARNING) << "Cannot get tablet " << tablet_id << ", status: " << error_msg;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::NotFound(error_msg);
     }
     return tablet;

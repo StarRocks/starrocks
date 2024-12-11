@@ -11,7 +11,11 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
+<<<<<<< HEAD
 DROP CATALOG catalog_name
+=======
+DROP CATALOG [IF EXISTS] catalog_name
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 ```
 
 ## 参数说明

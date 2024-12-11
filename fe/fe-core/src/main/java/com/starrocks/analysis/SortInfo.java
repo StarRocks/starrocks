@@ -36,8 +36,11 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 
@@ -49,7 +52,10 @@ import java.util.List;
  * particular input row (materialize all row slots)
  */
 public class SortInfo {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(SortInfo.class);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // All ordering exprs with cost greater than this will be materialized. Since we don't
     // currently have any information about actual function costs, this value is intended to
     // ensure that all expensive functions will be materialized while still leaving simple
@@ -75,6 +81,11 @@ public class SortInfo {
     // sortTupleDesc_.
     private List<Expr> sortTupleSlotExprs_;
 
+<<<<<<< HEAD
+=======
+    private TupleDescriptor preAggTupleDesc_;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public SortInfo(List<Expr> partitionExprs, long partitionLimit, List<Expr> orderingExprs, List<Boolean> isAscOrder,
                     List<Boolean> nullsFirstParams) {
         Preconditions.checkArgument(orderingExprs.size() == isAscOrder.size());
@@ -161,6 +172,17 @@ public class SortInfo {
         orderingExprs_ = Expr.substituteList(orderingExprs_, smap, analyzer, false);
     }
 
+<<<<<<< HEAD
+=======
+    public void setPreAggTupleDesc_(TupleDescriptor preAggTupleDesc_) {
+        this.preAggTupleDesc_ = preAggTupleDesc_;
+    }
+
+    public TupleDescriptor getPreAggTupleDesc_() {
+        return preAggTupleDesc_;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public SortInfo clone() {
         return new SortInfo(this);

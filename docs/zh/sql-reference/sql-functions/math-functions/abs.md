@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # abs
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回 `x` 的绝对值。如果输入值为 NULL，则返回 NULL。
 

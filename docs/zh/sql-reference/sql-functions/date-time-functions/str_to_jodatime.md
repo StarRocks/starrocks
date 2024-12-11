@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # str_to_jodatime
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将某一个 Joda 格式的字符串转换为指定的 Joda DateTime 格式（如 `yyyy-MM-dd HH:mm:ss`）的 DATETIME 值。
 

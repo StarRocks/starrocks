@@ -174,7 +174,11 @@ void FileScanNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
     }
+<<<<<<< HEAD
     exec_debug_action(TExecNodePhase::CLOSE);
+=======
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     _scan_finished.store(true);
     _queue_writer_cond.notify_all();
@@ -321,8 +325,12 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
 
             // todo: break if failed ?
             if (!status.ok() && !status.is_end_of_file()) {
+<<<<<<< HEAD
                 LOG(WARNING) << "FileScanner[" << start_idx + i
                              << "] process failed. status=" << status.get_error_msg();
+=======
+                LOG(WARNING) << "FileScanner[" << start_idx + i << "] process failed. status=" << status.message();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 break;
             }
         }

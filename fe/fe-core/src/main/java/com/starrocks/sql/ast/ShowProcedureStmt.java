@@ -65,4 +65,12 @@ public class ShowProcedureStmt extends ShowStmt {
     public String getPattern() {
         return pattern;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowProcedureStatement(this, context);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_contains
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 检查数组中是否包含某个元素，是的话返回 1，否则返回 0。
 

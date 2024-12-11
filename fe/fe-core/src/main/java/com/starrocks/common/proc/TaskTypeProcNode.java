@@ -67,7 +67,11 @@ public class TaskTypeProcNode implements ProcDirInterface {
 
         int totalFailedNum = 0;
         int totalTaskNum = 0;
+<<<<<<< HEAD
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+=======
+        List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (Long backendId : backendIds) {
             int failedNum = AgentTaskQueue.getTaskNum(backendId, type, true);
             int taskNum = AgentTaskQueue.getTaskNum(backendId, type, false);

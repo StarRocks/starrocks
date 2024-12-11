@@ -70,6 +70,13 @@ public class Catalog implements Writable {
         return name;
     }
 
+<<<<<<< HEAD
+=======
+    public void setName(String name) {
+        this.name = name;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getType() {
         return config.get(CATALOG_TYPE);
     }

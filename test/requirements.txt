@@ -10,3 +10,16 @@ fuzzywuzzy
 python-Levenshtein
 PyGithub
 mysql-connector
+<<<<<<< HEAD
+=======
+trino
+pure-sasl
+thrift
+thrift-sasl
+PyHive
+timeout_decorator
+DBUtils
+adbc-driver-manager==1.2.0
+adbc-driver-flightsql==1.2.0
+pyarrow==17.0.0
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

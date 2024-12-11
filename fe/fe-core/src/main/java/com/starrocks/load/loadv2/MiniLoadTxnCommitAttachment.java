@@ -23,7 +23,10 @@ import com.starrocks.thrift.TMiniLoadTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -74,6 +77,7 @@ public class MiniLoadTxnCommitAttachment extends TxnCommitAttachment {
         }
 
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
@@ -83,4 +87,6 @@ public class MiniLoadTxnCommitAttachment extends TxnCommitAttachment {
             errorLogUrl = Text.readString(in);
         }
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

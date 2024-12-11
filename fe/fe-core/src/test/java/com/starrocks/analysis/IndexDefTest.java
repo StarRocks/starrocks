@@ -18,10 +18,22 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+<<<<<<< HEAD
+=======
+import org.junit.jupiter.api.Assertions;
+
+import java.util.HashMap;
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class IndexDefTest {
     private IndexDef def;
@@ -59,6 +71,22 @@ public class IndexDefTest {
         } catch (SemanticException e) {
             Assert.assertTrue(e instanceof SemanticException);
         }
+<<<<<<< HEAD
+=======
+
+        def = new IndexDef("", null, IndexType.GIN, "");
+        Assertions.assertThrows(SemanticException.class, () -> def.analyze(), "Index can not accept null column.");
+
+        def = new IndexDef("", Lists.newArrayList("k1", "k2"), IndexType.BITMAP, "");
+        Assertions.assertThrows(SemanticException.class,
+                () -> def.analyze(), "bitmap index can only apply to a single column.");
+
+        def = new IndexDef("", Lists.newArrayList("k1", "k2"), IndexType.GIN, "");
+        Assertions.assertThrows(SemanticException.class,
+                () -> def.analyze(), "bitmap index can only apply to a single column.");
+
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -66,5 +94,14 @@ public class IndexDefTest {
         Assert.assertEquals("INDEX index1 (`col1`) USING BITMAP COMMENT 'balabala'", def.toSql());
         Assert.assertEquals("INDEX index1 ON table1 (`col1`) USING BITMAP COMMENT 'balabala'",
                 def.toSql("table1"));
+<<<<<<< HEAD
+=======
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("k1", "k1");
+        def = new IndexDef("index1", Lists.newArrayList("k1", "k2"), IndexType.GIN, "", properties);
+        Assert.assertEquals("INDEX index1 ON table1 (`k1`,`k2`) USING GIN (\"k1\"=\"k1\") COMMENT ''",
+                def.toSql("table1"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

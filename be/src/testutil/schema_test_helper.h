@@ -14,7 +14,10 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "gen_cpp/Descriptors_types.h"
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "gen_cpp/tablet_schema.pb.h"
 #include "storage/tablet_schema.h"
 
@@ -22,6 +25,10 @@ namespace starrocks {
 class SchemaTestHelper {
 public:
     static TabletSchemaPB gen_schema_pb_of_dup(TabletSchema::SchemaId schema_id, size_t num_cols, size_t num_key_cols);
+<<<<<<< HEAD
+=======
+    static TabletSchemaSPtr gen_schema_of_dup(TabletSchema::SchemaId schema_id, size_t num_cols, size_t num_key_cols);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     static TColumn gen_key_column(const std::string& col_name, TPrimitiveType::type type);
     static TColumn gen_value_column_for_dup_table(const std::string& col_name, TPrimitiveType::type type);
     static TColumn gen_value_column_for_agg_table(const std::string& col_name, TPrimitiveType::type type);

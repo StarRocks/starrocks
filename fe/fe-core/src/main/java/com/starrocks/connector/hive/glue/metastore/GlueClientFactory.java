@@ -15,14 +15,23 @@
 
 package com.starrocks.connector.hive.glue.metastore;
 
+<<<<<<< HEAD
 import com.amazonaws.services.glue.AWSGlue;
 import org.apache.hadoop.hive.metastore.api.MetaException;
+=======
+import org.apache.hadoop.hive.metastore.api.MetaException;
+import software.amazon.awssdk.services.glue.GlueClient;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 /***
  * Interface for creating Glue AWS Client
  */
 public interface GlueClientFactory {
 
+<<<<<<< HEAD
     AWSGlue newClient() throws MetaException;
+=======
+    GlueClient newClient() throws MetaException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 }

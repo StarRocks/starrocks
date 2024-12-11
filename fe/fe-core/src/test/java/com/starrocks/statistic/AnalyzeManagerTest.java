@@ -17,33 +17,72 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
+<<<<<<< HEAD
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+<<<<<<< HEAD
 import java.util.HashMap;
 import java.util.UUID;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class AnalyzeManagerTest extends PlanTestBase {
     @Test
     public void testClearStatisticFromDroppedTable() {
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
                 1, 2, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.MIN, Maps.newHashMap()));
         Assert.assertNotNull(GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(2L));
         GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
         Assert.assertNull(GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(2L));
+=======
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
+                1, 2, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.MIN, Maps.newHashMap()));
+        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(2L));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromNativeDroppedTable();
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(2L));
+    }
+
+    @Test
+    public void testClearStatisticFromExternalDroppedTable() {
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(new ExternalBasicStatsMeta(
+                "catalogName", "dbName", "tableName", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.MIN, Maps.newHashMap()));
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromExternalDroppedTable();
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+
+
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(new ExternalBasicStatsMeta(
+                "catalogName", "dbName", "tableName", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.MIN, Maps.newHashMap()));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(new ExternalHistogramStatsMeta(
+                "catalogName", "dbName", "tableName", "column", StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.MIN, Maps.newHashMap()));
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromExternalDroppedTable();
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -74,6 +113,7 @@ public class AnalyzeManagerTest extends PlanTestBase {
         result = Deencapsulation.invoke(statisticAutoCollector, "checkoutAnalyzeTime", time);
         Assert.assertTrue(result);
     }
+<<<<<<< HEAD
 
     @Test
     public void testUpdateLoadRowsWithTableDropped() {
@@ -90,4 +130,6 @@ public class AnalyzeManagerTest extends PlanTestBase {
         transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(0));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState);
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

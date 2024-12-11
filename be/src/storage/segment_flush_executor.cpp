@@ -43,7 +43,12 @@ public:
               _cntl(cntl),
               _request(request),
               _response(response),
+<<<<<<< HEAD
               _done(done) {}
+=======
+              _done(done),
+              _create_time_ns(MonotonicNanos()) {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Destructor which will respond to the brpc if run() or release() is not called.
     ~SegmentFlushTask() override {
@@ -55,7 +60,11 @@ public:
                             " txn_id: {}, tablet id: {}, flush token status: {}",
                             _request->txn_id(), _request->tablet_id(), _flush_token->status().to_string()));
         _send_fail_response(status);
+<<<<<<< HEAD
         VLOG(1) << "Segment flush task is destructed with failure response"
+=======
+        VLOG(2) << "Segment flush task is destructed with failure response"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 << ", txn_id: " << _request->txn_id() << ", tablet id: " << _request->tablet_id()
                 << ", flush token status: " << _flush_token->status();
     }
@@ -63,6 +72,21 @@ public:
     // Run the task if release() is not called which will flush the segment, and respond the brpc
     // BackendInternalServiceImpl<T>::tablet_writer_add_segment.
     void run() override {
+<<<<<<< HEAD
+=======
+        auto& stat = _flush_token->_stat;
+        stat.num_pending_tasks.fetch_add(-1, std::memory_order_relaxed);
+        stat.pending_time_ns.fetch_add(MonotonicNanos() - _create_time_ns, std::memory_order_relaxed);
+        stat.num_running_tasks.fetch_add(1, std::memory_order_relaxed);
+        int64_t duration_ns = 0;
+        DeferOp defer([&stat, &duration_ns]() {
+            stat.num_running_tasks.fetch_add(-1, std::memory_order_relaxed);
+            stat.num_finished_tasks.fetch_add(1, std::memory_order_relaxed);
+            stat.execute_time_ns.fetch_add(duration_ns, std::memory_order_relaxed);
+        });
+        SCOPED_RAW_TIMER(&duration_ns);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         bool expect = false;
         if (!_run_or_released.compare_exchange_strong(expect, true)) {
             return;
@@ -106,7 +130,11 @@ public:
     void release() {
         bool expect = false;
         _run_or_released.compare_exchange_strong(expect, true);
+<<<<<<< HEAD
         VLOG(1) << "Segment flush task is released"
+=======
+        VLOG(2) << "Segment flush task is released"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 << ", txn_id: " << _request->txn_id() << ", tablet id: " << _request->tablet_id()
                 << ", flush token status: " << _flush_token->status();
     }
@@ -151,6 +179,10 @@ private:
     const PTabletWriterAddSegmentRequest* _request;
     PTabletWriterAddSegmentResult* _response;
     google::protobuf::Closure* _done;
+<<<<<<< HEAD
+=======
+    int64_t _create_time_ns;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // whether run() or release() has been called
     std::atomic<bool> _run_or_released = false;
 };
@@ -172,6 +204,10 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
     auto task = std::make_shared<SegmentFlushTask>(this, writer, cntl, request, response, done);
     auto submit_st = _flush_token->submit(task);
     if (submit_st.ok()) {
+<<<<<<< HEAD
+=======
+        _stat.num_pending_tasks.fetch_add(1, std::memory_order_relaxed);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         closure_guard.release();
     } else {
         task->release();

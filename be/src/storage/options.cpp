@@ -160,6 +160,7 @@ Status parse_conf_store_paths(const string& config_path, std::vector<StorePath>*
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status parse_conf_block_cache_paths(const std::string& config_path, std::vector<std::string>* paths) {
     if (config_path.empty()) {
         return Status::OK();
@@ -194,4 +195,6 @@ Status parse_conf_block_cache_paths(const std::string& config_path, std::vector<
     return Status::OK();
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // end namespace starrocks

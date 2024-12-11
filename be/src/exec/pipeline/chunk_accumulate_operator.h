@@ -39,10 +39,19 @@ public:
     bool need_input() const override { return _acc.need_input(); }
     bool is_finished() const override { return _acc.is_finished(); }
 
+<<<<<<< HEAD
+=======
+    bool ignore_empty_eos() const override { return false; }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override {}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 private:
     ChunkPipelineAccumulator _acc;

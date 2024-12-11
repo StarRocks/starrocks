@@ -15,6 +15,10 @@
 #include "column/type_traits.h"
 #include "exec/olap_common.h"
 #include "gtest/gtest.h"
+<<<<<<< HEAD
+=======
+#include "testutil/assert.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -25,8 +29,13 @@ TEST(NormalizeRangeTest, RangeTest) {
         // where range in (1,2,3,4) and range not in (1, 2)
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2, 3, 4});
         range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {1, 2});
+=======
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2, 3, 4}));
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {1, 2}));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         std::set<CppType> values = {3, 4};
         ASSERT_EQ(range._fixed_values, values);
     }
@@ -34,8 +43,13 @@ TEST(NormalizeRangeTest, RangeTest) {
         // where range in (1, 2) and range > 1
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2});
         range.add_range(SQLFilterOp::FILTER_LARGER, 1);
+=======
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2}));
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER, 1));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         ASSERT_TRUE(range.is_fixed_value_range());
         ASSERT_EQ(range._fixed_values.size(), 1);
@@ -44,8 +58,13 @@ TEST(NormalizeRangeTest, RangeTest) {
         // where range in (1, 2) and range > 2
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2});
         range.add_range(SQLFilterOp::FILTER_LARGER, 2);
+=======
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2}));
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER, 2));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_TRUE(range.is_empty_value_range());
     }
     {
@@ -53,16 +72,26 @@ TEST(NormalizeRangeTest, RangeTest) {
         // return empty
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2});
         range.add_fixed_values(SQLFilterOp::FILTER_IN, {3});
+=======
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2}));
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_IN, {3}));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_TRUE(range.is_empty_value_range());
     }
     {
         // where range in (1, 3) and range not in (3)
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 3});
         range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {3});
+=======
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 3}));
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {3}));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_EQ(range._fixed_values.size(), 1);
         ASSERT_TRUE(range._fixed_values.count(1));
     }
@@ -70,8 +99,13 @@ TEST(NormalizeRangeTest, RangeTest) {
         // where range in (1, 2) and range not in (3)
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2});
         range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {3});
+=======
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2}));
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {3}));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_EQ(range._fixed_values.size(), 2);
         ASSERT_TRUE(range._fixed_values.count(1));
         ASSERT_TRUE(range._fixed_values.count(2));
@@ -80,8 +114,13 @@ TEST(NormalizeRangeTest, RangeTest) {
         // where range >= -limit and range in (1, 2, 3)
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, std::numeric_limits<CppType>::lowest());
         range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2, 3});
+=======
+        ASSERT_ERROR(range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, std::numeric_limits<CppType>::lowest()));
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2, 3}));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_EQ(range._fixed_values.size(), 3);
         ASSERT_TRUE(range._fixed_values.count(1));
         ASSERT_TRUE(range._fixed_values.count(2));
@@ -91,7 +130,11 @@ TEST(NormalizeRangeTest, RangeTest) {
         // where range >= -limit and range not in (1, 2, 3)
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_range(SQLFilterOp::FILTER_LESS, std::numeric_limits<CppType>::lowest());
+=======
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LESS, std::numeric_limits<CppType>::lowest()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         bool ok = range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {3}).ok();
         ASSERT_FALSE(ok);
     }
@@ -99,8 +142,13 @@ TEST(NormalizeRangeTest, RangeTest) {
         // where range > 1000 and range < 2000
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_range(SQLFilterOp::FILTER_LESS, 1000);
         range.add_range(SQLFilterOp::FILTER_LARGER, 2000);
+=======
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LESS, 1000));
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER, 2000));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_TRUE(range.is_empty_value_range());
     }
 }
@@ -110,7 +158,11 @@ TEST(NormalizeRangeTest, BoolRangeTest) {
         // range not in (false) and range < false
         // not support for this range
         ColumnValueRange<int> range("test", TYPE_BOOLEAN, 0, 1);
+<<<<<<< HEAD
         range.add_range(SQLFilterOp::FILTER_LESS, true);
+=======
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LESS, true));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         bool res = range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {false}).ok();
         ASSERT_FALSE(res);
     }
@@ -118,7 +170,11 @@ TEST(NormalizeRangeTest, BoolRangeTest) {
         // range not in (false) and range < empty
         // not support for this range
         ColumnValueRange<int> range("test", TYPE_BOOLEAN, 0, 1);
+<<<<<<< HEAD
         range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {false});
+=======
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {false}));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         bool res = range.add_range(SQLFilterOp::FILTER_LESS, true).ok();
         ASSERT_FALSE(res);
     }
@@ -126,8 +182,13 @@ TEST(NormalizeRangeTest, BoolRangeTest) {
         // range != false and range < true
         // not support for this range
         ColumnValueRange<int> range("test", TYPE_BOOLEAN, 0, 1);
+<<<<<<< HEAD
         range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {false});
         range.add_range(SQLFilterOp::FILTER_LESS, true);
+=======
+        ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {false}));
+        ASSERT_ERROR(range.add_range(SQLFilterOp::FILTER_LESS, true));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ASSERT_FALSE(range.is_empty_value_range());
     }
 }
@@ -139,7 +200,11 @@ TEST(NormalizeRangeTest, ExtendScanKeyTest) {
     {
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_range(SQLFilterOp::FILTER_LESS, 0);
+=======
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LESS, 0));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         OlapScanKeys scan_keys;
         scan_keys._begin_scan_keys.emplace_back();
@@ -150,7 +215,11 @@ TEST(NormalizeRangeTest, ExtendScanKeyTest) {
     {
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_range(SQLFilterOp::FILTER_LARGER, std::numeric_limits<CppType>::max());
+=======
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER, std::numeric_limits<CppType>::max()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         OlapScanKeys scan_keys;
         scan_keys._begin_scan_keys.emplace_back();
         scan_keys._begin_scan_keys.emplace_back();
@@ -160,8 +229,13 @@ TEST(NormalizeRangeTest, ExtendScanKeyTest) {
     {
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
+<<<<<<< HEAD
         range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, std::numeric_limits<CppType>::max());
         range.add_range(SQLFilterOp::FILTER_LESS_OR_EQUAL, std::numeric_limits<CppType>::max());
+=======
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, std::numeric_limits<CppType>::max()));
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LESS_OR_EQUAL, std::numeric_limits<CppType>::max()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         OlapScanKeys scan_keys;
         scan_keys._begin_scan_keys.emplace_back();
         scan_keys._begin_scan_keys.emplace_back();

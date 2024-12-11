@@ -16,9 +16,17 @@ package com.starrocks.credential.aliyun;
 
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.CloudCredential;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.s3a.Constants;
+import org.apache.hadoop.fs.s3a.S3AFileSystem;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.Map;
 
@@ -51,11 +59,18 @@ public class AliyunCloudCredential implements CloudCredential {
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+<<<<<<< HEAD
         configuration.set("fs.oss.impl", "com.aliyun.jindodata.oss.JindoOssFileSystem");
         configuration.set("fs.AbstractFileSystem.oss.impl", "com.aliyun.jindodata.oss.OSS");
         configuration.set("fs.oss.accessKeyId", accessKey);
         configuration.set("fs.oss.accessKeySecret", secretKey);
         configuration.set("fs.oss.endpoint", endpoint);
+=======
+        configuration.set("fs.oss.impl", S3AFileSystem.class.getName());
+        configuration.set(Constants.ACCESS_KEY, accessKey);
+        configuration.set(Constants.SECRET_KEY, secretKey);
+        configuration.set(Constants.ENDPOINT, endpoint);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -69,6 +84,12 @@ public class AliyunCloudCredential implements CloudCredential {
         properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey);
         properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey);
         properties.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint);
+<<<<<<< HEAD
+=======
+        properties.put(CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY, accessKey);
+        properties.put(CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY, secretKey);
+        properties.put(CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT, endpoint);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

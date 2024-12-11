@@ -38,6 +38,7 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 // A fast range iterator for roaring bitmap. Output ranges use closed-open form, like [from, to).
 // Example:
 //   input bitmap:  [0 1 4 5 6 7 10 15 16 17 18 19]
@@ -47,13 +48,34 @@ class BitmapRangeIterator {
 public:
     explicit BitmapRangeIterator(const Roaring& bitmap) {
         roaring_init_iterator(&bitmap.roaring, &_iter);
+=======
+using Roaring = roaring::Roaring;
+
+// A fast range iterator for roaring bitmap. Output ranges use closed-open form, like [from, to).
+// Example:
+//   input bitmap:  [0 1 4 5 6 7 10 15 16 17 18 19]
+//   output ranges: [0,2), [4,8), [10,11), [15,20)
+class BitmapRangeIterator {
+public:
+    explicit BitmapRangeIterator(const Roaring& bitmap) {
+        roaring_iterator_init(&bitmap.roaring, &_iter);
+        _read_next_batch();
+    }
+
+    BitmapRangeIterator(const Roaring& bitmap, uint32_t start) {
+        roaring_iterator_init(&bitmap.roaring, &_iter);
+        roaring_uint32_iterator_move_equalorlarger(&_iter, start);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _read_next_batch();
     }
 
     ~BitmapRangeIterator() = default;
 
+<<<<<<< HEAD
     bool has_more_range() const { return !_eof; }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // read next range into [*from, *to) whose size <= max_range_size.
     // return false when there is no more range.
     bool next_range(uint32_t max_range_size, uint32_t* from, uint32_t* to) {
@@ -61,6 +83,7 @@ public:
             return false;
         }
         *from = _buf[_buf_pos];
+<<<<<<< HEAD
         uint32_t range_size = 0;
         do {
             _last_val = _buf[_buf_pos];
@@ -71,12 +94,51 @@ public:
             }
         } while (range_size < max_range_size && !_eof && _buf[_buf_pos] == _last_val + 1);
         *to = *from + range_size;
+=======
+        auto last_val = *from;
+
+        uint32_t range_size = 0;
+        do {
+            _buf_pos++;
+            last_val++;
+            range_size++;
+            if (_buf_pos == _buf_size) {
+                _read_next_batch();
+            }
+        } while (range_size < max_range_size && !_eof && _buf[_buf_pos] == last_val);
+
+        *to = last_val;
+        return true;
+    }
+
+    // read next range into [*from, *to)
+    // return false when there is no more range.
+    bool next_range(uint32_t* from, uint32_t* to) {
+        if (_eof) {
+            return false;
+        }
+        *from = _buf[_buf_pos];
+        auto last_val = *from;
+
+        do {
+            _buf_pos++;
+            last_val++;
+            if (_buf_pos == _buf_size) {
+                _read_next_batch();
+            }
+        } while (!_eof && _buf[_buf_pos] == last_val);
+        *to = last_val;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return true;
     }
 
 private:
     void _read_next_batch() {
+<<<<<<< HEAD
         uint32_t n = roaring::api::roaring_read_uint32_iterator(&_iter, _buf, kBatchSize);
+=======
+        uint32_t n = roaring::api::roaring_uint32_iterator_read(&_iter, _buf, kBatchSize);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _buf_pos = 0;
         _buf_size = n;
         _eof = n == 0;
@@ -85,7 +147,10 @@ private:
     static const uint32_t kBatchSize = 256;
 
     roaring::api::roaring_uint32_iterator_t _iter{};
+<<<<<<< HEAD
     uint32_t _last_val{0};
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     uint32_t _buf_pos{0};
     uint32_t _buf_size{0};
     bool _eof{false};

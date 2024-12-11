@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # arrays_overlap
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 判断两个相同类型的数组中是否包含相同的元素。返回`1`代表存在相同元素，返回`0`代表不存在相同元素。
 

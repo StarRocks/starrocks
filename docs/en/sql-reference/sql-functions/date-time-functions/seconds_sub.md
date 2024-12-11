@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # seconds_sub
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Subtracts a time interval from a date value. The time interval is in seconds.
 

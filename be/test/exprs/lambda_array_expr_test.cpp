@@ -16,6 +16,10 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+<<<<<<< HEAD
+=======
+#include <memory>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 #include "butil/time.h"
 #include "column/column_helper.h"
@@ -25,6 +29,10 @@
 #include "exprs/array_map_expr.h"
 #include "exprs/cast_expr.h"
 #include "exprs/function_call_expr.h"
+<<<<<<< HEAD
+=======
+#include "exprs/function_helper.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exprs/is_null_predicate.h"
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
@@ -253,7 +261,11 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;
+<<<<<<< HEAD
             lambda->get_slot_ids(&ids);
+=======
+            lambda->get_captured_slot_ids(&ids);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             lambda->get_lambda_arguments_ids(&arguments);
 
             ASSERT_TRUE(arguments.size() == 1 && arguments[0] == 100000); // the x's slot_id = 100000
@@ -272,6 +284,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
                 ASSERT_FALSE(result->is_constant());
                 ASSERT_FALSE(result->is_numeric());
 
+<<<<<<< HEAD
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(1, result->get(0).get_array()[0].get_int32());
                 EXPECT_EQ(4, result->get(0).get_array()[1].get_int32());
@@ -303,6 +316,39 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
                 EXPECT_EQ(-110, result->get(1).get_array()[1].get_int32());
                 EXPECT_EQ(-110, result->get(2).get_array()[0].get_int32());
                 EXPECT_EQ(-110, result->get(2).get_array()[1].get_int32());
+=======
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(1, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(4, result->get(0).get_array()[1].get_int32());
+                ASSERT_TRUE(result->get(1).get_array()[0].is_null());
+                ASSERT_TRUE(result->get(1).get_array()[1].is_null());
+                ASSERT_TRUE(result->get(2).get_array()[0].is_null());
+                ASSERT_EQ(12, result->get(2).get_array()[1].get_int32());
+            } else if (i == 0 && j == 1) { // array_map(x -> x is null, array<int>)
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(0, result->get(0).get_array()[0].get_int8());
+                ASSERT_EQ(0, result->get(0).get_array()[1].get_int8());
+                ASSERT_EQ(1, result->get(1).get_array()[0].get_int8());
+                ASSERT_EQ(1, result->get(1).get_array()[1].get_int8());
+                ASSERT_EQ(1, result->get(2).get_array()[0].get_int8());
+                ASSERT_EQ(0, result->get(2).get_array()[1].get_int8());
+            } else if (i == 0 && j == 2) { // // array_map(x -> x+a, array<int>)
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(2, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(5, result->get(0).get_array()[1].get_int32());
+                ASSERT_TRUE(result->get(1).get_array()[0].is_null());
+                ASSERT_TRUE(result->get(1).get_array()[1].is_null());
+                ASSERT_TRUE(result->get(2).get_array()[0].is_null());
+                ASSERT_EQ(13, result->get(2).get_array()[1].get_int32());
+            } else if (i == 0 && j == 3) {
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(-110, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(0).get_array()[1].get_int32());
+                ASSERT_EQ(-110, result->get(1).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(1).get_array()[1].get_int32());
+                ASSERT_EQ(-110, result->get(2).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(2).get_array()[1].get_int32());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
 
             Expr::close(expr_ctxs, &_runtime_state);
@@ -329,7 +375,11 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;
+<<<<<<< HEAD
             lambda->get_slot_ids(&ids);
+=======
+            lambda->get_captured_slot_ids(&ids);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             lambda->get_lambda_arguments_ids(&arguments);
 
             ASSERT_TRUE(arguments.size() == 1 && arguments[0] == 100000); // the x's slot_id = 100000
@@ -338,6 +388,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
             } else {
                 ASSERT_TRUE(ids.empty());
             }
+<<<<<<< HEAD
 
             ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
 
@@ -355,16 +406,39 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
                 EXPECT_EQ(-110, result->get(0).get_array()[0].get_int32());
             } else if (i == 3) { // array_map(x->xxx,[])
                 EXPECT_EQ(1, result->size());
+=======
+            ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
+
+            if (i == 1) { // array_map(x->xxx,null)
+                ASSERT_EQ(3, result->size());
+                ASSERT_TRUE(result->is_null(0));
+            } else if (i == 2 && (j == 0 || j == 2)) { // array_map( x->x || x->x+a, [null])
+                ASSERT_EQ(1, result->size());
+                ASSERT_TRUE(result->get(0).get_array()[0].is_null());
+            } else if (i == 2 && j == 1) { // array_map(x -> x is null,[null])
+                ASSERT_EQ(1, result->size());
+                ASSERT_EQ(1, result->get(0).get_array()[0].get_int8());
+            } else if (i == 2 && j == 3) { // array_map(x -> -110,[null])
+                ASSERT_EQ(1, result->size());
+                ASSERT_EQ(-110, result->get(0).get_array()[0].get_int32());
+            } else if (i == 3) { // array_map(x->xxx,[])
+                ASSERT_EQ(3, result->size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ASSERT_TRUE(result->get(0).get_array().empty());
             } else if (i == 4 && (j == 0 || j == 2)) { // array_map(x->x || x->x+a, array<special>)
                                                        // [null]
                                                        // []
                                                        // NULL
+<<<<<<< HEAD
                 EXPECT_EQ(3, result->size());
+=======
+                ASSERT_EQ(3, result->size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->is_null(2));
             } else if (i == 4 && j == 1) { // array_map(x->x is null, array<special>)
+<<<<<<< HEAD
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(1, result->get(0).get_array()[0].get_int8());
                 ASSERT_TRUE(result->get(1).get_array().empty());
@@ -372,6 +446,15 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
             } else if (i == 4 && j == 3) { // array_map(x-> -110, array<special>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(-110, result->get(0).get_array()[0].get_int32());
+=======
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(1, result->get(0).get_array()[0].get_int8());
+                ASSERT_TRUE(result->get(1).get_array().empty());
+                ASSERT_TRUE(result->is_null(2));
+            } else if (i == 4 && j == 3) { // array_map(x-> -110, array<special>)
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(-110, result->get(0).get_array()[0].get_int32());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->is_null(2));
             }
@@ -400,7 +483,11 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;
+<<<<<<< HEAD
             lambda->get_slot_ids(&ids);
+=======
+            lambda->get_captured_slot_ids(&ids);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             lambda->get_lambda_arguments_ids(&arguments);
 
             ASSERT_TRUE(arguments.size() == 1 && arguments[0] == 100000); // the x's slot_id = 100000
@@ -409,6 +496,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
             } else {
                 ASSERT_TRUE(ids.empty());
             }
+<<<<<<< HEAD
 
             ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
             if (i == 5 && j == 0) { // array_map( x->x, array<const[1,4]...>)
@@ -445,16 +533,59 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 EXPECT_EQ(-110, result->get(2).get_array()[1].get_int32());
             } else if (i == 6) { // array_map(x -> x || x->x is null || x -> x+a, array<const(null...)>)
                 EXPECT_EQ(3, result->size());
+=======
+            ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
+            if (i == 5 && j == 0) { // array_map( x->x, array<const[1,4]...>)
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(1, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(4, result->get(0).get_array()[1].get_int32());
+                ASSERT_EQ(1, result->get(1).get_array()[0].get_int32());
+                ASSERT_EQ(4, result->get(1).get_array()[1].get_int32());
+                ASSERT_EQ(1, result->get(2).get_array()[0].get_int32());
+                ASSERT_EQ(4, result->get(2).get_array()[1].get_int32());
+            } else if (i == 5 && j == 1) { // array_map(x->x is null, array<const[1,4]...>)
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(0, result->get(0).get_array()[0].get_int8());
+                ASSERT_EQ(0, result->get(0).get_array()[1].get_int8());
+                ASSERT_EQ(0, result->get(1).get_array()[0].get_int8());
+                ASSERT_EQ(0, result->get(1).get_array()[1].get_int8());
+                ASSERT_EQ(0, result->get(2).get_array()[0].get_int8());
+                ASSERT_EQ(0, result->get(2).get_array()[1].get_int8());
+                LOG(INFO) << "pass";
+            } else if (i == 5 && j == 2) { // // array_map( x->x + a, array<const[1,4]...>)
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(2, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(5, result->get(0).get_array()[1].get_int32());
+                ASSERT_EQ(2, result->get(1).get_array()[0].get_int32());
+                ASSERT_EQ(5, result->get(1).get_array()[1].get_int32());
+                ASSERT_EQ(2, result->get(2).get_array()[0].get_int32());
+                ASSERT_EQ(5, result->get(2).get_array()[1].get_int32());
+            } else if (i == 5 && j == 3) { // // array_map( x-> -110, array<const[1,4]...>)
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(-110, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(0).get_array()[1].get_int32());
+                ASSERT_EQ(-110, result->get(1).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(1).get_array()[1].get_int32());
+                ASSERT_EQ(-110, result->get(2).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(2).get_array()[1].get_int32());
+            } else if (i == 6) { // array_map(x -> x || x->x is null || x -> x+a, array<const(null...)>)
+                ASSERT_EQ(3, result->size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ASSERT_TRUE(result->is_null(0));
                 ASSERT_TRUE(result->is_null(1));
                 ASSERT_TRUE(result->is_null(2));
             } else if (i == 7 && (j == 0 || j == 2)) { // array_map(x -> x || x-> x+a,array<const([null]...)>)
+<<<<<<< HEAD
                 EXPECT_EQ(3, result->size());
+=======
+                ASSERT_EQ(3, result->size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
                 ASSERT_TRUE(result->get(1).get_array()[0].is_null());
                 ASSERT_TRUE(result->get(2).get_array()[0].is_null());
 
             } else if (i == 7 && j == 1) { // array_map(x -> x is null, array<const([null]...)>)
+<<<<<<< HEAD
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(1, result->get(0).get_array()[0].get_int8());
                 EXPECT_EQ(1, result->get(1).get_array()[0].get_int8());
@@ -466,12 +597,26 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 EXPECT_EQ(-110, result->get(2).get_array()[0].get_int32());
             } else if (i == 8) { // array_map(x -> x || x -> x is null || x -> x+a || x -> -110, array<const([]...)>)
                 EXPECT_EQ(3, result->size());
+=======
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(1, result->get(0).get_array()[0].get_int8());
+                ASSERT_EQ(1, result->get(1).get_array()[0].get_int8());
+                ASSERT_EQ(1, result->get(2).get_array()[0].get_int8());
+            } else if (i == 7 && j == 3) { // array_map(x -> -110, array<const([null]...)>)
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(-110, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(1).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(2).get_array()[0].get_int32());
+            } else if (i == 8) { // array_map(x -> x || x -> x is null || x -> x+a || x -> -110, array<const([]...)>)
+                ASSERT_EQ(3, result->size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 ASSERT_TRUE(result->get(0).get_array().empty());
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->get(2).get_array().empty());
             }
 
             if (j == 1) { // array<int> -> array<bool>
+<<<<<<< HEAD
                 if (result->is_nullable()) {
                     auto col = std::dynamic_pointer_cast<NullableColumn>(result);
                     auto array_col = std::dynamic_pointer_cast<ArrayColumn>(col->data_column());
@@ -480,6 +625,17 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                     auto array_col = std::dynamic_pointer_cast<ArrayColumn>(result);
                     EXPECT_EQ(2, array_col->elements_column()->type_size()); // nullable bool
                 }
+=======
+                auto data_column = result;
+                if (data_column->is_constant()) {
+                    data_column = FunctionHelper::get_data_column_of_const(data_column);
+                }
+                if (data_column->is_nullable()) {
+                    data_column = down_cast<NullableColumn*>(data_column.get())->data_column();
+                }
+                auto array_col = std::dynamic_pointer_cast<ArrayColumn>(data_column);
+                ASSERT_EQ(2, array_col->elements_column()->type_size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             Expr::close(expr_ctxs, &_runtime_state);
         }

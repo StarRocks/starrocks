@@ -6,11 +6,19 @@ displayed_sidebar: docs
 
 ## Description
 
+<<<<<<< HEAD
 Cancels an on-going RESTORE task in a specified database. For more information, see [data backup and restoration](../../../administration/management/Backup_and_restore.md).
 
 > **CAUTION**
 >
 > If a RESTORE task is canceled during the COMMIT phase, the restored data will be corrupted and inaccessible. In this case, you can only perform the RESTORE  operation again and wait for the job to complete.
+=======
+Cancels an ongoing RESTORE task in a specified database.
+
+> **CAUTION**
+>
+> If a RESTORE task is canceled during the COMMIT phase, the restored data will be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 ## Syntax
 

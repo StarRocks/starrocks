@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hours_sub
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 从指定的日期时间中减少指定的小时数。
 

@@ -14,8 +14,13 @@
 
 package com.starrocks.udf;
 
+<<<<<<< HEAD
 import org.junit.Assert;
 import org.junit.Test;
+=======
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +47,10 @@ public class FunctionStatesTest {
             }
         }
 
+<<<<<<< HEAD
         Assert.assertEquals(states.size(), 8191);
+=======
+        Assertions.assertEquals(states.size(), 8191);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     sum(l_extendedprice * l_discount) as revenue
@@ -8,6 +9,8 @@ where
   and l_shipdate < date '1996-01-01'
   and l_discount between 0.02 and 0.04
   and l_quantity < 24 ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 AGGREGATE ([GLOBAL] aggregate [{19: sum=sum(19: sum)}] group by [[]] having [null]
     EXCHANGE GATHER

@@ -284,22 +284,33 @@ Status BinaryPrefixPageDecoder<Type>::_next_value(faststring* value) {
 
 template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::next_batch(size_t* n, Column* dst) {
+<<<<<<< HEAD
     SparseRange read_range;
     uint32_t begin = current_index();
     read_range.add(Range(begin, begin + *n));
+=======
+    SparseRange<> read_range;
+    uint32_t begin = current_index();
+    read_range.add(Range<>(begin, begin + *n));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *n = current_index() - begin + 1;
     return Status::OK();
 }
 
 template <LogicalType Type>
+<<<<<<< HEAD
 Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange& range, Column* dst) {
+=======
+Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_pos >= _num_values)) {
         return Status::OK();
     }
     size_t to_read = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_values - _cur_pos));
 
+<<<<<<< HEAD
     SparseRangeIterator iter = range.new_iterator();
     if constexpr (Type == TYPE_CHAR) {
         while (to_read > 0) {
@@ -311,11 +322,25 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange& range, Colum
                 RETURN_IF_ERROR(_next_value(&_current_value));
                 size_t len = strnlen(reinterpret_cast<const char*>(_current_value.data()), _current_value.size());
                 (void)dst->append_strings({Slice(_current_value.data(), len)});
+=======
+    SparseRangeIterator<> iter = range.new_iterator();
+    if constexpr (Type == TYPE_CHAR) {
+        while (to_read > 0) {
+            RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
+            bool ok = dst->append_strings(std::vector<Slice>{_current_value});
+            DCHECK(ok);
+            Range<> r = iter.next(to_read);
+            for (size_t i = 1; i < r.span_size(); ++i) {
+                RETURN_IF_ERROR(_next_value(&_current_value));
+                size_t len = strnlen(reinterpret_cast<const char*>(_current_value.data()), _current_value.size());
+                (void)dst->append_strings(std::vector<Slice>{Slice(_current_value.data(), len)});
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             to_read -= r.span_size();
         }
     } else {
         while (to_read > 0) {
+<<<<<<< HEAD
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
             DCHECK(ok);
@@ -323,6 +348,15 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange& range, Colum
             for (size_t i = 1; i < r.span_size(); ++i) {
                 RETURN_IF_ERROR(_next_value(&_current_value));
                 (void)dst->append_strings({_current_value});
+=======
+            RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
+            bool ok = dst->append_strings(std::vector<Slice>{_current_value});
+            DCHECK(ok);
+            Range<> r = iter.next(to_read);
+            for (size_t i = 1; i < r.span_size(); ++i) {
+                RETURN_IF_ERROR(_next_value(&_current_value));
+                (void)dst->append_strings(std::vector<Slice>{_current_value});
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             to_read -= r.span_size();
         }

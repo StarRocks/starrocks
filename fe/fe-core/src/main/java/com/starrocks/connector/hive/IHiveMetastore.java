@@ -16,12 +16,18 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+=======
+import com.starrocks.catalog.Table;
+import com.starrocks.connector.metastore.IMetastore;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+<<<<<<< HEAD
 
 public interface IHiveMetastore {
 
@@ -33,6 +39,26 @@ public interface IHiveMetastore {
 
     Table getTable(String dbName, String tableName);
 
+=======
+import java.util.function.Function;
+
+public interface IHiveMetastore extends IMetastore {
+
+    void createDb(String dbName, Map<String, String> properties);
+
+    void dropDb(String dbName, boolean deleteData);
+
+    void createTable(String dbName, Table table);
+
+    void dropTable(String dbName, String tableName);
+
+    Table getTable(String dbName, String tableName);
+
+    default List<String> getPartitionKeys(String dbName, String tableName) {
+        return getPartitionKeysByValue(dbName, tableName, HivePartitionValue.ALL_PARTITION_VALUES);
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues);
 
     default Map<HivePartitionName, Partition> getCachedPartitions(List<HivePartitionName> hivePartitionNames) {
@@ -45,12 +71,29 @@ public interface IHiveMetastore {
 
     Partition getPartition(String dbName, String tableName, List<String> partitionValues);
 
+<<<<<<< HEAD
+=======
+    void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions);
+
+    void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData);
+
+    boolean partitionExists(Table table, List<String> partitionValues);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Map<String, Partition> getPartitionsByNames(String dbName, String tableName, List<String> partitionNames);
 
     HivePartitionStats getTableStatistics(String dbName, String tableName);
 
     Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitions);
 
+<<<<<<< HEAD
+=======
+    void updateTableStatistics(String dbName, String tableName, Function<HivePartitionStats, HivePartitionStats> update);
+
+    void updatePartitionStatistics(String dbName, String tableName, String partitionName,
+                                   Function<HivePartitionStats, HivePartitionStats> update);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     // return refreshed partitions in cache for partitioned table, return empty list for unpartitioned table
     default List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
         return Lists.newArrayList();

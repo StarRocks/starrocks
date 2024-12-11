@@ -21,7 +21,11 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
@@ -127,7 +131,15 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         return loadPropertyList;
     }
 
+<<<<<<< HEAD
     public void checkJobProperties() throws UserException {
+=======
+    public Map<String, String> getJobProperties() {
+        return jobProperties;
+    }
+
+    public void checkJobProperties() throws StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !CONFIGURABLE_PROPERTIES_SET.contains(entity)).findFirst();
         if (optional.isPresent()) {
@@ -158,10 +170,17 @@ public class AlterRoutineLoadStmt extends DdlStmt {
                 maxFilterRatio = Double.valueOf(jobProperties.get(
                                     CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY));
             } catch (NumberFormatException exception) {
+<<<<<<< HEAD
                 throw new UserException("Incorrect format of max_filter_ratio", exception);
             }
             if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
                 throw new UserException(
+=======
+                throw new StarRocksException("Incorrect format of max_filter_ratio", exception);
+            }
+            if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
+                throw new StarRocksException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
             }
             analyzedJobProperties.put(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY,
@@ -174,10 +193,17 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             try {
                 taskConsumeSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
             } catch (NumberFormatException exception) {
+<<<<<<< HEAD
                 throw new UserException("Incorrect format of task_consume_second", exception);
             }
             if (taskConsumeSecond <= 0) {
                 throw new UserException(
+=======
+                throw new StarRocksException("Incorrect format of task_consume_second", exception);
+            }
+            if (taskConsumeSecond <= 0) {
+                throw new StarRocksException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         CreateRoutineLoadStmt.TASK_CONSUME_SECOND + " must be greater than 0");
             }
 
@@ -185,15 +211,26 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             try {
                 taskTimeoutSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
             } catch (NumberFormatException exception) {
+<<<<<<< HEAD
                 throw new UserException("Incorrect format of task_timeout_second", exception);
             }
             if (taskTimeoutSecond <= 0) {
                 throw new UserException(
+=======
+                throw new StarRocksException("Incorrect format of task_timeout_second", exception);
+            }
+            if (taskTimeoutSecond <= 0) {
+                throw new StarRocksException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND + " must be greater than 0");
             }
 
             if (taskConsumeSecond >= taskTimeoutSecond) {
+<<<<<<< HEAD
                 throw new UserException("task_timeout_second must be larger than task_consume_second");
+=======
+                throw new StarRocksException("task_timeout_second must be larger than task_consume_second");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             analyzedJobProperties.put(CreateRoutineLoadStmt.TASK_CONSUME_SECOND,
                     String.valueOf(taskConsumeSecond));
@@ -204,10 +241,17 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             try {
                 taskConsumeSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
             } catch (NumberFormatException exception) {
+<<<<<<< HEAD
                 throw new UserException("Incorrect format of task_consume_second", exception);
             }
             if (taskConsumeSecond <= 0) {
                 throw new UserException(
+=======
+                throw new StarRocksException("Incorrect format of task_consume_second", exception);
+            }
+            if (taskConsumeSecond <= 0) {
+                throw new StarRocksException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         CreateRoutineLoadStmt.TASK_CONSUME_SECOND + " must be greater than 0");
             }
 
@@ -221,10 +265,17 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             try {
                 taskTimeoutSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
             } catch (NumberFormatException exception) {
+<<<<<<< HEAD
                 throw new UserException("Incorrect format of task_timeout_second", exception);
             }
             if (taskTimeoutSecond <= 0) {
                 throw new UserException(
+=======
+                throw new StarRocksException("Incorrect format of task_timeout_second", exception);
+            }
+            if (taskTimeoutSecond <= 0) {
+                throw new StarRocksException(
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                         CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND + " must be greater than 0");
             }
 

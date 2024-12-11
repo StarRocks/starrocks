@@ -58,7 +58,11 @@ public class TransDbProcDir implements ProcDirInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
+<<<<<<< HEAD
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+=======
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         List<List<Comparable>> infos = transactionMgr.getDbInfo();
         // order by dbId, asc
         ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0);

@@ -47,6 +47,13 @@ public class DistributionDesc implements ParseNode, Writable {
         throw new NotImplementedException();
     }
 
+<<<<<<< HEAD
+=======
+    public DistributionInfoType getType() {
+        return type;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public int getBuckets() {
         throw new NotImplementedException();
     }

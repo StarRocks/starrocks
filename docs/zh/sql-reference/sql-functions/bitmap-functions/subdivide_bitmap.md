@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # subdivide_bitmap
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将大 bitmap 拆成多个子 bitmap。
 

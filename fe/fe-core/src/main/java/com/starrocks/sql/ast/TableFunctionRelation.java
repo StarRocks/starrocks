@@ -41,6 +41,11 @@ public class TableFunctionRelation extends Relation {
     private TableFunction tableFunction;
     private List<Expr> childExpressions;
 
+<<<<<<< HEAD
+=======
+    private boolean isLeftJoin = false;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public TableFunctionRelation(FunctionCallExpr functionCallExpr) {
         this(functionCallExpr.getFnName().toString().toLowerCase(), functionCallExpr.getParams(), functionCallExpr.getPos());
     }
@@ -67,6 +72,17 @@ public class TableFunctionRelation extends Relation {
         this.tableFunction = tableFunction;
     }
 
+<<<<<<< HEAD
+=======
+    public void setIsLeftJoin(boolean isLeftJoin) {
+        this.isLeftJoin = isLeftJoin;
+    }
+
+    public boolean getIsLeftJoin() {
+        return isLeftJoin;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<Expr> getChildExpressions() {
         return childExpressions;
     }

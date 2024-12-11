@@ -30,6 +30,10 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Set;
 
 /**
@@ -59,6 +63,12 @@ public class Group {
     // mv id -> Statistics
     private final Map<Long, Statistics> mvStatistics;
 
+<<<<<<< HEAD
+=======
+    // used to adjust mv statistics based on mv nest relationship
+    private final Map<Long, List<Long>> relatedMvs;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final Map<PhysicalPropertySet, Pair<Double, GroupExpression>> lowestCostExpressions;
     // GroupExpressions in this Group which could satisfy the required property.
     private final Map<PhysicalPropertySet, Set<GroupExpression>> satisfyOutputPropertyGroupExpressions;
@@ -68,6 +78,11 @@ public class Group {
     // All expressions in one group have same logical property.
     private LogicalProperty logicalProperty;
 
+<<<<<<< HEAD
+=======
+    private boolean isStatisticsAdjustedByMv = false;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Group(int groupId) {
         this.id = groupId;
         logicalExpressions = Lists.newArrayList();
@@ -76,6 +91,10 @@ public class Group {
         satisfyOutputPropertyGroupExpressions = Maps.newHashMap();
         isExplored = false;
         mvStatistics = Maps.newHashMap();
+<<<<<<< HEAD
+=======
+        relatedMvs = Maps.newHashMap();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         costLowerBounds = Maps.newHashMap();
     }
 
@@ -100,6 +119,7 @@ public class Group {
     }
 
     public void setMvStatistics(long mvId, Statistics statistics) {
+<<<<<<< HEAD
         mvStatistics.putIfAbsent(mvId, statistics);
     }
 
@@ -107,6 +127,27 @@ public class Group {
         return mvStatistics;
     }
 
+=======
+        mvStatistics.put(mvId, statistics);
+    }
+
+    public void setRelatedMvs(long mvId, List<Long> relatedIds) {
+        relatedMvs.put(mvId, relatedIds);
+    }
+
+    public Map<Long, List<Long>> getRelatedMvs() {
+        return relatedMvs;
+    }
+
+    public Map<Long, Statistics> getGroupMvStatistics() {
+        return mvStatistics;
+    }
+
+    public Optional<Statistics> getMvStatistics(long mvId) {
+        return Optional.ofNullable(mvStatistics.get(mvId));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<GroupExpression> getLogicalExpressions() {
         return logicalExpressions;
     }
@@ -307,6 +348,14 @@ public class Group {
             statistics = other.statistics;
         }
         other.satisfyOutputPropertyGroupExpressions.forEach(this::addSatisfyOutputPropertyGroupExpressions);
+<<<<<<< HEAD
+=======
+        mvStatistics.putAll(other.mvStatistics);
+        other.mvStatistics.clear();
+        relatedMvs.putAll(other.relatedMvs);
+        other.relatedMvs.clear();
+        isStatisticsAdjustedByMv |= other.isStatisticsAdjustedByMv();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void updateEnforcerGroup(GroupExpression groupExpression, Group checkGroup) {
@@ -377,6 +426,7 @@ public class Group {
         for (GroupExpression expr : logicalExpressions) {
             sb.append(expr).append('\n');
         }
+<<<<<<< HEAD
         return sb.toString();
     }
 
@@ -388,6 +438,20 @@ public class Group {
         }
         for (GroupExpression expr : physicalExpressions) {
             sb.append(expr.toPrettyString(headlineIndent, detailIndent));
+=======
+        sb.deleteCharAt(sb.length() - 1);
+        return sb.toString();
+    }
+
+    public String debugString(String headlineIndent, String detailIndent) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(headlineIndent).append("Group: ").append(id).append("\n");
+        for (GroupExpression expr : logicalExpressions) {
+            sb.append(expr.debugString(headlineIndent, detailIndent));
+        }
+        for (GroupExpression expr : physicalExpressions) {
+            sb.append(expr.debugString(headlineIndent, detailIndent));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         return sb.toString();
     }
@@ -416,4 +480,15 @@ public class Group {
             taskContext.setUpperBoundCost(CostModel.MAX_COST);
         }
     }
+<<<<<<< HEAD
+=======
+
+    public void setIsStatisticsAdjustedByMv(boolean isStatisticsAdjustedByMv) {
+        this.isStatisticsAdjustedByMv = isStatisticsAdjustedByMv;
+    }
+
+    public boolean isStatisticsAdjustedByMv() {
+        return this.isStatisticsAdjustedByMv;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

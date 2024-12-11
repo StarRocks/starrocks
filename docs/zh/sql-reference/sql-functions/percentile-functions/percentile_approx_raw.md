@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_approx_raw
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算给定参数 `x` 的百分位数。`x` 可以是列或者数值。如果 `x` 是列，则先对该列进行升序排序，然后取精确的第 `y` 位百分数。
 

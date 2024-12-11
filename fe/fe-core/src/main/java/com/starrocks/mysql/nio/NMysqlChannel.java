@@ -16,6 +16,10 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.NetUtils;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.ConnectProcessor;
 import org.apache.logging.log4j.LogManager;
@@ -39,7 +43,11 @@ public class NMysqlChannel extends MysqlChannel {
         this.conn = connection;
         if (connection.getPeerAddress() instanceof InetSocketAddress) {
             InetSocketAddress address = (InetSocketAddress) connection.getPeerAddress();
+<<<<<<< HEAD
             remoteHostPortString = address.getHostString() + ":" + address.getPort();
+=======
+            remoteHostPortString = NetUtils.getHostPortInAccessibleFormat(address.getHostString(), address.getPort());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             remoteIp = address.getAddress().getHostAddress();
         } else {
             // Reach here, what's it?

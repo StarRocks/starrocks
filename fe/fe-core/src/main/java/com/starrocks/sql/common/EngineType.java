@@ -27,6 +27,10 @@ public enum EngineType {
     ICEBERG,
     HUDI,
     JDBC,
+<<<<<<< HEAD
+=======
+    ODPS,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     FILE;
 
     public static Set<EngineType> SUPPORT_NOT_NULL_SET = ImmutableSet.of(

@@ -22,10 +22,18 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
+<<<<<<< HEAD
+=======
+#include "exprs/clone_expr.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "runtime/types.h"
 #include "types/logical_type.h"
+<<<<<<< HEAD
+=======
+#include "types/type_checker_manager.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 
@@ -138,7 +146,10 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     // use query timeout or default value of HikariConfig
     int connection_timeout_ms =
             state->query_options().__isset.query_timeout ? state->query_options().query_timeout * 1000 : 30 * 1000;
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
                                    statement_fetch_size, connection_pool_size, minimum_idle_connections,
                                    idle_timeout_ms, connection_timeout_ms);
@@ -198,6 +209,7 @@ void JDBCScanner::_init_profile() {
 }
 
 StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc) {
+<<<<<<< HEAD
     auto type = slot_desc->type().type;
     if (java_class == "java.lang.Short") {
         if (type != TYPE_TINYINT && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
@@ -304,6 +316,9 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
         return TYPE_VARCHAR;
     }
     __builtin_unreachable();
+=======
+    return TypeCheckerManager::getInstance().checkType(java_class, slot_desc);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
@@ -338,8 +353,20 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
         _result_chunk->append_column(std::move(result_column), i);
         auto column_ref = _pool.add(new ColumnRef(intermediate, i));
         // TODO: add check cast status
+<<<<<<< HEAD
         Expr* cast_expr =
                 VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(), column_ref, &_pool, true);
+=======
+        Expr* cast_expr = nullptr;
+        if (ret_type != _slot_descs[i]->type().type) {
+            cast_expr = VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(), column_ref, &_pool,
+                                                             true);
+        } else {
+            // clone to reuse result_chunk
+            cast_expr = CloneExpr::from_child(column_ref, &_pool);
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _cast_exprs.push_back(_pool.add(new ExprContext(cast_expr)));
     }
     RETURN_IF_ERROR(Expr::prepare(_cast_exprs, state));
@@ -448,4 +475,8 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
     return Status::OK();
 }
 
+<<<<<<< HEAD
 } // namespace starrocks
+=======
+} // namespace starrocks
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

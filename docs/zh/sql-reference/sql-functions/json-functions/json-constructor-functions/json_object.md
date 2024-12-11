@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_object
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 接收键值集合，并返回一个包含这些键值对的 JSON 类型的对象（以下简称JSON对象），并按照键的字典序排列。
 

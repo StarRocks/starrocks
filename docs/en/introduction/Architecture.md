@@ -25,7 +25,11 @@ As a typical massively parallel processing (MPP) database StarRocks supports the
 
 #### Nodes
 
+<<<<<<< HEAD
 In the storage-nothing architecture, StarRocks consists of two types of nodes: FEs and BEs.
+=======
+In the shared-nothing architecture, StarRocks consists of two types of nodes: FEs and BEs.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 - FEs are responsible for metadata management and constructing execution plans.
 - BEs execute query plans and store data. BEs utilize local storage to accelerate queries and the multi-replica mechanism to ensure high data availability.

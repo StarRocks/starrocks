@@ -46,7 +46,11 @@ Status BinlogBuilder::commit(BinlogBuildResult* result) {
     if (_current_writer->file_size() > _params->max_file_size) {
         // ignore close failure for the last writer because
         // all binlog data has been committed (persisted)
+<<<<<<< HEAD
         _close_current_writer();
+=======
+        (void)_close_current_writer();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _current_writer.reset();
     }
 
@@ -63,7 +67,11 @@ void BinlogBuilder::abort(BinlogBuildResult* result) {
     //    deleting newly created binlog files
     bool fail_delete_new_files = false;
     if (!_new_files.empty()) {
+<<<<<<< HEAD
         _close_current_writer();
+=======
+        WARN_IF_ERROR(_close_current_writer(), "close writer failed");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Status st = BinlogBuilder::delete_binlog_files(_new_files);
         fail_delete_new_files = !st.ok();
     } else if (_current_writer != nullptr) {
@@ -73,7 +81,11 @@ void BinlogBuilder::abort(BinlogBuildResult* result) {
         if (_current_writer->is_writing()) {
             Status status = _abort_current_writer();
             if (!status.ok()) {
+<<<<<<< HEAD
                 _close_current_writer();
+=======
+                WARN_IF_ERROR(_close_current_writer(), "close writer failed");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }
@@ -282,7 +294,11 @@ BinlogFileWriterPtr BinlogBuilder::discard_binlog_build_result(int64_t version, 
         // 2.1 reset the writer to the previous meta for reuse
         st = current_active_writer->reset(params->active_file_meta.get());
         if (!st.ok()) {
+<<<<<<< HEAD
             current_active_writer->close(false);
+=======
+            WARN_IF_ERROR(current_active_writer->close(false), "Fail to close active writer");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             LOG(WARNING) << "Fail to reset active writer when discarding data for version " << version
                          << ", file path: " << current_active_writer->file_path() << ", " << st;
         } else {

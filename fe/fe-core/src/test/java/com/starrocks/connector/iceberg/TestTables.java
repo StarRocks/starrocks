@@ -42,6 +42,10 @@ import java.io.File;
 import java.util.Map;
 
 import static org.apache.iceberg.TableMetadata.newTableMetadata;
+<<<<<<< HEAD
+=======
+import static org.apache.iceberg.TableProperties.FORMAT_VERSION;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class TestTables {
     private static final String TEST_METADATA_LOCATION =
@@ -76,7 +80,12 @@ public class TestTables {
         ops.commit(
                 null,
                 newTableMetadata(
+<<<<<<< HEAD
                         schema, spec, sortOrder, temp.toString(), ImmutableMap.of()));
+=======
+                        schema, spec, sortOrder, temp.toString(),
+                        ImmutableMap.of(FORMAT_VERSION, String.valueOf(formatVersion))));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         return new TestTable(ops, name);
     }

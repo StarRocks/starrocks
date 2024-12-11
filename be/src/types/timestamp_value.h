@@ -120,6 +120,10 @@ public:
     bool from_string(const char* date_str, size_t len);
 
     int64_t to_unix_second() const;
+<<<<<<< HEAD
+=======
+    int64_t to_unixtime() const;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     bool from_unixtime(int64_t second, const std::string& timezone);
     void from_unixtime(int64_t second, const cctz::time_zone& ctz);
@@ -153,8 +157,13 @@ public:
     static TimestampValue MIN_TIMESTAMP_VALUE;
 
     /**
+<<<<<<< HEAD
      * Milliseconds since January 1, 2000, 00:00:00. A negative number indicates the number of
      * milliseconds before January 1, 2000, 00:00:00.
+=======
+     * Microseconds since January 1, 2000, 00:00:00. A negative number indicates the number of
+     * microseconds before January 1, 2000, 00:00:00.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
      */
     Timestamp _timestamp;
 };

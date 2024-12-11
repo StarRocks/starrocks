@@ -50,4 +50,12 @@ public class PseudoType extends Type {
     protected String toSql(int depth) {
         return toString();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    protected String toTypeString(int depth) {
+        return toString();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

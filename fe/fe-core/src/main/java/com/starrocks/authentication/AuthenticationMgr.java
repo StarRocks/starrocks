@@ -18,22 +18,35 @@ package com.starrocks.authentication;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.Password;
+=======
+import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
+import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.metablock.MapEntryConsumer;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationMgr;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.UserPrivilegeCollectionV2;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -42,26 +55,38 @@ import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
+<<<<<<< HEAD
 import java.util.Collections;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+<<<<<<< HEAD
 import java.util.concurrent.ConcurrentHashMap;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthenticationMgr.class);
+<<<<<<< HEAD
     private static final String DEFAULT_PLUGIN = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public static final String ROOT_USER = "root";
     public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
 
@@ -121,9 +146,12 @@ public class AuthenticationMgr {
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;
 
+<<<<<<< HEAD
     @SerializedName("sim")
     protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public AuthenticationMgr() {
         // default plugin
         AuthenticationProviderFactory.installPlugin(
@@ -132,8 +160,11 @@ public class AuthenticationMgr {
                 LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative());
         AuthenticationProviderFactory.installPlugin(
                 KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
+<<<<<<< HEAD
         AuthenticationProviderFactory.installPlugin(
                 LDAPAuthProviderForExternal.PLUGIN_NAME, new LDAPAuthProviderForExternal());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
@@ -204,10 +235,13 @@ public class AuthenticationMgr {
         }
     }
 
+<<<<<<< HEAD
     public String getDefaultPlugin() {
         return DEFAULT_PLUGIN;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private boolean match(String remoteUser, String remoteHost, boolean isDomain, UserAuthenticationInfo info) {
         // quickly filter unmatched entries by username
         if (!info.matchUser(remoteUser)) {
@@ -264,6 +298,7 @@ public class AuthenticationMgr {
         return null;
     }
 
+<<<<<<< HEAD
     protected UserIdentity checkPasswordForNonNative(
             String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString, String authMechanism) {
         SecurityIntegration securityIntegration =
@@ -312,6 +347,10 @@ public class AuthenticationMgr {
         }
 
         return authenticatedUser;
+=======
+    public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
+        return checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
@@ -319,6 +358,7 @@ public class AuthenticationMgr {
                 remotePasswd.getBytes(StandardCharsets.UTF_8), null);
     }
 
+<<<<<<< HEAD
     public void checkPasswordReuse(UserIdentity user, String plainPassword) throws DdlException {
         if (Config.enable_password_reuse) {
             return;
@@ -328,6 +368,8 @@ public class AuthenticationMgr {
         }
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void createUser(CreateUserStmt stmt) throws DdlException {
         UserIdentity userIdentity = stmt.getUserIdentity();
         UserAuthenticationInfo info = stmt.getAuthenticationInfo();
@@ -340,6 +382,7 @@ public class AuthenticationMgr {
                         + " : user " + stmt.getUserIdentity() + " already exists");
                 return;
             }
+<<<<<<< HEAD
             userToAuthenticationInfo.put(userIdentity, info);
 
             UserProperty userProperty = null;
@@ -347,6 +390,27 @@ public class AuthenticationMgr {
                 userProperty = new UserProperty();
                 userNameToProperty.put(userIdentity.getUser(), userProperty);
             }
+=======
+
+            UserProperty userProperty = null;
+            String userName = userIdentity.getUser();
+            if (userNameToProperty.containsKey(userName)) {
+                userProperty = userNameToProperty.get(userName);
+            } else {
+                userProperty = new UserProperty();
+            }
+
+            if (stmt.getProperties() != null) {
+                // If we create the user with properties, we need to call userProperty.update to check and update userProperty.
+                // If there are failures, update method will throw an exception
+                userProperty.update(userIdentity, UserProperty.changeToPairList(stmt.getProperties()));
+            }
+
+            // If all checks are passed, we can add the user to the userToAuthenticationInfo and userNameToProperty
+            userToAuthenticationInfo.put(userIdentity, info);
+            userNameToProperty.put(userName, userProperty);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             AuthorizationMgr authorizationManager = globalStateMgr.getAuthorizationMgr();
             // init user privilege
@@ -365,8 +429,15 @@ public class AuthenticationMgr {
         }
     }
 
+<<<<<<< HEAD
     public void alterUser(UserIdentity userIdentity, UserAuthenticationInfo userAuthenticationInfo)
             throws DdlException {
+=======
+    // This method is used to update user information, including authentication information and user properties
+    // Note: if properties is null, we should keep the original properties
+    public void alterUser(UserIdentity userIdentity, UserAuthenticationInfo userAuthenticationInfo,
+                          Map<String, String> properties) throws DdlException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         writeLock();
         try {
             if (!userToAuthenticationInfo.containsKey(userIdentity)) {
@@ -377,7 +448,15 @@ public class AuthenticationMgr {
             }
 
             updateUserNoLock(userIdentity, userAuthenticationInfo, true);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, userAuthenticationInfo);
+=======
+            if (properties != null && properties.size() > 0) {
+                UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
+                userProperty.update(userIdentity, UserProperty.changeToPairList(properties));
+            }
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, userAuthenticationInfo, properties);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } catch (AuthenticationException e) {
             throw new DdlException("failed to alter user " + userIdentity, e);
         } finally {
@@ -385,18 +464,35 @@ public class AuthenticationMgr {
         }
     }
 
+<<<<<<< HEAD
     private void updateUserPropertyNoLock(String user, List<Pair<String, String>> properties) throws DdlException {
+=======
+    private void updateUserPropertyNoLock(String user, List<Pair<String, String>> properties, boolean isReplay)
+            throws DdlException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         UserProperty userProperty = userNameToProperty.getOrDefault(user, null);
         if (userProperty == null) {
             throw new DdlException("user '" + user + "' doesn't exist");
         }
+<<<<<<< HEAD
         userProperty.update(properties);
+=======
+        if (isReplay) {
+            userProperty.updateForReplayJournal(properties);
+        } else {
+            userProperty.update(user, properties);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void updateUserProperty(String user, List<Pair<String, String>> properties) throws DdlException {
         try {
             writeLock();
+<<<<<<< HEAD
             updateUserPropertyNoLock(user, properties);
+=======
+            updateUserPropertyNoLock(user, properties, false);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             UserPropertyInfo propertyInfo = new UserPropertyInfo(user, properties);
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPropertyV2(propertyInfo);
             LOG.info("finished to update user '{}' with properties: {}", user, properties);
@@ -405,6 +501,7 @@ public class AuthenticationMgr {
         }
     }
 
+<<<<<<< HEAD
     public void createSecurityIntegration(String name, Map<String, String> propertyMap) throws DdlException {
         createSecurityIntegration(name, propertyMap, false);
 
@@ -462,15 +559,32 @@ public class AuthenticationMgr {
         try {
             writeLock();
             updateUserPropertyNoLock(info.getUser(), info.getProperties());
+=======
+    public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
+        try {
+            writeLock();
+            updateUserPropertyNoLock(info.getUser(), info.getProperties(), true);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             writeUnlock();
         }
     }
 
+<<<<<<< HEAD
     public void replayAlterUser(UserIdentity userIdentity, UserAuthenticationInfo info) throws AuthenticationException {
         writeLock();
         try {
             updateUserNoLock(userIdentity, info, true);
+=======
+    public void replayAlterUser(UserIdentity userIdentity, UserAuthenticationInfo info,
+                                Map<String, String> properties) throws AuthenticationException {
+        writeLock();
+        try {
+            updateUserNoLock(userIdentity, info, true);
+            // updateForReplayJournal will catch all exceptions when replaying user properties
+            UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
+            userProperty.updateForReplayJournal(UserProperty.changeToPairList(properties));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         } finally {
             writeUnlock();
         }
@@ -540,8 +654,12 @@ public class AuthenticationMgr {
         }
     }
 
+<<<<<<< HEAD
     private void updateUserNoLock(
             UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists)
+=======
+    private void updateUserNoLock(UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throws AuthenticationException {
         if (userToAuthenticationInfo.containsKey(userIdentity)) {
             if (!shouldExists) {
@@ -591,6 +709,7 @@ public class AuthenticationMgr {
         }
     }
 
+<<<<<<< HEAD
     /**
      * Use new image format by SRMetaBlockWriter/SRMetaBlockReader
      * <p>
@@ -677,6 +796,8 @@ public class AuthenticationMgr {
         }
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isLoaded() {
         return isLoaded;
     }
@@ -685,6 +806,7 @@ public class AuthenticationMgr {
         isLoaded = loaded;
     }
 
+<<<<<<< HEAD
     /**
      * these public interfaces are for AuthUpgrader to upgrade from 2.x
      */
@@ -699,6 +821,8 @@ public class AuthenticationMgr {
         LOG.info("upgrade user {}", userIdentity);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public UserAuthenticationInfo getUserAuthenticationInfoByUserIdentity(UserIdentity userIdentity) {
         return userToAuthenticationInfo.get(userIdentity);
     }
@@ -707,12 +831,15 @@ public class AuthenticationMgr {
         return userToAuthenticationInfo;
     }
 
+<<<<<<< HEAD
     public void upgradeUserProperty(String userName, long maxConn) {
         UserProperty userProperty = new UserProperty();
         userProperty.setMaxConn(maxConn);
         userNameToProperty.put(userName, new UserProperty());
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private Class<?> authClazz = null;
     public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.plugins.auth.KerberosAuthentication";
     public static final String KRB5_AUTH_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-kerberos.jar";
@@ -761,6 +888,7 @@ public class AuthenticationMgr {
         return authClazz;
     }
 
+<<<<<<< HEAD
     public void saveV2(DataOutputStream dos) throws IOException {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
@@ -770,6 +898,17 @@ public class AuthenticationMgr {
             writer.writeJson(this);
             // 1 json for num user
             writer.writeJson(userToAuthenticationInfo.size());
+=======
+    public void saveV2(ImageWriter imageWriter) throws IOException {
+        try {
+            // 1 json for myself,1 json for number of users, 2 json for each user(kv)
+            final int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.AUTHENTICATION_MGR, cnt);
+            // 1 json for myself
+            writer.writeJson(this);
+            // 1 json for num user
+            writer.writeInt(userToAuthenticationInfo.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : userToAuthenticationInfo.entrySet()) {
                 // 2 json for each user(kv)
                 writer.writeJson(entry.getKey());
@@ -785,6 +924,7 @@ public class AuthenticationMgr {
     }
 
     public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+<<<<<<< HEAD
         AuthenticationMgr ret = null;
         try {
             // 1 json for myself
@@ -803,12 +943,55 @@ public class AuthenticationMgr {
         } catch (AuthenticationException e) {
             throw new RuntimeException(e);
         }
+=======
+        // 1 json for myself
+        AuthenticationMgr ret = reader.readJson(AuthenticationMgr.class);
+        ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
+
+        LOG.info("loading users");
+        reader.readMap(UserIdentity.class, UserAuthenticationInfo.class,
+                (MapEntryConsumer<UserIdentity, UserAuthenticationInfo>) (userIdentity, userAuthenticationInfo) -> {
+                    try {
+                        userAuthenticationInfo.analyze();
+                    } catch (AuthenticationException e) {
+                        throw new IOException(e);
+                    }
+
+                    ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
+                });
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
 
         // mark data is loaded
         this.isLoaded = true;
         this.userNameToProperty = ret.userNameToProperty;
+<<<<<<< HEAD
         this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
         this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
     }
+=======
+        this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
+    }
+
+    public UserProperty getUserProperty(String userName) {
+        UserProperty userProperty = userNameToProperty.get(userName);
+        if (userProperty == null) {
+            throw new SemanticException("Unknown user: " + userName);
+        }
+        return userProperty;
+    }
+
+    public UserIdentity getUserIdentityByName(String userName) {
+        Map<UserIdentity, UserAuthenticationInfo> userToAuthInfo = getUserToAuthenticationInfo();
+        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity = userToAuthInfo.entrySet().stream()
+                .filter(entry -> (entry.getKey().getUser().equals(userName)))
+                .findFirst().orElse(null);
+        if (matchedUserIdentity == null) {
+            throw new SemanticException("Unknown user: " + userName);
+        }
+
+        return matchedUserIdentity.getKey();
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

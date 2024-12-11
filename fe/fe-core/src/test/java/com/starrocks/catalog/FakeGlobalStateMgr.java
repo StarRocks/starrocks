@@ -35,6 +35,10 @@
 package com.starrocks.catalog;
 
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.NodeMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
@@ -43,6 +47,10 @@ public class FakeGlobalStateMgr extends MockUp<GlobalStateMgr> {
 
     private static GlobalStateMgr globalStateMgr;
     private static int metaVersion;
+<<<<<<< HEAD
+=======
+    private static NodeMgr nodeMgr = new NodeMgr();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private static SystemInfoService systemInfo = new SystemInfoService();
 
     public static void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
@@ -73,7 +81,16 @@ public class FakeGlobalStateMgr extends MockUp<GlobalStateMgr> {
     }
 
     @Mock
+<<<<<<< HEAD
     public static SystemInfoService getCurrentSystemInfo() {
+=======
+    public static NodeMgr getNodeMgr() {
+        return nodeMgr;
+    }
+
+    @Mock
+    public static SystemInfoService getClusterInfo() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return systemInfo;
     }
 

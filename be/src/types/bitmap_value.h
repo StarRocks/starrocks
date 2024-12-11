@@ -47,6 +47,10 @@
 #include <string>
 #include <utility>
 
+<<<<<<< HEAD
+=======
+#include "column/vectorized_fwd.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/config.h"
 #include "common/logging.h"
 #include "types/bitmap_value_detail.h"
@@ -175,7 +179,11 @@ public:
     std::string to_string() const;
 
     // Append values to array
+<<<<<<< HEAD
     void to_array(std::vector<int64_t>* array) const;
+=======
+    void to_array(Buffer<int64_t>* array) const;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     size_t serialize(uint8_t* dst) const;
 

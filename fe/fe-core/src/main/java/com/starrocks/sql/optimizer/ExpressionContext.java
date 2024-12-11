@@ -68,7 +68,11 @@ public class ExpressionContext {
 
         rootProperty = groupExpression.getGroup().getLogicalProperty();
         statistics = groupExpression.getGroup().getStatistics();
+<<<<<<< HEAD
         groupMvStatistics = groupExpression.getGroup().getGroupExpressionStatistics();
+=======
+        groupMvStatistics = groupExpression.getGroup().getGroupMvStatistics();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // Add child property and statistics
         for (Group group : groupExpression.getInputs()) {
@@ -77,6 +81,13 @@ public class ExpressionContext {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public OptExpression getOptExpression() {
+        return expression;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Operator getOp() {
         if (expression != null) {
             return expression.getOp();
@@ -84,6 +95,13 @@ public class ExpressionContext {
         return groupExpression.getOp();
     }
 
+<<<<<<< HEAD
+=======
+    public OptExpression getExpression() {
+        return expression;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public int arity() {
         if (expression != null) {
             return expression.arity();

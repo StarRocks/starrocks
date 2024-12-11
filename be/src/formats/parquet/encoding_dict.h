@@ -19,6 +19,10 @@
 
 #include "column/column.h"
 #include "column/column_helper.h"
+<<<<<<< HEAD
+=======
+#include "column/nullable_column.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "simd/simd.h"
@@ -107,14 +111,25 @@ public:
     }
 
     Status skip(size_t values_to_skip) override {
+<<<<<<< HEAD
         //TODO(Smith) still heavy work load
         _indexes.reserve(values_to_skip);
         _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
+=======
+        auto ret = _rle_batch_reader.SkipBatch(values_to_skip);
+        if (UNLIKELY(ret != values_to_skip)) {
+            return Status::InternalError("rle skip error, not enough values");
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
+<<<<<<< HEAD
         FixedLengthColumn<T>* data_column = nullptr;
+=======
+        FixedLengthColumn<T>* data_column /* = nullptr */;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(dst);
             nullable_column->null_column()->append_default(count);
@@ -131,6 +146,10 @@ public:
         if (UNLIKELY(ret <= 0)) {
             return Status::InternalError("DictDecoder GetBatchWithDict failed");
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
@@ -185,9 +204,14 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                            Column* column) override {
         const std::vector<uint8_t>& null_data = nulls.immutable_null_column_data();
+=======
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) override {
+        const NullData& null_data = nulls.immutable_null_column_data();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         bool has_null = nulls.has_null();
         bool all_null = false;
 
@@ -242,16 +266,27 @@ public:
     }
 
     Status skip(size_t values_to_skip) override {
+<<<<<<< HEAD
         //TODO(Smith) still heavy work load
         _indexes.reserve(values_to_skip);
         _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
+=======
+        auto ret = _rle_batch_reader.SkipBatch(values_to_skip);
+        if (UNLIKELY(ret != values_to_skip)) {
+            return Status::InternalError("rle skip error, not enough values");
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return Status::OK();
     }
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
         switch (content_type) {
         case DICT_CODE: {
+<<<<<<< HEAD
             FixedLengthColumn<int32_t>* data_column = nullptr;
+=======
+            FixedLengthColumn<int32_t>* data_column;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (dst->is_nullable()) {
                 auto nullable_column = down_cast<NullableColumn*>(dst);
                 nullable_column->null_column()->append_default(count);
@@ -292,7 +327,10 @@ private:
     std::vector<Slice> _dict;
     std::vector<uint32_t> _indexes;
     std::vector<Slice> _slices;
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     size_t _max_value_length = 0;
 };
 

@@ -20,18 +20,33 @@
 
 #include "common/status.h"
 #include "storage/olap_common.h"
+<<<<<<< HEAD
+=======
+#include "tablet_schema.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
 class CompactionPolicy;
 class RowsetWriter;
 class Tablet;
+<<<<<<< HEAD
+=======
+class Rowset;
+using RowsetSharedPtr = std::shared_ptr<Rowset>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 enum CompactionAlgorithm {
     // compaction by all columns together.
     HORIZONTAL_COMPACTION = 0,
     // compaction by column group, for tablet with many columns.
+<<<<<<< HEAD
     VERTICAL_COMPACTION = 1
+=======
+    VERTICAL_COMPACTION = 1,
+    // compaction for cloud native index
+    CLOUD_NATIVE_INDEX_COMPACTION = 2,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 struct Statistics {
@@ -50,8 +65,14 @@ public:
                                        int64_t total_mem_footprint, size_t source_num);
 
     static Status construct_output_rowset_writer(Tablet* tablet, uint32_t max_rows_per_segment,
+<<<<<<< HEAD
                                                  CompactionAlgorithm algorithm, Version version,
                                                  std::unique_ptr<RowsetWriter>* output_rowset_writer);
+=======
+                                                 CompactionAlgorithm algorithm, Version version, int64_t gtid,
+                                                 std::unique_ptr<RowsetWriter>* output_rowset_writer,
+                                                 const TabletSchemaCSPtr& tablet_schema);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     static uint32_t get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size);
 
@@ -64,6 +85,11 @@ public:
     // 2. if source_num is less than or equal to 1, or is more than MAX_SOURCES, use HORIZONTAL_COMPACTION.
     static CompactionAlgorithm choose_compaction_algorithm(size_t num_columns, int64_t max_columns_per_group,
                                                            size_t source_num);
+<<<<<<< HEAD
+=======
+
+    static RowsetSharedPtr& rowset_with_max_schema_version(std::vector<RowsetSharedPtr>& rowsets);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

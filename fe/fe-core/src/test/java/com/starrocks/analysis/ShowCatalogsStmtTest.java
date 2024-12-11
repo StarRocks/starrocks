@@ -68,8 +68,12 @@ public class ShowCatalogsStmtTest {
     @Test
     public void testShowCatalogsNormal() throws AnalysisException, DdlException {
         ShowCatalogsStmt stmt = new ShowCatalogsStmt();
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ShowResultSetMetaData metaData = resultSet.getMetaData();
         Assert.assertEquals("Catalog", metaData.getColumn(0).getName());
         Assert.assertEquals("Type", metaData.getColumn(1).getName());

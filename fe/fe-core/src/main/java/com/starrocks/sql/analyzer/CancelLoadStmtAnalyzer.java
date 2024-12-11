@@ -32,7 +32,11 @@ public class CancelLoadStmtAnalyzer {
         new CancelLoadStmtAnalyzerVisitor().analyze(statement, context);
     }
 
+<<<<<<< HEAD
     static class CancelLoadStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class CancelLoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         private String label;
 

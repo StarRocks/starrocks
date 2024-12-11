@@ -51,7 +51,11 @@ Status DataConsumerPool::get_consumer(StreamLoadContext* ctx, std::shared_ptr<Da
     while (iter != std::end(_pool)) {
         if ((*iter)->match(ctx)) {
             VLOG(3) << "get an available data consumer from pool: " << (*iter)->id();
+<<<<<<< HEAD
             (*iter)->reset();
+=======
+            (void)(*iter)->reset();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             *ret = *iter;
             iter = _pool.erase(iter);
             return Status::OK();
@@ -137,7 +141,11 @@ Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_pt
 void DataConsumerPool::return_consumer(const std::shared_ptr<DataConsumer>& consumer) {
     std::unique_lock<std::mutex> l(_lock);
 
+<<<<<<< HEAD
     consumer->reset();
+=======
+    (void)consumer->reset();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     if (_pool.size() == _max_pool_size) {
         VLOG(3) << "data consumer pool is full: " << _pool.size() << "-" << _max_pool_size

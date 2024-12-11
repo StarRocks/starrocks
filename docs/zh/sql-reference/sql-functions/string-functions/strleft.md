@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # strleft
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 从字符串左边部分返回指定长度的字符，长度的单位为「utf8 字符」。函数别名为 [left](left.md).
 

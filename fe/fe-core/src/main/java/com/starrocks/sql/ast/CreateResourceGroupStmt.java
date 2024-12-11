@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Predicate;
@@ -27,6 +30,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.catalog.ResourceGroupMgr.SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // ReesourceGroup create statement format
 // create resource group [if not exists] [or replace] <name>
 // to
@@ -35,6 +43,7 @@ import java.util.Map;
 // with ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type' = 'normal');
 //
 public class CreateResourceGroupStmt extends DdlStmt {
+<<<<<<< HEAD
     private String name;
     private boolean ifNotExists;
     private boolean replaceIfExists;
@@ -49,13 +58,33 @@ public class CreateResourceGroupStmt extends DdlStmt {
 
     public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
                                    List<List<Predicate>> classifiers, Map<String, String> proeprties,
+=======
+    private final String name;
+    private boolean ifNotExists;
+    private boolean replaceIfExists;
+    private final List<List<Predicate>> classifiers;
+    private final Map<String, String> properties;
+    private ResourceGroup resourceGroup;
+
+    public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
+                                   List<List<Predicate>> classifiers, Map<String, String> properties) {
+        this(name, ifNotExists, replaceIfExists, classifiers, properties, NodePosition.ZERO);
+    }
+
+    public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
+                                   List<List<Predicate>> classifiers, Map<String, String> properties,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                    NodePosition pos) {
         super(pos);
         this.name = name;
         this.ifNotExists = ifNotExists;
         this.replaceIfExists = replaceIfExists;
         this.classifiers = classifiers;
+<<<<<<< HEAD
         this.properties = proeprties;
+=======
+        this.properties = properties;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public boolean isIfNotExists() {
@@ -88,9 +117,20 @@ public class CreateResourceGroupStmt extends DdlStmt {
         if (resourceGroup.getResourceGroupType() == null) {
             resourceGroup.setResourceGroupType(TWorkGroupType.WG_NORMAL);
         }
+<<<<<<< HEAD
         if (resourceGroup.getCpuCoreLimit() == null) {
             throw new SemanticException("property 'cpu_core_limit' is absent");
         }
+=======
+
+        if (resourceGroup.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY &&
+                (resourceGroup.getExclusiveCpuCores() != null && resourceGroup.getExclusiveCpuCores() > 0)) {
+            throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);
+        }
+
+        ResourceGroup.validateCpuParameters(resourceGroup.getRawCpuWeight(), resourceGroup.getExclusiveCpuCores());
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (resourceGroup.getMemLimit() == null) {
             throw new SemanticException("property 'mem_limit' is absent");
         }

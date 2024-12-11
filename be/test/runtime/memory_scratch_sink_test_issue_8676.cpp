@@ -42,7 +42,10 @@
 #include <arrow/status.h>
 #include <arrow/type.h>
 #include <arrow/visitor.h>
+<<<<<<< HEAD
 #include <arrow/visitor_inline.h>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -133,16 +136,26 @@ public:
         _default_storage_root_path = config::storage_root_path;
         config::storage_root_path = "./data";
 
+<<<<<<< HEAD
         system("mkdir -p ./test_run/output/");
         system("pwd");
         system("cp -r ./be/test/runtime/test_data/ ./test_run/.");
+=======
+        [[maybe_unused]] auto res = system("mkdir -p ./test_run/output/");
+        res = system("pwd");
+        res = system("cp -r ./be/test/runtime/test_data/ ./test_run/.");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         init();
     }
 
     void TearDown() override {
         _obj_pool.clear();
+<<<<<<< HEAD
         system("rm -rf ./test_run");
+=======
+        [[maybe_unused]] auto res = system("rm -rf ./test_run");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         config::storage_root_path = _default_storage_root_path;
     }
 
@@ -209,7 +222,10 @@ public:
 private:
     ObjectPool _obj_pool;
     ExecEnv* _exec_env = nullptr;
+<<<<<<< HEAD
     // std::vector<TExpr> _exprs;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     TDescriptorTable _t_desc_table;
     RuntimeState* _state = nullptr;
     TPlanNode _tnode;
@@ -304,14 +320,22 @@ void MemoryScratchSinkIssue8676Test::init_desc_tbl() {
     t_tuple_desc.__isset.tableId = true;
     _t_desc_table.tupleDescriptors.push_back(t_tuple_desc);
 
+<<<<<<< HEAD
     DescriptorTbl::create(_state, &_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size);
+=======
+    CHECK(DescriptorTbl::create(_state, &_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size).ok());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     std::vector<TTupleId> row_tids;
     row_tids.push_back(0);
 
+<<<<<<< HEAD
     std::vector<bool> nullable_tuples;
     nullable_tuples.push_back(false);
     _row_desc = _obj_pool.add(new RowDescriptor(*_desc_tbl, row_tids, nullable_tuples));
+=======
+    _row_desc = _obj_pool.add(new RowDescriptor(*_desc_tbl, row_tids));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // node
     _tnode.node_id = 0;
@@ -319,7 +343,10 @@ void MemoryScratchSinkIssue8676Test::init_desc_tbl() {
     _tnode.num_children = 0;
     _tnode.limit = -1;
     _tnode.row_tuples.push_back(0);
+<<<<<<< HEAD
     _tnode.nullable_tuples.push_back(false);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 TEST_F(MemoryScratchSinkIssue8676Test, work_flow_normal) {

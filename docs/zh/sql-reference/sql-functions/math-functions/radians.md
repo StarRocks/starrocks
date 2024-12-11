@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # radians
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将参数 `x`转为弧度，`x` 是角度。
 

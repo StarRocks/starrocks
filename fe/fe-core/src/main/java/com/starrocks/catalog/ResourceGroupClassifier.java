@@ -209,7 +209,11 @@ public class ResourceGroupClassifier {
         if (CollectionUtils.isNotEmpty(databaseIds)) {
             String str = databaseIds.stream()
                     .map(id ->
+<<<<<<< HEAD
                             Optional.ofNullable(GlobalStateMgr.getCurrentState().getDb(id))
+=======
+                            Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id))
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     .map(Database::getFullName)
                                     .orElse("unknown"))
                     .collect(Collectors.joining(","));

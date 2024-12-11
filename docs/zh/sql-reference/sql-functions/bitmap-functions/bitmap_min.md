@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_min
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 获取Bitmap中的最小值。如果Bitmap为NULL，则返回NULL。如果Bitmap为空，默认返回NULL。
 

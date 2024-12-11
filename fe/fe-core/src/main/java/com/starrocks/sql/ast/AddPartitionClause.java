@@ -18,21 +18,42 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
+=======
+import java.util.List;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Map;
 
 // clause which is used to add partition
 public class AddPartitionClause extends AlterTableClause {
 
+<<<<<<< HEAD
     private final PartitionDesc partitionDesc;
+=======
+    private PartitionDesc partitionDesc;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final DistributionDesc distributionDesc;
     private final Map<String, String> properties;
     // true if this is to add a temporary partition
     private final boolean isTempPartition;
 
+<<<<<<< HEAD
+=======
+    //Object Resolved by Analyzer
+    private List<PartitionDesc> resolvedPartitionDescList;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public PartitionDesc getPartitionDesc() {
         return partitionDesc;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPartitionDesc(PartitionDesc desc) {
+        this.partitionDesc = desc;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public DistributionDesc getDistributionDesc() {
         return distributionDesc;
     }
@@ -57,10 +78,23 @@ public class AddPartitionClause extends AlterTableClause {
         this.distributionDesc = distributionDesc;
         this.properties = properties;
         this.isTempPartition = isTempPartition;
+<<<<<<< HEAD
         this.needTableStable = false;
     }
 
     @Override
+=======
+    }
+
+    public List<PartitionDesc> getResolvedPartitionDescList() {
+        return resolvedPartitionDescList;
+    }
+
+    public void setResolvedPartitionDescList(List<PartitionDesc> resolvedPartitionDescList) {
+        this.resolvedPartitionDescList = resolvedPartitionDescList;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Map<String, String> getProperties() {
         return this.properties;
     }

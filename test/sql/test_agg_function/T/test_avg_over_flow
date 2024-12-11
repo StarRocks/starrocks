@@ -7,6 +7,12 @@ CREATE TABLE `t1` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 8
 PROPERTIES (
+<<<<<<< HEAD
+=======
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 "replication_num" = "1"
 );
 

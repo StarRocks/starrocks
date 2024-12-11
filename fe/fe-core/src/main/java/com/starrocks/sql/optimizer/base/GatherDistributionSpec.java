@@ -12,29 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.sql.optimizer.base;
 
 import com.starrocks.sql.optimizer.operator.Operator;
 
+=======
+package com.starrocks.sql.optimizer.base;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Objects;
 
 /**
  * Re-shuffle all date to one node
  */
 public class GatherDistributionSpec extends DistributionSpec {
+<<<<<<< HEAD
     // limit doesn't affect distribution property
     private long limit = Operator.DEFAULT_LIMIT;
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public GatherDistributionSpec() {
         super(DistributionType.GATHER);
     }
 
+<<<<<<< HEAD
     public GatherDistributionSpec(long limit) {
         super(DistributionType.GATHER);
         this.limit = limit;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public boolean isSatisfy(DistributionSpec spec) {
         if (spec.type.equals(DistributionType.ANY)) {
             return true;
@@ -48,6 +59,7 @@ public class GatherDistributionSpec extends DistributionSpec {
         return spec instanceof GatherDistributionSpec;
     }
 
+<<<<<<< HEAD
     public long getLimit() {
         return limit;
     }
@@ -56,6 +68,8 @@ public class GatherDistributionSpec extends DistributionSpec {
         return limit != Operator.DEFAULT_LIMIT;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public int hashCode() {
         return Objects.hash(type);

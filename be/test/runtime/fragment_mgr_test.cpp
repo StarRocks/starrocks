@@ -46,8 +46,11 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 static Status s_prepare_status;
 static Status s_open_status;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // Mock used for this unittest
 PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb)
         : _exec_env(exec_env), _report_status_cb(std::move(report_status_cb)) {}
@@ -55,12 +58,20 @@ PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_call
 PlanFragmentExecutor::~PlanFragmentExecutor() = default;
 
 Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
+<<<<<<< HEAD
     return s_prepare_status;
+=======
+    return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 Status PlanFragmentExecutor::open() {
     SleepFor(MonoDelta::FromMilliseconds(50));
+<<<<<<< HEAD
     return s_open_status;
+=======
+    return Status::OK();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 void PlanFragmentExecutor::cancel() {}
@@ -75,9 +86,12 @@ public:
 
 protected:
     void SetUp() override {
+<<<<<<< HEAD
         s_prepare_status = Status::OK();
         s_open_status = Status::OK();
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         config::fragment_pool_thread_num_min = 32;
         config::fragment_pool_thread_num_max = 32;
         config::fragment_pool_queue_size = 1024;
@@ -150,6 +164,7 @@ TEST_F(FragmentMgrTest, CancelWithoutAdd) {
     ASSERT_TRUE(mgr.cancel(params.params.fragment_instance_id).ok());
 }
 
+<<<<<<< HEAD
 TEST_F(FragmentMgrTest, PrepareFailed) {
     s_prepare_status = Status::InternalError("Prepare failed.");
     FragmentMgr mgr(ExecEnv::GetInstance());
@@ -160,4 +175,6 @@ TEST_F(FragmentMgrTest, PrepareFailed) {
     ASSERT_FALSE(mgr.exec_plan_fragment(params).ok());
 }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

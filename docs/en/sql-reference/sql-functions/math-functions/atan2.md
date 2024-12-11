@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # atan2
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the arc tangent of `x` divided by `y`, that is, the arc tangent of `x/y`. The signs of the two parameters are used to determine the quadrant of the result.
 

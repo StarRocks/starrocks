@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_to_string
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts an input bitmap into a string that is separated by commas (,). This string contains all the bits in the bitmap. If the input is null, null is returned.
 

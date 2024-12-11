@@ -18,7 +18,15 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
+<<<<<<< HEAD
 import com.starrocks.connector.HdfsEnvironment;
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetastoreType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.HiveMetaClient;
@@ -67,15 +75,27 @@ public class HudiMetadataTest {
         executorForPullFiles = Executors.newFixedThreadPool(5);
 
         client = new HiveMetastoreTest.MockedHiveMetaClient();
+<<<<<<< HEAD
         metastore = new HiveMetastore(client, "hive_catalog");
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true);
+=======
+        metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
+                metastore, executorForHmsRefresh, 100, 10, 1000, false);
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         hudiRemoteFileIO = new HudiRemoteFileIO(new Configuration());
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                 hudiRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
+<<<<<<< HEAD
         fileOps = new RemoteFileOperations(cachingRemoteFileIO, executorForPullFiles, false, true);
+=======
+        fileOps = new RemoteFileOperations(cachingRemoteFileIO, executorForPullFiles, executorForPullFiles,
+                false, true, new Configuration());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         statisticsProvider = new HiveStatisticsProvider(hmsOps, fileOps);
 
         UtFrameUtils.createMinStarRocksCluster();
@@ -83,7 +103,12 @@ public class HudiMetadataTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
         hudiMetadata =
+<<<<<<< HEAD
                 new HudiMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider, Optional.empty());
+=======
+                new HudiMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider,
+                        Optional.empty(), new ConnectorProperties(ConnectorType.HUDI));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @After
@@ -108,8 +133,21 @@ public class HudiMetadataTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetPartitionKeys() {
         Assert.assertEquals(Lists.newArrayList("col1"), hudiMetadata.listPartitionNames("db1", "tbl1"));
+=======
+    public void testTableExists() {
+        boolean exists = hudiMetadata.tableExists("db1", "table1");
+        Assert.assertTrue(exists);
+    }
+
+    @Test
+    public void testGetPartitionKeys() {
+        Assert.assertEquals(
+                Lists.newArrayList("col1"),
+                hudiMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test

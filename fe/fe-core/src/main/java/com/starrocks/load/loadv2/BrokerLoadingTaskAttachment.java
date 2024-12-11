@@ -42,6 +42,7 @@ import java.util.Map;
 
 public class BrokerLoadingTaskAttachment extends TaskAttachment {
 
+<<<<<<< HEAD
     private Map<String, String> counters;
     private String trackingUrl;
     private List<TabletCommitInfo> commitInfoList;
@@ -51,12 +52,29 @@ public class BrokerLoadingTaskAttachment extends TaskAttachment {
     public BrokerLoadingTaskAttachment(long taskId, Map<String, String> counters, String trackingUrl,
                                        List<TabletCommitInfo> commitInfoList, List<TabletFailInfo> failInfoList,
                                        List<String> rejectedRecordPaths) {
+=======
+    private final Map<String, String> counters;
+    private final String trackingUrl;
+    private final List<TabletCommitInfo> commitInfoList;
+    private final List<TabletFailInfo> failInfoList;
+    private final List<String> rejectedRecordPaths;
+    private final long writeDurationMs;
+
+    public BrokerLoadingTaskAttachment(long taskId, Map<String, String> counters, String trackingUrl,
+                                       List<TabletCommitInfo> commitInfoList, List<TabletFailInfo> failInfoList,
+                                       List<String> rejectedRecordPaths,
+                                       long writeDurationMs) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(taskId);
         this.trackingUrl = trackingUrl;
         this.counters = counters;
         this.commitInfoList = commitInfoList;
         this.failInfoList = failInfoList;
         this.rejectedRecordPaths = rejectedRecordPaths;
+<<<<<<< HEAD
+=======
+        this.writeDurationMs = writeDurationMs;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public String getCounter(String key) {
@@ -82,4 +100,11 @@ public class BrokerLoadingTaskAttachment extends TaskAttachment {
     public List<String> getRejectedRecordPaths() {
         return rejectedRecordPaths;
     }
+<<<<<<< HEAD
+=======
+
+    public long getWriteDurationMs() {
+        return writeDurationMs;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

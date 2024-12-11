@@ -16,4 +16,11 @@ INSERT INTO t0 VALUES (2, row(1, 1));
 select to_json(c1) from t0 order by c0;
 
 SELECT to_json(row(1, 1));
+<<<<<<< HEAD
 SELECT to_json(NULL);
+=======
+SELECT to_json(NULL);
+
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ to_json(map{null:null});
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY')*/ to_json(map{null:null});
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

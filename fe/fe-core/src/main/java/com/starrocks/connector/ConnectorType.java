@@ -14,7 +14,10 @@
 
 package com.starrocks.connector;
 
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableSet;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.config.ConnectorConfig;
 import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.elasticsearch.ElasticsearchConnector;
@@ -23,18 +26,33 @@ import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.jdbc.JDBCConnector;
+<<<<<<< HEAD
 import com.starrocks.connector.paimon.PaimonConnector;
 
+=======
+import com.starrocks.connector.kudu.KuduConnector;
+import com.starrocks.connector.odps.OdpsConnector;
+import com.starrocks.connector.paimon.PaimonConnector;
+import com.starrocks.connector.unified.UnifiedConnector;
+import org.apache.commons.lang3.EnumUtils;
+
+import java.util.EnumSet;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Set;
 
 public enum ConnectorType {
 
+<<<<<<< HEAD
     ELASTICSEARCH("es", ElasticsearchConnector.class, EsConfig.class),
+=======
+    ES("es", ElasticsearchConnector.class, EsConfig.class),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     HIVE("hive", HiveConnector.class, null),
     ICEBERG("iceberg", IcebergConnector.class, null),
     JDBC("jdbc", JDBCConnector.class, null),
     HUDI("hudi", HudiConnector.class, null),
     DELTALAKE("deltalake", DeltaLakeConnector.class, null),
+<<<<<<< HEAD
     PAIMON("paimon", PaimonConnector.class, null);
 
     public static Set<String> SUPPORT_TYPE_SET = ImmutableSet.of(
@@ -45,6 +63,24 @@ public enum ConnectorType {
             HUDI.getName(),
             DELTALAKE.getName(),
             PAIMON.getName()
+=======
+    PAIMON("paimon", PaimonConnector.class, null),
+    ODPS("odps", OdpsConnector.class, null),
+    KUDU("kudu", KuduConnector.class, null),
+    UNIFIED("unified", UnifiedConnector.class, null);
+
+    public static final Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
+            ES,
+            HIVE,
+            ICEBERG,
+            JDBC,
+            HUDI,
+            DELTALAKE,
+            PAIMON,
+            ODPS,
+            KUDU,
+            UNIFIED
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     );
 
     ConnectorType(String name, Class connectorClass, Class configClass) {
@@ -53,9 +89,15 @@ public enum ConnectorType {
         this.configClass = configClass;
     }
 
+<<<<<<< HEAD
     private String name;
     private Class<Connector> connectorClass;
     private Class<ConnectorConfig> configClass;
+=======
+    private final String name;
+    private final Class<Connector> connectorClass;
+    private final Class<ConnectorConfig> configClass;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     public String getName() {
         return name;
@@ -70,6 +112,7 @@ public enum ConnectorType {
     }
 
     public static boolean isSupport(String name) {
+<<<<<<< HEAD
         return SUPPORT_TYPE_SET.contains(name);
     }
 
@@ -92,6 +135,18 @@ public enum ConnectorType {
             default:
                 throw new IllegalStateException("Unexpected value: " + name);
         }
+=======
+        ConnectorType type = EnumUtils.getEnumIgnoreCase(ConnectorType.class, name);
+        return type != null && SUPPORT_TYPE_SET.contains(type);
+    }
+
+    public static ConnectorType from(String name) {
+        ConnectorType res = EnumUtils.getEnumIgnoreCase(ConnectorType.class, name);
+        if (res == null) {
+            throw new IllegalStateException("unsupported catalog type: " + name);
+        }
+        return res;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
 }

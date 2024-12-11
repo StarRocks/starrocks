@@ -43,7 +43,10 @@ import com.starrocks.common.io.Writable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -85,6 +88,7 @@ public class CreateTableInfo implements Writable {
         table.write(out);
     }
 
+<<<<<<< HEAD
     public void readFields(DataInput in) throws IOException {
         dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
 
@@ -97,6 +101,8 @@ public class CreateTableInfo implements Writable {
         return createTableInfo;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public int hashCode() {
         return Objects.hashCode(dbName, table);

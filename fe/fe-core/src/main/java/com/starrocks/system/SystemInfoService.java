@@ -34,12 +34,17 @@
 
 package com.starrocks.system;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
+=======
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -51,6 +56,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
+<<<<<<< HEAD
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
@@ -61,6 +67,23 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
+=======
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.util.NetUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.datacache.DataCacheMetrics;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
 import com.starrocks.persist.CancelDisableDiskInfo;
@@ -68,31 +91,55 @@ import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+<<<<<<< HEAD
 import com.starrocks.persist.gson.GsonUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
+import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.DropComputeNodeClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
 import com.starrocks.thrift.TStatusCode;
+<<<<<<< HEAD
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.collections.CollectionUtils;
+=======
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.Arrays;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -100,7 +147,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+<<<<<<< HEAD
 import java.util.function.Predicate;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -109,6 +159,7 @@ public class SystemInfoService implements GsonPostProcessable {
     public static final String DEFAULT_CLUSTER = "default_cluster";
 
     @SerializedName(value = "be")
+<<<<<<< HEAD
     private volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
 
     @SerializedName(value = "ce")
@@ -120,12 +171,25 @@ public class SystemInfoService implements GsonPostProcessable {
     private volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
     private volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
 
+=======
+    protected volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
+
+    @SerializedName(value = "ce")
+    protected volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
+
+    protected volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
+    private volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
+
+    private final NodeSelector nodeSelector;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public SystemInfoService() {
         idToBackendRef = new ConcurrentHashMap<>();
         idToComputeNodeRef = new ConcurrentHashMap<>();
 
         idToReportVersionRef = ImmutableMap.of();
         pathHashToDishInfoRef = ImmutableMap.of();
+<<<<<<< HEAD
     }
 
     public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
@@ -137,6 +201,21 @@ public class SystemInfoService implements GsonPostProcessable {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             addComputeNode(pair.first, pair.second);
+=======
+
+        nodeSelector = new NodeSelector(this);
+    }
+
+    public void addComputeNodes(AddComputeNodeClause addComputeNodeClause)
+            throws DdlException {
+
+        for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
+            checkSameNodeExist(pair.first, pair.second);
+        }
+
+        for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
+            addComputeNode(pair.first, pair.second, addComputeNodeClause.getWarehouse());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -149,6 +228,13 @@ public class SystemInfoService implements GsonPostProcessable {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    public NodeSelector getNodeSelector() {
+        return nodeSelector;
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * For test.
      */
@@ -164,20 +250,32 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     // Final entry of adding compute node
+<<<<<<< HEAD
     private void addComputeNode(String host, int heartbeatPort) {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);
+=======
+    private void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
+        ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+        idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
+        setComputeNodeOwner(newComputeNode);
+        addComputeNodeToWarehouse(newComputeNode, warehouse);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
     }
 
+<<<<<<< HEAD
     private void setComputeNodeOwner(ComputeNode computeNode) {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
         cluster.addComputeNode(computeNode.getId());
+=======
+    public void setComputeNodeOwner(ComputeNode computeNode) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         computeNode.setBackendState(BackendState.using);
     }
 
@@ -185,6 +283,7 @@ public class SystemInfoService implements GsonPostProcessable {
         return idToBackendRef.size() + idToComputeNodeRef.size() == 1;
     }
 
+<<<<<<< HEAD
     /**
      * @param hostPortPairs : backend's host and port
      * @throws DdlException
@@ -200,6 +299,19 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     private void checkSameNodeExist(String host, int heartPort) throws DdlException {
+=======
+    public void addBackends(AddBackendClause addBackendClause) throws DdlException {
+        for (Pair<String, Integer> pair : addBackendClause.getHostPortPairs()) {
+            checkSameNodeExist(pair.first, pair.second);
+        }
+
+        for (Pair<String, Integer> pair : addBackendClause.getHostPortPairs()) {
+            addBackend(pair.first, pair.second, addBackendClause.getWarehouse());
+        }
+    }
+
+    public void checkSameNodeExist(String host, int heartPort) throws DdlException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // check is already exist
         if (getBackendWithHeartbeatPort(host, heartPort) != null) {
             throw new DdlException("Backend already exists with same host " + host + " and port " + heartPort);
@@ -214,15 +326,22 @@ public class SystemInfoService implements GsonPostProcessable {
     public void dropBackend(Backend backend) {
         idToBackendRef.remove(backend.getId());
 
+<<<<<<< HEAD
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(backend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+=======
+        Map<Long, AtomicLong> copiedReportVersions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVersions.remove(backend.getId());
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // for test
     public void addBackend(Backend backend) {
         idToBackendRef.put(backend.getId(), backend);
 
+<<<<<<< HEAD
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.put(backend.getId(), new AtomicLong(0L));
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
@@ -237,6 +356,31 @@ public class SystemInfoService implements GsonPostProcessable {
 
     // Final entry of adding backend
     private void addBackend(String host, int heartbeatPort) {
+=======
+        Map<Long, AtomicLong> copiedReportVersions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVersions.put(backend.getId(), new AtomicLong(0L));
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
+    }
+
+    public void setBackendOwner(Backend backend) {
+        backend.setBackendState(BackendState.using);
+    }
+
+    public void addComputeNodeToWarehouse(ComputeNode computeNode, String warehouseName)
+            throws DdlException {
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+        // check if the warehouse exist
+        if (warehouse == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
+        }
+
+        computeNode.setWorkerGroupId(warehouse.getAnyWorkerGroupId());
+        computeNode.setWarehouseId(warehouse.getId());
+    }
+
+    // Final entry of adding backend
+    private void addBackend(String host, int heartbeatPort, String warehouse) throws DdlException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // update idToBackend
         idToBackendRef.put(newBackend.getId(), newBackend);
@@ -248,11 +392,16 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // add backend to DEFAULT_CLUSTER
         setBackendOwner(newBackend);
+<<<<<<< HEAD
+=======
+        addComputeNodeToWarehouse(newBackend, warehouse);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
         LOG.info("finished to add {} ", newBackend);
 
+<<<<<<< HEAD
         // backends is changed, regenerated tablet number metrics
         MetricRepo.generateBackendsTabletMetrics();
     }
@@ -262,6 +411,20 @@ public class SystemInfoService implements GsonPostProcessable {
         String fqdn = modifyBackendAddressClause.getDestHost();
         List<Backend> candidateBackends = getBackendOnlyWithHost(willBeModifiedHost);
         if (null == candidateBackends || candidateBackends.size() == 0) {
+=======
+        // backends are changed, regenerated tablet number metrics
+        MetricRepo.generateBackendsTabletMetrics();
+    }
+
+    public ShowResultSet modifyBackendHost(ModifyBackendClause modifyBackendClause) throws DdlException {
+        if (RunMode.isSharedDataMode()) {
+            throw new DdlException("modify backend host is not supported in shared-data cluster.");
+        }
+        String willBeModifiedHost = modifyBackendClause.getSrcHost();
+        String fqdn = modifyBackendClause.getDestHost();
+        List<Backend> candidateBackends = getBackendOnlyWithHost(willBeModifiedHost);
+        if (null == candidateBackends || candidateBackends.isEmpty()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             throw new DdlException(String.format("backend [%s] not found", willBeModifiedHost));
         }
 
@@ -280,7 +443,12 @@ public class SystemInfoService implements GsonPostProcessable {
             formatSb.append("\nplease execute %d times, to modify the remaining backends\n");
             for (int i = 1; i < candidateBackends.size(); i++) {
                 Backend be = candidateBackends.get(i);
+<<<<<<< HEAD
                 formatSb.append(be.getHost() + ":" + be.getHeartbeatPort() + "\n");
+=======
+                formatSb.append(NetUtils.getHostPortInAccessibleFormat(be.getHost(), be.getHeartbeatPort())).
+                        append("\n");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
             opMessage = String.format(
                     formatSb.toString(), willBeModifiedHost,
@@ -291,6 +459,7 @@ public class SystemInfoService implements GsonPostProcessable {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
         List<List<String>> messageResult = new ArrayList<>();
+<<<<<<< HEAD
         messageResult.add(Arrays.asList(opMessage));
         return new ShowResultSet(builder.build(), messageResult);
     }
@@ -313,12 +482,97 @@ public class SystemInfoService implements GsonPostProcessable {
         ComputeNode dropComputeNode = getComputeNodeWithHeartbeatPort(host, heartbeatPort);
         if (dropComputeNode == null) {
             throw new DdlException("compute node does not exists[" + host + ":" + heartbeatPort + "]");
+=======
+        messageResult.add(Collections.singletonList(opMessage));
+        return new ShowResultSet(builder.build(), messageResult);
+    }
+
+    public ShowResultSet modifyBackendProperty(ModifyBackendClause modifyBackendClause) throws DdlException {
+        String backendHostPort = modifyBackendClause.getBackendHostPort();
+        Map<String, String> properties = modifyBackendClause.getProperties();
+
+        // check backend existence
+        Backend backend = getBackendWithHeartbeatPort(backendHostPort.split(":")[0],
+                Integer.parseInt(backendHostPort.split(":")[1]));
+        if (null == backend) {
+            throw new DdlException(String.format("backend [%s] not found", backendHostPort));
+        }
+
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+        builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
+        List<List<String>> messageResult = new ArrayList<>();
+
+        // update backend based on properties
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().equals(AlterSystemStmtAnalyzer.PROP_KEY_LOCATION)) {
+                Map<String, String> location = new HashMap<>();
+                // "" means clean backend location label
+                if (entry.getValue().isEmpty()) {
+                    backend.setLocation(location);
+                    continue;
+                }
+                String[] locKV = entry.getValue().split(":");
+                location.put(locKV[0].trim(), locKV[1].trim());
+                backend.setLocation(location);
+                String opMessage = String.format("%s:%d's location has been modified to %s",
+                        backend.getHost(), backend.getHeartbeatPort(), properties);
+                messageResult.add(Collections.singletonList(opMessage));
+            } else {
+                throw new UnsupportedOperationException("unsupported property: " + entry.getKey());
+            }
+        }
+
+        // persistence
+        GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(backend);
+
+        // Return message
+        return new ShowResultSet(builder.build(), messageResult);
+    }
+
+    public ShowResultSet modifyBackend(ModifyBackendClause modifyBackendClause) throws DdlException {
+        String backendHostPort = modifyBackendClause.getBackendHostPort();
+        if (backendHostPort == null) {
+            // modify backend host
+            return modifyBackendHost(modifyBackendClause);
+        } else {
+            // modify backend property
+            return modifyBackendProperty(modifyBackendClause);
+        }
+    }
+
+    public void dropComputeNodes(DropComputeNodeClause dropComputeNodeClause) throws DdlException {
+        String warehouse = dropComputeNodeClause.getWarehouse();
+        // check if the warehouse exist
+        if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouse) == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse));
+        }
+
+        for (Pair<String, Integer> pair : dropComputeNodeClause.getHostPortPairs()) {
+            dropComputeNode(pair.first, pair.second, warehouse);
+        }
+    }
+
+    public void dropComputeNode(String host, int heartbeatPort, String warehouse)
+            throws DdlException {
+        ComputeNode dropComputeNode = getComputeNodeWithHeartbeatPort(host, heartbeatPort);
+        if (dropComputeNode == null) {
+            throw new DdlException("compute node does not exists[" +
+                    NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
+        }
+
+        // check if warehouseName is right
+        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(dropComputeNode.getWarehouseId());
+        if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
+            throw new DdlException("compute node [" + host + ":" + heartbeatPort +
+                    "] does not exist in warehouse " + warehouse);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // update idToComputeNode
         idToComputeNodeRef.remove(dropComputeNode.getId());
 
         // remove from BackendCoreStat
+<<<<<<< HEAD
         BackendCoreStat.removeNumOfHardwareCoresOfBe(dropComputeNode.getId());
 
         // update cluster
@@ -337,6 +591,18 @@ public class SystemInfoService implements GsonPostProcessable {
             cluster.removeComputeNode(dropComputeNode.getId());
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
+=======
+        BackendResourceStat.getInstance().removeBe(dropComputeNode.getId());
+
+        // remove worker
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = dropComputeNode.getStarletPort();
+            // only need to remove worker after be reported its staretPort
+            if (starletPort != 0) {
+                String workerAddr = NetUtils.getHostPortInAccessibleFormat(dropComputeNode.getHost(), starletPort);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, dropComputeNode.getWorkerGroupId());
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // log
@@ -347,6 +613,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
         List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
+<<<<<<< HEAD
         boolean needCheckUnforce = !dropBackendClause.isForce();
 
         for (Pair<String, Integer> pair : hostPortPairs) {
@@ -358,6 +625,18 @@ public class SystemInfoService implements GsonPostProcessable {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             dropBackend(pair.first, pair.second, needCheckUnforce);
+=======
+        boolean needCheckWithoutForce = !dropBackendClause.isForce();
+
+        String warehouse = dropBackendClause.getWarehouse();
+        // check if the warehouse exist
+        if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouse) == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse));
+        }
+
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            dropBackend(pair.first, pair.second, warehouse, needCheckWithoutForce);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -368,6 +647,7 @@ public class SystemInfoService implements GsonPostProcessable {
             throw new DdlException("Backend[" + backendId + "] does not exist");
         }
 
+<<<<<<< HEAD
         dropBackend(backend.getHost(), backend.getHeartbeatPort(), false);
     }
 
@@ -406,11 +686,52 @@ public class SystemInfoService implements GsonPostProcessable {
                         });
             } finally {
                 db.readUnlock();
+=======
+        dropBackend(backend.getHost(), backend.getHeartbeatPort(), WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
+    }
+
+    protected void checkWhenNotForceDrop(Backend droppedBackend) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<Long> tabletIds =
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
+        List<Long> dbs = globalStateMgr.getLocalMetastore().getDbIds();
+
+        dbs.stream().map(dbId -> globalStateMgr.getLocalMetastore().getDb(dbId)).forEach(db -> {
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).stream()
+                        .filter(Table::isOlapTableOrMaterializedView)
+                        .map(table -> (OlapTable) table)
+                        .filter(table -> table.getTableProperty().getReplicationNum() == 1)
+                        .forEach(table -> table.getAllPhysicalPartitions().forEach(partition -> {
+                            String errMsg = String.format("Tables such as [%s.%s] on the backend[%s:%d]" +
+                                            " have only one replica. To avoid data loss," +
+                                            " please change the replication_num of [%s.%s] to three." +
+                                            " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
+                                            " can be used to forcibly drop the backend. ",
+                                    db.getOriginName(), table.getName(), droppedBackend.getHost(),
+                                    droppedBackend.getHeartbeatPort(), db.getOriginName(), table.getName());
+
+                            partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
+                                    .forEach(rollupIdx -> {
+                                        boolean existIntersection = rollupIdx.getTablets().stream()
+                                                .map(Tablet::getId).anyMatch(tabletIds::contains);
+
+                                        if (existIntersection) {
+                                            throw new RuntimeException(errMsg);
+                                        }
+                                    });
+                        }));
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         });
     }
 
     // final entry of dropping backend
+<<<<<<< HEAD
     public void dropBackend(String host, int heartbeatPort, boolean needCheckUnforce) throws DdlException {
         if (getBackendWithHeartbeatPort(host, heartbeatPort) == null) {
             throw new DdlException("backend does not exists[" + host + ":" + heartbeatPort + "]");
@@ -420,6 +741,29 @@ public class SystemInfoService implements GsonPostProcessable {
         if (needCheckUnforce) {
             try {
                 checkUnforce(droppedBackend);
+=======
+    public void dropBackend(String host, int heartbeatPort, String warehouse, boolean needCheckWithoutForce) throws DdlException {
+        Backend droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
+
+        if (droppedBackend == null) {
+            throw new DdlException("backend does not exists[" +
+                    NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
+        }
+
+        // check if warehouseName is right
+        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(droppedBackend.getWarehouseId());
+        if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
+            LOG.warn("warehouseName in dropBackends is not equal, " +
+                            "warehouseName from dropBackendClause is {}, while actual one is {}",
+                    warehouse, wh.getName());
+            throw new DdlException("backend [" + host + ":" + heartbeatPort +
+                    "] does not exist in warehouse " + warehouse);
+        }
+
+        if (needCheckWithoutForce) {
+            try {
+                checkWhenNotForceDrop(droppedBackend);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } catch (RuntimeException e) {
                 throw new DdlException(e.getMessage());
             }
@@ -429,6 +773,7 @@ public class SystemInfoService implements GsonPostProcessable {
         idToBackendRef.remove(droppedBackend.getId());
 
         // update idToReportVersion
+<<<<<<< HEAD
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(droppedBackend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
@@ -452,13 +797,34 @@ public class SystemInfoService implements GsonPostProcessable {
             cluster.removeBackend(droppedBackend.getId());
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
+=======
+        Map<Long, AtomicLong> copiedReportVersions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVersions.remove(droppedBackend.getId());
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
+
+        // remove from BackendCoreStat
+        BackendResourceStat.getInstance().removeBe(droppedBackend.getId());
+
+        // remove worker
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = droppedBackend.getStarletPort();
+            // only need to remove worker after be reported its staretPort
+            if (starletPort != 0) {
+                String workerAddr = NetUtils.getHostPortInAccessibleFormat(droppedBackend.getHost(), starletPort);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, droppedBackend.getWorkerGroupId());
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(droppedBackend);
         LOG.info("finished to drop {}", droppedBackend);
 
+<<<<<<< HEAD
         // backends is changed, regenerated tablet number metrics
+=======
+        // backends are changed, regenerated tablet number metrics
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         MetricRepo.generateBackendsTabletMetrics();
     }
 
@@ -588,7 +954,11 @@ public class SystemInfoService implements GsonPostProcessable {
         // update idToBackend
         idToBackendRef.clear();
         // update idToReportVersion
+<<<<<<< HEAD
         idToReportVersionRef = ImmutableMap.<Long, AtomicLong>of();
+=======
+        idToReportVersionRef = ImmutableMap.of();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // only for test
@@ -613,7 +983,20 @@ public class SystemInfoService implements GsonPostProcessable {
         return backend;
     }
 
+<<<<<<< HEAD
     public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
+=======
+    public void updateDataCacheMetrics(long backendId, DataCacheMetrics dataCacheMetrics) {
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("updateDataCacheMetrics receives a non-exist backend/compute [id={}]", backendId);
+            return;
+        }
+        node.updateDataCacheMetrics(dataCacheMetrics);
+    }
+
+    public void updateResourceUsage(long backendId, int numRunningQueries, long memUsedBytes,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                     int cpuUsedPermille, List<TResourceGroupUsage> groupUsages) {
         ComputeNode node = getBackendOrComputeNode(backendId);
         if (node == null) {
@@ -621,13 +1004,21 @@ public class SystemInfoService implements GsonPostProcessable {
             return;
         }
 
+<<<<<<< HEAD
         node.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+=======
+        node.updateResourceUsage(numRunningQueries, memUsedBytes, cpuUsedPermille);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         if (groupUsages != null) {
             List<Pair<ResourceGroup, TResourceGroupUsage>> groupAndUsages = new ArrayList<>(groupUsages.size());
             for (TResourceGroupUsage usage : groupUsages) {
                 ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
+<<<<<<< HEAD
                         .getResourceGroupIncludingDefault(usage.getGroup_id());
+=======
+                        .getResourceGroup(usage.getGroup_id());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (group == null) {
                     continue;
                 }
@@ -645,10 +1036,21 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public boolean checkNodeAvailable(ComputeNode node) {
+<<<<<<< HEAD
         if (node instanceof Backend) {
             return node != null && node.isAvailable();
         }
         return node != null && node.isAlive();
+=======
+        if (node != null) {
+            if (node instanceof Backend) {
+                return node.isAvailable();
+            } else {
+                return node.isAlive();
+            }
+        }
+        return false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public boolean checkBackendAlive(long backendId) {
@@ -658,7 +1060,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public ComputeNode getComputeNodeWithHeartbeatPort(String host, int heartPort) {
         for (ComputeNode computeNode : idToComputeNodeRef.values()) {
+<<<<<<< HEAD
             if (computeNode.getHost().equals(host) && computeNode.getHeartbeatPort() == heartPort) {
+=======
+            if (NetUtils.isSameIP(computeNode.getHost(), host) && computeNode.getHeartbeatPort() == heartPort) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return computeNode;
             }
         }
@@ -667,7 +1073,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public Backend getBackendWithHeartbeatPort(String host, int heartPort) {
         for (Backend backend : idToBackendRef.values()) {
+<<<<<<< HEAD
             if (backend.getHost().equals(host) && backend.getHeartbeatPort() == heartPort) {
+=======
+            if (NetUtils.isSameIP(backend.getHost(), host) && backend.getHeartbeatPort() == heartPort) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return backend;
             }
         }
@@ -676,7 +1086,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public long getBackendIdWithStarletPort(String host, int starletPort) {
         for (Backend backend : idToBackendRef.values()) {
+<<<<<<< HEAD
             if (backend.getHost().equals(host) && backend.getStarletPort() == starletPort) {
+=======
+            if (NetUtils.isSameIP(backend.getHost(), host) && backend.getStarletPort() == starletPort) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return backend.getId();
             }
         }
@@ -685,7 +1099,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
         for (ComputeNode cn : idToComputeNodeRef.values()) {
+<<<<<<< HEAD
             if (cn.getHost().equals(host) && cn.getStarletPort() == starletPort) {
+=======
+            if (NetUtils.isSameIP(cn.getHost(), host) && cn.getStarletPort() == starletPort) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 return cn.getId();
             }
         }
@@ -693,6 +1111,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public static TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
+<<<<<<< HEAD
         ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (computeNode == null) {
@@ -700,6 +1119,16 @@ public class SystemInfoService implements GsonPostProcessable {
                     GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
             if (computeNode == null) {
                 throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+=======
+        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithBePort(
+                host.getHostname(), host.getPort());
+        if (computeNode == null) {
+            computeNode =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .getComputeNodeWithBePort(host.getHostname(), host.getPort());
+            if (computeNode == null) {
+                throw new StarRocksException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
         if (computeNode.getBrpcPort() < 0) {
@@ -708,6 +1137,7 @@ public class SystemInfoService implements GsonPostProcessable {
         return new TNetworkAddress(computeNode.getHost(), computeNode.getBrpcPort());
     }
 
+<<<<<<< HEAD
     public static TNetworkAddress toBrpcIp(TNetworkAddress host) throws Exception {
         ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
@@ -724,6 +1154,8 @@ public class SystemInfoService implements GsonPostProcessable {
         return computeNode.getBrpcIpAddress();
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Backend getBackendWithBePort(String host, int bePort) {
         return getComputeNodeWithBePortCommon(host, bePort, idToBackendRef);
     }
@@ -754,6 +1186,20 @@ public class SystemInfoService implements GsonPostProcessable {
         return getBackendIds(true).size();
     }
 
+<<<<<<< HEAD
+=======
+    public int getRetainedBackendNumber() {
+        return getRetainedBackends().size();
+    }
+
+    public int getSystemTableExpectedReplicationNum() {
+        if (RunMode.isSharedDataMode()) {
+            return 1;
+        }
+        return Integer.max(1, Integer.min(Config.default_replication_num, getRetainedBackendNumber()));
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public int getTotalBackendNumber() {
         return idToBackendRef.size();
     }
@@ -762,8 +1208,11 @@ public class SystemInfoService implements GsonPostProcessable {
         return idToComputeNodeRef.size();
     }
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public int getAliveComputeNodeNumber() {
         return getComputeNodeIds(true).size();
     }
@@ -792,7 +1241,11 @@ public class SystemInfoService implements GsonPostProcessable {
             }
             boolean hostMatch = false;
             // target, cur has same ip
+<<<<<<< HEAD
             if (targetPair.first.equals(curPair.first)) {
+=======
+            if (NetUtils.isSameIP(targetPair.first, curPair.first)) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 hostMatch = true;
             }
             // target, cur has same fqdn and both of them are not equal ""
@@ -807,6 +1260,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public List<Long> getComputeNodeIds(boolean needAlive) {
+<<<<<<< HEAD
         List<Long> computeNodeIds = Lists.newArrayList(idToComputeNodeRef.keySet());
         if (!needAlive) {
             return computeNodeIds;
@@ -819,10 +1273,20 @@ public class SystemInfoService implements GsonPostProcessable {
                 }
             }
             return computeNodeIds;
+=======
+        if (needAlive) {
+            return idToComputeNodeRef.entrySet().stream()
+                    .filter(entry -> entry.getValue().isAlive())
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else {
+            return Lists.newArrayList(idToComputeNodeRef.keySet());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     public List<Long> getBackendIds(boolean needAlive) {
+<<<<<<< HEAD
         List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
         if (!needAlive) {
             return backendIds;
@@ -835,10 +1299,20 @@ public class SystemInfoService implements GsonPostProcessable {
                 }
             }
             return backendIds;
+=======
+        if (needAlive) {
+            return idToBackendRef.entrySet().stream()
+                    .filter(entry -> entry.getValue().isAlive())
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else {
+            return Lists.newArrayList(idToBackendRef.keySet());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
     public List<Long> getDecommissionedBackendIds() {
+<<<<<<< HEAD
         List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
 
         Iterator<Long> iter = backendIds.iterator();
@@ -862,6 +1336,17 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         }
         return backendIds;
+=======
+        return idToBackendRef.entrySet().stream()
+                .filter(entry -> entry.getValue().isDecommissioned())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+    }
+
+    public List<Long> getAvailableBackendIds() {
+        return idToBackendRef.entrySet().stream().filter(entry -> entry.getValue().isAvailable()).map(
+                Map.Entry::getKey).collect(Collectors.toList());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public List<Long> getAvailableComputeNodeIds() {
@@ -881,26 +1366,50 @@ public class SystemInfoService implements GsonPostProcessable {
         return Lists.newArrayList(idToBackendRef.values());
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Available: not decommissioned and alive
+     */
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public List<Backend> getAvailableBackends() {
         return getBackends().stream()
                 .filter(ComputeNode::isAvailable)
                 .collect(Collectors.toList());
     }
 
-    public List<ComputeNode> getAvailableComputeNodes() {
-        return getComputeNodes().stream()
-                .filter(ComputeNode::isAvailable)
-                .collect(Collectors.toList());
+<<<<<<< HEAD
+=======
+    /**
+     * Retained: not decommissioned, whatever alive or not
+     */
+    public List<Backend> getRetainedBackends() {
+        return getBackends().stream().filter(x -> !x.isDecommissioned()).collect(Collectors.toList());
     }
 
     public List<ComputeNode> getComputeNodes() {
         return Lists.newArrayList(idToComputeNodeRef.values());
     }
 
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
+    public List<ComputeNode> getAvailableComputeNodes() {
+        return getComputeNodes().stream()
+                .filter(ComputeNode::isAvailable)
+                .collect(Collectors.toList());
+    }
+
+<<<<<<< HEAD
+    public List<ComputeNode> getComputeNodes() {
+        return Lists.newArrayList(idToComputeNodeRef.values());
+    }
+
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public Stream<ComputeNode> backendAndComputeNodeStream() {
         return Stream.concat(idToBackendRef.values().stream(), idToComputeNodeRef.values().stream());
     }
 
+<<<<<<< HEAD
     public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAvailable, boolean isCreate,
                                                          TStorageMedium storageMedium) {
 
@@ -1062,6 +1571,8 @@ public class SystemInfoService implements GsonPostProcessable {
         return nodeIds;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public ImmutableMap<Long, Backend> getIdToBackend() {
         return ImmutableMap.copyOf(idToBackendRef);
     }
@@ -1070,6 +1581,7 @@ public class SystemInfoService implements GsonPostProcessable {
         return ImmutableMap.copyOf(idToComputeNodeRef);
     }
 
+<<<<<<< HEAD
     public ImmutableCollection<ComputeNode> getComputeNodes(boolean needAlive) {
         ImmutableMap<Long, ComputeNode> idToComputeNode = ImmutableMap.copyOf(idToComputeNodeRef);
         List<Long> computeNodeIds = getComputeNodeIds(needAlive);
@@ -1090,6 +1602,8 @@ public class SystemInfoService implements GsonPostProcessable {
         return ImmutableList.copyOf(backends);
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public long getBackendReportVersion(long backendId) {
         AtomicLong atomicLong;
         if ((atomicLong = idToReportVersionRef.get(backendId)) == null) {
@@ -1102,10 +1616,17 @@ public class SystemInfoService implements GsonPostProcessable {
     public void updateBackendReportVersion(long backendId, long newReportVersion, long dbId) {
         ComputeNode node = getBackendOrComputeNode(backendId);
         // only backend need to report version
+<<<<<<< HEAD
         if (node != null && (node instanceof Backend)) {
             AtomicLong atomicLong = null;
             if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        if (node instanceof Backend) {
+            AtomicLong atomicLong;
+            if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 if (db != null) {
                     updateReportVersionIncrementally(atomicLong, newReportVersion);
                     LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
@@ -1124,6 +1645,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
     public long saveBackends(DataOutputStream dos, long checksum) throws IOException {
         ImmutableMap<Long, Backend> idToBackend = ImmutableMap.copyOf(idToBackendRef);
         int backendCount = idToBackend.size();
@@ -1184,11 +1706,14 @@ public class SystemInfoService implements GsonPostProcessable {
         return checksum;
     }
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void clear() {
         this.idToBackendRef = new ConcurrentHashMap<>();
         this.idToReportVersionRef = ImmutableMap.of();
     }
 
+<<<<<<< HEAD
     public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) throws AnalysisException {
         hostPort = hostPort.replaceAll("\\s+", "");
         if (hostPort.isEmpty()) {
@@ -1206,6 +1731,26 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         int heartbeatPort = -1;
+=======
+    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) {
+        hostPort = hostPort.replaceAll("\\s+", "");
+        if (hostPort.isEmpty()) {
+            throw new SemanticException("Invalid host port: " + hostPort);
+        }
+
+        String[] hostInfo;
+        try {
+            hostInfo = NetUtils.resolveHostInfoFromHostPort(hostPort);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Invalid host port: " + hostPort, e);
+        }
+        String host = hostInfo[0];
+        if (Strings.isNullOrEmpty(host)) {
+            throw new SemanticException("Host is null");
+        }
+
+        int heartbeatPort;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try {
             // validate host
             if (resolveHost && !InetAddressValidator.getInstance().isValid(host)) {
@@ -1218,6 +1763,7 @@ public class SystemInfoService implements GsonPostProcessable {
             }
 
             // validate port
+<<<<<<< HEAD
             heartbeatPort = Integer.parseInt(pair[1]);
 
             if (heartbeatPort <= 0 || heartbeatPort >= 65536) {
@@ -1229,6 +1775,19 @@ public class SystemInfoService implements GsonPostProcessable {
             throw new AnalysisException("Unknown host: " + e.getMessage());
         } catch (Exception e) {
             throw new AnalysisException("Encounter unknown exception: " + e.getMessage());
+=======
+            heartbeatPort = Integer.parseInt(hostInfo[1]);
+
+            if (heartbeatPort <= 0 || heartbeatPort >= 65536) {
+                throw new SemanticException("Port is out of range: " + heartbeatPort);
+            }
+
+            return new Pair<>(host, heartbeatPort);
+        } catch (UnknownHostException e) {
+            throw new SemanticException("Unknown host: " + e.getMessage());
+        } catch (Exception e) {
+            throw new SemanticException("Encounter unknown exception: " + e.getMessage());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -1236,6 +1795,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // update idToComputeNode
         newComputeNode.setBackendState(BackendState.using);
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
+<<<<<<< HEAD
 
         // to add compute to DEFAULT_CLUSTER
         if (newComputeNode.getBackendState() == BackendState.using) {
@@ -1248,6 +1808,8 @@ public class SystemInfoService implements GsonPostProcessable {
                 // cluster is not created. CN in cluster will be updated in loadCluster.
             }
         }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void replayAddBackend(Backend newBackend) {
@@ -1255,6 +1817,7 @@ public class SystemInfoService implements GsonPostProcessable {
         idToBackendRef.put(newBackend.getId(), newBackend);
 
         // set new backend's report version as 0L
+<<<<<<< HEAD
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.put(newBackend.getId(), new AtomicLong(0L));
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
@@ -1270,6 +1833,11 @@ public class SystemInfoService implements GsonPostProcessable {
                 // cluster is not created. Be in cluster will be updated in loadCluster.
             }
         }
+=======
+        Map<Long, AtomicLong> copiedReportVersions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVersions.put(newBackend.getId(), new AtomicLong(0L));
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void replayDropComputeNode(long computeNodeId) {
@@ -1280,6 +1848,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
+<<<<<<< HEAD
             BackendCoreStat.removeNumOfHardwareCoresOfBe(computeNodeId);
         }
 
@@ -1298,6 +1867,19 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         } else {
             LOG.error("Cluster DEFAULT_CLUSTER " + DEFAULT_CLUSTER + " no exist.");
+=======
+            BackendResourceStat.getInstance().removeBe(computeNodeId);
+        }
+
+        // clear map in starosAgent
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = cn.getStarletPort();
+            if (starletPort == 0) {
+                return;
+            }
+            String workerAddr = NetUtils.getHostPortInAccessibleFormat(cn.getHost(), starletPort);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerAddr);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -1307,13 +1889,20 @@ public class SystemInfoService implements GsonPostProcessable {
         idToBackendRef.remove(backend.getId());
 
         // update idToReportVersion
+<<<<<<< HEAD
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(backend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+=======
+        Map<Long, AtomicLong> copiedReportVersions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVersions.remove(backend.getId());
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
+<<<<<<< HEAD
             BackendCoreStat.removeNumOfHardwareCoresOfBe(backend.getId());
         }
 
@@ -1340,12 +1929,33 @@ public class SystemInfoService implements GsonPostProcessable {
         long id = be.getId();
         Backend memoryBe = getBackend(id);
         if (memoryBe == null) {
+=======
+            BackendResourceStat.getInstance().removeBe(backend.getId());
+        }
+
+        // clear map in starosAgent
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = backend.getStarletPort();
+            if (starletPort == 0) {
+                return;
+            }
+            String workerAddr = NetUtils.getHostPortInAccessibleFormat(backend.getHost(), starletPort);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerAddr);
+        }
+    }
+
+    public void updateInMemoryStateBackend(Backend persistentState) {
+        long id = persistentState.getId();
+        Backend inMemoryState = getBackend(id);
+        if (inMemoryState == null) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // backend may already be dropped. this may happen when
             // 1. SystemHandler drop the decommission backend
             // 2. at same time, user try to cancel the decommission of that backend.
             // These two operations do not guarantee the order.
             return;
         }
+<<<<<<< HEAD
         memoryBe.setBePort(be.getBePort());
         memoryBe.setHost(be.getHost());
         memoryBe.setAlive(be.isAlive());
@@ -1358,6 +1968,21 @@ public class SystemInfoService implements GsonPostProcessable {
         memoryBe.setDisks(be.getDisks());
         memoryBe.setBackendState(be.getBackendState());
         memoryBe.setDecommissionType(be.getDecommissionType());
+=======
+        inMemoryState.setBePort(persistentState.getBePort());
+        inMemoryState.setHost(persistentState.getHost());
+        inMemoryState.setAlive(persistentState.isAlive());
+        inMemoryState.setDecommissioned(persistentState.isDecommissioned());
+        inMemoryState.setHttpPort(persistentState.getHttpPort());
+        inMemoryState.setBeRpcPort(persistentState.getBeRpcPort());
+        inMemoryState.setBrpcPort(persistentState.getBrpcPort());
+        inMemoryState.setLastUpdateMs(persistentState.getLastUpdateMs());
+        inMemoryState.setLastStartTime(persistentState.getLastStartTime());
+        inMemoryState.setDisks(persistentState.getDisks());
+        inMemoryState.setBackendState(persistentState.getBackendState());
+        inMemoryState.setDecommissionType(persistentState.getDecommissionType());
+        inMemoryState.setLocation(persistentState.getLocation());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public long getClusterAvailableCapacityB() {
@@ -1378,12 +2003,20 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void checkClusterCapacity() throws DdlException {
+<<<<<<< HEAD
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+=======
+        if (RunMode.isSharedDataMode()) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return;
         }
 
         if (getClusterAvailableCapacityB() <= 0L) {
+<<<<<<< HEAD
             throw new DdlException("Cluster has no available capacity");
+=======
+            throw new SemanticException("Cluster has no available capacity");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 
@@ -1464,10 +2097,19 @@ public class SystemInfoService implements GsonPostProcessable {
         if (!GlobalStateMgr.isCheckpointThread()) {
             // update BackendCoreStat
             for (ComputeNode node : idToBackendRef.values()) {
+<<<<<<< HEAD
                 BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
             }
             for (ComputeNode node : idToComputeNodeRef.values()) {
                 BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+=======
+                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
+            }
+            for (ComputeNode node : idToComputeNodeRef.values()) {
+                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             }
         }
     }

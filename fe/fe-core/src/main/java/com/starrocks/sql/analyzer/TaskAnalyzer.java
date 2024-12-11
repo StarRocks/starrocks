@@ -15,15 +15,38 @@
 
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import org.apache.parquet.Strings;
+=======
+import com.google.common.base.Strings;
+import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.sql.ast.SubmitTaskStmt;
+import org.apache.commons.collections.MapUtils;
+
+import java.util.Map;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class TaskAnalyzer {
 
     public static void analyzeSubmitTaskStmt(SubmitTaskStmt submitTaskStmt, ConnectContext session) {
+<<<<<<< HEAD
+=======
+        String catalogName = submitTaskStmt.getCatalogName();
+        if (Strings.isNullOrEmpty(catalogName)) {
+            catalogName = session.getCurrentCatalog();
+        }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String dbName = submitTaskStmt.getDbName();
         if (Strings.isNullOrEmpty(dbName)) {
             dbName = session.getDatabase();
@@ -31,7 +54,39 @@ public class TaskAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
         }
+<<<<<<< HEAD
         submitTaskStmt.setDbName(dbName);
+=======
+        submitTaskStmt.setCatalogName(catalogName);
+        submitTaskStmt.setDbName(dbName);
+        analyzeTaskProperties(submitTaskStmt.getProperties());
+        analyzeTaskSchedule(submitTaskStmt.getSchedule());
+    }
+
+    private static void analyzeTaskSchedule(TaskSchedule schedule) {
+        if (schedule == null) {
+            return;
+        }
+        long seconds = schedule.getTimeUnit().toSeconds(schedule.getPeriod());
+        if (seconds < Config.task_min_schedule_interval_s) {
+            ErrorReport.reportSemanticException("schedule interval is too small, the minimum value is %d SECONDS",
+                    ErrorCode.ERR_INVALID_PARAMETER,
+                    Config.task_min_schedule_interval_s);
+        }
+        if (schedule.getStartTime() == 0) {
+            schedule.setStartTime(TimeUtils.getEpochSeconds());
+        }
+    }
+
+    public static void analyzeTaskProperties(Map<String, String> properties) {
+        if (MapUtils.isEmpty(properties)) {
+            return;
+        }
+        String value = properties.get(SessionVariable.WAREHOUSE_NAME);
+        if (value != null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, SessionVariable.WAREHOUSE_NAME);
+        }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
 }

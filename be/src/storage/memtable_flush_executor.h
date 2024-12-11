@@ -39,6 +39,10 @@
 #include <vector>
 
 #include "common/status.h"
+<<<<<<< HEAD
+=======
+#include "storage/memtable.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "storage/olap_define.h"
 #include "util/spinlock.h"
 #include "util/threadpool.h"
@@ -53,11 +57,19 @@ class MemTable;
 // the statistic of a certain flush handler.
 // use atomic because it may be updated by multi threads
 struct FlushStatistic {
+<<<<<<< HEAD
     int64_t flush_time_ns = 0;
     int64_t flush_count = 0;
     int64_t flush_size_bytes = 0;
     int64_t cur_flush_count = 0;
     std::atomic<int64_t> queueing_memtable_num = 0;
+=======
+    int64_t flush_count = 0;
+    int64_t cur_flush_count = 0;
+    std::atomic<int64_t> queueing_memtable_num = 0;
+    int64_t pending_time_ns = 0;
+    MemtableStats memtable_stats;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat);

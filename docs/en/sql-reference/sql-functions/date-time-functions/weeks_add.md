@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # weeks_add
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the value with the number of weeks added to date.
 
@@ -22,7 +26,11 @@ DATETIME weeks_add(DATETIME expr1, INT expr2);
 
 ## Return value
 
+<<<<<<< HEAD
 returns `DATETIME`.
+=======
+returns `DATETIME`. 
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 `NULL` is returned if the date does not exist.
 

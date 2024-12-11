@@ -40,7 +40,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -103,8 +106,13 @@ public class TableProcDir implements ProcDirInterface {
                 return new PartitionsProcDir(db, (OlapTable) table, false);
             } else if (table.getType() == TableType.ELASTICSEARCH) {
                 return new EsPartitionsProcDir(db, (EsTable) table);
+<<<<<<< HEAD
             } else if (table instanceof HiveMetaStoreTable) {
                 return new HMSTablePartitionsProcDir((HiveMetaStoreTable) table);
+=======
+            } else if (table.isHMSTable()) {
+                return new HMSTablePartitionsProcDir(table);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             } else {
                 throw new AnalysisException(
                         "Table[" + table.getName() + "] is not a OLAP/MATERIALIZED_VIEW/ELASTICSEARCH/HIVE/HUDI table");

@@ -20,6 +20,10 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -28,7 +32,10 @@ import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.StatementBase;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.HashSet;
 import java.util.List;
@@ -40,7 +47,11 @@ public class ViewAnalyzer {
         new ViewAnalyzer.ViewAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class ViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         @Override
         public Void visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
             // normalize & validate view name
@@ -49,7 +60,14 @@ public class ViewAnalyzer {
             FeNameFormat.checkTableName(tableName);
 
             Analyzer.analyze(stmt.getQueryStatement(), context);
+<<<<<<< HEAD
 
+=======
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(stmt.getQueryStatement());
+            if (hasTemporaryTable) {
+                throw new SemanticException("View can't base on temporary table");
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             List<Column> viewColumns = analyzeViewColumns(stmt.getQueryStatement().getQueryRelation(), stmt.getColWithComments());
             stmt.setColumns(viewColumns);
             String viewSql = AstToSQLBuilder.toSQL(stmt.getQueryStatement());
@@ -64,7 +82,19 @@ public class ViewAnalyzer {
             final String tableName = stmt.getTableName().getTbl();
             FeNameFormat.checkTableName(tableName);
 
+<<<<<<< HEAD
             Table table = MetaUtils.getTable(stmt.getTableName());
+=======
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(stmt.getTableName().getCatalog(),
+                    stmt.getTableName().getDb(), stmt.getTableName().getTbl());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", tableName);
+            }
+            if (table.isConnectorView()) {
+                throw new SemanticException("cannot alter connector view");
+            }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             if (!(table instanceof View)) {
                 throw new SemanticException("The specified table [" + tableName + "] is not a view");
             }
@@ -73,6 +103,13 @@ public class ViewAnalyzer {
             AlterViewClause alterViewClause = (AlterViewClause) alterClause;
 
             Analyzer.analyze(alterViewClause.getQueryStatement(), context);
+<<<<<<< HEAD
+=======
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(((AlterViewClause) alterClause).getQueryStatement());
+            if (hasTemporaryTable) {
+                throw new SemanticException("View can't base on temporary table");
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             List<Column> viewColumns = analyzeViewColumns(alterViewClause.getQueryStatement().getQueryRelation(),
                     alterViewClause.getColWithComments());
@@ -104,8 +141,14 @@ public class ViewAnalyzer {
                 for (int i = 0; i < colWithComments.size(); ++i) {
                     Column col = viewColumns.get(i);
                     ColWithComment colWithComment = colWithComments.get(i);
+<<<<<<< HEAD
                     col.setName(colWithComment.getColName());
                     col.setComment(colWithComment.getComment());
+=======
+                    Column newColumn = new Column(colWithComment.getColName(), col.getType(), col.isAllowNull());
+                    newColumn.setComment(colWithComment.getComment());
+                    viewColumns.set(i, newColumn);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 }
             }
 

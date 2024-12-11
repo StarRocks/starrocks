@@ -70,6 +70,10 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                 .add(FunctionSet.NDV)
                 .add(FunctionSet.MULTI_DISTINCT_COUNT)
                 .add(FunctionSet.APPROX_COUNT_DISTINCT)
+<<<<<<< HEAD
+=======
+                .add(FunctionSet.DS_HLL_COUNT_DISTINCT)
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 .add(FunctionSet.BITMAP_UNION_INT.toUpperCase()).build();
 
         @Override

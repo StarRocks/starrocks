@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # coalesce
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns the first non-NULL expression among the input parameters. Returns NULL if non-NULL expressions cannot be found.
 

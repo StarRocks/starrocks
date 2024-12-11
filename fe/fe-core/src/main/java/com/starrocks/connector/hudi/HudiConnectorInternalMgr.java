@@ -14,11 +14,22 @@
 
 package com.starrocks.connector.hudi;
 
+<<<<<<< HEAD
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.HdfsEnvironment;
+=======
+import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.Util;
+import com.starrocks.connector.CachingRemoteFileConf;
+import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetastoreType;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.hive.CachingHiveMetastore;
@@ -26,11 +37,22 @@ import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.IHiveMetastore;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
+import static com.starrocks.connector.hudi.HudiConnector.SUPPORTED_METASTORE_TYPE;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 public class HudiConnectorInternalMgr {
     private final String catalogName;
     private final Map<String, String> properties;
@@ -50,6 +72,11 @@ public class HudiConnectorInternalMgr {
 
     private final boolean enableBackgroundRefreshHudiMetadata;
 
+<<<<<<< HEAD
+=======
+    private final MetastoreType metastoreType;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public HudiConnectorInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
         this.properties = properties;
@@ -66,6 +93,21 @@ public class HudiConnectorInternalMgr {
 
         this.enableBackgroundRefreshHudiMetadata = Boolean.parseBoolean(properties.getOrDefault(
                 "enable_background_refresh_connector_metadata", "true"));
+<<<<<<< HEAD
+=======
+
+        String hiveMetastoreType = properties.getOrDefault(HIVE_METASTORE_TYPE, "hive").toLowerCase();
+        if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
+            throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
+        }
+
+        if (hiveMetastoreType.equals("hive")) {
+            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                    "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
+            Util.validateMetastoreUris(hiveMetastoreUris);
+        }
+        this.metastoreType = MetastoreType.get(hiveMetastoreType);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public void shutdown() {
@@ -83,7 +125,11 @@ public class HudiConnectorInternalMgr {
     public IHiveMetastore createHiveMetastore() {
         // TODO(stephen): Abstract the creator class to construct hive meta client
         HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties);
+<<<<<<< HEAD
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName);
+=======
+        IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName, metastoreType);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         IHiveMetastore baseHiveMetastore;
         if (!enableMetastoreCache) {
             baseHiveMetastore = hiveMetastore;
@@ -147,4 +193,11 @@ public class HudiConnectorInternalMgr {
     public boolean isEnableBackgroundRefreshHudiMetadata() {
         return enableBackgroundRefreshHudiMetadata;
     }
+<<<<<<< HEAD
+=======
+
+    public MetastoreType getMetastoreType() {
+        return metastoreType;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_AsText,ST_AsWKT
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Converts a geometric figure to WKT (Well Known Text) format.
 

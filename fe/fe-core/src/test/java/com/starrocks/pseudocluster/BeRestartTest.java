@@ -18,6 +18,10 @@ import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.After;
 import org.junit.Before;
+<<<<<<< HEAD
+=======
+import org.junit.Ignore;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.Test;
 
 import java.util.List;
@@ -30,7 +34,11 @@ public class BeRestartTest {
     @Before
     public void setUp() throws Exception {
         // make publish wait time shorter for test, so insert will finish quicker if some BE is shutdown
+<<<<<<< HEAD
         Config.quorum_publish_wait_time_ms = 1000;
+=======
+        Config.quorum_publish_wait_time_ms = 500;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         Config.heartbeat_timeout_second = 2;
         Config.tablet_sched_checker_interval_seconds = 2;
         Config.tablet_sched_repair_delay_factor_second = 2;
@@ -48,6 +56,10 @@ public class BeRestartTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    @Ignore
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testBeRestart() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
         int numTable = 2;
@@ -62,7 +74,11 @@ public class BeRestartTest {
             createTableSqls[i] = PseudoCluster.newCreateTableSqlBuilder().setTableName(name).build();
             insertSqls[i] = PseudoCluster.buildInsertSql("test", name);
             cluster.runSqls("test", createTableSqls[i], insertSqls[i], insertSqls[i], insertSqls[i]);
+<<<<<<< HEAD
             tableIds[i] = GlobalStateMgr.getCurrentState().getDb("test").getTable(name).getId();
+=======
+            tableIds[i] = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable(name).getId();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             // insert 3 times -> version: 4
             tableVersions[i] = 4;
         }
@@ -71,6 +87,7 @@ public class BeRestartTest {
         final PseudoBackend be10002 = cluster.getBackend(10002);
         final PseudoBackend be10003 = cluster.getBackend(10003);
         be10001.setShutdown(true);
+<<<<<<< HEAD
         for (int i = 0; i < 10; i++) {
             int tableIdx = rand.nextInt(numTable);
             cluster.runSql("test", insertSqls[tableIdx], true);
@@ -83,6 +100,20 @@ public class BeRestartTest {
             cluster.runSql("test", insertSqls[tableIdx], true);
             tableVersions[tableIdx]++;
             Thread.sleep(500);
+=======
+        for (int i = 0; i < 3; i++) {
+            int tableIdx = rand.nextInt(numTable);
+            cluster.runSql("test", insertSqls[tableIdx], true);
+            tableVersions[tableIdx]++;
+            Thread.sleep(100);
+        }
+        be10001.setShutdown(false);
+        for (int i = 0; i < 3; i++) {
+            int tableIdx = rand.nextInt(numTable);
+            cluster.runSql("test", insertSqls[tableIdx], true);
+            tableVersions[tableIdx]++;
+            Thread.sleep(100);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
         Callable<Boolean> allTabletsReachVersion = new Callable<Boolean>() {
             @Override

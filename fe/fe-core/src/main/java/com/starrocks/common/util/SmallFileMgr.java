@@ -45,6 +45,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.ImageWriter;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -196,7 +200,11 @@ public class SmallFileMgr implements Writable {
 
     public void createFile(CreateFileStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -206,7 +214,11 @@ public class SmallFileMgr implements Writable {
 
     public void dropFile(DropFileStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -495,7 +507,11 @@ public class SmallFileMgr implements Writable {
     }
 
     public List<List<String>> getInfo(String dbName) throws DdlException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -552,11 +568,15 @@ public class SmallFileMgr implements Writable {
     }
 
     public void loadSmallFilesV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
+<<<<<<< HEAD
         int size = reader.readInt();
         while (size-- > 0) {
             SmallFile smallFile = reader.readJson(SmallFile.class);
             putToFiles(smallFile);
         }
+=======
+        reader.readCollection(SmallFile.class, this::putToFiles);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     private void putToFiles(SmallFile smallFile) {
@@ -578,9 +598,15 @@ public class SmallFileMgr implements Writable {
         return checksum;
     }
 
+<<<<<<< HEAD
     public void saveSmallFilesV2(DataOutputStream out) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(out, SRMetaBlockID.SMALL_FILE_MGR, 1 + idToFiles.size());
         writer.writeJson(idToFiles.size());
+=======
+    public void saveSmallFilesV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.SMALL_FILE_MGR, 1 + idToFiles.size());
+        writer.writeInt(idToFiles.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         for (SmallFile file : idToFiles.values()) {
             writer.writeJson(file);
         }

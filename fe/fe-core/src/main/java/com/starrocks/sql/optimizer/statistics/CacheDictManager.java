@@ -20,6 +20,10 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -72,7 +76,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                     return CompletableFuture.supplyAsync(() -> {
                         try {
                             long tableId = columnIdentifier.getTableId();
+<<<<<<< HEAD
                             String columnName = columnIdentifier.getColumnName();
+=======
+                            ColumnId columnName = columnIdentifier.getColumnName();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                             Pair<List<TStatisticData>, Status> result = queryDictSync(columnIdentifier.getDbId(),
                                     tableId, columnName);
                             if (result.second.isGlobalDictError()) {
@@ -108,7 +116,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             .maximumSize(Config.statistic_dict_columns)
             .buildAsync(dictLoader);
 
+<<<<<<< HEAD
     private Optional<ColumnDict> deserializeColumnDict(long tableId, String columnName, TStatisticData statisticData) {
+=======
+    private Optional<ColumnDict> deserializeColumnDict(long tableId, ColumnId columnName, TStatisticData statisticData) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (statisticData.dict == null) {
             throw new RuntimeException("Collect dict error in BE");
         }
@@ -151,7 +163,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
+=======
+    public boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
             LOG.debug("{}-{} isn't low cardinality string column", tableId, columnName);
@@ -165,8 +181,13 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
         Set<Long> dbIds = ConnectContext.get().getCurrentSqlDbIds();
         for (Long id : dbIds) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(id);
             if (db != null && db.getTable(tableId) != null) {
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+            if (db != null && GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) != null) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 columnIdentifier.setDbId(db.getId());
                 break;
             }
@@ -201,7 +222,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean hasGlobalDict(long tableId, String columnName) {
+=======
+    public boolean hasGlobalDict(long tableId, ColumnId columnName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
             LOG.debug("{} isn't low cardinality string column", columnName);
@@ -217,7 +242,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
+<<<<<<< HEAD
     public void removeGlobalDict(long tableId, String columnName) {
+=======
+    public void removeGlobalDict(long tableId, ColumnId columnName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
 
         // skip dictionary operator in checkpoint thread
@@ -245,7 +274,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
+<<<<<<< HEAD
     public void updateGlobalDict(long tableId, String columnName, long collectVersion, long versionTime) {
+=======
+    public void updateGlobalDict(long tableId, ColumnId columnName, long collectVersion, long versionTime) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
@@ -281,7 +314,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
+<<<<<<< HEAD
     public Optional<ColumnDict> getGlobalDict(long tableId, String columnName) {
+=======
+    public Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         CompletableFuture<Optional<ColumnDict>> columnFuture = dictStatistics.get(columnIdentifier);
         if (columnFuture.isDone()) {

@@ -28,7 +28,11 @@ public class PluginAnalyzer {
         new PluginAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class PluginAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class PluginAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         @Override
         public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {

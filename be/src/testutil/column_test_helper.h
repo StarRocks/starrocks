@@ -37,7 +37,11 @@ public:
             return data;
         } else if constexpr (std::is_same_v<T, Slice>) {
             auto data = BinaryColumn::create();
+<<<<<<< HEAD
             data->append_strings(values);
+=======
+            data->append_strings(values.data(), values.size());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             return data;
         } else if constexpr (std::is_same_v<T, double>) {
             auto data = DoubleColumn ::create();

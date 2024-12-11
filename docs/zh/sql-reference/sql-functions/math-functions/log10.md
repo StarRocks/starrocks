@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # log10, dlog10
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 返回以 10 为底数的 `x` 的对数。
 

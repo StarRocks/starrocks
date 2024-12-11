@@ -17,6 +17,10 @@
 #include <cstring>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "simdutf.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/slice.h"
 
 namespace starrocks {
@@ -68,6 +72,23 @@ static inline size_t get_utf8_small_index(const Slice& str, uint8_t* small_index
     return n;
 }
 
+<<<<<<< HEAD
+=======
+static inline Slice truncate_utf8(const Slice& str, const size_t max_size) {
+    std::vector<size_t> index{};
+    const size_t utf8_length = get_utf8_index(str, &index);
+    size_t actual_size = 0;
+    if (utf8_length > max_size) {
+        // do truncate
+        actual_size = index[max_size];
+    } else {
+        // don't need to truncate
+        actual_size = str.size;
+    }
+    return {str.data, actual_size};
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 // table-driven is faster than computing as follow:
 /*
  *      uint8_t b = ~static_cast<uint8_t>(*p);
@@ -104,6 +125,7 @@ static inline const char* skip_trailing_utf8(const char* p, const char* begin, s
     return p;
 }
 
+<<<<<<< HEAD
 // utf8_length
 // this SIMD optimization bases upon the brilliant implementation of ClickHouse
 // (https://github.com/ClickHouse/ClickHouse/blob/master/src/Common/UTF8Helpers.cpp)
@@ -151,6 +173,10 @@ inline static int utf8_len(const char* begin, const char* end) {
         len += static_cast<int8_t>(*p) > static_cast<int8_t>(0xBF);
     }
     return len;
+=======
+static inline int utf8_len(const char* begin, const char* end) {
+    return simdutf::count_utf8(begin, end - begin);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 // Check if the string contains a utf-8 character
@@ -176,6 +202,7 @@ static inline Slice utf8_char_start(const char* end) {
     return {p, count};
 }
 
+<<<<<<< HEAD
 // Modify from https://github.com/lemire/fastvalidate-utf-8/blob/master/include/simdasciicheck.h
 static inline bool validate_ascii_fast(const char* src, size_t len) {
 #ifdef __AVX2__
@@ -221,6 +248,10 @@ static inline bool validate_ascii_fast(const char* src, size_t len) {
     }
     return !(tail_has_error & 0x80);
 #endif
+=======
+static inline bool validate_ascii_fast(const char* src, size_t len) {
+    return simdutf::validate_ascii(src, len);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 } // namespace starrocks

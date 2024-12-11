@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_sum
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 对数组中的所有元素求和。
 

@@ -17,7 +17,11 @@
 namespace starrocks::pipeline {
 
 Status HashPartitionSinkOperator::prepare(RuntimeState* state) {
+<<<<<<< HEAD
     Operator::prepare(state);
+=======
+    RETURN_IF_ERROR(Operator::prepare(state));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _partition_num = ADD_COUNTER(_unique_metrics, "PartitionNumber", TUnit::UNIT);
     return _hash_partition_ctx->prepare(state, _unique_metrics.get());
 }

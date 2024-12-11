@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_from_binary
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将特定格式的 Varbinary 类型的字符串转换为 Bitmap。可用于导入 Bitmap 数据到 StarRocks。
 

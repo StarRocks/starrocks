@@ -190,7 +190,12 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     public List<String> listPartitionColumns(Connection connection, String databaseName, String tableName) {
         String partitionColumnsQuery = "SELECT DISTINCT PARTITION_EXPRESSION FROM INFORMATION_SCHEMA.PARTITIONS " +
                 "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL " +
+<<<<<<< HEAD
                 "AND ( PARTITION_METHOD = 'RANGE' or PARTITION_METHOD = 'RANGE COLUMNS')";
+=======
+                "AND ( PARTITION_METHOD = 'RANGE' or PARTITION_METHOD = 'RANGE COLUMNS') " +
+                "AND PARTITION_EXPRESSION IS NOT NULL";
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
@@ -215,15 +220,24 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         JDBCTable jdbcTable = (JDBCTable) table;
         String query = getPartitionQuery(table);
         try (PreparedStatement ps = connection.prepareStatement(query)) {
+<<<<<<< HEAD
             ps.setString(1, jdbcTable.getDbName());
             ps.setString(2, jdbcTable.getJdbcTable());
+=======
+            ps.setString(1, jdbcTable.getCatalogDBName());
+            ps.setString(2, jdbcTable.getCatalogTableName());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
             if (null != rs) {
                 while (rs.next()) {
                     String[] partitionNames = rs.getString("NAME").
                             replace("'", "").split(",");
+<<<<<<< HEAD
                     long createTime = rs.getDate("MODIFIED_TIME").getTime();
+=======
+                    long createTime = rs.getTimestamp("MODIFIED_TIME").getTime();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                     for (String partitionName : partitionNames) {
                         list.add(new Partition(partitionName, createTime));
                     }
@@ -237,6 +251,45 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Fetch jdbc table's partition info from `INFORMATION_SCHEMA.PARTITIONS`.
+     * eg:
+     * mysql> desc INFORMATION_SCHEMA.PARTITIONS;
+     * +-------------------------------+---------------------+------+-----+---------+-------+
+     * | Field                         | Type                | Null | Key | Default | Extra |
+     * +-------------------------------+---------------------+------+-----+---------+-------+
+     * | TABLE_CATALOG                 | varchar(512)        | NO   |     |         |       |
+     * | TABLE_SCHEMA                  | varchar(64)         | NO   |     |         |       |
+     * | TABLE_NAME                    | varchar(64)         | NO   |     |         |       |
+     * | PARTITION_NAME                | varchar(64)         | YES  |     | NULL    |       |
+     * | SUBPARTITION_NAME             | varchar(64)         | YES  |     | NULL    |       |
+     * | PARTITION_ORDINAL_POSITION    | bigint(21) unsigned | YES  |     | NULL    |       |
+     * | SUBPARTITION_ORDINAL_POSITION | bigint(21) unsigned | YES  |     | NULL    |       |
+     * | PARTITION_METHOD              | varchar(18)         | YES  |     | NULL    |       |
+     * | SUBPARTITION_METHOD           | varchar(12)         | YES  |     | NULL    |       |
+     * | PARTITION_EXPRESSION          | longtext            | YES  |     | NULL    |       |
+     * | SUBPARTITION_EXPRESSION       | longtext            | YES  |     | NULL    |       |
+     * | PARTITION_DESCRIPTION         | longtext            | YES  |     | NULL    |       |
+     * | TABLE_ROWS                    | bigint(21) unsigned | NO   |     | 0       |       |
+     * | AVG_ROW_LENGTH                | bigint(21) unsigned | NO   |     | 0       |       |
+     * | DATA_LENGTH                   | bigint(21) unsigned | NO   |     | 0       |       |
+     * | MAX_DATA_LENGTH               | bigint(21) unsigned | YES  |     | NULL    |       |
+     * | INDEX_LENGTH                  | bigint(21) unsigned | NO   |     | 0       |       |
+     * | DATA_FREE                     | bigint(21) unsigned | NO   |     | 0       |       |
+     * | CREATE_TIME                   | datetime            | YES  |     | NULL    |       |
+     * | UPDATE_TIME                   | datetime            | YES  |     | NULL    |       |
+     * | CHECK_TIME                    | datetime            | YES  |     | NULL    |       |
+     * | CHECKSUM                      | bigint(21) unsigned | YES  |     | NULL    |       |
+     * | PARTITION_COMMENT             | varchar(80)         | NO   |     |         |       |
+     * | NODEGROUP                     | varchar(12)         | NO   |     |         |       |
+     * | TABLESPACE_NAME               | varchar(64)         | YES  |     | NULL    |       |
+     * +-------------------------------+---------------------+------+-----+---------+-------+
+     * @param table
+     * @return
+     */
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @NotNull
     private static String getPartitionQuery(Table table) {
         final String partitionsQuery = "SELECT PARTITION_DESCRIPTION AS NAME, " +

@@ -16,7 +16,11 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
+=======
+import com.starrocks.catalog.OlapTable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -24,6 +28,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -34,17 +42,40 @@ public class CreateTableLikeAnalyzer {
 
     public static void analyze(CreateTableLikeStmt stmt, ConnectContext context) {
         TableName existedDbTbl = stmt.getExistedDbTbl();
+<<<<<<< HEAD
         MetaUtils.normalizationTableName(context, stmt.getDbTbl());
         MetaUtils.normalizationTableName(context, existedDbTbl);
+=======
+        stmt.getDbTbl().normalization(context);
+        existedDbTbl.normalization(context);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         String tableName = stmt.getTableName();
         FeNameFormat.checkTableName(tableName);
 
         MetaUtils.checkNotSupportCatalog(existedDbTbl.getCatalog(), "CREATE TABLE LIKE");
+<<<<<<< HEAD
         Database db = MetaUtils.getDatabase(context, existedDbTbl);
         Table table = MetaUtils.getTable(existedDbTbl);
 
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(stmt.getDbName(), table, createTableStmt, null, null, false, false);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(existedDbTbl.getCatalog(),
+                existedDbTbl.getDb(), existedDbTbl.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
+
+        List<String> createTableStmt = Lists.newArrayList();
+
+        if (stmt instanceof CreateTemporaryTableLikeStmt) {
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("temporary table only support olap engine");
+            }
+        }
+        AstToStringBuilder.getDdlStmt(stmt.getDbName(), table, createTableStmt, null,
+                null, false, false, stmt instanceof CreateTemporaryTableLikeStmt);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (createTableStmt.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_EMPTY, "CREATE");
         }
@@ -57,6 +88,18 @@ public class CreateTableLikeAnalyzer {
             if (stmt.isSetIfNotExists()) {
                 parsedCreateTableStmt.setIfNotExists();
             }
+<<<<<<< HEAD
+=======
+            if (stmt.getProperties() != null) {
+                parsedCreateTableStmt.updateProperties(stmt.getProperties());
+            }
+            if (stmt.getDistributionDesc() != null) {
+                parsedCreateTableStmt.setDistributionDesc(stmt.getDistributionDesc());
+            }
+            if (stmt.getPartitionDesc() != null) {
+                parsedCreateTableStmt.setPartitionDesc(stmt.getPartitionDesc());
+            }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
             com.starrocks.sql.analyzer.Analyzer.analyze(parsedCreateTableStmt, context);
             stmt.setCreateTableStmt(parsedCreateTableStmt);

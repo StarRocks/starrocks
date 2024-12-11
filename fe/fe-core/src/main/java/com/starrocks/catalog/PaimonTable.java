@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.catalog;
 
@@ -27,10 +28,29 @@ import org.apache.paimon.types.DataField;
 
 import java.util.ArrayList;
 import java.util.List;
+=======
+package com.starrocks.catalog;
+
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.planner.PaimonScanNode;
+import com.starrocks.thrift.TPaimonTable;
+import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableType;
+import org.apache.paimon.table.DataTable;
+import org.apache.paimon.types.DataField;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
+<<<<<<< HEAD
 
 public class PaimonTable extends Table {
     private static final Logger LOG = LogManager.getLogger(PaimonTable.class);
@@ -44,12 +64,33 @@ public class PaimonTable extends Table {
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        Options paimonOptions, org.apache.paimon.table.Table paimonNativeTable, long createTime) {
+=======
+public class PaimonTable extends Table {
+    private String catalogName;
+    private String databaseName;
+    private String tableName;
+    private org.apache.paimon.table.Table paimonNativeTable;
+    private List<String> partColumnNames;
+    private List<String> paimonFieldNames;
+    private Map<String, String> properties;
+
+    public PaimonTable() {
+        super(TableType.PAIMON);
+    }
+
+    public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
+                       org.apache.paimon.table.Table paimonNativeTable, long createTime) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.PAIMON, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
+<<<<<<< HEAD
         this.paimonOptions = paimonOptions;
         this.paimonNativeTable = (AbstractFileStoreTable) paimonNativeTable;
+=======
+        this.paimonNativeTable = paimonNativeTable;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.partColumnNames = paimonNativeTable.partitionKeys();
         this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
                 .map(DataField::name)
@@ -57,10 +98,15 @@ public class PaimonTable extends Table {
         this.createTime = createTime;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public String getCatalogName() {
         return catalogName;
     }
 
+<<<<<<< HEAD
     public String getDbName() {
         return databaseName;
     }
@@ -70,6 +116,19 @@ public class PaimonTable extends Table {
     }
 
     public AbstractFileStoreTable getNativeTable() {
+=======
+    @Override
+    public String getCatalogDBName() {
+        return databaseName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+        return tableName;
+    }
+
+    public org.apache.paimon.table.Table getNativeTable() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         return paimonNativeTable;
     }
 
@@ -80,7 +139,23 @@ public class PaimonTable extends Table {
 
     @Override
     public String getTableLocation() {
+<<<<<<< HEAD
         return paimonNativeTable.location().toString();
+=======
+        if (paimonNativeTable instanceof DataTable) {
+            return ((DataTable) paimonNativeTable).location().toString();
+        } else {
+            return paimonNativeTable.name().toString();
+        }
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        if (properties == null) {
+            this.properties = new HashMap<>();
+        }
+        return properties;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -104,7 +179,11 @@ public class PaimonTable extends Table {
 
     @Override
     public boolean isUnPartitioned() {
+<<<<<<< HEAD
         return partColumnNames.size() == 0;
+=======
+        return partColumnNames.isEmpty();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override
@@ -115,6 +194,7 @@ public class PaimonTable extends Table {
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TPaimonTable tPaimonTable = new TPaimonTable();
+<<<<<<< HEAD
         StringBuilder sb = new StringBuilder();
         for (String key : this.paimonOptions.keySet()) {
             sb.append(key).append("=").append(this.paimonOptions.get(key)).append(",");
@@ -122,9 +202,37 @@ public class PaimonTable extends Table {
         String option = sb.substring(0, sb.length() - 1);
 
         tPaimonTable.setPaimon_options(option);
+=======
+        String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
+        tPaimonTable.setPaimon_native_table(encodedTable);
+        tPaimonTable.setTime_zone(TimeUtils.getSessionTimeZone());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);
         return tTableDescriptor;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        PaimonTable that = (PaimonTable) o;
+        return catalogName.equals(that.catalogName) &&
+                databaseName.equals(that.databaseName) &&
+                tableName.equals(that.tableName) &&
+                createTime == that.createTime;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(catalogName, databaseName, tableName, createTime);
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

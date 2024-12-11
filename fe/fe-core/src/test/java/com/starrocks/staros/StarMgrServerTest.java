@@ -67,7 +67,11 @@ public class StarMgrServerTest {
         server.getJournalSystem().setReplayId(1L);
         Assert.assertEquals(1L, server.getReplayId());
 
+<<<<<<< HEAD
         new MockUp<BDBJEJournalSystem>() {
+=======
+        new MockUp<StarOSBDBJEJournalSystem>() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             @Mock
             public void replayTo(long journalId) throws StarException {
             }
@@ -76,9 +80,15 @@ public class StarMgrServerTest {
                 return 0;
             }
         };
+<<<<<<< HEAD
         Assert.assertTrue(server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 0L));
 
         new MockUp<BDBJEJournalSystem>() {
+=======
+        server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 0L);
+
+        new MockUp<StarOSBDBJEJournalSystem>() {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
             @Mock
             public void replayTo(long journalId) throws StarException {
             }
@@ -87,6 +97,10 @@ public class StarMgrServerTest {
                 return 1;
             }
         };
+<<<<<<< HEAD
         Assert.assertTrue(server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 1L));
+=======
+        server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 1L);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 }

@@ -51,6 +51,10 @@
 #include <utility>
 
 #include "common/config.h"
+<<<<<<< HEAD
+=======
+#include "service/backend_options.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "util/thread.h"
 
 namespace starrocks {
@@ -338,7 +342,12 @@ Status ThriftServer::start() {
     }
 
     case THREAD_POOL:
+<<<<<<< HEAD
         fe_server_transport.reset(new apache::thrift::transport::TServerSocket(_port));
+=======
+        fe_server_transport.reset(new apache::thrift::transport::TServerSocket(
+                BackendOptions::get_service_bind_address_without_bracket(), _port));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         if (transport_factory == nullptr) {
             transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
@@ -349,7 +358,12 @@ Status ThriftServer::start() {
         break;
 
     case THREADED:
+<<<<<<< HEAD
         server_socket = new apache::thrift::transport::TServerSocket(_port);
+=======
+        server_socket = new apache::thrift::transport::TServerSocket(
+                BackendOptions::get_service_bind_address_without_bracket(), _port);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         //      server_socket->setAcceptTimeout(500);
         fe_server_transport.reset(server_socket);
         server_socket->setKeepAlive(true);

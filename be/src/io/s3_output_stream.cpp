@@ -22,6 +22,12 @@
 #include <fmt/format.h>
 
 #include "common/logging.h"
+<<<<<<< HEAD
+=======
+#include "io/io_profiler.h"
+#include "io/s3_zero_copy_iostream.h"
+#include "util/stopwatch.hpp"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::io {
 
@@ -39,6 +45,11 @@ S3OutputStream::S3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::s
 }
 
 Status S3OutputStream::write(const void* data, int64_t size) {
+<<<<<<< HEAD
+=======
+    MonotonicStopWatch watch;
+    watch.start();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     _buffer.append(static_cast<const char*>(data), size);
     if (_upload_id.empty() && _buffer.size() > _max_single_part_size) {
         RETURN_IF_ERROR(create_multipart_upload());
@@ -48,6 +59,10 @@ Status S3OutputStream::write(const void* data, int64_t size) {
         RETURN_IF_ERROR(multipart_upload());
         _buffer.clear();
     }
+<<<<<<< HEAD
+=======
+    IOProfiler::add_write(size, watch.elapsed_time());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     return Status::OK();
 }
 
@@ -106,7 +121,11 @@ Status S3OutputStream::singlepart_upload() {
     req.SetBucket(_bucket);
     req.SetKey(_object);
     req.SetContentLength(static_cast<int64_t>(_buffer.size()));
+<<<<<<< HEAD
     req.SetBody(std::make_shared<Aws::StringStream>(_buffer));
+=======
+    req.SetBody(Aws::MakeShared<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, _buffer.data(), _buffer.size()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     Aws::S3::Model::PutObjectOutcome outcome = _client->PutObject(req);
     if (!outcome.IsSuccess()) {
         std::string error_msg =
@@ -128,7 +147,11 @@ Status S3OutputStream::multipart_upload() {
     req.SetPartNumber(static_cast<int>(_etags.size() + 1));
     req.SetUploadId(_upload_id);
     req.SetContentLength(static_cast<int64_t>(_buffer.size()));
+<<<<<<< HEAD
     req.SetBody(std::make_shared<Aws::StringStream>(_buffer));
+=======
+    req.SetBody(Aws::MakeShared<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, _buffer.data(), _buffer.size()));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     auto outcome = _client->UploadPart(req);
     if (outcome.IsSuccess()) {
         _etags.push_back(outcome.GetResult().GetETag());

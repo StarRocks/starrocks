@@ -14,6 +14,10 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <atomic>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <utility>
 
 #include "exec/aggregator.h"
@@ -25,8 +29,16 @@ namespace starrocks::pipeline {
 class AggregateBlockingSinkOperator : public Operator {
 public:
     AggregateBlockingSinkOperator(AggregatorPtr aggregator, OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+<<<<<<< HEAD
                                   int32_t driver_sequence, const char* name = "aggregate_blocking_sink")
             : Operator(factory, id, name, plan_node_id, false, driver_sequence), _aggregator(std::move(aggregator)) {
+=======
+                                  int32_t driver_sequence, std::atomic<int64_t>& shared_limit_countdown,
+                                  const char* name = "aggregate_blocking_sink")
+            : Operator(factory, id, name, plan_node_id, false, driver_sequence),
+              _aggregator(std::move(aggregator)),
+              _shared_limit_countdown(shared_limit_countdown) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         _aggregator->set_aggr_phase(AggrPhase2);
         _aggregator->ref();
     }
@@ -56,9 +68,16 @@ protected:
 
 private:
     // Whether prev operator has no output
+<<<<<<< HEAD
     bool _is_finished = false;
     // whether enable aggregate group by limit optimize
     bool _agg_group_by_with_limit = false;
+=======
+    std::atomic_bool _is_finished = false;
+    // whether enable aggregate group by limit optimize
+    bool _agg_group_by_with_limit = false;
+    std::atomic<int64_t>& _shared_limit_countdown;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 class AggregateBlockingSinkOperatorFactory final : public OperatorFactory {

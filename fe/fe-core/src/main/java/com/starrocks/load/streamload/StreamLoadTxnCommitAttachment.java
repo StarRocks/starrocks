@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 package com.starrocks.load.streamload;
 
 import com.google.gson.annotations.SerializedName;
@@ -22,7 +25,10 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -117,16 +123,22 @@ public class StreamLoadTxnCommitAttachment extends TxnCommitAttachment implement
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
+<<<<<<< HEAD
     public void readFields(DataInput in) throws IOException {}
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public String toString() {
         return GsonUtils.GSON.toJson(this);
     }
+<<<<<<< HEAD
 
     public static StreamLoadTxnCommitAttachment loadStreamLoadTxnCommitAttachment(DataInput in) throws IOException {
         String json = Text.readString(in);
         StreamLoadTxnCommitAttachment attachment = GsonUtils.GSON.fromJson(json, StreamLoadTxnCommitAttachment.class);
         return attachment;
     }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }

@@ -16,7 +16,10 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+<<<<<<< HEAD
 import com.starrocks.analysis.IndexDef;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.catalog.Index;
 import com.starrocks.sql.parser.NodePosition;
 

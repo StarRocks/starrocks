@@ -242,6 +242,10 @@ public:
 
     static uint8_t calc_weekday(uint64_t daynr, bool);
 
+<<<<<<< HEAD
+=======
+    TimeType type() const { return (TimeType)_type; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     int year() const { return _year; }
     int month() const { return _month; }
     int day() const { return _day; }
@@ -397,7 +401,10 @@ public:
     }
 
     void set_type(int type);
+<<<<<<< HEAD
     TimeType type() const { return (TimeType)_type; }
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 protected:
     // Used to make sure sizeof DateTimeValue

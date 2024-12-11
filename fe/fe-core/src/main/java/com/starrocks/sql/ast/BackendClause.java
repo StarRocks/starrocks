@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
+<<<<<<< HEAD
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.LinkedList;
@@ -32,6 +33,19 @@ public class BackendClause extends AlterClause {
     protected BackendClause(List<String> hostPorts, NodePosition pos) {
         super(AlterOpType.ALTER_OTHER, pos);
         this.hostPorts = hostPorts;
+=======
+
+import java.util.LinkedList;
+import java.util.List;
+
+public class BackendClause extends AlterClause {
+    protected List<String> hostPortsUnResolved;
+    protected List<Pair<String, Integer>> hostPortPairs;
+
+    protected BackendClause(List<String> hostPortsUnResolved, NodePosition pos) {
+        super(AlterOpType.ALTER_OTHER, pos);
+        this.hostPortsUnResolved = hostPortsUnResolved;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.hostPortPairs = new LinkedList<>();
     }
 
@@ -39,6 +53,7 @@ public class BackendClause extends AlterClause {
         return hostPortPairs;
     }
 
+<<<<<<< HEAD
     public List<String> getHostPorts() {
         return hostPorts;
     }
@@ -46,6 +61,14 @@ public class BackendClause extends AlterClause {
     @Override
     public Map<String, String> getProperties() {
         throw new NotImplementedException();
+=======
+    public void setHostPortPairs(List<Pair<String, Integer>> hostPortPairs) {
+        this.hostPortPairs = hostPortPairs;
+    }
+
+    public List<String> getHostPortsUnResolved() {
+        return hostPortsUnResolved;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Override

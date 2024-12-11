@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # catalog
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 查询当前会话所在的 Catalog。可以是 Internal Catalog 或 External Catalog。有关 Catalog 的详细信息，参见 [](../../../data_source/catalog/catalog_overview.md)。
 

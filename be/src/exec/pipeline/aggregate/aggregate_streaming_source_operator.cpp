@@ -16,6 +16,11 @@
 
 #include <variant>
 
+<<<<<<< HEAD
+=======
+#include "util/failpoint/fail_point.h"
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 namespace starrocks::pipeline {
 
 bool AggregateStreamingSourceOperator::has_output() const {
@@ -75,6 +80,12 @@ StatusOr<ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(RuntimeState* st
     return std::move(chunk);
 }
 
+<<<<<<< HEAD
+=======
+// used to verify https://github.com/StarRocks/starrocks/issues/30078
+DEFINE_FAIL_POINT(force_reset_aggregator_after_agg_streaming_sink_finish);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         _aggregator->hash_map_variant().visit(
@@ -86,6 +97,15 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* c
 
     auto need_reset_aggregator = _aggregator->is_streaming_all_states() && _aggregator->is_ht_eos();
 
+<<<<<<< HEAD
+=======
+    FAIL_POINT_TRIGGER_EXECUTE(force_reset_aggregator_after_agg_streaming_sink_finish, {
+        if (_aggregator->is_sink_complete()) {
+            need_reset_aggregator = true;
+        }
+    });
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     if (need_reset_aggregator) {
         if (!_aggregator->is_sink_complete()) {
             RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));

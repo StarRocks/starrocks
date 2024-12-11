@@ -22,8 +22,11 @@
 #include <fmt/format.h>
 #include <sys/syscall.h>
 
+<<<<<<< HEAD
 #include <exception>
 
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
@@ -31,6 +34,7 @@
 #include "runtime/current_thread.h"
 #include "util/time.h"
 
+<<<<<<< HEAD
 namespace google::glog_internal_namespace_ {
 void DumpStackTraceToString(std::string* stacktrace);
 } // namespace google::glog_internal_namespace_
@@ -40,13 +44,29 @@ namespace google {
 int GetStackTrace(void** result, int max_depth, int skip_count);
 bool Symbolize(void* pc, char* out, int out_size);
 } // namespace google
+=======
+namespace google {
+std::string GetStackTrace();
+}
+
+// import hidden stack trace functions from glog
+namespace google::glog_internal_namespace_ {
+enum class SymbolizeOptions { kNone = 0, kNoLineNumbers = 1 };
+int GetStackTrace(void** result, int max_depth, int skip_count);
+bool Symbolize(void* pc, char* out, unsigned long out_size, SymbolizeOptions options = SymbolizeOptions::kNone);
+} // namespace google::glog_internal_namespace_
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 
 std::string get_stack_trace() {
+<<<<<<< HEAD
     std::string s;
     google::glog_internal_namespace_::DumpStackTraceToString(&s);
     return s;
+=======
+    return google::GetStackTrace();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 }
 
 struct StackTraceTask {
@@ -59,7 +79,11 @@ struct StackTraceTask {
         for (int i = 0; i < depth; ++i) {
             char line[2048];
             char buf[1024];
+<<<<<<< HEAD
             if (google::Symbolize(addrs[i], buf, sizeof(buf))) {
+=======
+            if (google::glog_internal_namespace_::Symbolize(addrs[i], buf, sizeof(buf))) {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 snprintf(line, 2048, "  %16p  %s\n", addrs[i], buf);
             } else {
                 snprintf(line, 2048, "  %16p  (unknown)\n", addrs[i]);
@@ -93,7 +117,11 @@ struct StackTraceTaskHash {
 
 void get_stack_trace_sighandler(int signum, siginfo_t* siginfo, void* ucontext) {
     auto task = reinterpret_cast<StackTraceTask*>(siginfo->si_value.sival_ptr);
+<<<<<<< HEAD
     task->depth = google::GetStackTrace(task->addrs, StackTraceTask::kMaxStackDepth, 2);
+=======
+    task->depth = google::glog_internal_namespace_::GetStackTrace(task->addrs, StackTraceTask::kMaxStackDepth, 2);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     task->done = true;
 }
 

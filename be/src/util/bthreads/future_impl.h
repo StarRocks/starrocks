@@ -162,6 +162,10 @@ public:
 private:
     friend class Future<R>;
     friend class FutureBase<R>;
+<<<<<<< HEAD
+=======
+    friend class SharedFuture<R>;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     friend class Promise<R>;
 
     R& value() noexcept { return _result.value(); }

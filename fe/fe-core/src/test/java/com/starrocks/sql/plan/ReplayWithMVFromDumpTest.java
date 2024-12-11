@@ -14,8 +14,11 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedView;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
@@ -23,24 +26,35 @@ import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 import mockit.Mock;
 import mockit.MockUp;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+<<<<<<< HEAD
 import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Set;
 
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
+=======
+import org.junit.Test;
+
+import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
+import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertNotContains;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
+<<<<<<< HEAD
         connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
         connectContext.getSessionVariable().setEnableQueryDebugTrace(true);
 
@@ -57,6 +71,11 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 return true;
             }
         };
+=======
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Before
@@ -68,14 +87,21 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void after() {
     }
 
+<<<<<<< HEAD
     @Ignore
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Test
     public void testMV_JoinAgg1() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg1");
         // Table and mv have no stats, mv rewrite is ok.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second, replayPair.second.contains("table: mv1, rollup: mv1"));
+=======
+        assertContains(replayPair.second, "table: mv1, rollup: mv1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -85,7 +111,12 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/mock_join_agg1");
         // Table and mv have no stats, mv rewrite is ok.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second, replayPair.second.contains("table: tbl_mock_001, rollup: tbl_mock_001"));
+=======
+        // Rewrite OK when enhance rule based mv rewrite.
+        assertContains(replayPair.second, "table: test_mv0, rollup: test_mv0");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -96,7 +127,11 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable()
                 .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
+=======
+        assertContains(replayPair.second, "table: mv1, rollup: mv1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -107,7 +142,11 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second.contains("line_order_flat_mv"));
+=======
+        assertContains(replayPair.second, "line_order_flat_mv");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -119,7 +158,11 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg4"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second.contains("line_order_flat_mv"));
+=======
+        assertContains(replayPair.second, "line_order_flat_mv");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -129,11 +172,16 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv1"),
                         null, TExplainLevel.NORMAL);
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second.contains("mv2"));
+=======
+        assertContains(replayPair.second, "mv2");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FeConstants.isReplayFromQueryDump = false;
     }
 
     @Test
+<<<<<<< HEAD
     public void testMVJoin() throws Exception {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         Pair<QueryDumpInfo, String> replayPair =
@@ -148,16 +196,23 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testMock_MV_MVOnMV1() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_mv_on_mv1"),
                         null, TExplainLevel.NORMAL);
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second.contains("tbl_mock_017"));
+=======
+        assertContains(replayPair.second, "tbl_mock_017");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         FeConstants.isReplayFromQueryDump = false;
     }
 
     @Test
+<<<<<<< HEAD
     @Ignore
     public void testMVOnMV2() throws Exception {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
@@ -165,6 +220,18 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("test_mv2"));
+=======
+    public void testMVOnMV2() throws Exception {
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        // TODO: How to remove the join reorder noise?
+        connectContext.getSessionVariable().disableJoinReorder();
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        connectContext.getSessionVariable().enableJoinReorder();
+        assertContains(replayPair.second, "test_mv2");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -172,7 +239,11 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having1"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second.contains("TEST_MV_2"));
+=======
+        assertContains(replayPair.second, "TEST_MV_2");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -180,25 +251,44 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second.contains("TEST_MV_2"));
     }
 
     @Test
     @Ignore
+=======
+        assertContains(replayPair.second, "TEST_MV_2");
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testMV_AggWithHaving3() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second.contains("TEST_MV_3"));
     }
 
     @Test
     @Ignore
+=======
+        assertContains(replayPair.second, "TEST_MV_2");
+    }
+
+    @Test
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     public void testMock_MV_AggWithHaving3() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_agg_with_having3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second.contains("tbl_mock_023"));
+=======
+        // Rewrite OK since rule based mv is enhanced
+        assertContains(replayPair.second, "test_mv2");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -208,11 +298,31 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_with_cost_bug1"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+<<<<<<< HEAD
         Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_35"));
+=======
+        assertContains(replayPair.second, "mv_35");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         FeConstants.isReplayFromQueryDump = false;
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testMVWithDictRewrite() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
+            assertContains(replayPair.second,
+                    "DictDecode(78: n_name, [<place-holder> = 'GERMANY'])");
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     /**
      * Test synchronous materialized view rewrite with global dict optimization.
      */
@@ -230,7 +340,22 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         //        "nmock_024, nmock_025, nmock_026, nmock_027, nmock_028, nmock_029, nmock_030, nmock_031, " +
         //        "nmock_032, nmock_033, nmock_034, nmock_035, nmock_036, nmock_037, nmock_038, nmock_039, " +
         //        "nmock_040, nmock_041 from tbl_mock_001 order by nmock_002;";
+<<<<<<< HEAD
         Assert.assertFalse(replayPair.second, replayPair.second.contains("mv_tbl_mock_001"));
+=======
+        assertNotContains(replayPair.second, "mv_tbl_mock_001");
+    }
+
+    @Test
+    public void testViewDeltaRewriter() throws Exception {
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/view_delta"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_yyf_trade_water3"));
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     @Test
@@ -248,7 +373,14 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
+<<<<<<< HEAD
                 "  3:Project\n");
         assertContains(replayPair.second, "  |  <slot 59> : coalesce(");
     }
 }
+=======
+                "  3:Project\n" +
+                "  |  <slot 59> : coalesce(80: count, 0)");
+    }
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

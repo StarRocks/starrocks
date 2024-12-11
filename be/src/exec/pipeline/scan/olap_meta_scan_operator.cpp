@@ -87,6 +87,13 @@ size_t OlapMetaScanOperator::buffer_capacity() const {
     return _ctx->get_chunk_buffer().limiter()->capacity();
 }
 
+<<<<<<< HEAD
+=======
+size_t OlapMetaScanOperator::buffer_memory_usage() const {
+    return _ctx->get_chunk_buffer().memory_usage();
+}
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 size_t OlapMetaScanOperator::default_buffer_capacity() const {
     return _ctx->get_chunk_buffer().limiter()->default_capacity();
 }

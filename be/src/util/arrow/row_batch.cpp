@@ -44,7 +44,10 @@
 #include <arrow/status.h>
 #include <arrow/type.h>
 #include <arrow/visitor.h>
+<<<<<<< HEAD
 #include <arrow/visitor_inline.h>
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <fmt/format.h>
 
 #include <memory>
@@ -222,4 +225,16 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status serialize_arrow_schema(std::shared_ptr<arrow::Schema>* schema, std::string* result) {
+    auto empty_arrow_record_batch = arrow::RecordBatch::MakeEmpty(*schema);
+    if (!empty_arrow_record_batch.ok()) {
+        return Status::InternalError("serialize_arrow_schema failed");
+    }
+
+    const auto record_batch = empty_arrow_record_batch.ValueOrDie();
+    return serialize_record_batch(*record_batch, result);
+}
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 } // namespace starrocks

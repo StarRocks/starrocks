@@ -52,8 +52,11 @@ private:
 
     RuntimeProfile::Counter* _expr_compute_timer = nullptr;
     RuntimeProfile::Counter* _common_sub_expr_compute_timer = nullptr;
+<<<<<<< HEAD
 
     DictOptimizeParser _dict_optimize_parser;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

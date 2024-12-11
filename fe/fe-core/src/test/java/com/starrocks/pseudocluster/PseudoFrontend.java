@@ -19,7 +19,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
+<<<<<<< HEAD
 import com.starrocks.common.util.JdkUtils;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
@@ -72,6 +75,10 @@ public class PseudoFrontend {
         MIN_FE_CONF.put("query_port", "9030");
         MIN_FE_CONF.put("edit_log_port", "9010");
         MIN_FE_CONF.put("priority_networks", "127.0.0.1/24");
+<<<<<<< HEAD
+=======
+        MIN_FE_CONF.put("frontend_address", "127.0.0.1");
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         LoggerContext context = (LoggerContext) LogManager.getContext(false);
         context.start();
@@ -175,6 +182,7 @@ public class PseudoFrontend {
 
             try {
                 // init config
+<<<<<<< HEAD
                 new Config().init(frontend.getRunningDir() + "/conf/fe.conf");
                 Config.statistic_collect_query_timeout = 60;
 
@@ -183,6 +191,13 @@ public class PseudoFrontend {
                     throw new IllegalArgumentException("Java version doesn't match");
                 }
 
+=======
+                Config config = new Config();
+                config.init(frontend.getRunningDir() + "/conf/fe.conf");
+                config.initMutable(frontend.getRunningDir() + "/conf/fe_mutable.conf");
+                Config.statistic_collect_query_timeout = 60;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 Log4jConfig.initLogging();
 
                 // set dns cache ttl
@@ -203,8 +218,11 @@ public class PseudoFrontend {
 
                 GlobalStateMgr.getCurrentState().initialize(args);
                 GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
+<<<<<<< HEAD
                 StateChangeExecutor.getInstance().setMetaContext(
                         GlobalStateMgr.getCurrentState().getMetaContext());
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                 StateChangeExecutor.getInstance().registerStateChangeExecution(
                         GlobalStateMgr.getCurrentState().getStateChangeExecution());
                 StateChangeExecutor.getInstance().start();

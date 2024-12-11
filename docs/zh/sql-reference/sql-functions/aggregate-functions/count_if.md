@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # count_if
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 计算满足指定条件（即条件表达试的结果为 `true`）的记录数。
 

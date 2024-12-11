@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     p_brand,
@@ -29,6 +30,8 @@ order by
     p_brand,
     p_type,
     p_size ;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [result]
 TOP-N (order by [[23: count DESC NULLS LAST, 9: p_brand ASC NULLS FIRST, 10: p_type ASC NULLS FIRST, 11: p_size ASC NULLS FIRST]])
     TOP-N (order by [[23: count DESC NULLS LAST, 9: p_brand ASC NULLS FIRST, 10: p_type ASC NULLS FIRST, 11: p_size ASC NULLS FIRST]])

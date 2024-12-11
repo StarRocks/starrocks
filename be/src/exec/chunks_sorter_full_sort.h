@@ -68,15 +68,26 @@ private:
     Status _partial_sort(RuntimeState* state, bool done);
     Status _merge_sorted(RuntimeState* state);
     void _split_late_and_early_chunks();
+<<<<<<< HEAD
     static constexpr SlotId ORDINAL_COLUMN_SLOT_ID = -2;
     void _assign_ordinals();
     template <typename T>
     void _assign_ordinals_tmpl();
     ChunkPtr _late_materialize(const ChunkPtr& chunk);
+=======
+    void _assign_ordinals();
+    template <typename T>
+    void _assign_ordinals_tmpl();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     template <typename T>
     ChunkPtr _late_materialize_tmpl(const ChunkPtr& chunk);
 
 protected:
+<<<<<<< HEAD
+=======
+    ChunkPtr _late_materialize(const ChunkPtr& chunk);
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     size_t _total_rows = 0;        // Total rows of sorting data
     Permutation _sort_permutation; // Temp permutation for sorting
     size_t _staging_unsorted_rows = 0;

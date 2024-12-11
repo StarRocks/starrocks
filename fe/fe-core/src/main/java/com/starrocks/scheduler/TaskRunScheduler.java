@@ -22,6 +22,10 @@ import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
+=======
+import java.util.Collection;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,14 +38,26 @@ import java.util.function.Consumer;
 public class TaskRunScheduler {
     private static final Logger LOG = LogManager.getLogger(TaskRunScheduler.class);
 
+<<<<<<< HEAD
     @SerializedName("pendingTaskRunQueue")
     private final PendingTaskRunFIFOQueue pendingTaskRunQueue = new PendingTaskRunFIFOQueue();
+=======
+    // pending task run queue, it will schedule in fifo mode to ensure the task run scheduled in priority order.
+    @SerializedName("pendingTaskRunQueue")
+    private final TaskRunFIFOQueue pendingTaskRunQueue = new TaskRunFIFOQueue();
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
     // so the map value is not queue
     @SerializedName("runningTaskRunMap")
     private final Map<Long, TaskRun> runningTaskRunMap = Maps.newConcurrentMap();
 
+<<<<<<< HEAD
+=======
+    @SerializedName("runningSyncTaskRunMap")
+    private final Map<Long, TaskRun> runningSyncTaskRunMap = Maps.newConcurrentMap();
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     ////////// pending task run map //////////
     /**
      * Get the count of pending task run
@@ -86,6 +102,13 @@ public class TaskRunScheduler {
     }
 
     public void removePendingTask(Task task) {
+<<<<<<< HEAD
+=======
+        if (task == null) {
+            return;
+        }
+        LOG.info("remove pending task: {}", task);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         pendingTaskRunQueue.remove(task.getId());
     }
 
@@ -93,7 +116,11 @@ public class TaskRunScheduler {
         if (taskId == null || queryId == null) {
             return null;
         }
+<<<<<<< HEAD
         Set<TaskRun> taskRunQueue = pendingTaskRunQueue.getByTaskId(taskId);
+=======
+        Collection<TaskRun> taskRunQueue = pendingTaskRunQueue.getByTaskId(taskId);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         if (taskRunQueue == null) {
             return null;
         }
@@ -192,6 +219,24 @@ public class TaskRunScheduler {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    //////////// sync running task run map ////////////
+    public void addSyncRunningTaskRun(TaskRun taskRun) {
+        if (taskRun == null) {
+            return;
+        }
+        runningSyncTaskRunMap.put(taskRun.getTaskId(), taskRun);
+    }
+
+    public TaskRun removeSyncRunningTaskRun(TaskRun taskRun) {
+        if (taskRun == null) {
+            return null;
+        }
+        return runningSyncTaskRunMap.remove(taskRun.getTaskId());
+    }
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     @Override
     public String toString() {
         return GsonUtils.GSON.toJson(this);

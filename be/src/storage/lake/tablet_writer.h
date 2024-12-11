@@ -19,27 +19,62 @@
 
 #include "common/status.h"
 #include "fs/fs.h" // FileInfo
+<<<<<<< HEAD
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet.h"
+=======
+#include "gen_cpp/data.pb.h"
+#include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/location_provider.h"
+#include "storage/tablet_schema.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks {
 class Chunk;
 class Column;
 class TabletSchema;
+<<<<<<< HEAD
 
 namespace lake {
 
+=======
+class ThreadPool;
+
+struct OlapWriterStatistics;
+
+namespace lake {
+
+class TabletManager;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 enum WriterType : int { kHorizontal = 0, kVertical = 1 };
 
 // Basic interface for tablet writers.
 class TabletWriter {
 public:
+<<<<<<< HEAD
     explicit TabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id)
             : _tablet(tablet), _schema(std::move(schema)), _txn_id(txn_id) {}
 
     virtual ~TabletWriter() = default;
 
     int64_t tablet_id() const { return _tablet.id(); }
+=======
+    explicit TabletWriter(TabletManager* tablet_mgr, int64_t tablet_id, std::shared_ptr<const TabletSchema> schema,
+                          int64_t txn_id, bool is_compaction, ThreadPool* flush_pool = nullptr)
+            : _tablet_mgr(tablet_mgr),
+              _tablet_id(tablet_id),
+              _schema(std::move(schema)),
+              _txn_id(txn_id),
+              _flush_pool(flush_pool),
+              _is_compaction(is_compaction) {}
+
+    virtual ~TabletWriter() = default;
+
+    TabletManager* tablet_manager() const { return _tablet_mgr; }
+
+    int64_t tablet_id() const { return _tablet_id; }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     int64_t txn_id() const { return _txn_id; }
 
@@ -66,11 +101,20 @@ public:
     // arranged in ascending order.
     //
     // For horizontal writer.
+<<<<<<< HEAD
     virtual Status write(const Chunk& data) = 0;
 
     // Writes both chunk and each rows's rssid & rowid
     // For horizontal writer.
     virtual Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids) = 0;
+=======
+    virtual Status write(const Chunk& data, SegmentPB* segment = nullptr) = 0;
+
+    // Writes both chunk and each rows's rssid & rowid
+    // For horizontal writer.
+    virtual Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids,
+                         SegmentPB* segment = nullptr) = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Writes partial columns data to this rowset.
     //
@@ -92,7 +136,11 @@ public:
     // Flushes this writer and forces any buffered bytes to be written out to segment files.
     // There is no order guarantee between the data written before a `flush()`
     // and the data written after it.
+<<<<<<< HEAD
     virtual Status flush() = 0;
+=======
+    virtual Status flush(SegmentPB* segment = nullptr) = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // Flushes partial columns data when current columns are written finished.
     //
@@ -100,7 +148,11 @@ public:
     virtual Status flush_columns() = 0;
 
     // This method is called at the end of data processing.
+<<<<<<< HEAD
     virtual Status finish() = 0;
+=======
+    virtual Status finish(SegmentPB* segment = nullptr) = 0;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // This method is called at the very end of the operator's life, both in
     // the case of a successful completion of the operation, and in the case
@@ -111,17 +163,43 @@ public:
     virtual RowsetTxnMetaPB* rowset_txn_meta() = 0;
 
     // allow to set custom tablet schema for writer, used in partial update
+<<<<<<< HEAD
     void set_tablet_schema(std::shared_ptr<const TabletSchema> schema) { _schema = std::move(schema); }
 
 protected:
     Tablet _tablet;
     std::shared_ptr<const TabletSchema> _schema;
     int64_t _txn_id;
+=======
+    void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
+
+    void set_fs(const std::shared_ptr<FileSystem> fs) { _fs = std::move(fs); }
+    void set_location_provider(const std::shared_ptr<LocationProvider> location_provider) {
+        _location_provider = std::move(location_provider);
+    }
+
+    const OlapWriterStatistics& stats() const { return _stats; }
+
+protected:
+    TabletManager* _tablet_mgr;
+    int64_t _tablet_id;
+    TabletSchemaCSPtr _schema;
+    int64_t _txn_id;
+    ThreadPool* _flush_pool;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     std::vector<FileInfo> _files;
     int64_t _num_rows = 0;
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
     bool _finished = false;
+<<<<<<< HEAD
+=======
+    std::shared_ptr<FileSystem> _fs;
+    std::shared_ptr<LocationProvider> _location_provider;
+    OlapWriterStatistics _stats;
+
+    bool _is_compaction = false;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace lake

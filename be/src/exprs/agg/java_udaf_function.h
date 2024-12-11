@@ -214,12 +214,20 @@ public:
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+<<<<<<< HEAD
                                   AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+=======
+                                  AggDataPtr* states, const Filter& filter) const override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
         std::vector<DirectByteBuffer> buffers;
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
         helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
+<<<<<<< HEAD
+=======
+        auto defer = DeferOp([env = env]() { env->PopLocalFrame(nullptr); });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         {
             auto states_arr = JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset,
                                                                                    filter.data(), batch_size);
@@ -231,7 +239,10 @@ public:
                                             ctx->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
                                             args.size());
         }
+<<<<<<< HEAD
         helper.getEnv()->PopLocalFrame(nullptr);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
@@ -242,6 +253,10 @@ public:
         std::vector<DirectByteBuffer> buffers;
         int num_cols = ctx->get_num_args();
         env->PushLocalFrame(num_cols * 3 + 1);
+<<<<<<< HEAD
+=======
+        auto defer = DeferOp([env = env]() { env->PopLocalFrame(nullptr); });
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         {
             auto st =
                     JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
@@ -251,7 +266,10 @@ public:
             auto state_handle = this->data(state).handle;
             helper.batch_update_single(stub, state_handle, args.data(), num_cols, batch_size);
         }
+<<<<<<< HEAD
         env->PopLocalFrame(nullptr);
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     // This is only used to get portion of the entire binary column
@@ -320,7 +338,11 @@ public:
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
+<<<<<<< HEAD
                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+=======
+                                 AggDataPtr* states, const Filter& filter) const override {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // batch merge
         auto& helper = JVMFunctionHelper::getInstance();
 

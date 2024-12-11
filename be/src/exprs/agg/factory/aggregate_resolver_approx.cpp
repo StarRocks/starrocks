@@ -38,6 +38,12 @@ struct HLLUnionBuilder {
 
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, HyperLogLog>(
                     "approx_count_distinct", false, AggregateFactory::MakeHllNdvAggregateFunction<lt>());
+<<<<<<< HEAD
+=======
+
+            resolver->add_aggregate_mapping_variadic<lt, TYPE_BIGINT, HLLSketchState>(
+                    "ds_hll_count_distinct", false, AggregateFactory::MakeHllSketchAggregateFunction<lt>());
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         }
     }
 };

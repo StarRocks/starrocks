@@ -44,7 +44,11 @@ namespace starrocks {
 
 class MasterServerClient {
 public:
+<<<<<<< HEAD
     explicit MasterServerClient(FrontendServiceClientCache* client_cache);
+=======
+    explicit MasterServerClient() = default;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     virtual ~MasterServerClient() = default;
 
     // Reprot finished task to the master server
@@ -67,9 +71,12 @@ public:
 
     MasterServerClient(const MasterServerClient&) = delete;
     const MasterServerClient& operator=(const MasterServerClient&) = delete;
+<<<<<<< HEAD
 
 private:
     FrontendServiceClientCache* _client_cache;
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

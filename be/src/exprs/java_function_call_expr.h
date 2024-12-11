@@ -36,6 +36,12 @@ public:
     bool is_constant() const override;
 
 private:
+<<<<<<< HEAD
+=======
+    StatusOr<std::shared_ptr<JavaUDFContext>> _build_udf_func_desc(ExprContext* context,
+                                                                   FunctionContext::FunctionStateScope scope,
+                                                                   const std::string& libpath);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     void _call_udf_close();
     RuntimeState* _runtime_state = nullptr;
     std::shared_ptr<JavaUDFContext> _func_desc;

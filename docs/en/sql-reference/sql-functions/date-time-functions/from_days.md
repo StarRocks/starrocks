@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # from_days
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 Returns a date from 0000-01-01.
 

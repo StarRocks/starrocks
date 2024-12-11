@@ -69,7 +69,11 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 class TxnInfo;
+=======
+struct TxnInfo;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 struct TabletTxnInfo {
     PUniqueId load_id;
@@ -97,7 +101,16 @@ public:
                       const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery);
 
     Status publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+<<<<<<< HEAD
                        int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0);
+=======
+                       int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0,
+                       bool is_double_write = false);
+
+    Status publish_overwrite_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
+                                 TTransactionId transaction_id, int64_t version, const RowsetSharedPtr& rowset,
+                                 uint32_t wait_time);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
     // persist_tablet_related_txns persists the tablets' meta and make it crash-safe.
     Status persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets);

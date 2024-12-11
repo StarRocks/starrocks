@@ -16,6 +16,10 @@
 
 #include "storage/lake/tablet_metadata.h"
 #include "storage/primary_key_compaction_conflict_resolver.h"
+<<<<<<< HEAD
+=======
+#include "storage/tablet_manager.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 namespace starrocks::lake {
 
@@ -27,13 +31,21 @@ class LakePrimaryIndex;
 class LakePrimaryKeyCompactionConflictResolver : public PrimaryKeyCompactionConflictResolver {
 public:
     explicit LakePrimaryKeyCompactionConflictResolver(const TabletMetadata* metadata, Rowset* rowset,
+<<<<<<< HEAD
                                                       UpdateManager* update_manager, MetaFileBuilder* builder,
+=======
+                                                      TabletManager* tablet_mgr, MetaFileBuilder* builder,
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
                                                       LakePrimaryIndex* index, int64_t txn_id, int64_t base_version,
                                                       std::map<uint32_t, size_t>* segment_id_to_add_dels,
                                                       std::vector<std::pair<uint32_t, DelVectorPtr>>* delvecs)
             : _metadata(metadata),
               _rowset(rowset),
+<<<<<<< HEAD
               _update_manager(update_manager),
+=======
+              _tablet_mgr(tablet_mgr),
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
               _builder(builder),
               _index(index),
               _txn_id(txn_id),
@@ -53,7 +65,11 @@ private:
     // input
     const TabletMetadata* _metadata = nullptr;
     Rowset* _rowset = nullptr;
+<<<<<<< HEAD
     UpdateManager* _update_manager = nullptr;
+=======
+    TabletManager* _tablet_mgr = nullptr;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     MetaFileBuilder* _builder = nullptr;
     LakePrimaryIndex* _index = nullptr;
     int64_t _txn_id = 0;

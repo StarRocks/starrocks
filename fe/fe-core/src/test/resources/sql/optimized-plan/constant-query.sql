@@ -69,7 +69,10 @@ tabletRatio=3/3
 tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=9.0
+<<<<<<< HEAD
 numNodes=0
+=======
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 [end]
 
 [sql]

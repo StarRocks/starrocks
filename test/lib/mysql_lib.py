@@ -25,6 +25,11 @@ mysql_lib.py
 import pymysql as _mysql
 from pymysql.constants import CLIENT
 
+<<<<<<< HEAD
+=======
+from lib import close_conn
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 class MysqlLib(object):
     """MysqlLib class"""
@@ -52,4 +57,9 @@ class MysqlLib(object):
 
     def close(self):
         if self.connector != "":
+<<<<<<< HEAD
             self.connector.close()
+=======
+            close_conn(self.connector, "MySQL")
+            self.connector = ""
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))

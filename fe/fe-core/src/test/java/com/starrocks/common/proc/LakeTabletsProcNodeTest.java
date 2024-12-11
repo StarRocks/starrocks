@@ -31,6 +31,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
@@ -38,6 +39,16 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
@@ -49,12 +60,27 @@ import java.util.List;
 
 public class LakeTabletsProcNodeTest {
 
+<<<<<<< HEAD
     @Test
     public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr, @Mocked StarOSAgent agent) throws UserException {
+=======
+    @Mocked
+    private ConnectContext connectContext;
+
+    public LakeTabletsProcNodeTest() {
+        connectContext = new ConnectContext(null);
+        connectContext.setThreadLocalInfo();
+    }
+
+    @Test
+    public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr, @Mocked WarehouseManager agent) throws
+            StarRocksException {
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
+<<<<<<< HEAD
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
@@ -69,6 +95,12 @@ public class LakeTabletsProcNodeTest {
             }
         };
 
+=======
+        long physicalPartitionId = 6L;
+        long tablet1Id = 10L;
+        long tablet2Id = 11L;
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // Schema
         List<Column> columns = Lists.newArrayList();
         Column k1 = new Column("k1", Type.INT, true, null, "", "");
@@ -80,6 +112,22 @@ public class LakeTabletsProcNodeTest {
         Tablet tablet1 = new LakeTablet(tablet1Id);
         Tablet tablet2 = new LakeTablet(tablet2Id);
 
+<<<<<<< HEAD
+=======
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = agent;
+
+                agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet1);
+                result = Sets.newHashSet(10000, 10001);
+
+                agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet2);
+                result = Sets.newHashSet(10001, 10002);
+            }
+        };
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
@@ -90,7 +138,11 @@ public class LakeTabletsProcNodeTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
         // Lake table
         LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);

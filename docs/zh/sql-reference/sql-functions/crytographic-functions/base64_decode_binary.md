@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # base64_decode_binary
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 解码某个 Base64 编码的字符串，并返回一个 VARBINARY 类型的值。
 

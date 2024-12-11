@@ -14,10 +14,14 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <exception>
 #include <orc/OrcFile.hh>
 #include <set>
 #include <unordered_map>
+=======
+#include <orc/OrcFile.hh>
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include <utility>
 
 #include "cctz/civil_time.h"
@@ -25,11 +29,17 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "formats/orc/orc_mapping.h"
+<<<<<<< HEAD
 #include "formats/orc/utils.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "runtime/types.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
+=======
+#include "gen_cpp/orc_proto.pb.h"
+#include "io/shared_buffered_input_stream.h"
+#include "types/date_value.h"
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 #include "types/timestamp_value.h"
 
 namespace starrocks {
@@ -62,7 +72,11 @@ public:
 // orc timestamp is millseconds since unix epoch time.
 // timestamp conversion is quite tricky, because it involves timezone info,
 // and it affects how we interpret `value`. according to orc v1 spec
+<<<<<<< HEAD
 // https://orc.apache.org/specification/ORCv1/ writer timezoe  is in stripe footer.
+=======
+// https://orc.apache.org/specification/ORCv1/ writer timezone is in stripe footer.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 // time conversion involves two aspects:
 // 1. timezone (UTC/GMT and local timezone)
@@ -106,6 +120,16 @@ public:
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    static void native_ts_to_orc_ts(const TimestampValue& tv, int64_t& seconds, int64_t& nanoseconds) {
+        Timestamp time = tv._timestamp & TIMESTAMP_BITS_TIME;
+        uint64_t microseconds = time % USECS_PER_SEC;
+        seconds = tv.to_unix_second();
+        nanoseconds = microseconds * 1000;
+    }
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 };
 
 } // namespace starrocks

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_hash
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
 
 将 `double` 类型数值构造成 `percentile` 类型数值。
 

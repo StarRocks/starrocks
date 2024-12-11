@@ -40,12 +40,20 @@ import com.starrocks.catalog.Replica;
 import java.util.Set;
 
 public class TabletDeleteInfo {
+<<<<<<< HEAD
     private final long partitionId;
+=======
+    private final long physicalPartitionId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     private final long tabletId;
     private final Set<Replica> finishedReplicas;
 
     public TabletDeleteInfo(long partitionId, long tabletId) {
+<<<<<<< HEAD
         this.partitionId = partitionId;
+=======
+        this.physicalPartitionId = partitionId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
         this.tabletId = tabletId;
         this.finishedReplicas = Sets.newConcurrentHashSet();
     }
@@ -54,8 +62,13 @@ public class TabletDeleteInfo {
         return tabletId;
     }
 
+<<<<<<< HEAD
     public long getPartitionId() {
         return partitionId;
+=======
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
     }
 
     public Set<Replica> getFinishedReplicas() {
