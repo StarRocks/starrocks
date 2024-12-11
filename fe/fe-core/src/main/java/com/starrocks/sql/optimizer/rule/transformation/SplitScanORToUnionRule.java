@@ -255,6 +255,10 @@ public class SplitScanORToUnionRule extends TransformationRule {
                 .setColumnMetaToColRefMap(columnToRefs)
                 .setFromSplitOR(true)
                 .setPredicate(rewriter.rewrite(scanPredicate));
+        if (scan.getPrunedPartitionPredicates() != null && !scan.getPrunedPartitionPredicates().isEmpty()) {
+            builder.setPrunedPartitionPredicates(scan.getPrunedPartitionPredicates().stream()
+                    .map(rewriter::rewrite).collect(Collectors.toList()));
+        }
 
         if (scan.getProjection() != null) {
             Map<ColumnRefOperator, ScalarOperator> newProjections = Maps.newHashMap();
