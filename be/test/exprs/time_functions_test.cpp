@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "column/binary_column.h"
+#include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -34,6 +35,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -3925,13 +3927,13 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
     // Basic format test
     {
         // Create time column
-        auto time_builder = ColumnHelper::get_builder<TYPE_TIME>(1);
-        TimeValue time_val(14, 30, 45, 0);
-        time_builder->append(time_val);
+        auto time_builder = ColumnBuilder<TYPE_TIME>(1);
+        TimestampValue ts = TimestampValue::create(0, 0, 0, 14, 30, 45);
+        time_builder->append(ts.timestamp());
         auto time_column = time_builder->build();
 
         // Create format column with basic format string
-        auto format_builder = ColumnHelper::get_builder<TYPE_VARCHAR>(1);
+        auto format_builder = ColumnBuilder<TYPE_VARCHAR>(1);
         format_builder->append("%H:%i:%S");
         auto format_column = format_builder->build();
 
@@ -3954,15 +3956,15 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
     // Multiple format strings test
     {
         // Create time column with multiple rows
-        auto time_builder = ColumnHelper::get_builder<TYPE_TIME>(4);
-        TimeValue time_val(14, 30, 45, 0);
+        auto time_builder = ColumnBuilder<TYPE_TIME>(4);
+        TimestampValue ts = TimestampValue::create(0, 0, 0, 14, 30, 45);
         for (int i = 0; i < 4; i++) {
-            time_builder->append(time_val);
+            time_builder->append(ts.timestamp());
         }
         auto time_column = time_builder->build();
 
         // Create format column with different format strings
-        auto format_builder = ColumnHelper::get_builder<TYPE_VARCHAR>(4);
+        auto format_builder = ColumnBuilder<TYPE_VARCHAR>(4);
         format_builder->append("%H:%i:%S");
         format_builder->append("%H:%i");
         format_builder->append("Time: %H:%i");

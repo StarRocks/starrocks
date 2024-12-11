@@ -3237,22 +3237,27 @@ StatusOr<ColumnPtr> TimeFunctions::format_time(FunctionContext* context, const s
     auto format_viewer = ColumnViewer<TYPE_VARCHAR>(format_column);
 
     const size_t size = time_column->size();
-    auto builder = ColumnHelper::get_builder<TYPE_VARCHAR>(size);
+    auto builder = ColumnBuilder<TYPE_VARCHAR>(size);
 
     for (size_t i = 0; i < size; ++i) {
-        TimeValue time_val = time_viewer.value(i);
-        std::string_view format_str = format_viewer.value(i);
-
         if (time_viewer.is_null(i) || format_viewer.is_null(i)) {
-            builder->append_null();
+            builder.append_null();
             continue;
         }
 
+        TimestampValue time_val;
+        time_val.set_timestamp(time_viewer.value(i));
+        std::string_view format_str = format_viewer.value(i);
+
         // Convert TimeValue to hours, minutes, seconds
-        int hours = time_val.hour();
-        int minutes = time_val.minute();
-        int seconds = time_val.second();
-        int microseconds = time_val.microsecond();
+        int year;
+        int month;
+        int day;
+        int hours;
+        int minutes;
+        int seconds;
+        int microseconds;
+        time_val.to_timestamp(&year, &month, &day, &hours, &minutes, &seconds, &microseconds);
 
         std::stringstream result;
         bool in_format = false;
@@ -3300,10 +3305,10 @@ StatusOr<ColumnPtr> TimeFunctions::format_time(FunctionContext* context, const s
             result << '%'; // Handle trailing %
         }
 
-        builder->append(result.str());
+        builder.append(result.str());
     }
 
-    return builder->build();
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks
