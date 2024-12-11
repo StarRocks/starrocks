@@ -417,6 +417,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("emps");
         setTableStatistics(t7, 6000000);
+
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
     }
 
     @Test

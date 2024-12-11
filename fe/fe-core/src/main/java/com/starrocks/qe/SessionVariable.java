@@ -210,6 +210,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_UKFK_JOIN_REORDER = "enable_ukfk_join_reorder";
     public static final String MAX_UKFK_JOIN_REORDER_SCALE_RATIO = "max_ukfk_join_reorder_scale_ratio";
     public static final String MAX_UKFK_JOIN_REORDER_FK_ROWS = "max_ukfk_join_reorder_fk_rows";
+    public static final String ENABLE_ELIMINATE_AGG = "enable_eliminate_agg";
 
     // if set to true, some of stmt will be forwarded to leader FE to get result
 
@@ -246,7 +247,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
-    public static final String MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT = "max_buckets_per_be_to_use_balancer_assignment";
+    public static final String MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT =
+            "max_buckets_per_be_to_use_balancer_assignment";
 
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
     public static final String ENABLE_INCREMENTAL_REFRESH_MV = "enable_incremental_mv";
@@ -527,7 +529,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_materialized_view_transparent_union_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
-    public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE = "enable_materialized_view_agg_pushdown_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE =
+            "enable_materialized_view_agg_pushdown_rewrite";
 
     public static final String ENABLE_MATERIALIZED_VIEW_TEXT_MATCH_REWRITE =
             "enable_materialized_view_text_match_rewrite";
@@ -715,7 +718,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String COUNT_DISTINCT_IMPLEMENTATION = "count_distinct_implementation";
 
-    public static final String ENABLE_COUNT_DISTINCT_REWRITE_BY_HLL_BITMAP = "enable_count_distinct_rewrite_by_hll_bitmap";
+    public static final String ENABLE_COUNT_DISTINCT_REWRITE_BY_HLL_BITMAP =
+            "enable_count_distinct_rewrite_by_hll_bitmap";
 
     // 0 means disable interleaving, positive value sets the group size, but adaptively enable interleaving,
     // negative value means force interleaving under the group size of abs(interleaving_group_size)
@@ -1077,7 +1081,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
 
-
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_SPILL, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkSpill = true;
 
@@ -1200,6 +1203,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = MAX_UKFK_JOIN_REORDER_FK_ROWS, flag = VariableMgr.INVISIBLE)
     private int maxUKFKJoinReorderFKRows = 100000000;
+
+    @VarAttr(name = ENABLE_ELIMINATE_AGG)
+    private boolean enableEliminateAgg = true;
 
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
@@ -2222,6 +2228,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public int getPhasedSchedulerMaxConcurrency() {
         return phasedSchedulerMaxConcurrency;
     }
+
     public void setPhasedSchedulerMaxConcurrency(int phasedSchedulerMaxConcurrency) {
         this.phasedSchedulerMaxConcurrency = phasedSchedulerMaxConcurrency;
     }
@@ -2229,6 +2236,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean enablePhasedScheduler() {
         return enablePhasedScheduler;
     }
+
     public void setEnablePhasedScheduler(boolean enablePhasedScheduler) {
         this.enablePhasedScheduler = enablePhasedScheduler;
     }
@@ -2439,17 +2447,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setComputationFragmentSchedulingPolicy(String computationFragmentSchedulingPolicy) {
         SessionVariableConstants.ComputationFragmentSchedulingPolicy result =
                 Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
-                                   StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
+                        StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
         if (result == null) {
-            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
-            throw new IllegalArgumentException("Legal values of computation_fragment_scheduling_policy are " + legalValues);
+            String legalValues =
+                    Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+            throw new IllegalArgumentException(
+                    "Legal values of computation_fragment_scheduling_policy are " + legalValues);
         }
         this.computationFragmentSchedulingPolicy = StringUtils.upperCase(computationFragmentSchedulingPolicy);
     }
 
     public SessionVariableConstants.ComputationFragmentSchedulingPolicy getComputationFragmentSchedulingPolicy() {
         return Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
-                StringUtils.upperCase(computationFragmentSchedulingPolicy))
+                        StringUtils.upperCase(computationFragmentSchedulingPolicy))
                 .or(SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
     }
 
@@ -2747,6 +2757,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableTablePruneOnUpdate() {
         return enableTablePruneOnUpdate;
+    }
+
+    public boolean isEnableEliminateAgg() {
+        return enableEliminateAgg;
+    }
+
+    public void setEnableEliminateAgg(boolean enableEliminateAgg) {
+        this.enableEliminateAgg = enableEliminateAgg;
     }
 
     public boolean isEnableUKFKOpt() {
@@ -3563,7 +3581,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMaterializedViewRewritePartitionCompensate;
     }
 
-    public void setEnableMaterializedViewRewritePartitionCompensate(boolean enableMaterializedViewRewritePartitionCompensate) {
+    public void setEnableMaterializedViewRewritePartitionCompensate(
+            boolean enableMaterializedViewRewritePartitionCompensate) {
         this.enableMaterializedViewRewritePartitionCompensate = enableMaterializedViewRewritePartitionCompensate;
     }
 
@@ -3571,7 +3590,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMaterializedViewTransparentUnionRewrite;
     }
 
-    public void setEnableMaterializedViewTransparentUnionRewrite(boolean enableMaterializedViewTransparentUnionRewrite) {
+    public void setEnableMaterializedViewTransparentUnionRewrite(
+            boolean enableMaterializedViewTransparentUnionRewrite) {
         this.enableMaterializedViewTransparentUnionRewrite = enableMaterializedViewTransparentUnionRewrite;
     }
 
@@ -4079,7 +4099,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isDisableGeneratedColumnRewrite() {
         return disableGeneratedColumnRewrite;
     }
-    
+
     public String getCustomQueryId() {
         return customQueryId;
     }
@@ -4106,7 +4126,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableRewriteUnnestBitmapToArray() {
         return enableRewriteUnnestBitmapToArray;
-    }    
+    }
 
     // Serialize to thrift object
     // used for rest api

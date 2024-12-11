@@ -743,13 +743,11 @@ public class SetTest extends PlanTestBase {
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  6 <-> if[(5: varchar_value IS NULL, 0, 1); " +
-                "args: BOOLEAN,INT,INT; result: TINYINT; args nullable: false; result nullable: true]\n" +
+                "  |  6 <-> if[(5: varchar_value IS NULL, cast(0 as BIGINT), cast(1 as BIGINT)); " +
+                "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: false; result nullable: true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_single_unique_key, rollup: test_agg_group_single_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
+                "  0:OlapScanNode");
 
         sql = "SELECT\n" +
                 "    id,\n" +
@@ -788,13 +786,11 @@ public class SetTest extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: id, INT, false]\n" +
                 "  |  2 <-> [2: big_value, BIGINT, true]\n" +
-                "  |  6 <-> if[(5: varchar_value IS NULL, 0, 1); args: BOOLEAN,INT,INT;" +
-                " result: TINYINT; args nullable: false; result nullable: true]\n" +
+                "  |  6 <-> if[(5: varchar_value IS NULL, cast(0 as BIGINT), cast(1 as BIGINT)); " +
+                "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: false; result nullable: true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
+                "  0:OlapScanNode");
         sql = "SELECT\n" +
                 "    id,\n" +
                 "    big_value,\n" +

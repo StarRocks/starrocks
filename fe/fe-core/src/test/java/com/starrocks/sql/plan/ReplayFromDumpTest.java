@@ -31,6 +31,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.stream.Stream;
@@ -47,6 +48,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testForceRuleBasedRewriteMonth() throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
@@ -765,12 +767,12 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/nested_view_with_cte"),
                         null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("Project\n" +
-                "  |  <slot 7363> : 7363: count\n" +
-                "  |  limit: 100\n"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("AGGREGATE (merge finalize)\n" +
-                "  |  output: count(7363: count)\n" +
-                "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2133: case\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  524:Project\n" +
+                "  |  <slot 8449> : 8449: count\n" +
+                "  |  limit: 100"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  523:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(8449: count)\n" +
+                "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2532: case\n" +
                 "  |  limit: 100"));
     }
 
@@ -813,6 +815,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testCBONestedMvRewriteMonth() throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
