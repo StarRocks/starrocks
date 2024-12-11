@@ -512,6 +512,7 @@ public class StmtExecutor {
         }
 
         try {
+            context.getState().setIsQuery(parsedStmt instanceof QueryStatement);
             if (parsedStmt.isExistQueryScopeHint()) {
                 processQueryScopeHint();
             }
