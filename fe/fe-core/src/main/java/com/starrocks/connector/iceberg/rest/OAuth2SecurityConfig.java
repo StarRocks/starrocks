@@ -35,7 +35,7 @@ public class OAuth2SecurityConfig {
     // The Bearer token which will be used for interactions with the server
     public static String OAUTH2_TOKEN = "oauth2.token";
     // The endpoint to retrieve access token from OAuth2 Server
-    public static String SERVER_URI = "server_uri";
+    public static String SERVER_URI = "oauth2.server-uri";
 
     public SecurityEnum getSecurity() {
         return security;

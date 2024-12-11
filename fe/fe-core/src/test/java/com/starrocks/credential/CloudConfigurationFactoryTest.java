@@ -35,6 +35,7 @@ public class CloudConfigurationFactoryTest {
         map.put(S3FileIOProperties.ACCESS_KEY_ID, "ak");
         map.put(S3FileIOProperties.SECRET_ACCESS_KEY, "sk");
         map.put(S3FileIOProperties.SESSION_TOKEN, "token");
+        map.put(S3FileIOProperties.PATH_STYLE_ACCESS, "true");
         map.put(AwsClientProperties.CLIENT_REGION, "region");
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
         Assert.assertNotNull(cloudConfiguration);
@@ -44,7 +45,7 @@ public class CloudConfigurationFactoryTest {
                         "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
                         "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
                         "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
-                        "region='region', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}",
+                        "region='region', endpoint=''}, enablePathStyleAccess=true, enableSSL=true}",
                 cloudConfiguration.toConfString());
     }
 

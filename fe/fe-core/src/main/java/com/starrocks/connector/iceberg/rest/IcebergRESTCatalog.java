@@ -66,7 +66,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergRESTCatalog.class);
 
     public static final String KEY_CREDENTIAL_WITH_PREFIX = ICEBERG_CUSTOM_PROPERTIES_PREFIX + "credential";
-    public static final String KEY_DISABLE_VENDED_CREDENTIAL = "disable_vended_credential";
+    public static final String KEY_VENDED_CREDENTIALS_ENABLED = "vended-credentials-enabled";
 
     private final Configuration conf;
     private final RESTCatalog delegate;
@@ -86,12 +86,12 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
 
-        boolean disableVendedCredential =
-                Boolean.parseBoolean(copiedProperties.getOrDefault(KEY_DISABLE_VENDED_CREDENTIAL, "false"));
-        if (disableVendedCredential) {
-            copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
-        } else {
+        boolean enableVendedCredentials =
+                Boolean.parseBoolean(copiedProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
+        if (enableVendedCredentials) {
             copiedProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
+        } else {
+            copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         }
 
         // setup oauth2
