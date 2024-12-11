@@ -704,7 +704,9 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.VECTOR_REWRITE);
         // this rule should be after mv
         // @TODO: it can also be applied to other table scan operator
-        ruleRewriteOnlyOnce(tree, rootTaskContext, PullUpScanPredicateRule.OLAP_SCAN);
+        if (context.getSessionVariable().isEnableScanPredicateExprReuse()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, PullUpScanPredicateRule.OLAP_SCAN);
+        }
 
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
