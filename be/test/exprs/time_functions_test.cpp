@@ -3930,12 +3930,12 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
         auto time_builder = ColumnBuilder<TYPE_TIME>(1);
         TimestampValue ts = TimestampValue::create(0, 0, 0, 14, 30, 45);
         time_builder.append(ts.timestamp());
-        auto time_column = time_builder.build();
+        auto time_column = time_builder.build(false);
 
         // Create format column with basic format string
         auto format_builder = ColumnBuilder<TYPE_VARCHAR>(1);
         format_builder.append("%H:%i:%S");
-        auto format_column = format_builder.build();
+        auto format_column = format_builder.build(false);
 
         // Set up columns and function context
         Columns columns;
@@ -3961,7 +3961,7 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
         for (int i = 0; i < 4; i++) {
             time_builder.append(ts.timestamp());
         }
-        auto time_column = time_builder.build();
+        auto time_column = time_builder.build(false);
 
         // Create format column with different format strings
         auto format_builder = ColumnBuilder<TYPE_VARCHAR>(4);
@@ -3969,7 +3969,7 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
         format_builder.append("%H:%i");
         format_builder.append("Time: %H:%i");
         format_builder.append("%H");
-        auto format_column = format_builder.build();
+        auto format_column = format_builder.build(false);
 
         // Set up columns and function context
         Columns columns;
