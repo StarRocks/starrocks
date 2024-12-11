@@ -172,8 +172,8 @@ public abstract class MVTimelinessArbiter {
      * @param refBaseTableAndColumns ref base table and columns of mv
      * @return ref base table's changed partition names
      */
-    protected Map<Table, Set<String>> collectMVToBaseTablePartitionNames(Map<Table, List<Column>> refBaseTableAndColumns,
-                                                                         MvUpdateInfo mvUpdateInfo) {
+    protected Map<Table, Set<String>> collectBaseTableUpdatePartitionNames(Map<Table, List<Column>> refBaseTableAndColumns,
+                                                                           MvUpdateInfo mvUpdateInfo) {
         Map<Table, Set<String>> baseChangedPartitionNames = Maps.newHashMap();
         for (Table baseTable : refBaseTableAndColumns.keySet()) {
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
