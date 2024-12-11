@@ -320,6 +320,4 @@ public class SubfieldAccessPathNormalizer {
                 scalarOperators.stream().map(op -> collector.process(op, allAccessPaths)).collect(Collectors.toList());
         paths.forEach(p -> p.ifPresent(allAccessPaths::add));
     }
-
-    // translater access path to sub field operator
 }
