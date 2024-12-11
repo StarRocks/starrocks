@@ -133,6 +133,10 @@ public class ConstantExpressionTest extends PlanTestBase {
                 "'20180808'");
 
         testFragmentPlanContainsConstExpr(
+                "select date_format('2018-08-08 07:16:19', 'yyyy/MM/dd');",
+                "'2018/08/08'");
+
+        testFragmentPlanContainsConstExpr(
                 "select date_format('2018-08-08 07:16:19', 'yyyy-MM-dd HH:mm:ss');",
                 "'2018-08-08 07:16:19'");
 

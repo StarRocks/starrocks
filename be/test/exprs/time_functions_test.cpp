@@ -1240,10 +1240,12 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithFormat) {
         tc1->append(24 * 60 * 60);
         tc1->append(61 + 24 * 60 * 60);
         tc1->append(3789 + 24 * 60 * 60);
+        tc1->append(3789 + 24 * 60 * 60);
         auto tc2 = BinaryColumn::create();
         tc2->append("%Y-%m-%d %H:%i:%S");
         tc2->append("%Y-%m-%d %H:%i:%S");
         tc2->append("%Y-%m-%d %H:%i:%S");
+        tc2->append("yyyy/MM/dd %H:%i:%S");
 
         columns.emplace_back(tc1);
         columns.emplace_back(tc2);
@@ -1262,6 +1264,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithFormat) {
         ASSERT_EQ("1970-01-01 16:00:00", v->get_data()[0]);
         ASSERT_EQ("1970-01-01 16:01:01", v->get_data()[1]);
         ASSERT_EQ("1970-01-01 17:03:09", v->get_data()[2]);
+        ASSERT_EQ("1970/01/01 17:03:09", v->get_data()[3]);
 
         ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -3919,4 +3922,17 @@ TEST_F(TimeFunctionsTest, MakeDateTest) {
     ASSERT_TRUE(nullable_col->is_null(8));
     ASSERT_TRUE(nullable_col->is_null(9));
 }
+
+TEST_F(TimeFunctionsTest, ConvertFormatTest) {
+    ASSERT_EQ(TimeFunctions::convert_format(Slice("yyyy-MM-dd")), "%Y-%m-%d");
+    EXPECT_EQ(TimeFunctions::convert_format(Slice("yyyyMMdd")), "%Y%m%d");
+    EXPECT_EQ(TimeFunctions::convert_format(Slice("yyyy/MM/dd")), "%Y/%m/%d");
+    EXPECT_EQ(TimeFunctions::convert_format(Slice("yyyy#MM#dd")), "%Y#%m#%d");
+    EXPECT_EQ(TimeFunctions::convert_format(Slice("yyyy")), "%Y");
+    EXPECT_EQ(TimeFunctions::convert_format(Slice("MM")), "%m");
+    EXPECT_EQ(TimeFunctions::convert_format(Slice("dd")), "%d");
+    EXPECT_EQ(TimeFunctions::convert_format(Slice("HH:mm:ss")), "%H:%i:%s");
+    EXPECT_EQ(TimeFunctions::convert_format(Slice("yyyy-MM-dd HH:mm:ss")), "%Y-%m-%d %H:%i:%s");
+}
+
 } // namespace starrocks

@@ -405,14 +405,11 @@ public class ScalarOperatorFunctions {
         if (format.isEmpty()) {
             return ConstantOperator.createNull(Type.VARCHAR);
         }
-        // unix style
-        if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
-            DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar());
-            return ConstantOperator.createVarchar(builder.format(date.getDatetime()));
-        } else {
-            String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
-            return ConstantOperator.createVarchar(result);
-        }
+        // format java datetime style
+        String javaStyleFormatter = DateUtils.convertJavaStyleDateTimeFormat(format);
+        // change to unix datetime style
+        DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(javaStyleFormatter);
+        return ConstantOperator.createVarchar(builder.format(date.getDatetime()));
     }
 
     @ConstantFunction.List(list = {

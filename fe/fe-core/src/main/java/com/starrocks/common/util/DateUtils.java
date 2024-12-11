@@ -36,6 +36,8 @@ import java.time.format.SignStyle;
 import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
 import java.time.temporal.WeekFields;
+import java.util.HashMap;
+import java.util.Map;
 
 public class DateUtils {
     // These are marked as deprecated because they don't support year 0000 parsing
@@ -237,6 +239,46 @@ public class DateUtils {
 
     private static DateTimeFormatter unixDatetimeStrictFormatter(String pattern, boolean isOutputFormat) {
         return unixDatetimeFormatBuilder(pattern, isOutputFormat).toFormatter().withResolverStyle(ResolverStyle.STRICT);
+    }
+
+
+    public static String convertJavaStyleDateTimeFormat(String format) {
+        // Defining mapping rules
+        Map<String, String> formatMap = new HashMap<>();
+        formatMap.put("yyyy", "%Y");
+        formatMap.put("MM", "%m");
+        formatMap.put("dd", "%d");
+        formatMap.put("HH", "%H");
+        formatMap.put("mm", "%i");
+        formatMap.put("ss", "%s");
+
+        StringBuilder result = new StringBuilder();
+        int pos = 0;
+
+        while (pos < format.length()) {
+            boolean matched = false;
+
+            // Try to match the longest keyword
+            for (Map.Entry<String, String> entry : formatMap.entrySet()) {
+                String key = entry.getKey();
+                String value = entry.getValue();
+
+                if (format.startsWith(key, pos)) {
+                    result.append(value);
+                    pos += key.length();
+                    matched = true;
+                    break;
+                }
+            }
+
+            // If no keyword is matched, keep the original character
+            if (!matched) {
+                result.append(format.charAt(pos));
+                pos++;
+            }
+        }
+
+        return result.toString();
     }
 
     public static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern, boolean isOutputFormat) {
