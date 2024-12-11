@@ -80,7 +80,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                 input_null_map =
                         FunctionHelper::union_null_column(nullable->null_column(), input_null_map); // merge null
             } else {
-                input_null_map = nullable->null_column();
+                input_null_map = ColumnHelper::as_column<NullColumn>(nullable->null_column()->clone_shared());
             }
         }
         DCHECK(data_column->is_map());
@@ -150,8 +150,9 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                                                  map_col->keys_column()->size()));
     }
 
-    auto res_map =
-            std::make_shared<MapColumn>(map_col->keys_column(), map_col->values_column(), input_map->offsets_column());
+    auto res_map = std::make_shared<MapColumn>(
+            map_col->keys_column(), map_col->values_column(),
+            ColumnHelper::as_column<UInt32Column>(input_map->offsets_column()->clone_shared()));
 
     if (_maybe_duplicated_keys && res_map->size() > 0) {
         res_map->remove_duplicated_keys();
