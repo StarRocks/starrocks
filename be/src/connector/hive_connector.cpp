@@ -19,6 +19,7 @@
 #include "connector/hive_chunk_sink.h"
 #include "exec/cache_select_scanner.h"
 #include "exec/exec_node.h"
+#include "exec/hdfs_scanner.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner_partition.h"
@@ -580,6 +581,35 @@ void HiveDataSource::_init_rf_counters() {
     }
 }
 
+Status HiveDataSource::_init_global_dicts(HdfsScannerParams* params) {
+    const THdfsScanNode& hdfs_scan_node = _provider->_hdfs_scan_node;
+    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
+    auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
+    // mapping column id to storage column ids
+    const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
+    for (auto slot : tuple_desc->slots()) {
+        if (!slot->is_materialized()) {
+            continue;
+        }
+        auto iter = global_dict_map.find(slot->id());
+        if (iter != global_dict_map.end()) {
+            auto& dict_map = iter->second.first;
+            global_dict->emplace(slot->id(), const_cast<GlobalDictMap*>(&dict_map));
+#ifdef DEBUG
+            std::stringstream ss;
+            ss << "slot_id: " << slot->id() << " global dict: ";
+            for (const auto& kv : dict_map) {
+                ss << "<" << kv.first << " " << kv.second << ">"
+                   << ", ";
+            }
+            LOG(INFO) << ss.str();
+#endif
+        }
+    }
+    params->global_dictmaps = global_dict;
+    return Status::OK();
+}
+
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
     SCOPED_TIMER(_profile.open_file_timer);
 
@@ -609,6 +639,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
 
     HdfsScannerParams scanner_params;
+    RETURN_IF_ERROR(_init_global_dicts(&scanner_params));
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_range = &scan_range;
     scanner_params.fs = _pool.add(fs.release());

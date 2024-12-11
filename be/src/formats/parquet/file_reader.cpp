@@ -533,6 +533,7 @@ Status FileReader::_init_group_readers() {
     // for pageIndex
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
     _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;
+    _group_reader_param.global_dictmaps = fd_scanner_ctx.global_dictmaps;
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.

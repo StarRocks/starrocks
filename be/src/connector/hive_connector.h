@@ -108,6 +108,8 @@ private:
     HdfsScanner* _create_kudu_jni_scanner(const FSOptions& options);
     Status _check_all_slots_nullable();
 
+    Status _init_global_dicts(HdfsScannerParams* params);
+
     // =====================================
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;

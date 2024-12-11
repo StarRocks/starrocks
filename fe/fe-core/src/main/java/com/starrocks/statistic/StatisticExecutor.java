@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnId;
@@ -31,6 +32,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
+import com.starrocks.connector.statistics.StatisticsUtils;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -40,11 +44,15 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.THdfsFileFormat;
+import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
@@ -60,11 +68,17 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
+    private static final Set<THdfsFileFormat> SUPPORTED_FORMAT = ImmutableSet.of(THdfsFileFormat.PARQUET);
+
+    private static final Predicate<THdfsScanRange> FORMAT_CHECKER = x -> x.isSetFile_format() &&
+            SUPPORTED_FORMAT.contains(x.getFile_format());
 
     public List<TStatisticData> queryStatisticSync(ConnectContext context, String tableUUID, Table table,
                                                    List<String> columnNames) {
@@ -287,6 +301,16 @@ public class StatisticExecutor {
                 "dict_merge(" + StatisticUtils.quoting(columnName) + ") as _dict_merge_" + columnName +
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
+        return executeStatisticDQLWithoutContext(sql);
+    }
+
+    private static Pair<List<TStatisticData>, Status> executeStatisticDQLWithoutContext(String sql) throws TException {
+        RemoteFilesSampleStrategy strategy = new RemoteFilesSampleStrategy();
+        return executeStatisticDQLWithSample(sql, strategy);
+    }
+
+    private static Pair<List<TStatisticData>, Status> executeStatisticDQLWithSample(
+            String sql, RemoteFilesSampleStrategy strategy) throws TException {
         ConnectContext context = StatisticUtils.buildConnectContext();
         // The parallelism degree of low-cardinality dict collect task is uniformly set to 1 to
         // prevent collection tasks from occupying a large number of be execution threads and scan threads.
@@ -295,12 +319,59 @@ public class StatisticExecutor {
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
 
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
+
+        assert execPlan != null;
+        ScanNode scanNode = execPlan.getScanNodes().get(0);
+        scanNode.setScanSampleStrategy(strategy);
+
         StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
             return Pair.create(Collections.emptyList(), sqlResult.second);
         } else {
             return Pair.create(deserializerStatisticData(sqlResult.first), sqlResult.second);
+        }
+    }
+
+    public static Pair<List<TStatisticData>, Status> queryDictSync(String tableUUID, String columnName)
+            throws Exception {
+        return queryDictSync(tableUUID, columnName, new RemoteFilesSampleStrategy(5, FORMAT_CHECKER));
+    }
+
+    public static Pair<List<TStatisticData>, Status> queryDictSync(String tableUUID, String columnName,
+                                                                   RemoteFilesSampleStrategy strategy)
+            throws TException {
+        List<String> names = StatisticsUtils.getTableNameByUUID(tableUUID);
+        if (names.size() < 3) {
+            return Pair.create(Collections.emptyList(), new Status(TStatusCode.GLOBAL_DICT_ERROR,
+                    "tableUUID " + tableUUID + " error for collecting dict"));
+        }
+        String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
+                "cast(0 as bigint), " +
+                "dict_merge(" + StatisticUtils.quoting(columnName) + ") from " +
+                StatisticUtils.quoting(names.get(0), names.get(1), names.get(2));
+
+        return executeStatisticDQLWithSample(sql, strategy);
+    }
+
+    public static Pair<List<TStatisticData>, Status> queryDictSync(String tableUUID, String columnName, String fileName)
+            throws TException {
+        RemoteFilesSampleStrategy strategy = new RemoteFilesSampleStrategy(fileName);
+        return queryDictSync(tableUUID, columnName, strategy);
+    }
+
+    public static void updateDictASync(String tableUUID, String columnName, Optional<String> fileName)
+            throws TException {
+        // poc hack with sync
+        if (fileName.isEmpty()) {
+            IRelaxDictManager.getInstance().updateGlobalDict(tableUUID, columnName, Optional.empty());
+            return;
+        }
+        Pair<List<TStatisticData>, Status> result = queryDictSync(tableUUID, columnName, fileName.get());
+        if (result.second.isGlobalDictError()) {
+            IRelaxDictManager.getInstance().updateGlobalDict(tableUUID, columnName, Optional.empty());
+        } else {
+            IRelaxDictManager.getInstance().updateGlobalDict(tableUUID, columnName, Optional.of(result.first.get(0)));
         }
     }
 

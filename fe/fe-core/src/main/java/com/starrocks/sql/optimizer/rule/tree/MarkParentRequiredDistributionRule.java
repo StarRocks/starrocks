@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.tree;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -120,6 +121,15 @@ public class MarkParentRequiredDistributionRule implements TreeRewriteRule {
         @Override
         public Boolean visitPhysicalOlapScan(OptExpression optExpression, Boolean existRequiredDistribution) {
             PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
+            boolean existGlobalDict = CollectionUtils.isNotEmpty(scanOperator.getGlobalDicts()) ||
+                    MapUtils.isNotEmpty(scanOperator.getGlobalDictsExpr());
+            optExpression.setExistRequiredDistribution(existRequiredDistribution || existGlobalDict);
+            return existGlobalDict;
+        }
+
+        @Override
+        public Boolean visitPhysicalHiveScan(OptExpression optExpression, Boolean existRequiredDistribution) {
+            PhysicalHiveScanOperator scanOperator = (PhysicalHiveScanOperator) optExpression.getOp();
             boolean existGlobalDict = CollectionUtils.isNotEmpty(scanOperator.getGlobalDicts()) ||
                     MapUtils.isNotEmpty(scanOperator.getGlobalDictsExpr());
             optExpression.setExistRequiredDistribution(existRequiredDistribution || existGlobalDict);

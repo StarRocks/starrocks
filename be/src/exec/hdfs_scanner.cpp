@@ -171,6 +171,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.split_context = _scanner_params.split_context;
     ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
+    ctx.global_dictmaps = _scanner_params.global_dictmaps;
 
     if (config::parquet_advance_zonemap_filter) {
         ScanConjunctsManagerOptions opts;

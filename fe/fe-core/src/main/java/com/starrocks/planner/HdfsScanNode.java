@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.DescriptorTable;
@@ -23,6 +24,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.connector.hive.HiveConnectorScanRangeSource;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.datacache.DataCacheOptions;
@@ -157,6 +159,17 @@ public class HdfsScanNode extends ScanNode {
         if (detailLevel == TExplainLevel.VERBOSE) {
             HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
 
+            if (!appliedDictStringColumns.isEmpty()) {
+                int maxSize = Math.min(appliedDictStringColumns.size(), 5);
+                List<String> printList = appliedDictStringColumns.subList(0, maxSize);
+                String format_template = "dict_col=%s";
+                if (appliedDictStringColumns.size() > 5) {
+                    format_template = format_template + "...";
+                }
+                output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));
+                output.append("\n");
+            }
+
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -276,5 +289,10 @@ public class HdfsScanNode extends ScanNode {
     @Override
     protected boolean supportTopNRuntimeFilter() {
         return true;
+    }
+
+    @Override
+    public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
+        scanRangeSource.setSampleStrategy(strategy);
     }
 }

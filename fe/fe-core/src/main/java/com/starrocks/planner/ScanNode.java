@@ -40,6 +40,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
@@ -47,9 +48,11 @@ import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.jetbrains.annotations.TestOnly;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -63,6 +66,7 @@ public abstract class ScanNode extends PlanNode {
     protected DataCacheOptions dataCacheOptions = null;
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     protected ScanOptimzeOption scanOptimzeOption;
+    protected final List<String> appliedDictStringColumns = new ArrayList<>();
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -86,6 +90,16 @@ public abstract class ScanNode extends PlanNode {
         this.dataCacheOptions = dataCacheOptions;
     }
 
+    public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (appliedColumnIds.contains(slot.getId().asInt())) {
+                appliedDictStringColumns.add(slot.getColumn().getName());
+            }
+        }
+    }
+
+    public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {}
+
     public void setWarehouseId(long warehouseId) {
         this.warehouseId = warehouseId;
     }
@@ -100,6 +114,10 @@ public abstract class ScanNode extends PlanNode {
 
     public String getTableName() {
         return desc.getTable().getName();
+    }
+
+    public TupleDescriptor getDesc() {
+        return desc;
     }
 
     public boolean isLocalNativeTable() {

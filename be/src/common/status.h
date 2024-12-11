@@ -134,6 +134,7 @@ public:
     }
 
     static Status GlobalDictError(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
+    static Status GlobalDictNotMatch(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_NOT_MATCH, msg); }
 
     static Status TransactionInProcessing(std::string_view msg) { return Status(TStatusCode::TXN_IN_PROCESSING, msg); }
     static Status TransactionNotExists(std::string_view msg) { return Status(TStatusCode::TXN_NOT_EXISTS, msg); }

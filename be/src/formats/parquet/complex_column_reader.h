@@ -45,6 +45,8 @@ public:
         _element_reader->select_offset_index(range, rg_first_row);
     }
 
+    ColumnReaderPtr& get_element_reader() { return _element_reader; }
+
 private:
     std::unique_ptr<ColumnReader> _element_reader;
 };

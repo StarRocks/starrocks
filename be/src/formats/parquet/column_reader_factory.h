@@ -28,6 +28,9 @@ public:
                                             const TypeDescriptor& col_type,
                                             const TIcebergSchemaField* iceberg_schema_field);
 
+    static StatusOr<ColumnReaderPtr> create(const ColumnReaderPtr inner_reader, const GlobalDictMap* dict,
+                                            const SlotId slot_id, int64_t num_rows);
+
 private:
     // for struct type without schema change
     static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,

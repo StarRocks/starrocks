@@ -14,10 +14,13 @@
 
 #include "formats/parquet/column_reader_factory.h"
 
+#include "common/global_types.h"
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/utils.h"
+#include "runtime/global_dict/config.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 
 namespace starrocks::parquet {
 
@@ -153,6 +156,30 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
     } else {
         return std::make_unique<ScalarColumnReader>(field, &opts.row_group_meta->columns[field->physical_column_index],
                                                     &col_type, opts);
+    }
+}
+
+StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr inner_reader, const GlobalDictMap* dict,
+                                                      SlotId slot_id, int64_t num_rows) {
+    if (inner_reader->get_column_parquet_field()->type == ColumnType::ARRAY) {
+        ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
+                         ColumnReaderFactory::create(
+                                 std::move((down_cast<ListColumnReader*>(inner_reader.get()))->get_element_reader()),
+                                 dict, slot_id, num_rows));
+        return std::make_unique<ListColumnReader>(inner_reader->get_column_parquet_field(), std::move(child_reader));
+    } else {
+        RawColumnReader* raw_reader = dynamic_cast<RawColumnReader*>(inner_reader.get());
+        if (raw_reader == nullptr) {
+            return Status::InternalError("Error on reader transform for low cardinality reader");
+        }
+        if (raw_reader->column_all_pages_dict_encoded()) {
+            return std::make_unique<LowCardColumnReader>(*raw_reader, dict, slot_id);
+        } else if (num_rows <= DICT_DECODE_MAX_SIZE) {
+            return std::make_unique<LowRowsColumnReader>(*raw_reader, dict, slot_id);
+        } else {
+            return Status::GlobalDictNotMatch(
+                    fmt::format("SlotId: {}, Not dict encoded and not low rows on global dict column. ", slot_id));
+        }
     }
 }
 

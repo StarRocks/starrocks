@@ -18,9 +18,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 
 import java.nio.ByteBuffer;
+import java.util.Map;
+import java.util.TreeSet;
 
 public final class ColumnDict {
-    private final ImmutableMap<ByteBuffer, Integer> dict;
+    private ImmutableMap<ByteBuffer, Integer> dict;
     private final long collectedVersionTime;
     private long versionTime;
 
@@ -46,5 +48,22 @@ public final class ColumnDict {
 
     void updateVersionTime(long versionTime) {
         this.versionTime = versionTime;
+    }
+
+    void merge(ColumnDict o) {
+        TreeSet<ByteBuffer> orderSet = new TreeSet<>();
+        for (Map.Entry<ByteBuffer, Integer> kv : dict.entrySet()) {
+            orderSet.add(kv.getKey());
+        }
+        for (Map.Entry<ByteBuffer, Integer> kv : o.getDict().entrySet()) {
+            orderSet.add(kv.getKey());
+        }
+        ImmutableMap.Builder<ByteBuffer, Integer> dicts = ImmutableMap.builder();
+        int index = 0;
+        for (ByteBuffer v : orderSet) {
+            dicts.put(v, index);
+            index++;
+        }
+        dict = dicts.build();
     }
 }
