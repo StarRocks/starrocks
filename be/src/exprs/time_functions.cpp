@@ -3232,7 +3232,7 @@ StatusOr<ColumnPtr> TimeFunctions::format_time(FunctionContext* context, const s
     const auto& format_column = columns[1];
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    
+
     auto time_viewer = ColumnViewer<TYPE_TIME>(time_column);
     auto format_viewer = ColumnViewer<TYPE_VARCHAR>(format_column);
 
@@ -3247,7 +3247,7 @@ StatusOr<ColumnPtr> TimeFunctions::format_time(FunctionContext* context, const s
             builder->append_null();
             continue;
         }
-        
+
         // Convert TimeValue to hours, minutes, seconds
         int hours = time_val.hour();
         int minutes = time_val.minute();
@@ -3271,28 +3271,28 @@ StatusOr<ColumnPtr> TimeFunctions::format_time(FunctionContext* context, const s
 
             in_format = false;
             switch (c) {
-                case 'H': // Hour (00-23)
-                    result << std::setfill('0') << std::setw(2) << hours;
-                    break;
-                case 'h': // Hour (01-12)
-                    result << std::setfill('0') << std::setw(2) << (((hours % 12) == 0) ? 12 : (hours % 12));
-                    break;
-                case 'i': // Minutes (00-59)
-                    result << std::setfill('0') << std::setw(2) << minutes;
-                    break;
-                case 'S': // Seconds (00-59)
-                case 's': // Seconds (00-59)
-                    result << std::setfill('0') << std::setw(2) << seconds;
-                    break;
-                case 'f': // Microseconds (000000-999999)
-                    result << std::setfill('0') << std::setw(6) << microseconds;
-                    break;
-                case 'p': // AM or PM
-                    result << (hours < 12 ? "AM" : "PM");
-                    break;
-                default:
-                    result << '%' << c;
-                    break;
+            case 'H': // Hour (00-23)
+                result << std::setfill('0') << std::setw(2) << hours;
+                break;
+            case 'h': // Hour (01-12)
+                result << std::setfill('0') << std::setw(2) << (((hours % 12) == 0) ? 12 : (hours % 12));
+                break;
+            case 'i': // Minutes (00-59)
+                result << std::setfill('0') << std::setw(2) << minutes;
+                break;
+            case 'S': // Seconds (00-59)
+            case 's': // Seconds (00-59)
+                result << std::setfill('0') << std::setw(2) << seconds;
+                break;
+            case 'f': // Microseconds (000000-999999)
+                result << std::setfill('0') << std::setw(6) << microseconds;
+                break;
+            case 'p': // AM or PM
+                result << (hours < 12 ? "AM" : "PM");
+                break;
+            default:
+                result << '%' << c;
+                break;
             }
         }
 
