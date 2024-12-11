@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -571,6 +572,12 @@ public class ConnectContext {
 
     public void setStartTime() {
         startTime = Instant.now();
+        returnRows = 0;
+    }
+
+    @VisibleForTesting
+    public void setStartTime(Instant start) {
+        startTime = start;
         returnRows = 0;
     }
 
