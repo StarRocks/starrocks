@@ -25,6 +25,7 @@
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
@@ -3928,7 +3929,7 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
     {
         // Create time column
         auto time_builder = ColumnBuilder<TYPE_TIME>(1);
-        TimestampValue ts = TimestampValue::create(0, 0, 0, 14, 30, 45);
+        TimestampValue ts = TimestampValue::create(0, 0, 0, 14, 30, 40);
         time_builder.append(ts.timestamp());
         auto time_column = time_builder.build(false);
 
@@ -3950,14 +3951,14 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
         // Verify result
         ASSERT_TRUE(result->is_binary());
         auto result_viewer = ColumnViewer<TYPE_VARCHAR>(result);
-        EXPECT_EQ("14:30:45", std::string(result_viewer.get_slice(0)));
+        EXPECT_EQ("14:30:40", std::string(result_viewer.value(0)));
     }
 
     // Multiple format strings test
     {
         // Create time column with multiple rows
         auto time_builder = ColumnBuilder<TYPE_TIME>(4);
-        TimestampValue ts = TimestampValue::create(0, 0, 0, 14, 30, 45);
+        TimestampValue ts = TimestampValue::create(0, 0, 0, 14, 30, 40);
         for (int i = 0; i < 4; i++) {
             time_builder.append(ts.timestamp());
         }
@@ -3984,10 +3985,10 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
         // Verify results
         ASSERT_TRUE(result->is_binary());
         auto result_viewer = ColumnViewer<TYPE_VARCHAR>(result);
-        EXPECT_EQ("14:30:45", std::string(result_viewer.get_slice(0)));
-        EXPECT_EQ("14:30", std::string(result_viewer.get_slice(1)));
-        EXPECT_EQ("Time: 14:30", std::string(result_viewer.get_slice(2)));
-        EXPECT_EQ("14", std::string(result_viewer.get_slice(3)));
+        EXPECT_EQ("14:30:40", std::string(result_viewer.value(0)));
+        EXPECT_EQ("14:30", std::string(result_viewer.value(1)));
+        EXPECT_EQ("Time: 14:30", std::string(result_viewer.value(2)));
+        EXPECT_EQ("14", std::string(result_viewer.value(3)));
     }
 }
 } // namespace starrocks
