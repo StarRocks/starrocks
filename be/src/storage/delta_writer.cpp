@@ -14,6 +14,7 @@
 
 #include "storage/delta_writer.h"
 
+#include <random>
 #include <utility>
 
 #include "io/io_profiler.h"
@@ -740,6 +741,16 @@ Status DeltaWriter::commit() {
 
     auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                           _cur_rowset, false);
+
+    if (config::enable_fail_random) {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> distrib(0, 10);
+        int random_number = distrib(gen);
+        if (random_number > 5) {
+            res = Status::InternalError("commit txn failed because random fail");
+        }
+    }
 
     if (!res.ok()) {
         _storage_engine->update_manager()->on_rowset_cancel(_tablet.get(), _cur_rowset.get());
