@@ -523,14 +523,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.dbId = dbId;
     }
 
-    public boolean isActive() {
+    public synchronized boolean isActive() {
         return active;
     }
 
     /**
      * active the materialized again & reload the state.
      */
-    public void setActive() {
+    public synchronized void setActive() {
         LOG.info("set {} to active", name);
         // reset mv rewrite cache when it is active again
         CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, true);
@@ -538,7 +538,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.inactiveReason = null;
     }
 
-    public void setInactiveAndReason(String reason) {
+    public synchronized void setInactiveAndReason(String reason) {
         LOG.warn("set {} to inactive because of {}", name, reason);
         this.active = false;
         this.inactiveReason = reason;
@@ -550,14 +550,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     /**
      * Reset cached metadata when mv's meta has changed.
      */
-    public void resetMetadataCache() {
+    public synchronized void resetMetadataCache() {
         refBaseTablePartitionExprsOpt = Optional.empty();
         refBaseTablePartitionSlotsOpt = Optional.empty();
         refBaseTablePartitionColumnsOpt = Optional.empty();
         tableToBaseTableInfoCache.clear();
     }
 
-    public String getInactiveReason() {
+    public synchronized String getInactiveReason() {
         return inactiveReason;
     }
 
