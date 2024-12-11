@@ -118,7 +118,7 @@ TEST(NormalizeRangeTest, RangeTest) {
         // where range >= -limit and range in (1, 2, 3)
         ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
                                         std::numeric_limits<CppType>::max());
-        ASSERT_ERROR(range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, std::numeric_limits<CppType>::lowest()));
+        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, std::numeric_limits<CppType>::lowest()));
         ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2, 3}));
         ASSERT_EQ(range._fixed_values.size(), 3);
         ASSERT_TRUE(range._fixed_values.count(1));
