@@ -39,7 +39,7 @@ key_column_expr ::= <column_name> | <expr>
 
 返回值的数据类型与 value 列的数据类型保持一致。如果 value 列为字典表的自增列，则返回值的数据类型为 BIGINT。
 
-然而当未找到与该 key 呈映射关系的 value 时，如果为 `<null_if_not_exist>` 参数为默认的 `false`，则返回 `NULL`。如果为 `true`，则返回报错 `query failed if record not exist in dict table`。
+然而当未找到与该 key 呈映射关系的 value 时，如果为 `<null_if_not_exist>` 参数为 `true`，则返回 `NULL`。如果为默认的 `false`，则返回报错 `query failed if record not exist in dict table`。
 
 ## 示例
 
@@ -165,7 +165,7 @@ key_column_expr ::= <column_name> | <expr>
 
 **示例四：启用 null_if_not_exist 模式**
 
-启用 null_if_not_exist 模式，并且使用字典表中不存在的 key，查询与其呈映射关系的 value，此时直接返回报错而不是 `NULL`。从而可以确保导入至数据表之前，相关 key 已经先导入至字典表并生成与其映射的value。
+禁用 `<null_if_not_exist>` 模式，并且使用字典表中不存在的 key，查询与其呈映射关系的 value，此时直接返回报错而不是 `NULL`。从而可以确保导入至数据表之前，相关 key 已经先导入至字典表并生成与其映射的 value。
 
 ```SQL
 MySQL [test]>  SELECT dict_mapping('dict', 'b1', true);
