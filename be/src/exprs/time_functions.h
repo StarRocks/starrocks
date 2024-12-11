@@ -799,6 +799,14 @@ public:
     // so this value is 253402329599(UTC 9999-12-31 23:59:59) - 24 * 3600(for all timezones)
     constexpr static const int64_t MAX_UNIX_TIMESTAMP = 253402243199L;
 
+    /**
+     * Format a time value according to a format string.
+     * @param: [time_value, format_str]
+     * @paramType columns: [TYPE_TIME, TYPE_VARCHAR]
+     * @return ColumnPtr A column holding formatted time strings.
+     */
+    DEFINE_VECTORIZED_FN(time_format);
+
 private:
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime);
 
