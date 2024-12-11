@@ -80,7 +80,7 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
     }
 
     @Override
-    protected MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
+    public MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
         List<Partition> partitions = Lists.newArrayList(mv.getPartitions());
         if (partitions.size() > 0 && partitions.get(0).getDefaultPhysicalPartition().getVisibleVersion() <= 1) {
             // the mv is newly created, can not use it to rewrite query.
