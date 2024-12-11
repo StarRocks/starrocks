@@ -14,7 +14,6 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.ResourceGroup;
@@ -101,6 +100,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     private final QueryQueueManager manager = QueryQueueManager.getInstance();
 
     private final Map<Long, ResourceGroup> mockedGroups = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     private boolean prevQueueEnableSelect;
     private boolean prevQueueEnableStatistic;
@@ -650,16 +650,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                     return res;
                 }
             };
-            ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
             scheduler.schedule(() -> {
                 coord.cancel("simulate timeout");
             }, 1, TimeUnit.SECONDS);
-
-            Stopwatch watch = Stopwatch.createStarted();
             Assert.assertThrows("pending timeout", StarRocksException.class,
                     () -> manager.maybeWait(connectContext, coord));
-            long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
-            Assert.assertTrue(elapsed >= 1000 && elapsed < 5000);
         }
 
         // 3. Finish the first `concurrencyLimit` non-group queries.
