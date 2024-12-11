@@ -90,7 +90,6 @@ public class ProfileManager implements MemoryTrackable {
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
                     START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE));
 
-
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
         public byte[] profileContent;
@@ -114,8 +113,8 @@ public class ProfileManager implements MemoryTrackable {
     private final ReadLock readLock;
     private final WriteLock writeLock;
 
-    private final LinkedHashMap<String, ProfileElement> profileMap; // from QueryId to RuntimeProfile
-    private final LinkedHashMap<String, ProfileElement> loadProfileMap; // from LoadId to RuntimeProfile
+    // from QueryId to RuntimeProfile
+    private final LinkedHashMap<String, ProfileElement> profileMap;
 
     public static ProfileManager getInstance() {
         if (INSTANCE == null) {
@@ -129,7 +128,6 @@ public class ProfileManager implements MemoryTrackable {
         readLock = lock.readLock();
         writeLock = lock.writeLock();
         profileMap = new LinkedHashMap<>();
-        loadProfileMap = new LinkedHashMap<>();
     }
 
     public ProfileElement createElement(RuntimeProfile summaryProfile, String profileString) {
@@ -172,7 +170,6 @@ public class ProfileManager implements MemoryTrackable {
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
         element.plan = plan;
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
-        String queryType = element.infoStrings.get(ProfileManager.QUERY_TYPE);
         // check when push in, which can ensure every element in the list has QUERY_ID column,
         // so there is no need to check when remove element from list.
         if (Strings.isNullOrEmpty(queryId)) {
@@ -183,6 +180,7 @@ public class ProfileManager implements MemoryTrackable {
         String removedQueryId = null;
         writeLock.lock();
         try {
+<<<<<<< HEAD
             if (queryType != null && queryType.equals("Load")) {
                 loadProfileMap.put(queryId, element);
                 if (loadProfileMap.size() > Config.load_profile_info_reserved_num) {
@@ -195,6 +193,11 @@ public class ProfileManager implements MemoryTrackable {
                     removedQueryId = profileMap.keySet().iterator().next();
                     profileMap.remove(removedQueryId);
                 }
+=======
+            profileMap.put(queryId, element);
+            if (profileMap.size() > Config.profile_info_reserved_num) {
+                profileMap.remove(profileMap.keySet().iterator().next());
+>>>>>>> 0372e310b9 ([Enhancement] Remove unnecessary LoadProfileMap (#53768))
             }
         } finally {
             writeLock.unlock();
@@ -208,7 +211,7 @@ public class ProfileManager implements MemoryTrackable {
     public boolean hasProfile(String queryId) {
         readLock.lock();
         try {
-            return profileMap.containsKey(queryId) || loadProfileMap.containsKey(queryId);
+            return profileMap.containsKey(queryId);
         } finally {
             readLock.unlock();
         }
@@ -226,14 +229,6 @@ public class ProfileManager implements MemoryTrackable {
                 }
                 result.add(0, row);
             }
-            for (ProfileElement element : loadProfileMap.values()) {
-                Map<String, String> infoStrings = element.infoStrings;
-                List<String> row = Lists.newArrayList();
-                for (String str : PROFILE_HEADERS) {
-                    row.add(infoStrings.get(str));
-                }
-                result.add(0, row);
-            }
         } finally {
             readLock.unlock();
         }
@@ -243,7 +238,6 @@ public class ProfileManager implements MemoryTrackable {
     public void removeProfile(String queryId) {
         writeLock.lock();
         try {
-            loadProfileMap.remove(queryId);
             profileMap.remove(queryId);
         } finally {
             writeLock.unlock();
@@ -253,7 +247,6 @@ public class ProfileManager implements MemoryTrackable {
     public void clearProfiles() {
         writeLock.lock();
         try {
-            loadProfileMap.clear();
             profileMap.clear();
         } finally {
             writeLock.unlock();
@@ -264,7 +257,7 @@ public class ProfileManager implements MemoryTrackable {
         ProfileElement element = new ProfileElement();
         readLock.lock();
         try {
-            element = profileMap.get(queryId) == null ? loadProfileMap.get(queryId) : profileMap.get(queryId);
+            element = profileMap.get(queryId);
             if (element == null) {
                 return null;
             }
@@ -282,7 +275,7 @@ public class ProfileManager implements MemoryTrackable {
     public ProfileElement getProfileElement(String queryId) {
         readLock.lock();
         try {
-            return profileMap.get(queryId) == null ? loadProfileMap.get(queryId) : profileMap.get(queryId);
+            return profileMap.get(queryId);
         } finally {
             readLock.unlock();
         }
@@ -293,7 +286,6 @@ public class ProfileManager implements MemoryTrackable {
         readLock.lock();
         try {
             result.addAll(profileMap.values());
-            result.addAll(loadProfileMap.values());
         } finally {
             readLock.unlock();
         }
@@ -302,8 +294,7 @@ public class ProfileManager implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryProfile", (long) profileMap.size(),
-                "LoadProfile", (long) loadProfileMap.size());
+        return ImmutableMap.of("QueryProfile", (long) profileMap.size());
     }
 
     @Override
@@ -314,13 +305,8 @@ public class ProfileManager implements MemoryTrackable {
                     .stream()
                     .limit(MEMORY_PROFILE_SAMPLES)
                     .collect(Collectors.toList());
-            List<Object> loadProfileSamples = loadProfileMap.values()
-                    .stream()
-                    .limit(MEMORY_PROFILE_SAMPLES)
-                    .collect(Collectors.toList());
 
-            return Lists.newArrayList(Pair.create(profileSamples, (long) profileMap.size()),
-                    Pair.create(loadProfileSamples, (long) loadProfileMap.size()));
+            return Lists.newArrayList(Pair.create(profileSamples, (long) profileMap.size()));
         } finally {
             readLock.unlock();
         }
