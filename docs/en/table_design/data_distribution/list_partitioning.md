@@ -112,5 +112,10 @@ DISTRIBUTED BY HASH(`id`);
 - List partitioning does support dynamic partitioning and creating multiple partitions at a time.
 - Currently, StarRocks's shared-data mode does not support this feature.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` statement is used to delete a partition created by using list partitioning, data in the partition is directly removed and cannot be recovered.
+<<<<<<< HEAD
 - Currently you cannot backup and restore partitions created by the list partitioning.
 - Currently, StarRocks does not support creating [asynchronous materialized views](../../using_starrocks/async_mv/Materialized_view.md) with base tables created with the list partitioning strategy.
+=======
+- Currently you cannot [backup and restore](../../administration/management/Backup_and_restore.md) tables created with the list partitioning strategy.
+- From v3.3.5 onwards,  StarRocks supports creating [asynchronous materialized views](../../using_starrocks/async_mv/Materialized_view.md) with base tables created with the list partitioning strategy.
+>>>>>>> edd5009ce6 ([Doc] Revise Backup Restore according to feedback (#53738))
