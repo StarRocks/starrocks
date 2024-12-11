@@ -127,8 +127,7 @@ Status ColumnChunkReader::_parse_page_header() {
     auto& page_type = _page_reader->current_header()->type;
     // TODO: support DATA_PAGE_V2, now common writer use DATA_PAGE as default
     if (UNLIKELY(page_type != tparquet::PageType::DICTIONARY_PAGE && page_type != tparquet::PageType::DATA_PAGE)) {
-        return Status::NotSupported(
-            strings::Substitute("Not supported page type: $0", page_type));
+        return Status::NotSupported(strings::Substitute("Not supported page type: $0", page_type));
     }
     if (page_type == tparquet::PageType::DATA_PAGE) {
         const auto& header = *_page_reader->current_header();
