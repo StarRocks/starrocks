@@ -213,7 +213,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     auto tablet_mgr = tablet->tablet_mgr();
     // not fill data and meta cache
     auto fill_cache = false;
-    LakeIOOptions lake_io_opts{fill_cache, -1};
+    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache, .buffer_size = -1};
     ASSIGN_OR_RETURN(auto segment,
                      tablet_mgr->load_segment(src, segment_id, &footer_sine_hint, lake_io_opts, fill_cache, tschema));
     uint32_t num_rows = segment->num_rows();

@@ -158,8 +158,8 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
-    reader_params.lake_io_opts = {config::lake_enable_vertical_compaction_fill_data_cache,
-                                  config::lake_compaction_stream_buffer_size_bytes};
+    reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
+                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
     CompactionTaskStats prev_stats;
