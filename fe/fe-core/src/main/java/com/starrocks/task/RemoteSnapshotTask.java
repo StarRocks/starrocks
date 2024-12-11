@@ -14,7 +14,6 @@
 
 package com.starrocks.task;
 
-import com.starrocks.task.AgentTask;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TRemoteSnapshotRequest;
 import com.starrocks.thrift.TTabletType;
