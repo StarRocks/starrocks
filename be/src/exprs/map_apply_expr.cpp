@@ -151,8 +151,8 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
     }
 
     auto res_map = std::make_shared<MapColumn>(
-        map_col->keys_column(), map_col->values_column(),
-        ColumnHelper::as_column<UInt32Column>(input_map->offsets_column()->clone_shared()));
+            map_col->keys_column(), map_col->values_column(),
+            ColumnHelper::as_column<UInt32Column>(input_map->offsets_column()->clone_shared()));
 
     if (_maybe_duplicated_keys && res_map->size() > 0) {
         res_map->remove_duplicated_keys();
