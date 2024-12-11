@@ -604,7 +604,7 @@ public class HiveMetastoreApiConverter {
         if (fieldDelim.isEmpty()) {
             // Support for hive org.apache.hadoop.hive.serde2.OpenCSVSerde
             // https://cwiki.apache.org/confluence/display/hive/csv+serde
-            if (parameters.getOrDefault(HIVE_TABLE_SERDE_LIB, null).equals(HiveClassNames.OPEN_CSV_SERDE_CLASS)) {
+            if (HiveClassNames.OPEN_CSV_SERDE_CLASS.equals(parameters.getOrDefault(HIVE_TABLE_SERDE_LIB, null))) {
                 fieldDelim = parameters.getOrDefault(OpenCSVSerde.SEPARATORCHAR, String.valueOf(CSVWriter.DEFAULT_SEPARATOR));
             }
         }
