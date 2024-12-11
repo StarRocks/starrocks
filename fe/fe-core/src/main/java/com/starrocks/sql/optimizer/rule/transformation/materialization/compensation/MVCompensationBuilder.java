@@ -442,7 +442,7 @@ public class MVCompensationBuilder {
             return null;
         }
 
-        Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getNameToPartKeys();
+        Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getPartitonToCells();
         List<PartitionKey> partitionKeys = Lists.newArrayList();
         MaterializedView mv = mvContext.getMv();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();

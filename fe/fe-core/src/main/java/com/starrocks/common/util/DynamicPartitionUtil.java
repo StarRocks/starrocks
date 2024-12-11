@@ -465,8 +465,35 @@ public class DynamicPartitionUtil {
         return true;
     }
 
+<<<<<<< HEAD
     public static boolean isDynamicPartitionTable(Table table) {
         return isTableSchedulable(table, true);
+=======
+    public static boolean isEnabledTablePartitionTTL(OlapTable olapTable,
+                                                     PartitionInfo partitionInfo,
+                                                     TableProperty tableProperty) {
+        if (olapTable == null || tableProperty == null) {
+            return false;
+        }
+        // list partition is not supported
+        if (partitionInfo instanceof RangePartitionInfo) {
+            // if ttl is not set in table property, return false
+            if (tableProperty.getPartitionTTLNumber() > 0 || !tableProperty.getPartitionTTL().isZero()) {
+                return true;
+            }
+            if (!Strings.isNullOrEmpty(tableProperty.getPartitionRetentionCondition())) {
+                return true;
+            }
+            return false;
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            if (!Strings.isNullOrEmpty(tableProperty.getPartitionRetentionCondition())) {
+                return true;
+            }
+            return false;
+        } else {
+            return false;
+        }
+>>>>>>> a87019374 ([Refactor] Refactor Range<PartitionKey> and PListCell into PCell for better abstraction (#53725))
     }
 
     public static boolean isTTLPartitionTable(Table table) {

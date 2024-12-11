@@ -24,7 +24,7 @@ import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessRangePartitionArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -34,8 +34,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.starrocks.connector.PartitionUtil.getMVPartitionNameWithList;
 import static com.starrocks.connector.PartitionUtil.getMVPartitionNameWithRange;
+import static com.starrocks.connector.PartitionUtil.getMVPartitionToCells;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 /**
@@ -198,10 +198,17 @@ public class MvRefreshArbiter {
                 List<Column> refPartitionColumns = refBaseTablePartitionColumns.get(baseTable);
                 PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
                 if (mvPartitionInfo.isListPartition()) {
+<<<<<<< HEAD
                     Map<String, PListCell> partitionNameWithRange = getMVPartitionNameWithList(baseTable,
                             refPartitionColumns, updatedPartitionNamesList);
                     baseTableUpdateInfo.addListPartitionKeys(partitionNameWithRange);
                     baseTableUpdateInfo.addToRefreshPartitionNames(partitionNameWithRange.keySet());
+=======
+                    Map<String, PCell> mvPartitionNameWithList = getMVPartitionToCells(baseTable,
+                            refPartitionColumns, updatedPartitionNamesList);
+                    baseTableUpdateInfo.addPartitionCells(mvPartitionNameWithList);
+                    baseTableUpdateInfo.addToRefreshPartitionNames(mvPartitionNameWithList.keySet());
+>>>>>>> a87019374 ([Refactor] Refactor Range<PartitionKey> and PListCell into PCell for better abstraction (#53725))
                 } else if (mvPartitionInfo.isRangePartition()) {
                     Preconditions.checkArgument(refPartitionColumns.size() == 1,
                             "Range partition column size must be 1");

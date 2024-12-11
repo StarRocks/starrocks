@@ -1313,7 +1313,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     public Map<TableSnapshotInfo, Set<String>> getRefTableRefreshPartitions(Set<String> mvToRefreshedPartitions) {
         Map<TableSnapshotInfo, Set<String>> refTableAndPartitionNames = Maps.newHashMap();
         Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
-        if (mvToBaseNameRefs == null) {
+        if (mvToBaseNameRefs == null || mvToBaseNameRefs.isEmpty()) {
             return refTableAndPartitionNames;
         }
         for (TableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
