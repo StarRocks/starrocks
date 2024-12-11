@@ -35,7 +35,7 @@ import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCell;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.time.Clock;
@@ -108,8 +108,8 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
     }
 
     @Override
-    public Map<String, PListCell> getPartitionList(List<Column> partitionColumns) throws AnalysisException {
-        return PartitionUtil.getMVPartitionNameWithList(table, partitionColumns, getPartitionNames());
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
+        return PartitionUtil.getMVPartitionToCells(table, partitionColumns, getPartitionNames());
     }
 
     @Override

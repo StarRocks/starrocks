@@ -89,9 +89,9 @@ public class SyncPartitionUtils {
 
     private static final String DEFAULT_PREFIX = "p";
 
-    public static RangePartitionDiff getRangePartitionDiffOfSlotRef(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                                    Map<String, Range<PartitionKey>> mvRangeMap,
-                                                                    RangePartitionDiffer differ) {
+    public static PartitionDiff getRangePartitionDiffOfSlotRef(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                               Map<String, Range<PartitionKey>> mvRangeMap,
+                                                               RangePartitionDiffer differ) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
         RangeSet<PartitionKey> ranges = TreeRangeSet.create();
@@ -109,7 +109,7 @@ public class SyncPartitionUtils {
 
     public static boolean hasRangePartitionChanged(Map<String, Range<PartitionKey>> baseRangeMap,
                                                    Map<String, Range<PartitionKey>> mvRangeMap) {
-        RangePartitionDiff diff = RangePartitionDiffer.simpleDiff(baseRangeMap, mvRangeMap);
+        PartitionDiff diff = RangePartitionDiffer.simpleDiff(baseRangeMap, mvRangeMap);
         if (MapUtils.isNotEmpty(diff.getAdds()) || MapUtils.isNotEmpty(diff.getDeletes())) {
             return true;
         }
@@ -117,10 +117,10 @@ public class SyncPartitionUtils {
     }
 
 
-    public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                                 Map<String, Range<PartitionKey>> mvRangeMap,
-                                                                 FunctionCallExpr functionCallExpr,
-                                                                 RangePartitionDiffer differ) {
+    public static PartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                            Map<String, Range<PartitionKey>> mvRangeMap,
+                                                            FunctionCallExpr functionCallExpr,
+                                                            RangePartitionDiffer differ) {
         PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
         Map<String, Range<PartitionKey>> rollupRange = Maps.newHashMap();
         if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
@@ -155,11 +155,11 @@ public class SyncPartitionUtils {
     }
 
     @NotNull
-    private static RangePartitionDiff getRangePartitionDiff(Map<String, Range<PartitionKey>> mvRangeMap,
-                                                            Map<String, Range<PartitionKey>> rollupRange,
-                                                            RangePartitionDiffer differ) {
+    private static PartitionDiff getRangePartitionDiff(Map<String, Range<PartitionKey>> mvRangeMap,
+                                                       Map<String, Range<PartitionKey>> rollupRange,
+                                                       RangePartitionDiffer differ) {
         // TODO: Callers may use `List<PartitionRange>` directly.
-        RangePartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
+        PartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
                 RangePartitionDiffer.simpleDiff(rollupRange, mvRangeMap);
         return diff;
     }
