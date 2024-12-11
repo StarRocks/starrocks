@@ -32,7 +32,7 @@ key_column_expr ::= <column_name> | <expr>
 
 - Optional parameters:
   - `<value_column>`: The name of the value column, which is also the mapping column. If the value column is not specified, the default value column is the AUTO_INCREMENT column of the dictionary table.  The value column can also be defined as any column in the dictionary table excluding auto-incremented columns and primary keys. The column's data type has no restrictions.
-  - `<null_if_not_exist>` (Optional): Whether to return if the key does not exist in the dictionary cache. Valid values:
+  - `<null_if_not_exist>` (Optional): Whether to return if the key does not exist in the dictionary table. Valid values:
     - `true`: Null is returned if the key does not exist.
     - `false` (Default): An exception is thrown if the key does not exist.
 
@@ -40,7 +40,7 @@ key_column_expr ::= <column_name> | <expr>
 
 The data type of the returned values remains consistent with the data type of the value column. If the value column is the auto-incremented column of the dictionary table, the data type of the returned values is BIGINT.
 
-However, when the value mapped to the specified key is not found, if the `<null_if_not_exist>` parameter is set to `false` (default),  `NULL` is returned. If the parameter is set to `true`,  an error `query failed if record not exist in dict table` is returned.
+However, when the value mapped to the specified key is not found, if the `<null_if_not_exist>` parameter is set to `true`,  `NULL` is returned. If the parameter is set to `false`(default),  an error `query failed if record not exist in dict table` is returned.
 
 ## Example
 
@@ -165,7 +165,7 @@ However, when the value mapped to the specified key is not found, if the `<null_
 
 **Example 4: Enable null_if_not_exist mode**
 
-When null_if_not_exist mode is enabled and the value mapped to the key that doesn't exist in the dictionary table is queried , an error, instead of `NULL`, is returned. It makes sure that a data row's key is first loaded into the dictionary table and its mapped value (dictionary ID) is generated before that data row is loaded into the target table.
+When `<null_if_not_exist>` mode is disabled and the value mapped to the key that doesn't exist in the dictionary table is queried , an error, instead of `NULL`, is returned. It makes sure that a data row's key is first loaded into the dictionary table and its mapped value (dictionary ID) is generated before that data row is loaded into the target table.
 
 ```SQL
 MySQL [test]>  SELECT dict_mapping('dict', 'b1', true);
