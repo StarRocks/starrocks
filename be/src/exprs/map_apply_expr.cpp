@@ -80,7 +80,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                 input_null_map =
                         FunctionHelper::union_null_column(nullable->null_column(), input_null_map); // merge null
             } else {
-                input_null_map = nullable->null_column();
+                input_null_map = ColumnHelper::as_column<NullColumn>(nullable->null_column()->clone_shared());
             }
         }
         DCHECK(data_column->is_map());
@@ -159,8 +159,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
     }
     // attach null info
     if (input_null_map != nullptr) {
-        return NullableColumn::create(std::move(res_map),
-                                      ColumnHelper::as_column<NullColumn>(input_null_map->clone_shared()));
+        return NullableColumn::create(std::move(res_map), input_null_map);
     }
     return res_map;
 }
