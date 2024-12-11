@@ -64,7 +64,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
 
         // update mv's to refresh partitions based on base table's partition changes
         MvUpdateInfo mvTimelinessInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL);
-        Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
+        Map<Table, Set<String>> baseChangedPartitionNames = collectMVToBaseTablePartitionNames(refBaseTablePartitionColumns,
                 mvTimelinessInfo);
 
         // collect base table's partition infos

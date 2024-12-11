@@ -74,7 +74,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         // record the relation of partitions between materialized view and base partition table
         MvUpdateInfo mvTimelinessInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL);
         // collect & update mv's to refresh partitions based on base table's partition changes
-        Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
+        Map<Table, Set<String>> baseChangedPartitionNames = collectMVToBaseTablePartitionNames(refBaseTablePartitionColumns,
                 mvTimelinessInfo);
 
         // collect all ref base table's partition range map
