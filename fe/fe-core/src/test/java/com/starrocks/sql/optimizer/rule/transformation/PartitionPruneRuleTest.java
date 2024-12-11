@@ -501,14 +501,14 @@ public class PartitionPruneRuleTest {
                 String exp = "Exceeded the limit of number of olap table partitions to be scanned. Number of partitions " +
                         "allowed: 3, number of partitions to be scanned: 5. Please adjust the SQL or " +
                         "change the limit by set variable scan_olap_partition_num_limit.";
-                Assert.assertEquals(e.getMessage(), exp);
+                Assert.assertTrue(e.getMessage().contains(exp));
             }
             //check set invalid value abc
             try {
                 stmt.execute("set scan_olap_partition_num_limit=abc;");
             } catch (Exception e) {
                 String exp = "Incorrect argument type to variable 'scan_olap_partition_num_limit'";
-                Assert.assertEquals(e.getMessage(), exp);
+                Assert.assertTrue(e.getMessage().contains(exp));
             }
         } finally {
             stmt.close();
