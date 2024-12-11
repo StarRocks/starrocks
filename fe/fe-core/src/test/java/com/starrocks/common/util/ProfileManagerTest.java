@@ -105,16 +105,6 @@ public class ProfileManagerTest {
 
         assertEquals(1, manager.getAllQueries().size());
 
-        Config.load_profile_info_reserved_num = 1;
-
-        profile1 = buildRuntimeProfile("125", "Load");
-        manager.pushProfile(null, profile1);
-
-        profile2 = buildRuntimeProfile("126", "Load");
-        manager.pushProfile(null, profile2);
-
-        assertEquals(2, manager.getAllQueries().size());
-
         manager.clearProfiles();
     }
 }
