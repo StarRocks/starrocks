@@ -101,7 +101,7 @@ public class OptOlapPartitionPruner {
             checkScanPartitionLimit(selectedPartitionIds.size());
         } catch (AnalysisException e) {
             LOG.warn("{} queryId: {}", e.getMessage(), DebugUtil.printId(ConnectContext.get().getQueryId()));
-            throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
+            throw new StarRocksPlannerException(e.getMessage(), ErrorType.USER_ERROR);
         }
 
         final Pair<ScalarOperator, List<ScalarOperator>> prunePartitionPredicate =
@@ -143,7 +143,7 @@ public class OptOlapPartitionPruner {
             checkScanPartitionLimit(ansPartitionIds.size());
         } catch (AnalysisException e) {
             LOG.warn("{} queryId: {}", e.getMessage(), DebugUtil.printId(ConnectContext.get().getQueryId()));
-            throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
+            throw new StarRocksPlannerException(e.getMessage(), ErrorType.USER_ERROR);
         }
 
         final LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
@@ -164,8 +164,10 @@ public class OptOlapPartitionPruner {
             LOG.warn("fail to get variable scan_olap_partition_num_limit, set default value 0, msg: {}", e.getMessage());
         }
         if (scanOlapPartitionNumLimit > 0 && selectedPartitionNum > scanOlapPartitionNumLimit) {
-            String msg = "Exceeded the limit of " + scanOlapPartitionNumLimit + " max scan olap partitions. " +
-                    "Please adjust query or change limit by set session variable scan_olap_partition_num_limit.";
+            String msg = "Exceeded the limit of number of olap table partitions to be scanned. " +
+                         "Number of partitions allowed: " + scanOlapPartitionNumLimit +
+                         ", number of partitions to be scanned: " + selectedPartitionNum +
+                         ". Please adjust the SQL or change the limit by set variable scan_olap_partition_num_limit.";
             throw new AnalysisException(msg);
         }
     }
