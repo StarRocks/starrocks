@@ -14,11 +14,14 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.PartitionUtil;
@@ -27,6 +30,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -34,6 +38,10 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 public final class ListPartitionDiffer extends PartitionDiffer {
     private static final Logger LOG = LogManager.getLogger(ListPartitionDiffer.class);
+
+    public ListPartitionDiffer(MaterializedView mv, boolean isQueryRewrite) {
+        super(mv, isQueryRewrite);
+    }
 
     /**
      * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into result.
@@ -43,13 +51,13 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @param mvItems the partition name to its list partition cell of the mv
      * @return the list partition diff between the base table and the mv
      */
-    public static ListPartitionDiff getListPartitionDiff(Map<String, PListCell> baseItems,
-                                                         Map<String, PListCell> mvItems) {
+    public static PartitionDiff getListPartitionDiff(Map<String, PCell> baseItems,
+                                                     Map<String, PCell> mvItems) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
-        Map<String, PListCell> adds = diffList(baseItems, mvItems);
-        Map<String, PListCell> deletes = diffList(mvItems, baseItems);
-        return new ListPartitionDiff(adds, deletes);
+        Map<String, PCell> adds = diffList(baseItems, mvItems);
+        Map<String, PCell> deletes = diffList(mvItems, baseItems);
+        return new PartitionDiff(adds, deletes);
     }
 
     /**
@@ -58,16 +66,20 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @param dstListMap dst partition list map
      * @return the different partition list map
      */
-    public static Map<String, PListCell> diffList(Map<String, PListCell> srcListMap,
-                                                  Map<String, PListCell> dstListMap) {
-        Map<String, PListCell> result = Maps.newTreeMap();
+    public static Map<String, PCell> diffList(Map<String, PCell> srcListMap,
+                                              Map<String, PCell> dstListMap) {
+        Map<String, PCell> result = Maps.newTreeMap();
         // PListCell may contain multi values, we need to ensure they are not duplicated from each other
         Map<PListAtom, PListCell> dstAtomMaps = Maps.newHashMap();
         dstListMap.values().stream()
-                .forEach(l -> l.toAtoms().stream().forEach(x -> dstAtomMaps.put(x, l)));
-        for (Map.Entry<String, PListCell> srcEntry : srcListMap.entrySet()) {
+                .forEach(l -> {
+                    Preconditions.checkArgument(l instanceof PListCell, "PListCell expected");
+                    PListCell cell = (PListCell) l;
+                    cell.toAtoms().stream().forEach(x -> dstAtomMaps.put(x, cell));
+                });
+        for (Map.Entry<String, PCell> srcEntry : srcListMap.entrySet()) {
             String key = srcEntry.getKey();
-            PListCell srcItem = srcEntry.getValue();
+            PListCell srcItem = (PListCell) srcEntry.getValue();
             if (srcItem.equals(dstListMap.get(key))) {
                 continue;
             }
@@ -123,31 +135,21 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         return false;
     }
 
-    private static Map<PListAtom, Set<PListCellPlus>> toAtoms(Map<String, PListCell> partitionMap,
-                                                              List<Integer> refIdxes) {
+    private static Map<PListAtom, Set<PListCellPlus>> toAtoms(Map<String, PCell> partitionMap) {
         Map<PListAtom, Set<PListCellPlus>> result = Maps.newHashMap();
-        for (Map.Entry<String, PListCell> e : partitionMap.entrySet()) {
-            PListCellPlus plus = new PListCellPlus(e.getKey(), e.getValue());
-            plus.toAtoms(refIdxes).stream()
-                    .forEach(x -> result.computeIfAbsent(x, k -> Sets.newHashSet())
-                            .add(new PListCellPlus(e.getKey(), e.getValue())));
-        }
-        return result;
-    }
-
-    private static Map<PListAtom, Set<PListCellPlus>> toAtoms(Map<String, PListCell> partitionMap) {
-        Map<PListAtom, Set<PListCellPlus>> result = Maps.newHashMap();
-        for (Map.Entry<String, PListCell> e : partitionMap.entrySet()) {
-            PListCellPlus plus = new PListCellPlus(e.getKey(), e.getValue());
-            plus.toAtoms().stream()
-                    .forEach(x -> result.computeIfAbsent(x, k -> Sets.newHashSet())
-                            .add(new PListCellPlus(e.getKey(), e.getValue())));
+        for (Map.Entry<String, PCell> e : partitionMap.entrySet()) {
+            PListCell cell = (PListCell) e.getValue();
+            PListCellPlus plus = new PListCellPlus(e.getKey(), cell);
+            plus.toAtoms().stream().forEach(x -> {
+                result.computeIfAbsent(x, k -> Sets.newHashSet())
+                        .add(new PListCellPlus(e.getKey(), cell));
+            });
         }
         return result;
     }
 
     public static Map<String, Set<String>> generateBaseRefMapImpl(Map<PListAtom, Set<PListCellPlus>> mvPartitionMap,
-                                                                  Map<String, PListCell> baseTablePartitionMap) {
+                                                                  Map<String, PCell> baseTablePartitionMap) {
         if (mvPartitionMap.isEmpty()) {
             return Maps.newHashMap();
         }
@@ -176,60 +178,64 @@ public final class ListPartitionDiffer extends PartitionDiffer {
 
     /**
      * Collect base table's partition infos.
-     * @param basePartitionMaps result to collect base table's partition cells for each table
-     * @param allBasePartitionItems result to collect all base table's partition cells(merged)
-     * @return true if success, otherwise false
      */
-    public static boolean syncBaseTablePartitionInfos(MaterializedView mv,
-                                                      Map<Table, Map<String, PListCell>> basePartitionMaps,
-                                                      Map<String, PListCell> allBasePartitionItems) {
+    @Override
+    public Map<Table, Map<String, PCell>> syncBaseTablePartitionInfos() {
+        Map<Table, Map<String, PCell>> refBaseTablePartitionMap = Maps.newHashMap();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
         try {
             for (Map.Entry<Table, List<Column>> e : refBaseTablePartitionColumns.entrySet()) {
                 Table refBaseTable = e.getKey();
                 List<Column> refPartitionColumns = e.getValue();
                 // collect base table's partition cells by aligning with mv's partition column order
-                Map<String, PListCell> basePartitionCells = PartitionUtil.getPartitionList(refBaseTable,
+                Map<String, PCell> basePartitionCells = PartitionUtil.getPartitionCells(refBaseTable,
                         refPartitionColumns);
-                basePartitionMaps.put(refBaseTable, basePartitionCells);
-
-                // merge into a total map to compute the difference
-                basePartitionCells.entrySet()
-                        .stream()
-                        .forEach(x -> allBasePartitionItems.computeIfAbsent(x.getKey(), k -> new PListCell(Lists.newArrayList()))
-                                .addItems(x.getValue().getPartitionItems()));
+                refBaseTablePartitionMap.put(refBaseTable, basePartitionCells);
             }
         } catch (Exception e) {
             LOG.warn("Materialized view compute partition difference with base table failed.",
                     DebugUtil.getStackTrace(e));
-            return false;
+            return null;
         }
-        return true;
+        return refBaseTablePartitionMap;
     }
 
-    public static ListPartitionDiffResult computeListPartitionDiff(MaterializedView mv,
-                                                                   boolean isQueryRewrite) {
+    public static Map<String, PCell> collectBasePartitionCells(Map<Table, Map<String, PCell>> basePartitionMaps) {
+        Map<String, PCell> allBasePartitionItems = Maps.newHashMap();
+        for (Map<String, PCell> e : basePartitionMaps.values()) {
+            // merge into a total map to compute the difference
+            e.entrySet()
+                    .stream()
+                    .forEach(x -> {
+                        PListCell cell = (PListCell) allBasePartitionItems.computeIfAbsent(x.getKey(),
+                                k -> new PListCell(Lists.newArrayList()));
+                        cell.addItems(((PListCell) x.getValue()).getPartitionItems());
+                    });
+        }
+        return allBasePartitionItems;
+    }
+
+    @Override
+    public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude) {
         // table -> map<partition name -> partition cell>
-        Map<Table, Map<String, PListCell>> refBaseTablePartitionMap = Maps.newHashMap();
+        Map<Table, Map<String, PCell>> refBaseTablePartitionMap = syncBaseTablePartitionInfos();
         // merge all base table partition cells
-        Map<String, PListCell> allBasePartitionItems = Maps.newHashMap();
-        if (!syncBaseTablePartitionInfos(mv, refBaseTablePartitionMap, allBasePartitionItems)) {
+        if (refBaseTablePartitionMap == null) {
             logMVPrepare(mv, "Partitioned mv collect base table infos failed");
             return null;
         }
-        return computeListPartitionDiff(mv, refBaseTablePartitionMap, allBasePartitionItems, isQueryRewrite);
+        return computePartitionDiff(null, refBaseTablePartitionMap);
     }
 
-    public static ListPartitionDiffResult computeListPartitionDiff(
-            MaterializedView mv,
-            Map<Table, Map<String, PListCell>> refBaseTablePartitionMap,
-            Map<String, PListCell> allBasePartitionItems,
-            boolean isQueryRewrite) {
+    @Override
+    public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude,
+                                                    Map<Table, Map<String, PCell>> refBaseTablePartitionMap) {
         // generate the reference map between the base table and the mv
         // TODO: prune the partitions based on ttl
-        Map<String, PListCell> mvPartitionNameToListMap = mv.getListPartitionItems();
-        ListPartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(
-                allBasePartitionItems, mvPartitionNameToListMap);
+        Map<String, PCell> mvPartitionNameToListMap = mv.getPartitionCells(Optional.empty());
+
+        Map<String, PCell> allBasePartitionItems = collectBasePartitionCells(refBaseTablePartitionMap);
+        PartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(allBasePartitionItems, mvPartitionNameToListMap);
 
         // collect external partition column mapping
         Map<Table, Map<String, Set<String>>> externalPartitionMaps = Maps.newHashMap();
@@ -241,7 +247,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 return null;
             }
         }
-        return new ListPartitionDiffResult(mvPartitionNameToListMap, refBaseTablePartitionMap, diff, externalPartitionMaps);
+        return new PartitionDiffResult(externalPartitionMaps, refBaseTablePartitionMap, mvPartitionNameToListMap, diff);
     }
 
     /**
@@ -250,13 +256,14 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @param mvPartitionMap mv partition name to its list partition cell
      * @return base table -> <partition name, mv partition names> mapping
      */
-    public static Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, Map<String, PListCell>> basePartitionMaps,
-                                                                          Map<String, PListCell> mvPartitionMap) {
+    @Override
+    public Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, Map<String, PCell>> basePartitionMaps,
+                                                                   Map<String, PCell> mvPartitionMap) {
         Map<PListAtom, Set<PListCellPlus>> mvAtoms = toAtoms(mvPartitionMap);
         Map<Table, Map<String, Set<String>>> result = Maps.newHashMap();
-        for (Map.Entry<Table, Map<String, PListCell>> entry : basePartitionMaps.entrySet()) {
+        for (Map.Entry<Table, Map<String, PCell>> entry : basePartitionMaps.entrySet()) {
             Table baseTable = entry.getKey();
-            Map<String, PListCell> baseTablePartitionMap = entry.getValue();
+            Map<String, PCell> baseTablePartitionMap = entry.getValue();
             Map<String, Set<String>> baseTableRefMap = generateBaseRefMapImpl(mvAtoms, baseTablePartitionMap);
             result.put(baseTable, baseTableRefMap);
         }
@@ -269,14 +276,15 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @param basePartitionMaps src partition list map of the base table
      * @return mv partition name -> <base table, base partition names> mapping
      */
-    public static  Map<String, Map<Table, Set<String>>> generateMvRefMap(Map<String, PListCell> mvPartitionMap,
-                                                                         Map<Table, Map<String, PListCell>> basePartitionMaps) {
+    @Override
+    public Map<String, Map<Table, Set<String>>> generateMvRefMap(Map<String, PCell> mvPartitionMap,
+                                                                 Map<Table, Map<String, PCell>> basePartitionMaps) {
         Map<String, Map<Table, Set<String>>> result = Maps.newHashMap();
         // for each partition of base, find the corresponding partition of mv
         Map<PListAtom, Set<PListCellPlus>> mvAtoms = toAtoms(mvPartitionMap);
-        for (Map.Entry<Table, Map<String, PListCell>> entry : basePartitionMaps.entrySet()) {
+        for (Map.Entry<Table, Map<String, PCell>> entry : basePartitionMaps.entrySet()) {
             Table baseTable = entry.getKey();
-            Map<String, PListCell> basePartitionMap = entry.getValue();
+            Map<String, PCell> basePartitionMap = entry.getValue();
             Map<PListAtom, Set<PListCellPlus>> baseAtoms = toAtoms(basePartitionMap);
             for (Map.Entry<PListAtom, Set<PListCellPlus>> e : baseAtoms.entrySet()) {
                 PListAtom singleton = e.getKey();

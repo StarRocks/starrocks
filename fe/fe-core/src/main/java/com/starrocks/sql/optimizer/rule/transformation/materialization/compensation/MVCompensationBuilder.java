@@ -445,7 +445,7 @@ public class MVCompensationBuilder {
             return null;
         }
 
-        Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getNameToPartKeys();
+        Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getPartitonToCells();
         List<PartitionKey> partitionKeys = Lists.newArrayList();
         try {
             for (String partitionName : refTablePartitionNamesToRefresh) {
