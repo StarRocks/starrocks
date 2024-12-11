@@ -230,7 +230,9 @@ public class MockedFrontend {
 
             try {
                 // init config
-                new Config().init(frontend.getRunningDir() + "/conf/fe.conf");
+                Config config = new Config();
+                config.init(frontend.getRunningDir() + "/conf/fe.conf");
+                config.initMutable(frontend.getRunningDir() + "/conf/fe_mutable.conf");
 
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
