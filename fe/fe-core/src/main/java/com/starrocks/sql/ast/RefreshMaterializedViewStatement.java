@@ -30,6 +30,7 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
     private EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc;
     private final boolean forceRefresh;
     private final boolean isSync;
+    private final Integer priority;
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -38,12 +39,13 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
 
     public RefreshMaterializedViewStatement(TableName mvName,
                                             EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
-                                            boolean forceRefresh, boolean isSync, NodePosition pos) {
+                                            boolean forceRefresh, boolean isSync, Integer priority, NodePosition pos) {
         super(pos);
         this.mvName = mvName;
         this.partitionDesc = partitionDesc;
         this.forceRefresh = forceRefresh;
         this.isSync = isSync;
+        this.priority = priority;
     }
 
     public TableName getMvName() {
@@ -79,5 +81,9 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
 
     public boolean isSync() {
         return isSync;
+    }
+
+    public Integer getPriority() {
+        return priority;
     }
 }
