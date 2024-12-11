@@ -38,7 +38,7 @@ set scan_olap_partition_num_limit=3;
 -- !result
 select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';
 -- result:
-E: (1064, 'Exceeded the limit of 3 max scan olap partitions. Please adjust query or change limit by set session variable scan_olap_partition_num_limit.')
+E: (1064, 'Exceeded the limit of number of olap table partitions to be scanned. Number of partitions allowed: 3, number of partitions to be scanned: 5. Please adjust the SQL or change the limit by set variable scan_olap_partition_num_limit.')
 -- !result
 set scan_olap_partition_num_limit=0;
 -- result:
