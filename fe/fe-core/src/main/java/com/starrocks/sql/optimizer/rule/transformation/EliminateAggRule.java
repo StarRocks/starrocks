@@ -80,6 +80,10 @@ public class EliminateAggRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnableEliminateAgg()) {
+            return false;
+        }
+
         LogicalAggregationOperator aggOp = input.getOp().cast();
         List<ColumnRefOperator> groupKeys = aggOp.getGroupingKeys();
 
