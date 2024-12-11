@@ -139,6 +139,7 @@ public class InsertLoadJob extends LoadJob {
             this.coordinator = null;
         } finally {
             writeUnlock();
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(this.id);
         }
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
