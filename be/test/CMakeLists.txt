@@ -24,6 +24,7 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
+        ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
@@ -410,6 +411,7 @@ set(EXEC_FILES
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/await_test.cpp
+        ./util/base85_test.cpp
         ./util/bitmap_test.cpp
         ./util/bit_mask_test.cpp
         ./util/bit_stream_utils_test.cpp

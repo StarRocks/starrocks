@@ -178,6 +178,8 @@ struct HdfsScannerParams {
     std::string path;
     // The file size. -1 means unknown.
     int64_t file_size = -1;
+    // the table location
+    std::string table_location;
 
     const TupleDescriptor* tuple_desc = nullptr;
 
@@ -212,6 +214,8 @@ struct HdfsScannerParams {
     HdfsScanProfile* profile = nullptr;
 
     std::vector<const TIcebergDeleteFile*> deletes;
+
+    std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor = nullptr;
 
     const TIcebergSchema* iceberg_schema = nullptr;
 
