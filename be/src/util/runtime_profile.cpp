@@ -971,11 +971,11 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                 if (!counter->skip_min_max()) {
                     if (counter->_min_value.has_value()) {
                         already_merged = true;
-                        min_value = counter->_min_value.value();
+                        min_value = std::min(counter->_min_value.value(), min_value);
                     }
                     if (counter->_max_value.has_value()) {
                         already_merged = true;
-                        max_value = counter->_max_value.value();
+                        max_value = std::max(counter->_max_value.value(), max_value);
                     }
                 }
 
@@ -1007,10 +1007,10 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
 
                 if (!merged_counter->skip_min_max()) {
                     if (min_value != std::numeric_limits<int64_t>::max()) {
-                        merged_counter->_max_value.emplace(max_value);
+                        merged_counter->_min_value.emplace(min_value);
                     }
                     if (max_value != std::numeric_limits<int64_t>::min()) {
-                        merged_counter->_min_value.emplace(min_value);
+                        merged_counter->_max_value.emplace(max_value);
                     }
                 }
             }
