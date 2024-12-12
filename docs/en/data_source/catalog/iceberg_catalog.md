@@ -283,7 +283,7 @@ Description: The credential to exchange for a token in the OAuth2 client credent
 
 Required: No
 
-Description: Scope to be used when communicating with the REST Catalog. Applicable only when using `credential`.
+Description: Scope to be used when communicating with the REST Catalog. Applicable only when `credential` is used.
 
 ###### iceberg.catalog.oauth2.server-uri
 
