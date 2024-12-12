@@ -493,7 +493,7 @@ public class PartitionPruneRuleTest {
                 int count = stmt.getResultSet().getInt(1);
                 Assert.assertEquals(count, 5);
             }
-            //check set value 3
+            //check set value 3 
             stmt.execute("set scan_olap_partition_num_limit=3;");
             try {
                 stmt.execute("select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';");
