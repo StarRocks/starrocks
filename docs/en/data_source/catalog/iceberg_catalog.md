@@ -327,7 +327,7 @@ PROPERTIES (
     "iceberg.catalog.type"  =  "rest",   
     "iceberg.catalog.warehouse" = "starrocks_catalog",
     "iceberg.catalog.security" = "oauth2",
-    "iceberg.catalog.oauth2.credential" = "f7357cfbe9583aa1:7b90fc77e4fbe288a5c41eaa05da3a3b",
+    "iceberg.catalog.oauth2.credential" = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL'
  );
 
