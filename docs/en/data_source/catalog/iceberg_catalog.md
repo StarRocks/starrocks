@@ -235,20 +235,21 @@ Description: The secret key of your AWS IAM user. If you use the IAM user-based 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 </TabItem>
-<TabItem value="TABULAR" label="Tabular">
+<TabItem value="REST" label="REST">
 
-##### Tabular
+##### REST
 
-If you use Tabular as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
+If you use REST as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
 
 ```SQL
 "iceberg.catalog.type" = "rest",
 "iceberg.catalog.uri" = "<rest_server_api_endpoint>",
-"iceberg.catalog.credential" = "<credential>",
+"iceberg.catalog.security" = "oauth2",
+"iceberg.catalog.oauth2.credential" = "<credential>",
 "iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
 ```
 
-`MetastoreParams` for Tabular:
+`MetastoreParams` for REST catalog:
 
 ###### iceberg.catalog.type
 
@@ -258,17 +259,50 @@ Description: The type of metastore that you use for your Iceberg cluster. Set th
 ###### iceberg.catalog.uri
 
 Required: Yes
-Description: The URI of the Tabular service endpoint. Example: `https://api.tabular.io/ws`.      
+Description: The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`. 
 
-###### iceberg.catalog.credential
+###### iceberg.catalog.security
 
-Required: Yes
-Description: The authentication information of the Tabular service.
+Required: No
+
+Description: The type of authorization protocol to use. Default: `NONE`. Valid value: `OAUTH2`, which requires either a `token` or `credential`.
+
+###### iceberg.catalog.oauth2.token
+
+Required: No
+
+Description: The bearer token used for interactions with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
+
+###### iceberg.catalog.oauth2.credential
+
+Required: No
+
+Description: The credential to exchange for a token in the OAuth2 client credentials flow with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
+
+###### iceberg.catalog.oauth2.scope
+
+Required: No
+
+Description: Scope to be used when communicating with the REST Catalog. Applicable only when `credential` is used.
+
+###### iceberg.catalog.oauth2.server-uri
+
+Required: No
+
+Description: The endpoint to retrieve access token from OAuth2 Server.
+
+###### iceberg.catalog.vended-credentials-enabled
+
+Required: No
+
+Description: Whether to support querying objects under nested namespace. Default: `true`.
 
 ###### iceberg.catalog.warehouse
 
 Required: No
 Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.
+
+
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
 
@@ -283,6 +317,34 @@ PROPERTIES
     "iceberg.catalog.warehouse" = "sandbox"
 );
 ```
+The following example creates an Iceberg catalog named `smith_polaris` that uses Polaris as metastore:
+
+```sql
+CREATE EXTERNAL CATALOG smith_polaris 
+PROPERTIES (   
+    "iceberg.catalog.uri"  = "http://xxx.xx.xx.xxx:8181/api/catalog", 
+    "type"  =  "iceberg",   
+    "iceberg.catalog.type"  =  "rest",   
+    "iceberg.catalog.warehouse" = "starrocks_catalog",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.credential" = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL'
+ );
+
+# `ns1.ns2.tpch_namespace` is a nested namespace
+create table smith_polaris.`ns1.ns2.tpch_namespace`.tbl (c1 string);
+
+mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
++------+
+| c1   |
++------+
+| 1    |
+| 2    |
+| 3    |
++------+
+3 rows in set (0.34 sec)
+```
+
 </TabItem>
 
 </Tabs>
