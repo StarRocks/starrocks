@@ -277,7 +277,7 @@ Description: The bearer token used for interactions with the server. A `token` o
 
 Required: No
 
-Description: The credential to exchange for a token in the OAuth2 client credentials flow with the server. A `token` or `credential` is required for `OAUTH2` security. Example: `AbCdEf123456`.
+Description: The credential to exchange for a token in the OAuth2 client credentials flow with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
 
 ###### iceberg.catalog.oauth2.scope
 
