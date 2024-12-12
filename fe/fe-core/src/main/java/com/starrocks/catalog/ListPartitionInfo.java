@@ -213,6 +213,18 @@ public class ListPartitionInfo extends PartitionInfo {
         return idToValues;
     }
 
+    public boolean isSingleValuePartition(long id) {
+        List<String> values = getIdToValues().get(id);
+        if (values != null && values.size() == 1) {
+            return true;
+        }
+        List<List<String>> multiValues = getIdToMultiValues().get(id);
+        if (multiValues != null && multiValues.size() == 1) {
+            return true;
+        }
+        return false;
+    }
+
     /**
      * serialize data to log
      *
