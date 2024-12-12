@@ -271,7 +271,7 @@ Description: The type of authorization protocol to use. Default: `NONE`. Valid v
 
 Required: No
 
-Description: The bearer token used for interactions with the server. A `token` or `credential` is required for `OAUTH2` security. Example: `AbCdEf123456`.
+Description: The bearer token used for interactions with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
 
 ###### iceberg.catalog.oauth2.credential
 
