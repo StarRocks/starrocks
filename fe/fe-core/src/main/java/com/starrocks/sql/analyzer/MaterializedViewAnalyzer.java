@@ -316,7 +316,8 @@ public class MaterializedViewAnalyzer {
             }
             Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getTableName().getDb());
             if (db == null) {
-                String errMsg = String.format("Can not find database:%s in default_catalog", statement.getTableName().getDb());
+                String catalog = statement.getTableName().getCatalog();
+                String errMsg = String.format("Can not find database:%s in %s", statement.getTableName().getDb(), catalog);
                 throw new SemanticException(errMsg, statement.getTableName().getPos());
             }
             Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
