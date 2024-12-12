@@ -84,7 +84,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             new TableKeeper(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME, LOADS_HISTORY_TABLE_CREATE,
                     () -> Math.max(1, Config.loads_history_retained_days));
 
-    private long syncedLoadFinishTIme = -1L;
+    private long syncedLoadFinishTime = -1L;
 
     public static TableKeeper createKeeper() {
         return KEEPER;
@@ -119,9 +119,11 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             }
 
             long latestFinishTime = GlobalStateMgr.getCurrentState().getLoadMgr().getLatestFinishTime();
-            if (syncedLoadFinishTIme < latestFinishTime) {
+            if (syncedLoadFinishTime < latestFinishTime) {
                 syncData();
-                syncedLoadFinishTIme = latestFinishTime;
+                // refer to SQL:LOADS_HISTORY_SYNC. Only sync loads that completed more than 1 minute ago
+                long oneMinAgo = System.currentTimeMillis() - 60000;
+                syncedLoadFinishTime = Math.min(latestFinishTime, oneMinAgo);
             }
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of LoadJobScheduler with error message {}", e.getMessage(), e);
