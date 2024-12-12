@@ -1158,4 +1158,5 @@ const UnarrivedRuntimeFilterList& ScanConjunctsManager::unarrived_runtime_filter
     return _root_builder.unarrived_runtime_filters();
 }
 
+template class ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND>;
 } // namespace starrocks
