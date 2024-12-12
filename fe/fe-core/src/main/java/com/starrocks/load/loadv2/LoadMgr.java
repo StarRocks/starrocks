@@ -587,9 +587,7 @@ public class LoadMgr implements MemoryTrackable {
                     continue;
                 }
                 if (loadJob.isFinal()) {
-                    if (loadJob.getFinishTimestamp() > latestFinishTime) {
-                        latestFinishTime = loadJob.getFinishTimestamp();
-                    }
+                    latestFinishTime = Math.max(latestFinishTime, loadJob.getFinishTimestamp());
                 }
             }
         } finally {

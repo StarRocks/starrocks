@@ -121,13 +121,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
                 return;
             }
 
-            Pair<Long, Long> dbTableId = getTargetDbTableId();
-            if (dbTableId == null) {
-                LOG.warn("failed to get db: {}, table: {}", LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME);
-                return;
-            }
-            long latestFinishTime = GlobalStateMgr.getCurrentState().getLoadMgr()
-                    .getLatestFinishTimeExcludeTable(dbTableId.first, dbTableId.second);
+            long latestFinishTime = getLatestFinishTime();
             if (syncedLoadFinishTime < latestFinishTime) {
                 syncData();
                 // refer to SQL:LOADS_HISTORY_SYNC. Only sync loads that completed more than 1 minute ago
@@ -161,5 +155,16 @@ public class LoadsHistorySyncer extends FrontendDaemon {
         }
 
         return Pair.create(database.getId(), table.getId());
+    }
+
+    private long getLatestFinishTime() {
+        Pair<Long, Long> dbTableId = getTargetDbTableId();
+        if (dbTableId == null) {
+            LOG.warn("failed to get db: {}, table: {}", LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME);
+            return -1L;
+        }
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        return Math.max(state.getLoadMgr().getLatestFinishTimeExcludeTable(dbTableId.first, dbTableId.second),
+                state.getStreamLoadMgr().getLatestFinishTime());
     }
 }
