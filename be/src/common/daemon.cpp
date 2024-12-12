@@ -216,20 +216,25 @@ void jemalloc_tracker_daemon(void* arg_this) {
         JemallocStats stats;
         retrieve_jemalloc_stats(&stats);
 
-        // metadata
+        // Jemalloc metadata
         if (GlobalEnv::GetInstance()->jemalloc_metadata_traker() && stats.metadata > 0) {
             auto tracker = GlobalEnv::GetInstance()->jemalloc_metadata_traker();
             int64_t delta = stats.metadata - tracker->consumption();
             tracker->consume(delta);
         }
 
-        // fragmentation
+        // Fragmentation and dirty memory:
+        // Jemalloc retains some dirty memory and gradually returns it to the OS, which cannot be reused by the application.
+        // Failing to account for this memory in the MemoryTracker may lead to memory allocation failures or even process
+        // termination by the OS; however, retaining excessive memory in the tracker is also wasteful.
+        // To address this, we employ a smoothing formula to track fragmentation and dirty memory, which also mitigates
+        // the impact of sudden memory releases, such as those occurring when a large query is executed:
+        // S_t = \exp\left(\alpha \cdot \log(1 + x_t) + (1 - \alpha) \cdot \log(1 + S_{t-1})\right) - 1
         if (GlobalEnv::GetInstance()->jemalloc_fragmentation_traker()) {
             if (stats.resident > 0 && stats.allocated > 0 && stats.metadata > 0) {
                 double fragmentation = stats.resident - stats.allocated - stats.metadata;
                 if (fragmentation < 0) fragmentation = 0;
 
-                // S_t = \exp\left(\alpha \cdot \log(1 + x_t) + (1 - \alpha) \cdot \log(1 + S_{t-1})\right) - 1
                 // log transformation
                 double alpha = std::clamp(config::jemalloc_fragmentation_ratio, 0.1, 0.9);
                 fragmentation = std::log1p(fragmentation);
