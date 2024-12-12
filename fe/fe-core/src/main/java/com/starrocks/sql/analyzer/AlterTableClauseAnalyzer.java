@@ -1103,7 +1103,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 upgradeDeprecatedSingleItemListPartitionDesc(olapTable, partitionDescList, clause, partitionInfo);
                 analyzeAddPartition(olapTable, partitionDescList, clause, partitionInfo);
             } catch (DdlException | AnalysisException | NotImplementedException e) {
-                throw new SemanticException(e.getMessage());
+                throw new SemanticException(e.getMessage(), e);
             }
         }
 

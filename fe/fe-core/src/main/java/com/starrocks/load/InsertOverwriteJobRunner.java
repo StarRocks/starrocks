@@ -176,6 +176,7 @@ public class InsertOverwriteJobRunner {
         LOG.info("replay state change:{}", info);
         // If the final status is failure, then GC must be done
         if (info.getToState() == OVERWRITE_FAILED) {
+            job.setTmpPartitionIds(info.getTmpPartitionIds());
             job.setJobState(OVERWRITE_FAILED);
             LOG.info("replay insert overwrite job:{} to FAILED", job.getJobId());
             gc(true);
@@ -193,6 +194,7 @@ public class InsertOverwriteJobRunner {
                 job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
                 break;
             case OVERWRITE_SUCCESS:
+                job.setTmpPartitionIds(info.getTmpPartitionIds());
                 job.setJobState(InsertOverwriteJobState.OVERWRITE_SUCCESS);
                 doCommit(true);
                 LOG.info("replay insert overwrite job:{} to SUCCESS", job.getJobId());
@@ -429,12 +431,18 @@ public class InsertOverwriteJobRunner {
             }
             // if dynamic overwrite, drop all runtime created partitions
             if (job.isDynamicOverwrite()) {
-                TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .getTransactionState(dbId, insertStmt.getTxnId());
-                if (txnState == null) {
-                    throw new DmlException("transaction state is null for dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                List<String> tmpPartitionNames = Lists.newArrayList();
+                if (!isReplay) {
+                    TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                            .getTransactionState(dbId, insertStmt.getTxnId());
+                    if (txnState == null) {
+                        throw new DmlException("transaction state is null for dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                    }
+                    tmpPartitionNames = txnState.getCreatedPartitionNames();
+                    job.setTmpPartitionIds(tmpPartitionNames.stream()
+                            .map(name -> targetTable.getPartition(name, true).getId())
+                            .collect(Collectors.toList()));
                 }
-                List<String> tmpPartitionNames = txnState.getCreatedPartitionNames();
                 for (String partitionName : tmpPartitionNames) {
                     Partition partition = targetTable.getPartition(partitionName, true);
                     if (partition != null) {
@@ -442,6 +450,7 @@ public class InsertOverwriteJobRunner {
                             sourceTablets.addAll(index.getTablets());
                         }
                         targetTable.dropTempPartition(partitionName, true);
+                        LOG.info("drop temp partition {} from dynamic overwrite job {}", partitionName, job.getJobId());
                     }
                 }
             }
@@ -508,15 +517,23 @@ public class InsertOverwriteJobRunner {
                     .sum();
             stats.setSourceRows(sumSourceRows);
 
+            LOG.info("overwrite job {} replace source partitions:{} to tmp partitions:{}", job.getJobId(),
+                    sourcePartitionNames, tmpPartitionNames);
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                 if (job.isDynamicOverwrite()) {
-                    TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                            .getTransactionState(dbId, insertStmt.getTxnId());
-                    if (txnState == null) {
-                        throw new DmlException("transaction state is null for dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                    if (!isReplay) {
+                        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                                .getTransactionState(dbId, insertStmt.getTxnId());
+                        if (txnState == null) {
+                            throw new DmlException("transaction state is null dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                        }
+                        tmpPartitionNames = txnState.getCreatedPartitionNames();
+                        job.setTmpPartitionIds(tmpPartitionNames.stream()
+                                .map(name -> targetTable.getPartition(name, true).getId())
+                                .collect(Collectors.toList()));
                     }
-                    tmpPartitionNames = txnState.getCreatedPartitionNames();
+                    LOG.info("dynamic overwrite job {} replace tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
                     targetTable.replaceMatchPartitions(tmpPartitionNames);
                 } else {
                     targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
