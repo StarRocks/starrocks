@@ -47,7 +47,6 @@ struct DriverExecutorMetrics {
     void register_all_metrics(MetricRegistry* registry);
 };
 
-// scan
 struct PipelineExecutorMetrics {
 public:
     PollerMetrics poller_metrics;

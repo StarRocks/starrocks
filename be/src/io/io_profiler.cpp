@@ -206,9 +206,9 @@ void IOProfiler::_add_tls_read(int64_t bytes, int64_t latency_ns) {
     tls_io_stat.read_ops += 1;
     tls_io_stat.read_bytes += bytes;
     tls_io_stat.read_time_ns += latency_ns;
-    // update metrics
     auto* metrics = StarRocksMetrics::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
     if (UNLIKELY(metrics == nullptr)) {
+        // some r/w operations may be performed before metrics are initialized, in which case updating metrics is ignored.
         return;
     }
     metrics->read_ops.increment(1);

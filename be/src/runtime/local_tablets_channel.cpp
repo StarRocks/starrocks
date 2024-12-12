@@ -50,7 +50,6 @@
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -229,7 +228,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
     }
 
-    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage(): 0;
+    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
 
     auto res = _create_write_context(chunk, request, response);
     if (!res.ok()) {

@@ -22,7 +22,8 @@
 namespace starrocks {
 
 void TableMetrics::install(MetricRegistry* registry, const std::string& table_id) {
-#define REGISTER_TABLE_METRIC(name) registry->register_metric("table_"#name, MetricLabels().add("table_id", table_id), &name)
+#define REGISTER_TABLE_METRIC(name) \
+    registry->register_metric("table_" #name, MetricLabels().add("table_id", table_id), &name)
 
     REGISTER_TABLE_METRIC(scan_read_bytes);
     REGISTER_TABLE_METRIC(scan_read_rows);

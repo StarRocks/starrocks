@@ -163,7 +163,6 @@ void GlobalDriverExecutor::_worker_thread() {
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
             int64_t end_time = driver->get_active_time();
-            // _driver_execution_ns += end_time - start_time;
             _metrics->driver_execution_time.increment(end_time - start_time);
             _metrics->exec_running_tasks.increment(-1);
             _metrics->exec_finished_tasks.increment(1);
