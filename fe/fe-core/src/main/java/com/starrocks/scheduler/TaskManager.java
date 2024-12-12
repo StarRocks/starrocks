@@ -640,7 +640,7 @@ public class TaskManager implements MemoryTrackable {
                         && (CollectionUtils.isEmpty(taskNames) || taskNames.contains(task.getTaskName()));
         Consumer<TaskRunStatus> addResult = task -> {
             // Keep only the first one of duplicated task runs
-            if (isSameTaskRunJob(task, mvNameRunStatusMap)) {
+            if (!isSameTaskRunJob(task, mvNameRunStatusMap)) {
                 mvNameRunStatusMap.computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList()).add(task);
             }
         };
@@ -672,14 +672,14 @@ public class TaskManager implements MemoryTrackable {
         // 1. if task status has already existed, existed task run status's job id is not null, find the same job id.
         // 2. otherwise, add it to the result.
         if (!mvNameRunStatusMap.containsKey(taskRunStatus.getTaskName())) {
-            return true;
+            return false;
         }
         List<TaskRunStatus> existedTaskRuns = mvNameRunStatusMap.get(taskRunStatus.getTaskName());
         if (existedTaskRuns == null || existedTaskRuns.isEmpty()) {
-            return true;
+            return false;
         }
         if (!Config.enable_show_materialized_views_include_all_task_runs) {
-            return false;
+            return true;
         }
         String jobId = taskRunStatus.getStartTaskRunId();
         return !Strings.isNullOrEmpty(jobId) && jobId.equals(existedTaskRuns.get(0).getStartTaskRunId());
