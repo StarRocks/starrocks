@@ -99,7 +99,7 @@ public class OptOlapPartitionPruner {
 
         try {
             checkScanPartitionLimit(selectedPartitionIds.size());
-        } catch (AnalysisException e) {
+        } catch (StarRocksPlannerException e) {
             LOG.warn("{} queryId: {}", e.getMessage(), DebugUtil.printId(ConnectContext.get().getQueryId()));
             throw new StarRocksPlannerException(e.getMessage(), ErrorType.USER_ERROR);
         }
@@ -141,7 +141,7 @@ public class OptOlapPartitionPruner {
 
         try {
             checkScanPartitionLimit(ansPartitionIds.size());
-        } catch (AnalysisException e) {
+        } catch (StarRocksPlannerException e) {
             LOG.warn("{} queryId: {}", e.getMessage(), DebugUtil.printId(ConnectContext.get().getQueryId()));
             throw new StarRocksPlannerException(e.getMessage(), ErrorType.USER_ERROR);
         }
@@ -156,7 +156,7 @@ public class OptOlapPartitionPruner {
         return builder.build();
     }
 
-    private static void checkScanPartitionLimit(int selectedPartitionNum) throws AnalysisException {
+    private static void checkScanPartitionLimit(int selectedPartitionNum) throws StarRocksPlannerException {
         int scanOlapPartitionNumLimit = 0;
         try {
             scanOlapPartitionNumLimit = ConnectContext.get().getSessionVariable().getScanOlapPartitionNumLimit();
@@ -168,7 +168,7 @@ public class OptOlapPartitionPruner {
                          "Number of partitions allowed: " + scanOlapPartitionNumLimit +
                          ", number of partitions to be scanned: " + selectedPartitionNum +
                          ". Please adjust the SQL or change the limit by set variable scan_olap_partition_num_limit.";
-            throw new AnalysisException(msg);
+            throw new StarRocksPlannerException(msg, ErrorType.USER_ERROR);
         }
     }
 
