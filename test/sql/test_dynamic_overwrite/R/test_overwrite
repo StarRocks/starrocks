@@ -14,6 +14,8 @@ dynamic_overwrite	true
 
 
 
+
+
 -- name: test_dynamic_overwrite
 create table t(k int, v int) partition by (k);
 -- result:
@@ -49,6 +51,8 @@ select * from t;
 2	2
 3	2
 -- !result
+
+
 
 
 
@@ -122,4 +126,43 @@ insert overwrite t1 values(0);
 select * from t1;
 -- result:
 0
+-- !result
+
+-- name: test_overwrite_range_table
+create table fv(k datetime, v int) partition by date_trunc('day', k);
+-- result:
+-- !result
+set dynamic_overwrite=false;
+-- result:
+-- !result
+insert overwrite fv values('2020-01-01', 4),('2020-01-02', 2);
+-- result:
+-- !result
+select * from fv;
+-- result:
+2020-01-02 00:00:00	2
+2020-01-01 00:00:00	4
+-- !result
+insert overwrite fv values('2020-01-03', 4),('2020-01-02', 2);
+-- result:
+-- !result
+select * from fv;
+-- result:
+2020-01-02 00:00:00	2
+2020-01-03 00:00:00	4
+-- !result
+set dynamic_overwrite=true;
+-- result:
+-- !result
+insert overwrite fv values('2020-01-04', 3),('2020-01-02', 3);
+-- result:
+-- !result
+select * from fv;
+-- result:
+2020-01-03 00:00:00	4
+2020-01-04 00:00:00	3
+2020-01-02 00:00:00	3
+-- !result
+set dynamic_overwrite=false;
+-- result:
 -- !result
