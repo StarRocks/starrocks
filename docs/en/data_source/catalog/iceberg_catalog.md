@@ -322,7 +322,7 @@ The following example creates an Iceberg catalog named `smith_polaris` that uses
 ```sql
 CREATE EXTERNAL CATALOG smith_polaris 
 PROPERTIES (   
-    "iceberg.catalog.uri"  = "http://localhost:8181/api/catalog",   
+    "iceberg.catalog.uri"  = "http://xxx.xx.xx.xxx:8181/api/catalog", 
     "type"  =  "iceberg",   
     "iceberg.catalog.type"  =  "rest",   
     "iceberg.catalog.warehouse" = "starrocks_catalog",
