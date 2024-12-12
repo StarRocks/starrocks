@@ -211,6 +211,7 @@ static void retrieve_jemalloc_stats(JemallocStats* stats) {
 // Tracker the memory usage of jemalloc
 void jemalloc_tracker_daemon(void* arg_this) {
     auto* daemon = static_cast<Daemon*>(arg_this);
+    double smoothed_fragmentation = 0;
     while (!daemon->stopped()) {
         JemallocStats stats;
         retrieve_jemalloc_stats(&stats);
@@ -225,14 +226,18 @@ void jemalloc_tracker_daemon(void* arg_this) {
         // fragmentation
         if (GlobalEnv::GetInstance()->jemalloc_fragmentation_traker()) {
             if (stats.resident > 0 && stats.allocated > 0 && stats.metadata > 0) {
-                int64_t fragmentation = stats.resident - stats.allocated - stats.metadata;
-                fragmentation *= config::jemalloc_fragmentation_ratio;
+                double fragmentation = stats.resident - stats.allocated - stats.metadata;
+                if (fragmentation < 0) fragmentation = 0;
 
-                // In case that released a lot of memory but not get purged, we would not consider it as fragmentation
-                bool released_a_lot = stats.allocated < (stats.resident * 0.5);
-                if (released_a_lot) {
-                    fragmentation = 0;
-                }
+                // S_t = \exp\left(\alpha \cdot \log(1 + x_t) + (1 - \alpha) \cdot \log(1 + S_{t-1})\right) - 1
+                // log transformation
+                double alpha = std::clamp(config::jemalloc_fragmentation_ratio, 0.1, 0.9);
+                fragmentation = std::log1p(fragmentation);
+                // smoothing
+                fragmentation = alpha * fragmentation + smoothed_fragmentation * (1 - alpha);
+                // restore the log value
+                smoothed_fragmentation = fragmentation;
+                fragmentation = std::expm1(fragmentation);
 
                 if (fragmentation >= 0) {
                     auto tracker = GlobalEnv::GetInstance()->jemalloc_fragmentation_traker();
