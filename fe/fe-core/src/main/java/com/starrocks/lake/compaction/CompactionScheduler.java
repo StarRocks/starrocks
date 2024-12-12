@@ -102,7 +102,7 @@ public class CompactionScheduler extends Daemon {
 
     @Override
     protected void runOneCycle() {
-        cleanPartition();
+        cleanPhysicalPartition();
 
         // Schedule compaction tasks only when this is a leader FE and all edit logs have finished replay.
         // In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
@@ -244,12 +244,12 @@ public class CompactionScheduler extends Daemon {
         return aliveComputeNodes.size() * 16;
     }
 
-    private void cleanPartition() {
+    private void cleanPhysicalPartition() {
         long now = System.currentTimeMillis();
         if (now - lastPartitionCleanTime >= PARTITION_CLEAN_INTERVAL_SECOND * 1000L) {
             compactionManager.getAllPartitions()
                     .stream()
-                    .filter(p -> !MetaUtils.isPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
+                    .filter(p -> !MetaUtils.isPhysicalPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
                     .filter(p -> !runningCompactions.containsKey(p)) // Ignore those partitions in runningCompactions
                     .forEach(compactionManager::removePartition);
             lastPartitionCleanTime = now;

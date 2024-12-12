@@ -203,7 +203,7 @@ public class CompactionMgr implements MemoryTrackable {
         // remove partition for every case, so remove non-existed partitions only when writing image
         getAllPartitions()
                 .stream()
-                .filter(p -> !MetaUtils.isPartitionExist(
+                .filter(p -> !MetaUtils.isPhysicalPartitionExist(
                         GlobalStateMgr.getCurrentState(), p.getDbId(), p.getTableId(), p.getPartitionId()))
                 .forEach(this::removePartition);
 
