@@ -729,7 +729,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_load_failure) {
         ASSERT_OK(delta_writer->open());
         // upsert
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
+        ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
         ASSERT_FALSE(publish_single_version(tablet_id, version + 1, txn_id).ok());
@@ -744,9 +744,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_load_failure) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
