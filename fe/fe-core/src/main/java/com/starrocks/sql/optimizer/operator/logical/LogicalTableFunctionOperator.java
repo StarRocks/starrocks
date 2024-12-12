@@ -112,6 +112,17 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        return inputs.get(0).getDomainProperty();
+    }
+
+    @Override
+>>>>>>> c51814df7b ([Enhancement] reuse column stats on TableFunctionNode (#53812))
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalTableFunction(this, context);
     }
