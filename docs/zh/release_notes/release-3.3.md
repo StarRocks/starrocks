@@ -14,6 +14,9 @@ displayed_sidebar: docs
 
 发布日期：2024 年 11 月 29 日
 
+### 新增功能
+- 物化视图新增 `excluded_refresh_tables` 参数，物化视图刷新的时候不会触发数据同步的基表。[#50926](https://github.com/StarRocks/starrocks/pull/50926)
+
 ### 功能优化
 
 - 将 `unnest(bitmap_to_array)` 改写为 `unnest_bitmap` 以提升效率。[#52870](https://github.com/StarRocks/starrocks/pull/52870)
