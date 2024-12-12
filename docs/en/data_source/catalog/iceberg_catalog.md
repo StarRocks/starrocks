@@ -265,7 +265,7 @@ Description: The URI of the REST service endpoint. Example: `https://api.tabular
 
 Required: No
 
-Description: The type of security to use (default: `NONE`). `OAUTH2` requires either a `token` or `credential`. Example: `OAUTH2`.
+Description: The type of authorization protocol to use. Default: `NONE`. Valid value: `OAUTH2`, which requires either a `token` or `credential`.
 
 ###### iceberg.catalog.oauth2.token
 
