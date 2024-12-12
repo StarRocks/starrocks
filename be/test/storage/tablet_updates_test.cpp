@@ -3608,9 +3608,27 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
 
     // 14. get del_vec failed
     test_fail_point("tablet_apply_get_del_vec_failed", 15, N / 2);
-}
 
-TEST_F(TabletUpdatesTest, test_column_mode_partial_update_apply_retry) {}
+    // 15. delvec inconsistent
+    {
+        // Enable fail point
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablet_delvec_inconsistent");
+        fp->setMode(trigger_mode);
+
+        // Create and commit rowset
+        auto rs = create_rowset(_tablet, keys, &deletes);
+        ASSERT_TRUE(_tablet->rowset_commit(16, rs).ok());
+        ASSERT_EQ(16, _tablet->updates()->max_version());
+
+        // Wait for a short duration and check error state
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(_tablet->updates()->is_error());
+
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+    }
+}
 
 TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     config::retry_apply_interval_second = 1;

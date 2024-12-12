@@ -930,6 +930,7 @@ DEFINE_FAIL_POINT(tablet_apply_cache_del_vec_failed);
 DEFINE_FAIL_POINT(tablet_apply_tablet_drop);
 DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
+DEFINE_FAIL_POINT(tablet_delvec_inconsistent);
 
 void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
@@ -1615,13 +1616,21 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             size_t cur_old = old_del_vec->cardinality();
             size_t cur_add = new_delete.second.size();
             size_t cur_new = new_del_vecs[idx].second->cardinality();
+            FAIL_POINT_TRIGGER_EXECUTE(tablet_delvec_inconsistent, {
+                cur_old = 0;
+                cur_add = 1;
+                cur_new = 0;
+            });
             if (cur_old + cur_add != cur_new) {
                 // should not happen, data inconsistent
-                LOG(FATAL) << strings::Substitute(
+                string msg = strings::Substitute(
                         "delvec inconsistent tablet:$0 rssid:$1 #old:$2 #add:$3 #new:$4 old_v:$5 "
                         "v:$6",
                         _tablet.tablet_id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(),
                         version.major_number());
+                LOG(ERROR) << msg;
+                _set_error(msg);
+                return Status::InternalError(msg);
             }
             if (VLOG_IS_ON(1)) {
                 StringAppendF(&delvec_change_info, " %u:%zu(%ld)+%zu=%zu", rssid, cur_old, old_del_vec->version(),
