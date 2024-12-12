@@ -14,7 +14,9 @@
 
 package com.starrocks.sql.automv.pattern;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.automv.qe.RboOptimizer;
 import com.starrocks.sql.automv.util.TestUtil;
@@ -30,7 +32,9 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class PlanPiecePatternTest {
@@ -171,7 +175,7 @@ public class PlanPiecePatternTest {
             String name = p.first;
             String sql = p.second;
             ConnectContext ctx = getStarRocksAssert().getCtx();
-            List<OptExpression> subPlans = RboOptimizer.getSubPlans(sql, ctx, PlanPiecePattern.getSPJG()).second;
+            List<OptExpression> subPlans = RboOptimizer.getSubPlans(sql, ctx, PlanPiecePatterns.getSPJG()).second;
             Assert.assertTrue(nextResult.hasNext());
             Object[] result = nextResult.next();
             String expectName = (String) result[0];
@@ -191,5 +195,43 @@ public class PlanPiecePatternTest {
                         operators.stream().map(Operator::getOpType).allMatch(acceptedTypes::contains));
             }
         });
+    }
+
+    @Test
+    public void test11MVPattern() throws Exception {
+        List<Pair<String, List<OptExpression>>> subPlanLists = TestUtil.getTPCDSQueryList().stream()
+                //.filter(p -> p.first.equals("query01"))
+                .map(p -> {
+                    String name = p.first;
+                    String sql = p.second;
+                    ConnectContext ctx = getStarRocksAssert().getCtx();
+                    List<OptExpression> subPlans =
+                            RboOptimizer.getSubPlans(sql, ctx, PlanPiecePatterns.get11MV()).second;
+                    Map<String, List<OptExpression>> subPlanGroups = subPlans.stream()
+                            .collect(Collectors.groupingBy(sp -> sp.getOp().getOpType().name()));
+                    return Pair.create(name, subPlanGroups);
+                })
+                .flatMap(p -> p.second.entrySet()
+                        .stream()
+                        .map(e -> Pair.create(p.first + "." + e.getKey(), e.getValue())))
+                .collect(Collectors.toList());
+
+        Function<String, String> lastComp = s -> {
+            String[] comps = s.split("\\.");
+            return comps[comps.length - 1];
+        };
+
+        Map<String, List<OptExpression>> subPlanGroupByRootOp = subPlanLists.stream()
+                .map(p -> Pair.create(lastComp.apply(p.first), p.second))
+                .collect(Collectors.groupingBy(p -> p.first,
+                        Collectors.flatMapping(p -> p.second.stream(), Collectors.toList())));
+        Map<String, Integer> expectResults = ImmutableMap.<String, Integer>builder()
+                .put("LOGICAL_JOIN", 122)
+                .put("LOGICAL_AGGR", 128)
+                .put("LOGICAL_OLAP_SCAN", 55)
+                .build();
+        Map<String, Integer> actualResults = subPlanGroupByRootOp.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size()));
+        Assert.assertEquals(expectResults, actualResults);
     }
 }

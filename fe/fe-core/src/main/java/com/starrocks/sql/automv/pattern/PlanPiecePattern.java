@@ -105,17 +105,6 @@ public abstract class PlanPiecePattern {
                     return Optional.of(desc);
                 }
             };
-    private static final PlanPiecePattern SPJG_PATTERN;
-
-    static {
-        PlanPiecePattern scanPat =
-                PlanPiecePattern.repeat(PlanPiecePattern.node(PlanPiecePattern.NodeName.Scan), 1, 1000);
-        PlanPiecePattern joinPat =
-                PlanPiecePattern.repeat(PlanPiecePattern.node(PlanPiecePattern.NodeName.Join), 1, 1000);
-        SPJG_PATTERN =
-                PlanPiecePattern.treeCapture(PlanPiecePattern.node(PlanPiecePattern.NodeName.Aggregate),
-                        Collections.singletonList(PlanPiecePattern.consistOf(scanPat, joinPat)), null);
-    }
 
     public static Node node(NodeName nodeName) {
         return new Node(nodeName, ConstantOperator.TRUE);
@@ -147,9 +136,10 @@ public abstract class PlanPiecePattern {
         List<OptExpression> subPlans = Lists.newArrayList();
         if (match(root, pat)) {
             subPlans.add(root);
-        }
-        for (OptExpression input : root.getInputs()) {
-            subPlans.addAll(extract(input, pat));
+        } else {
+            for (OptExpression input : root.getInputs()) {
+                subPlans.addAll(extract(input, pat));
+            }
         }
         return subPlans;
     }
@@ -173,10 +163,6 @@ public abstract class PlanPiecePattern {
     public static Optional<OptExpression> extractEntire(OptExpression root, PlanPiecePattern pat) {
         return getAggRoot(root).flatMap(newRoot ->
                 extract(root, pat).stream().filter(subPlan -> subPlan == newRoot).findFirst());
-    }
-
-    public static PlanPiecePattern getSPJG() {
-        return SPJG_PATTERN;
     }
 
     public abstract boolean matchRoot(OptExpression op, MatchContext context);

@@ -40,7 +40,7 @@ import com.starrocks.sql.automv.lifecycle.MVChangeLog;
 import com.starrocks.sql.automv.lifecycle.MVHitCountEntry;
 import com.starrocks.sql.automv.lifecycle.QueryAuditEntry;
 import com.starrocks.sql.automv.options.AutoMVOptions;
-import com.starrocks.sql.automv.pattern.PlanPiecePattern;
+import com.starrocks.sql.automv.pattern.PlanPiecePatterns;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPieceBuilder;
@@ -334,7 +334,7 @@ public class AutoMVUtil {
         QueryStatement queryStmt = stmt.getQueryStatement();
         Map<String, FQTable> fqTableMap = stmt.getFqTableMap();
         Map<String, String> mvMap = Maps.newHashMap();
-        List<OptExpression> subPlans = RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePattern.getSPJG());
+        List<OptExpression> subPlans = RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePatterns.getSPJG());
         Supplier<String> nameGenerator = Util.nextStringGenerator("Q.part.", "");
         for (OptExpression subPlan : subPlans) {
             ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();

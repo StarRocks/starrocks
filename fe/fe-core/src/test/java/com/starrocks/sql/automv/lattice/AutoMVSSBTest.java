@@ -23,7 +23,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
 import com.starrocks.sql.automv.options.AutoMVOptions;
-import com.starrocks.sql.automv.pattern.PlanPiecePattern;
+import com.starrocks.sql.automv.pattern.PlanPiecePatterns;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.qe.RboOptimizer;
@@ -202,7 +202,7 @@ public class AutoMVSSBTest {
         Assert.assertTrue(optNameAndQuery.isPresent());
         String query = optNameAndQuery.get().second;
         Pair<Map<String, FQTable>, List<OptExpression>> fqTablesAndSubPlans =
-                RboOptimizer.getSubPlans(query, getStarRocksAssert().getCtx(), PlanPiecePattern.getSPJG());
+                RboOptimizer.getSubPlans(query, getStarRocksAssert().getCtx(), PlanPiecePatterns.getSPJG());
         AutoMVOptions options =
                 AutoMVOptions.of(new PartitionExtractor(), getStarRocksAssert().getCtx().getSessionVariable());
         Map<String, FQTable> fqTableMap = fqTablesAndSubPlans.first;

@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.options.AutoMVOptions;
 import com.starrocks.sql.automv.pattern.PlanPiecePattern;
+import com.starrocks.sql.automv.pattern.PlanPiecePatterns;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPiece;
@@ -196,7 +197,7 @@ public class RboOptimizer {
         Map<String, FQTable> fqTableMap = queryStmtPlus.getFqTableMap();
 
         Optional<OptExpression> optEntirePlan =
-                RboOptimizer.getEntirePlan(queryStmt, context, PlanPiecePattern.getSPJG());
+                RboOptimizer.getEntirePlan(queryStmt, context, PlanPiecePatterns.getSPJG());
         if (!optEntirePlan.isPresent()) {
             return Optional.empty();
         }
@@ -214,7 +215,7 @@ public class RboOptimizer {
         Map<String, FQTable> fqTableMap = stmt.getFqTableMap();
         AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         Function<OptExpression, PlanPiece> subPlanToPieceConverter = subPlanToPiece(options, "Q", fqTableMap);
-        return RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePattern.getSPJG())
+        return RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePatterns.getSPJG())
                 .stream()
                 .map(subPlanToPieceConverter)
                 .collect(Collectors.toList());
@@ -226,7 +227,7 @@ public class RboOptimizer {
         Map<String, FQTable> fqTableMap = stmt.getFqTableMap();
         AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         Function<OptExpression, PlanPiece> subPlanToPieceConverter = subPlanToPiece(options, name, fqTableMap);
-        return RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePattern.getSPJG())
+        return RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePatterns.getSPJG())
                 .stream()
                 .map(subPlanToPieceConverter)
                 .collect(Collectors.toList());

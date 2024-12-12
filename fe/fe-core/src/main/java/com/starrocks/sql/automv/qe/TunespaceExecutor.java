@@ -41,6 +41,7 @@ import com.starrocks.sql.automv.lattice.MVRecommendation;
 import com.starrocks.sql.automv.lattice.MVRecommender;
 import com.starrocks.sql.automv.options.AutoMVOptions;
 import com.starrocks.sql.automv.pattern.PlanPiecePattern;
+import com.starrocks.sql.automv.pattern.PlanPiecePatterns;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPiece;
@@ -140,7 +141,7 @@ public class TunespaceExecutor {
             QueryStatement queryStmt = appendClause.getQueryStatement().getQueryStatement();
             Map<String, FQTable> fqTableMap = appendClause.getQueryStatement().getFqTableMap();
             OptExpression logicalPlan = RboOptimizer.getLogicalPlan(queryStmt, context);
-            List<OptExpression> subPlans = PlanPiecePattern.extract(logicalPlan, PlanPiecePattern.getSPJG());
+            List<OptExpression> subPlans = PlanPiecePattern.extract(logicalPlan, PlanPiecePatterns.getSPJG());
             Optional<OptExpression> optAggRoot = PlanPiecePattern.getAggRoot(logicalPlan);
             boolean matchEntire = optAggRoot
                     .map(aggRoot -> subPlans.size() == 1 && subPlans.get(0) == aggRoot)

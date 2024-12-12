@@ -20,7 +20,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.options.AutoMVOptions;
-import com.starrocks.sql.automv.pattern.PlanPiecePattern;
+import com.starrocks.sql.automv.pattern.PlanPiecePatterns;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPiece;
@@ -88,7 +88,7 @@ public class GeneratorTest {
             String sql = p.second;
             ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
             Pair<Map<String, FQTable>, List<OptExpression>>
-                    fQTableMapAndSubPlans = RboOptimizer.getSubPlans(sql, ctx, PlanPiecePattern.getSPJG());
+                    fQTableMapAndSubPlans = RboOptimizer.getSubPlans(sql, ctx, PlanPiecePatterns.getSPJG());
             List<OptExpression> subPlans = fQTableMapAndSubPlans.second;
             Map<String, FQTable> fqTableMap = fQTableMapAndSubPlans.first;
             PrettyPrinter traceLog = new PrettyPrinter();

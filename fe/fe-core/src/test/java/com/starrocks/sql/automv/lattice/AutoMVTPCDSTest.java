@@ -29,7 +29,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.options.AutoMVOptions;
-import com.starrocks.sql.automv.pattern.PlanPiecePattern;
+import com.starrocks.sql.automv.pattern.PlanPiecePatterns;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPieceBuilder;
@@ -853,7 +853,7 @@ public class AutoMVTPCDSTest {
             QueryStatement queryStmt = stmt.getQueryStatement();
             Map<String, FQTable> fqTableMap = stmt.getFqTableMap();
             List<OptExpression> subPlans =
-                    RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePattern.getSPJG());
+                    RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePatterns.getSPJG());
 
             AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
             List<PlanPieceInfo> pieceInfos = subPlans.stream()
@@ -879,7 +879,7 @@ public class AutoMVTPCDSTest {
         QueryStatementPlus queryStmtPlus = RboOptimizer.getQueryStatement(ctx, sql);
         QueryStatement queryStmt = queryStmtPlus.getQueryStatement();
         Map<String, FQTable> fqTableMap = queryStmtPlus.getFqTableMap();
-        List<OptExpression> subPlans = RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePattern.getSPJG());
+        List<OptExpression> subPlans = RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePatterns.getSPJG());
         OptExpression subPlan = subPlans.get(0);
         ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
         Optional<AggregatePiece> optPlanPiece =
