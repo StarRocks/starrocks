@@ -144,6 +144,9 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
             StarRocksMetrics::instance()->primary_key_table_error_state_total.increment(1);
             builder->set_recover_flag(RecoverFlag::RECOVER_WITH_PUBLISH);
         }
+        // If load failed, release lock guard and remove index entry
+        // MUST release lock guard before remove index entry
+        guard.reset(nullptr);
         _index_cache.remove(index_entry);
         std::string msg = strings::Substitute("prepare_primary_index: load primary index failed: $0", st.to_string());
         LOG(ERROR) << msg;
@@ -152,6 +155,8 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
     _block_cache->update_memory_usage();
     st = index.prepare(EditVersion(new_version, 0), 0);
     if (!st.ok()) {
+        // If prepare failed, release lock guard and remove index entry
+        guard.reset(nullptr);
         _index_cache.remove(index_entry);
         std::string msg =
                 strings::Substitute("prepare_primary_index: prepare primary index failed: $0", st.to_string());
