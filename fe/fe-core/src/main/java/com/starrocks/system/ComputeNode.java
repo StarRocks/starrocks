@@ -25,6 +25,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DnsCache;
 import com.starrocks.datacache.DataCacheMetrics;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
@@ -53,7 +54,7 @@ import java.util.stream.Collectors;
  * This class extends the primary identifier of a compute node with computing capabilities
  * and no storage capacity。
  */
-public class ComputeNode implements IComputable, Writable {
+public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(ComputeNode.class);
 
     @SerializedName("id")
@@ -764,6 +765,15 @@ public class ComputeNode implements IComputable, Writable {
 
     public Status getStatus() {
         return status;
+    }
+
+    @Override
+    public void gsonPostProcess() {
+        if (isAlive.get()) {
+            // Upgraded from an old version where the status is not properly set.
+            // reset the status according to the aliveness
+            status = Status.OK;
+        }
     }
 
     public static class ResourceGroupUsage {
