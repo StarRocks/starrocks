@@ -302,7 +302,9 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
+#ifndef BE_TEST
     _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
+#endif
     _is_incremental_channel = is_incremental;
     if (params.has_lake_tablet_params() && params.lake_tablet_params().has_write_txn_log()) {
         _finish_mode = params.lake_tablet_params().write_txn_log() ? lake::DeltaWriterFinishMode::kWriteTxnLog
@@ -393,6 +395,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         response->mutable_status()->add_error_msgs("out-of-order packet");
         return;
     }
+    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
 
     auto res = _create_write_context(chunk, request, response);
     if (!res.ok()) {
@@ -561,6 +564,10 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     }
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
+#ifndef BE_TEST
+    _table_metrics->load_rows.increment(total_row_num);
+    _table_metrics->load_bytes.increment(chunk_size);
+#endif
     COUNTER_UPDATE(_add_chunk_counter, 1);
     COUNTER_UPDATE(_add_chunk_timer, watch.elapsed_time());
     COUNTER_UPDATE(_add_row_num, total_row_num);
