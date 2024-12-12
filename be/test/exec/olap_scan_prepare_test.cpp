@@ -23,6 +23,8 @@
 #include "testutil/schema_test_helper.h"
 
 namespace starrocks {
+template class ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND>;
+
 class ChunkPredicateBuilderTest : public testing::Test {
 public:
     void SetUp() override {
