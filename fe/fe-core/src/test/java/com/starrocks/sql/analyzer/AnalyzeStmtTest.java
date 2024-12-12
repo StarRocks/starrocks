@@ -295,7 +295,7 @@ public class AnalyzeStmtTest {
                         "cast(min(cast(min as bigint)) as string) FROM column_statistics " +
                         "WHERE table_id = %d and column_name in (\"v1\", \"v2\") " +
                         "GROUP BY db_id, table_id, column_name", table.getId()),
-                StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
+                StatisticSQLBuilder.buildQueryFullStatisticsSQL(table.getId(),
                         Lists.newArrayList("v1", "v2"), Lists.newArrayList(v1.getType(), v2.getType())));
 
         Assert.assertEquals(String.format(
@@ -442,7 +442,7 @@ public class AnalyzeStmtTest {
                 "cast(max(cast(max as bigint)) as string), cast(min(cast(min as bigint)) as string) " +
                 "FROM column_statistics WHERE table_id = %d and column_name in (\"kk1\") " +
                 "GROUP BY db_id, table_id, column_name", table.getId(), table.getId());
-        String content = StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
+        String content = StatisticSQLBuilder.buildQueryFullStatisticsSQL(table.getId(),
                 Lists.newArrayList("kk1", "kk2"), Lists.newArrayList(kk1.getType(), kk2.getType()));
         Assert.assertEquals(pattern, content);
     }
