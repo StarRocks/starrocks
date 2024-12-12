@@ -40,13 +40,9 @@ StatusOr<bool> FixedValueColumnReader::page_index_zone_map_filter(const std::vec
     DCHECK(row_ranges->empty());
     ZoneMapDetail zone_map{_fixed_value, _fixed_value, _fixed_value.is_null()};
 
-    if (ZoneMapEvaluatorUtils::is_satisfy(predicates, zone_map, pred_relation)) {
-        // no filter happened
-        return false;
-    } else {
-        // filter happened, entire row group can be filtered
-        return true;
-    }
+    // is_satisfy = true means no filter happened, return false
+    // is_satisfy = false means entire row group can be filtered, filter happened, return true
+    return !ZoneMapEvaluatorUtils::is_satisfy(predicates, zone_map, pred_relation);
 }
 
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
