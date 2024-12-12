@@ -576,11 +576,16 @@ public class LoadMgr implements MemoryTrackable {
         }
     }
 
-    public long getLatestFinishTime() {
+    public long getLatestFinishTimeExcludeTable(long dbId, long tableId) {
         long latestFinishTime = -1L;
         readLock();
         try {
             for (LoadJob loadJob : idToLoadJob.values()) {
+                if (loadJob instanceof InsertLoadJob
+                        && loadJob.getDbId() == dbId
+                        && ((InsertLoadJob) loadJob).getTableId() == tableId) {
+                    continue;
+                }
                 if (loadJob.isFinal()) {
                     if (loadJob.getFinishTimestamp() > latestFinishTime) {
                         latestFinishTime = loadJob.getFinishTimestamp();

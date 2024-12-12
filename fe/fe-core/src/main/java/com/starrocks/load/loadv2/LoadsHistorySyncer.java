@@ -15,8 +15,11 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
@@ -118,7 +121,13 @@ public class LoadsHistorySyncer extends FrontendDaemon {
                 return;
             }
 
-            long latestFinishTime = GlobalStateMgr.getCurrentState().getLoadMgr().getLatestFinishTime();
+            Pair<Long, Long> dbTableId = getTargetDbTableId();
+            if (dbTableId == null) {
+                LOG.warn("failed to get db: {}, table: {}", LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME);
+                return;
+            }
+            long latestFinishTime = GlobalStateMgr.getCurrentState().getLoadMgr()
+                    .getLatestFinishTimeExcludeTable(dbTableId.first, dbTableId.second);
             if (syncedLoadFinishTime < latestFinishTime) {
                 syncData();
                 // refer to SQL:LOADS_HISTORY_SYNC. Only sync loads that completed more than 1 minute ago
@@ -141,4 +150,16 @@ public class LoadsHistorySyncer extends FrontendDaemon {
         }
     }
 
+    private Pair<Long, Long> getTargetDbTableId() {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(LOADS_HISTORY_DB_NAME);
+        if (database == null) {
+            return null;
+        }
+        Table table = database.getTable(LOADS_HISTORY_TABLE_NAME);
+        if (table == null) {
+            return null;
+        }
+
+        return Pair.create(database.getId(), table.getId());
+    }
 }
