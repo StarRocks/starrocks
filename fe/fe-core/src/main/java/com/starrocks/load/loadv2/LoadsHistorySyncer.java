@@ -126,7 +126,8 @@ public class LoadsHistorySyncer extends FrontendDaemon {
                 syncData();
                 // refer to SQL:LOADS_HISTORY_SYNC. Only sync loads that completed more than 1 minute ago
                 long oneMinAgo = System.currentTimeMillis() - 60000;
-                syncedLoadFinishTime = Math.min(latestFinishTime, oneMinAgo);
+                // use (oneMinAgo - 10000) to cover the clock skew between FE and BE
+                syncedLoadFinishTime = Math.min(latestFinishTime, oneMinAgo - 10000);
             }
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of LoadJobScheduler with error message {}", e.getMessage(), e);
