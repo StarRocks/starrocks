@@ -29,6 +29,7 @@ class RuntimeState;
 class RuntimeFilterProbeCollector;
 class PredicateParser;
 class ColumnPredicate;
+class VectorizedLiteral;
 using ColumnPredicatePtr = std::unique_ptr<ColumnPredicate>;
 using ColumnPredicatePtrs = std::vector<ColumnPredicatePtr>;
 
@@ -88,6 +89,9 @@ public:
     bool is_pred_normalized(size_t index) const;
 
     const UnarrivedRuntimeFilterList& unarrived_runtime_filters() { return rt_ranger_params; }
+
+    template <LogicalType SlotType, LogicalType MappingType, template <class> class Decoder, class... Args>
+    void normalized_rf_with_null(const JoinRuntimeFilter* rf, Expr* col_ref, Args&&... args);
 
 private:
     const ScanConjunctsManagerOptions& _opts;
@@ -155,6 +159,11 @@ private:
     // `ColumnExprPredicate` would be used in late materialization, zone map filtering,
     // dict encoded column filtering and bitmap value column filtering etc.
     Status build_column_expr_predicates();
+
+    Expr* _gen_min_binary_pred(Expr* col_ref, VectorizedLiteral* min_literal, bool is_close_interval);
+    Expr* _gen_max_binary_pred(Expr* col_ref, VectorizedLiteral* max_literal, bool is_close_interval);
+    Expr* _gen_is_null_pred(Expr* col_ref);
+    Expr* _gen_and_pred(Expr* left, Expr* right);
 };
 
 class ScanConjunctsManager {
