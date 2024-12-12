@@ -363,6 +363,8 @@ private:
     void to_protobuf(PTypeDesc* proto_type) const;
 };
 
+static const TypeDescriptor TYPE_INT_DESC = TypeDescriptor(LogicalType::TYPE_INT);
+
 inline std::ostream& operator<<(std::ostream& os, const TypeDescriptor& type) {
     os << type.debug_string();
     return os;

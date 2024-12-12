@@ -68,13 +68,13 @@ struct RuntimeColumnPredicateBuilder {
             if constexpr (ltype == TYPE_VARCHAR) {
                 auto cid = parser->column_id(*slot);
                 if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
-                    build_minmax_range<RangeType, value_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf,
+                    build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf,
                                                                                                       iter->second);
                 } else {
-                    build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+                    build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, rf, nullptr);
                 }
             } else {
-                build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+                build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, rf, nullptr);
             }
 
             std::vector<TCondition> filters;
@@ -135,13 +135,38 @@ struct RuntimeColumnPredicateBuilder {
             return decoder->decode(code);
         }
 
+        template <LogicalType Type>
+        ColumnPtr min_const_column(const TypeDescriptor& col_type) {
+            auto min_decode_value = min_value();
+            if constexpr (lt_is_decimal<Type>) {
+                return ColumnHelper::create_const_decimal_column<Type>(min_decode_value, col_type.precision,
+                                                                       col_type.scale, 1);
+            } else {
+                return ColumnHelper::create_const_column<Type>(min_decode_value, 1);
+            }
+        }
+
+        template <LogicalType Type>
+        ColumnPtr max_const_column(const TypeDescriptor& col_type) {
+            auto max_decode_value = max_value();
+            if constexpr (lt_is_decimal<Type>) {
+                return ColumnHelper::create_const_decimal_column<Type>(max_decode_value, col_type.precision,
+                                                                       col_type.scale, 1);
+            } else {
+                return ColumnHelper::create_const_column<Type>(max_decode_value, 1);
+            }
+        }
+
     private:
         const RuntimeFilter* runtime_filter;
         const Decoder* decoder;
     };
 
-    template <class Range, class value_type, LogicalType mapping_type, template <class> class Decoder, class... Args>
+    template <class Range, LogicalType SlotType, LogicalType mapping_type, template <class> class Decoder,
+              class... Args>
     static void build_minmax_range(Range& range, const JoinRuntimeFilter* rf, Args&&... args) {
+        using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
+
         const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);
         using DecoderType = Decoder<typename RunTimeTypeTraits<mapping_type>::CppType>;
         DecoderType decoder(std::forward<Args>(args)...);
@@ -153,7 +178,7 @@ struct RuntimeColumnPredicateBuilder {
             min_op = to_olap_filter_type(TExprOpcode::GT, false);
         }
         auto min_value = parser.min_value();
-        (void)range.add_range(min_op, static_cast<value_type>(min_value));
+        (void)range.add_range(min_op, static_cast<ValueType>(min_value));
 
         SQLFilterOp max_op;
         if (filter->right_close_interval()) {
@@ -163,7 +188,7 @@ struct RuntimeColumnPredicateBuilder {
         }
 
         auto max_value = parser.max_value();
-        (void)range.add_range(max_op, static_cast<value_type>(max_value));
+        (void)range.add_range(max_op, static_cast<ValueType>(max_value));
     }
 };
 } // namespace detail
