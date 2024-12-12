@@ -24,6 +24,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.thrift.TDeletionVectorDescriptor;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
@@ -101,6 +102,17 @@ public class DeltaConnectorScanRangeSource implements ConnectorScanRangeSource {
         hdfsScanRange.setFile_format(remoteFileInputFormat.toThrift());
         hdfsScanRange.setPartition_value(table.toHdfsPartition(referencedPartitionInfo));
         hdfsScanRange.setTable_id(table.getId());
+        // serialize dv
+        if (fileScanTask.getDv() != null) {
+            TDeletionVectorDescriptor dv = new TDeletionVectorDescriptor();
+            dv.setStorageType(fileScanTask.getDv().getStorageType());
+            dv.setPathOrInlineDv(fileScanTask.getDv().getPathOrInlineDv());
+            dv.setOffset(fileScanTask.getDv().getOffset().orElse(0));
+            dv.setSizeInBytes(fileScanTask.getDv().getSizeInBytes());
+            dv.setCardinality(fileScanTask.getDv().getCardinality());
+            hdfsScanRange.setDeletion_vector_descriptor(dv);
+        }
+
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);

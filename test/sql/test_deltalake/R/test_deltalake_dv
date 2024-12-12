@@ -1,0 +1,25 @@
+-- name: test_delta_lake_dv
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_test_dv order by `key`;
+-- result:
+1	name1	StarRocks
+2	name2	sr
+3	name3	sr
+5	name5	rocks
+6	name6	rocks
+-- !result
+select count(1) from delta_test_${uuid0}.delta_oss_db.delta_test_par_dv where comment = 'starrocks';
+-- result:
+15
+-- !result
+drop catalog delta_test_${uuid0}
+-- result:
+-- !result

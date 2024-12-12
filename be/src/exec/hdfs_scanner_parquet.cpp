@@ -14,6 +14,7 @@
 
 #include "exec/hdfs_scanner_parquet.h"
 
+#include "connector/deletion_vector/deletion_vector.h"
 #include "exec/hdfs_scanner.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
@@ -45,6 +46,9 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
                 new PaimonDeleteFileBuilder(scanner_params.fs, &_need_skip_rowids));
         RETURN_IF_ERROR(paimon_delete_file_builder->build(scanner_params.paimon_deletion_file.get()));
+    } else if (scanner_params.deletion_vector_descriptor != nullptr) {
+        std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(scanner_params);
+        RETURN_IF_ERROR(dv->fill_row_indexes(&_need_skip_rowids));
     }
     return Status::OK();
 }

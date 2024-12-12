@@ -1,0 +1,15 @@
+-- name: test_delta_lake_dv
+
+-- create catalog
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+select * from delta_test_${uuid0}.delta_oss_db.delta_test_dv order by `key`;
+select count(1) from delta_test_${uuid0}.delta_oss_db.delta_test_par_dv where comment = 'starrocks';
+
+drop catalog delta_test_${uuid0}
