@@ -19,6 +19,7 @@ import org.junit.Test;
 public class PredicatePushDownTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
         connectContext.getSessionVariable().setEnableScanPredicateExprReuse(true);
     }
 
