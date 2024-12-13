@@ -416,15 +416,15 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 .getDefaultPhysicalPartition().getVisibleVersion());
 
         refreshMVRange(materializedView.getName(), "2021-12-03", "2022-05-06", true);
-        Assert.assertEquals(2, materializedView.getPartition("p202112_202201")
+        Assert.assertEquals(3, materializedView.getPartition("p202112_202201")
                 .getDefaultPhysicalPartition().getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p202201_202202")
+        Assert.assertEquals(3, materializedView.getPartition("p202201_202202")
                 .getDefaultPhysicalPartition().getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p202202_202203")
+        Assert.assertEquals(2, materializedView.getPartition("p202202_202203")
                 .getDefaultPhysicalPartition().getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202203_202204")
                 .getDefaultPhysicalPartition().getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p202204_202205")
+        Assert.assertEquals(3, materializedView.getPartition("p202204_202205")
                 .getDefaultPhysicalPartition().getVisibleVersion());
     }
 
